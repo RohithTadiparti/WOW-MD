@@ -8,6 +8,7 @@ import ChoiceField from '../components/ChoiceField';
 import { CITIES, STATES } from '../lib/reference';
 import { useAuth } from '../store/auth';
 import { useBusinesses } from '../store/business';
+import { LoadingCards } from '../components/ui/Feedback';
 import VendorServices, { priceLabel } from '../components/VendorServices';
 import PhotoUploader from '../components/PhotoUploader';
 import {
@@ -38,7 +39,7 @@ export default function ProviderConsole() {
   const permissions = useAuth((s) => s.user?.permissions ?? []);
   const isVendor = can(permissions, Permission.VENDOR_LISTING_MANAGE);
 
-  const { data: listing } = useQuery({
+  const { data: listing, isPending: listingPending } = useQuery({
     queryKey: ['my-listing', isVendor],
     queryFn: async () =>
       isVendor ? (await api.get('/vendors/me')).data : (await api.get('/wedding-planners/me')).data,
@@ -50,7 +51,7 @@ export default function ProviderConsole() {
   // Which business this page is about comes from the header's switcher, not
   // from `listings[0]`. An account with two businesses could previously only
   // ever edit the first one from here.
-  const { activeId } = useBusinesses();
+  const { activeId, isLoading: businessesLoading } = useBusinesses();
   const vendorId: string | undefined = isVendor ? (activeId ?? undefined) : undefined;
   const current = isVendor
     ? ((listing as VendorListing[] | undefined) ?? []).find((l) => l.id === vendorId)
@@ -107,7 +108,13 @@ export default function ProviderConsole() {
             owned it; the wizard only sequences them and carries the server's
             lock and status rules between the steps.
           */}
-          <VendorBusinessWizard vendorId={vendorId} current={current} />
+          {/* Nothing is decided about the listing until it has loaded: before
+              then an existing business looks like none. */}
+          {listingPending || businessesLoading ? (
+            <LoadingCards count={1} />
+          ) : (
+            <VendorBusinessWizard vendorId={vendorId} current={current} />
+          )}
         </>
       ) : (
         <>
@@ -579,10 +586,12 @@ function VendorListingForm({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    if (!current) {
-      setEditing(true);
-      return;
-    }
+    // No listing renders the create form on its own. This used to set
+    // `editing`, and a listing that was merely still loading -- every page
+    // refresh -- looked like no listing: the form stayed open once the saved
+    // listing arrived, so a vendor who had just saved saw "Edit your listing"
+    // again and thought nothing had been kept.
+    if (!current) return;
     // A submitted listing opens read-only, whatever was on screen before.
     if (locked) setEditing(false);
     setForm({
