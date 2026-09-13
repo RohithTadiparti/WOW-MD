@@ -1,30 +1,11 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import { CATEGORY_SLUG, MAX_CATEGORIES } from '../vendor-categories';
 import { Type } from 'class-transformer';
 import { IsNotFutureDate } from '../../../common/decorators/not-future.decorator';
-import {
-  ArrayMaxSize,
-  IsArray,
-  IsDateString,
-  IsEnum,
-  IsInt,
-  IsNumber,
-  IsOptional,
-  IsString,
-  IsUUID,
-  Matches,
-  Max,
-  MaxLength,
-  Min,
-  MinLength,
-  ValidateIf,
-  ValidateNested,
-} from 'class-validator';
+import { ArrayMaxSize, IsArray, IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
 import { IsUploadedUrl } from '../../../common/decorators/uploaded-url.decorator';
 import { Transform } from 'class-transformer';
-import {
-  ReviewStatus,
-  VendorCategory,
-} from '../../../common/enums';
+import { ReviewStatus } from '../../../common/enums';
 import {
   GSTIN_MESSAGE,
   GSTIN_PATTERN,
@@ -156,19 +137,33 @@ export class CreateVendorDto extends VendorComplianceDto {
   @MaxLength(120)
   name: string;
 
-  @ApiProperty({ enum: VendorCategory })
-  @IsEnum(VendorCategory)
-  category: VendorCategory;
+  /**
+   * One to five catalogue category slugs, in the order chosen (EZ1-I263). The
+   * service checks the count and that each is an active catalogue category, and
+   * refuses anything else by name.
+   */
+  @ApiPropertyOptional({ type: [String], example: ['catering', 'cakes'], maxItems: MAX_CATEGORIES })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_CATEGORIES, { message: `Choose at most ${MAX_CATEGORIES} categories` })
+  @IsString({ each: true })
+  @Matches(CATEGORY_SLUG, { each: true, message: 'That is not a category' })
+  categories?: string[];
 
   /**
-   * Required when the category is OTHER, refused otherwise — a listing that
-   * says "Other: Venue" would fragment the very directory the category exists
-   * to organise.
+   * The single category app builds from before EZ1-I263 send. Read as a list
+   * of one, so those builds keep saving; new clients send `categories`.
    */
-  @ApiPropertyOptional({ example: 'Wedding Transportation', maxLength: 80 })
-  @ValidateIf((o: { category: VendorCategory }) => o.category === VendorCategory.OTHER)
-  @IsString({ message: 'Tell us which category, since you chose Other' })
-  @MinLength(2)
+  @ApiPropertyOptional({ deprecated: true, example: 'catering' })
+  @IsOptional()
+  @IsString()
+  @Matches(CATEGORY_SLUG, { message: 'That is not a category' })
+  category?: string;
+
+  /** Sent by the same older builds alongside "Other". Accepted and ignored. */
+  @ApiPropertyOptional({ deprecated: true })
+  @IsOptional()
+  @IsString()
   @MaxLength(80)
   otherCategory?: string;
 
@@ -229,10 +224,12 @@ export enum VendorSort {
 }
 
 export class VendorSearchDto extends PaginationDto {
-  @ApiPropertyOptional({ enum: VendorCategory })
+  /** A catalogue category slug: a business listed under it among any of its categories. */
+  @ApiPropertyOptional({ example: 'catering' })
   @IsOptional()
-  @IsEnum(VendorCategory)
-  category?: VendorCategory;
+  @IsString()
+  @Matches(CATEGORY_SLUG, { message: 'That is not a category' })
+  category?: string;
 
   @ApiPropertyOptional({ maxLength: 80 })
   @IsOptional()

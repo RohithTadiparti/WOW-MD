@@ -2,7 +2,8 @@ import { FormEvent, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, apiMessage } from '../lib/api';
-import { Permission, VENDOR_CATEGORIES, can } from '../lib/permissions';
+import { Permission, can } from '../lib/permissions';
+import { CategoryNames, useCatalogCategories } from '../components/CategoryPicker';
 import { useAuth } from '../store/auth';
 import DynamicForm, { Answers, FieldSpec, cleanAnswers, validateAnswers } from '../components/DynamicForm';
 import { EmptyState, Loading } from '../components/ui/Feedback';
@@ -11,7 +12,9 @@ import { SealCheck, Star, Storefront } from '@phosphor-icons/react';
 interface Vendor {
   id: string;
   name: string;
-  category: string;
+  /** The first of `categories` (EZ1-I263). */
+  category: string | null;
+  categories?: string[];
   city?: string;
   description?: string;
   ratingAvg: number;
@@ -73,15 +76,6 @@ interface WeddingEvent {
   eventDate: string | null;
 }
 
-const CATEGORY_LABEL: Record<string, string> = {
-  venue: 'Venue',
-  catering: 'Catering',
-  photography: 'Photography',
-  decor: 'Decor',
-  makeup: 'Makeup',
-  entertainment: 'Entertainment',
-  other: 'Other',
-};
 
 /**
  * The vendor marketplace.
@@ -94,6 +88,7 @@ const CATEGORY_LABEL: Record<string, string> = {
  */
 export default function Vendors() {
   const [category, setCategory] = useState('');
+  const { data: catalogCategories = [] } = useCatalogCategories();
   const [city, setCity] = useState('');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState('');
@@ -223,9 +218,9 @@ export default function Vendors() {
             onChange={(e) => setCategory(e.target.value)}
           >
             <option value="">All categories</option>
-            {VENDOR_CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {CATEGORY_LABEL[c]}
+            {catalogCategories.map((c) => (
+              <option key={c.slug} value={c.slug}>
+                {c.name}
               </option>
             ))}
           </select>
@@ -254,7 +249,7 @@ export default function Vendors() {
           {city && <FilterChip label={`City: ${city}`} onClear={() => setCity('')} />}
           {category && (
             <FilterChip
-              label={CATEGORY_LABEL[category] ?? category}
+              label={catalogCategories.find((c) => c.slug === category)?.name ?? category}
               onClear={() => setCategory('')}
             />
           )}
@@ -332,7 +327,8 @@ export default function Vendors() {
                 )}
               </div>
               <p className="mt-0.5 text-sm text-gray-500">
-                {[CATEGORY_LABEL[v.category] ?? v.category, v.city].filter(Boolean).join(' \u00b7 ')}
+                <CategoryNames slugs={v.categories?.length ? v.categories : [v.category]} />
+                {v.city ? ' \u00b7 ' + v.city : ''}
               </p>
               {/* Only approved listings reach search, but a verified badge says
                   an officer actually visited — worth surfacing (EZ1-I164). */}
@@ -619,7 +615,7 @@ function RequestDialog({ vendor, onClose }: { vendor: Vendor; onClose: () => voi
           <div>
             <h2 className="section-title">{vendor.name}</h2>
             <p className="text-sm text-gray-600">
-              {CATEGORY_LABEL[vendor.category] ?? vendor.category}
+              <CategoryNames slugs={vendor.categories?.length ? vendor.categories : [vendor.category]} />
               {vendor.city ? ` · ${vendor.city}` : ''}
             </p>
           </div>

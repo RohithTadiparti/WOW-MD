@@ -328,7 +328,9 @@ export class SupportCasesService {
           ? {
               id: vendor.id,
               name: vendor.name,
-              category: vendor.category,
+              // A listing that was filed under "Other" has not chosen a category
+              // yet (EZ1-I263).
+              category: vendor.category ?? 'uncategorised',
               city: vendor.city ?? null,
               status: vendor.status,
               isApproved: vendor.isApproved,

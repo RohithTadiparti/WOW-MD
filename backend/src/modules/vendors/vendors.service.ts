@@ -1,10 +1,6 @@
-import {
-  BadRequestException,
-  ConflictException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ServiceCategory } from '../catalog/entities/service-category.entity';
+import { categoryCountProblem, requestedCategories } from './vendor-categories';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { Vendor } from './entities/vendor.entity';
@@ -23,12 +19,7 @@ import {
   VendorSort,
 } from './dto/vendor.dto';
 import { RedisService } from '../../platform/redis/redis.service';
-import {
-  BusinessStatus,
-  ReviewStatus,
-  UserRole,
-  VendorCategory,
-} from '../../common/enums';
+import { BusinessStatus, ReviewStatus, UserRole } from '../../common/enums';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
 import { likeEscape } from '../../common/util/like';
@@ -53,7 +44,9 @@ import { likeEscape } from '../../common/util/like';
 export interface PublicVendor {
   id: string;
   name: string;
-  category: VendorCategory;
+  category: string | null;
+  /** Every category the business lists under, first one first (EZ1-I263). */
+  categories: string[];
   otherCategory: string | null;
   description: string;
   city: string;
@@ -88,6 +81,7 @@ export function publicVendor(v: Vendor, startingPrice: number | null = null): Pu
     id: v.id,
     name: v.name,
     category: v.category,
+    categories: v.categories ?? [],
     otherCategory: v.otherCategory,
     description: v.description,
     city: v.city,
@@ -108,6 +102,9 @@ export function publicVendor(v: Vendor, startingPrice: number | null = null): Pu
 export class VendorsService {
   constructor(
     @InjectRepository(Vendor) private readonly vendors: Repository<Vendor>,
+    // Read-only, to check a listing's categories against the catalogue (EZ1-I263).
+    @InjectRepository(ServiceCategory)
+    private readonly catalogCategories: Repository<ServiceCategory>,
     @InjectRepository(VendorReview) private readonly reviews: Repository<VendorReview>,
     // Read-only, to name the service, package and booking on the vendor's own
     // reviews view (EZ1-I103).
@@ -140,9 +137,25 @@ export class VendorsService {
    * The guard itself stays. It was telling the truth.
    */
   async create(ownerUserId: string, dto: CreateVendorDto): Promise<Vendor> {
+    const categories = await this.resolveCategories(dto);
+    if (!categories) throw new BadRequestException('Choose at least one category');
+    const fields: Partial<CreateVendorDto> = { ...dto };
+    delete fields.category;
+    delete fields.otherCategory;
+    delete fields.categories;
+
     // New listings always start unapproved regardless of what the client sent.
     const vendor = await this.saveListing(
-      this.vendors.create({ ...dto, ownerUserId, isApproved: false, ratingAvg: 0, ratingCount: 0 }),
+      this.vendors.create({
+        ...fields,
+        categories,
+        category: categories[0],
+        otherCategory: null,
+        ownerUserId,
+        isApproved: false,
+        ratingAvg: 0,
+        ratingCount: 0,
+      }),
     );
 
     await this.invalidateSearchCache();
@@ -166,6 +179,31 @@ export class VendorsService {
     }
   }
 
+  /**
+   * The categories a create or update asks for, checked (EZ1-I263).
+   *
+   * Undefined when the request does not mention categories. Otherwise one to
+   * five slugs that are all active catalogue categories, or a 400 that says
+   * what was wrong.
+   */
+  private async resolveCategories(dto: {
+    categories?: string[];
+    category?: string;
+  }): Promise<string[] | undefined> {
+    const list = requestedCategories(dto);
+    if (list === undefined) return undefined;
+    const problem = categoryCountProblem(list);
+    if (problem) throw new BadRequestException(problem);
+    const known = await this.catalogCategories.find({
+      where: { slug: In(list), active: true },
+      select: ['slug'],
+    });
+    const knownSlugs = new Set(known.map((c) => c.slug));
+    const unknown = list.filter((slug) => !knownSlugs.has(slug));
+    if (unknown.length) throw new BadRequestException('Not a category: ' + unknown.join(', '));
+    return list;
+  }
+
   /** Only the owning vendor account may edit a listing. */
   async update(ownerUserId: string, vendorId: string, dto: UpdateVendorDto): Promise<Vendor> {
     const vendor = await this.vendors.findOne({ where: { id: vendorId } });
@@ -181,9 +219,23 @@ export class VendorsService {
     // the state allows it (narrowed to the flagged fields under a targeted
     // correction, EZ1-I205); the presentational-only edit a verified/live
     // listing still permits; or a hard lock while it is pending or refused.
-    this.lifecycle.assertIdentityEditable(vendor, dto as Record<string, unknown>);
+    // The list replaces the single category older app builds send, and the
+    // lock below compares the list, so a verified listing cannot have its
+    // categories changed through either field (EZ1-I263).
+    const changes: Record<string, unknown> = { ...dto };
+    delete changes.category;
+    delete changes.otherCategory;
+    delete changes.categories;
+    const categories = await this.resolveCategories(dto);
+    if (categories) changes.categories = categories;
 
-    Object.assign(vendor, dto);
+    this.lifecycle.assertIdentityEditable(vendor, changes);
+
+    Object.assign(vendor, changes);
+    if (categories) {
+      vendor.category = categories[0];
+      vendor.otherCategory = null;
+    }
     const saved = await this.saveListing(vendor);
     await this.invalidateSearchCache();
     return saved;
@@ -226,7 +278,7 @@ export class VendorsService {
       const qb = this.vendors
         .createQueryBuilder('v')
         .where('v.isApproved = :approved', { approved: true });
-      if (q.category) qb.andWhere('v.category = :category', { category: q.category });
+      if (q.category) qb.andWhere(':category = ANY(v.categories)', { category: q.category });
       /*
        * Typed, not chosen.
        *

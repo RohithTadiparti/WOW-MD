@@ -219,8 +219,8 @@ export const MILESTONE_LABEL: Record<string, string> = {
  */
 export const CORRECTION_FIELD_LABELS: Record<string, string> = {
   name: 'Business name',
-  category: 'Category',
-  otherCategory: 'Other category',
+  // The categories list (EZ1-I263); the correction key is still 'category'.
+  category: 'Categories',
   description: 'Description',
   city: 'City',
   gstNumber: 'GST number',
@@ -384,15 +384,6 @@ export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 /** Registration accepts only Gmail addresses across every portal (EZ1-I104). */
 export const GMAIL_PATTERN = /@gmail\.com$/i;
 
-export const VENDOR_CATEGORIES = [
-  'venue',
-  'catering',
-  'photography',
-  'decor',
-  'makeup',
-  'entertainment',
-  'other',
-] as const;
 
 /** Does the signed-in user hold this capability? */
 export function can(permissions: string[] | null | undefined, permission: PermissionValue): boolean {

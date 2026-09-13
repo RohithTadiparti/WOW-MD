@@ -2,13 +2,14 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { CaretRight, CheckCircle, CircleIcon, Storefront } from 'phosphor-react-native';
 
-import { BUSINESS_STATUS_LABEL, businessTone, categoryLabel, isVerifiedLive } from '@/lib/business-status';
+import { BUSINESS_STATUS_LABEL, businessTone, isVerifiedLive } from '@/lib/business-status';
 import { shortDate } from '@/lib/format';
 import { useActiveListing } from '@/lib/vendor-listing';
 import { CORRECTION_FIELD_LABELS } from '@/shared/permissions';
 import { Badge, DetailGrid, DetailRow, Divider } from '@/components/chrome';
 import { BusinessSwitcher } from '@/components/business/switcher';
 import { useCompletion } from '@/components/business/completion';
+import { useCategoryNames } from '@/components/business/category-picker';
 import { RequestChange } from '@/components/business/request-change';
 import { DocumentList, MediaStrip } from '@/components/uploader';
 import {
@@ -47,6 +48,7 @@ export default function MyBusiness() {
   const { activeId, isLoading } = useBusinesses();
   const { listing, isPending } = useActiveListing(activeId);
   const { data: completion } = useCompletion(activeId);
+  const categoryNames = useCategoryNames();
 
   const rejected = listing?.status === 'rejected';
   const locked = completion ? !completion.rules.editIdentity : false;
@@ -193,7 +195,7 @@ export default function MyBusiness() {
           <View style={{ flex: 1, gap: space(0.5) }}>
             <SectionTitle numberOfLines={2}>{listing.name}</SectionTitle>
             <Caption>
-              {categoryLabel(listing.category, listing.otherCategory)}
+              {categoryNames(listing.categories).join(', ') || 'No category chosen yet'}
               {listing.city ? ` · ${listing.city}` : ''}
             </Caption>
           </View>

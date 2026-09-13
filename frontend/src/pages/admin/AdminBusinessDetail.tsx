@@ -1,4 +1,5 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { CategoryNames } from '../../components/CategoryPicker';
 import { useQuery } from '@tanstack/react-query';
 import { CaretLeft } from '@phosphor-icons/react';
 import { api, apiMessage } from '../../lib/api';
@@ -42,6 +43,7 @@ interface BusinessDetail {
     id: string;
     name: string;
     category: string;
+    categories?: string[];
     otherCategory: string | null;
     description: string | null;
     city: string | null;
@@ -139,7 +141,7 @@ export default function AdminBusinessDetail() {
             <p className="text-xs uppercase tracking-wide text-brand-strong">Business</p>
             <h1 className="page-title truncate">{b.name}</h1>
             <p className="page-subtitle">
-              {b.category === 'other' && b.otherCategory ? b.otherCategory : b.category}
+              <CategoryNames slugs={b.categories?.length ? b.categories : [b.category]} fallback={b.otherCategory ?? 'Not chosen'} />
               {b.city ? ` · ${b.city}` : ''}
             </p>
           </div>
@@ -155,7 +157,7 @@ export default function AdminBusinessDetail() {
       <div className="grid gap-4 lg:grid-cols-3">
         <Section title="Business info">
           <Row label="Category">
-            {b.category === 'other' && b.otherCategory ? b.otherCategory : b.category}
+            <CategoryNames slugs={b.categories?.length ? b.categories : [b.category]} fallback={b.otherCategory ?? 'Not chosen'} />
           </Row>
           <Row label="City">{dash(b.city)}</Row>
           <Row label="Rating">

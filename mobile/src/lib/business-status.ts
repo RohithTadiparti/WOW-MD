@@ -42,22 +42,6 @@ export function businessTone(status: string): Tone {
   return STATUS_TONE[status] ?? 'caution';
 }
 
-/** The seven vendor categories, as the listing form labels them. */
-export const CATEGORY_LABEL: Record<string, string> = {
-  venue: 'Venue',
-  catering: 'Catering',
-  photography: 'Photography',
-  decor: 'Decor',
-  makeup: 'Makeup',
-  entertainment: 'Entertainment',
-  other: 'Other',
-};
-
-/** A listing's category in words, honouring the free-text "other". */
-export function categoryLabel(category: string, otherCategory?: string | null): string {
-  if (category === 'other') return otherCategory ?? 'Other';
-  return CATEGORY_LABEL[category] ?? category;
-}
 
 /** Statuses in which nothing is left to submit, so Review & Submit is dropped. */
 export function isVerifiedLive(status?: string): boolean {

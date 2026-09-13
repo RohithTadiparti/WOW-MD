@@ -9,6 +9,7 @@ import { CITIES, STATES } from '../lib/reference';
 import { useAuth } from '../store/auth';
 import { useBusinesses } from '../store/business';
 import { LoadingCards } from '../components/ui/Feedback';
+import CategoryPicker, { useCategoryNames } from '../components/CategoryPicker';
 import VendorServices, { priceLabel } from '../components/VendorServices';
 import PhotoUploader from '../components/PhotoUploader';
 import {
@@ -16,19 +17,9 @@ import {
   GSTIN_PATTERN,
   PAN_PATTERN,
   Permission,
-  VENDOR_CATEGORIES,
   can,
 } from '../lib/permissions';
 
-const CATEGORY_LABEL: Record<string, string> = {
-  venue: 'Venue',
-  catering: 'Catering',
-  photography: 'Photography',
-  decor: 'Decor',
-  makeup: 'Makeup',
-  entertainment: 'Entertainment',
-  other: 'Other',
-};
 
 /**
  * The seller-side workspace, shared by vendors and wedding planners. Which
@@ -135,7 +126,9 @@ export default function ProviderConsole() {
 interface VendorListing {
   id: string;
   name: string;
-  category: string;
+  /** The first of `categories` (EZ1-I263). */
+  category: string | null;
+  categories: string[];
   otherCategory: string | null;
   city: string;
   description: string;
@@ -391,10 +384,7 @@ interface ReviewService {
 
 /** The whole listing, read-only, before it is submitted for verification. */
 function ReviewSummary({ current }: { current: VendorListing }) {
-  const category =
-    current.category === 'other'
-      ? (current.otherCategory ?? 'Other')
-      : (CATEGORY_LABEL[current.category] ?? current.category);
+  const category = useCategoryNames()(current.categories).join(', ') || 'Not chosen yet';
 
   // The catalog the vendor actually built, so Review is the complete submission
   // rather than a count of it — no "2 Services" / "3 Documents" (EZ1-I152).
@@ -533,8 +523,6 @@ const emptyListing = {
   name: '',
   // No category is pre-selected — the vendor must choose one rather than have
   // "Venue" default in on their behalf (EZ1-I152).
-  category: '',
-  otherCategory: '',
   city: '',
   description: '',
   gstNumber: '',
@@ -563,6 +551,7 @@ function VendorListingForm({
 }) {
   const qc = useQueryClient();
   const current = existing?.[0];
+  const categoryNames = useCategoryNames();
   /*
    * Whether this listing may still be edited, asked of the server.
    *
@@ -580,6 +569,8 @@ function VendorListingForm({
   const presentationalOnly = locked && (completion?.rules.editPresentational ?? false);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState(emptyListing);
+  // One to five catalogue categories, first one first (EZ1-I263).
+  const [categories, setCategories] = useState<string[]>([]);
   const [portfolio, setPortfolio] = useState<string[]>([]);
   const [documents, setDocuments] = useState<string[]>([]);
   const [msg, setMsg] = useState('');
@@ -596,8 +587,6 @@ function VendorListingForm({
     if (locked) setEditing(false);
     setForm({
       name: current.name ?? '',
-      category: current.category ?? '',
-      otherCategory: current.otherCategory ?? '',
       city: current.city ?? '',
       description: current.description ?? '',
       gstNumber: current.gstNumber ?? '',
@@ -607,6 +596,7 @@ function VendorListingForm({
       registeredAddress: current.registeredAddress ?? '',
       contactPhone: current.contactPhone ?? '',
     });
+    setCategories(current.categories ?? []);
     setPortfolio(current.portfolio ?? []);
     setDocuments(current.complianceDocuments ?? []);
   }, [current]);
@@ -619,10 +609,7 @@ function VendorListingForm({
     // document are all mandatory to submit a listing for verification
     // (EZ1-I152) — an officer cannot verify a business that has named none of
     // them.
-    if (!form.category) errors.category = 'Choose a category';
-    if (form.category === 'other' && !form.otherCategory.trim()) {
-      errors.otherCategory = 'Say what you do, so clients can find you';
-    }
+    if (categories.length === 0) errors.categories = 'Choose at least one category';
     if (!form.city.trim()) errors.city = 'A city is required';
     if (!form.registeredAddress.trim()) {
       errors.registeredAddress = 'A registered address is required — it is where the officer visits';
@@ -694,14 +681,13 @@ function VendorListingForm({
           }
         : {
             name: form.name.trim(),
-            category: form.category,
+            categories,
             // Portfolio is deliberately always sent, including empty: clearing
             // the last photo has to be able to reach the server.
             portfolio,
             complianceDocuments: documents,
           };
       if (!presentationalOnly) {
-        if (form.category === 'other') payload.otherCategory = form.otherCategory.trim();
         for (const key of [
           'city',
           'description',
@@ -763,9 +749,7 @@ function VendorListingForm({
           <div>
             <h2 className="section-title">{current.name}</h2>
             <p className="text-sm text-gray-600">
-              {current.category === 'other'
-                ? (current.otherCategory ?? 'Other')
-                : (CATEGORY_LABEL[current.category] ?? current.category)}
+              {categoryNames(current.categories).join(', ') || 'No category chosen yet'}
               {current.city ? ` \u00b7 ${current.city}` : ''}
             </p>
           </div>
@@ -925,30 +909,12 @@ function VendorListingForm({
         <Field label="Business name" error={fieldErrors.name}>
           <input className="input" value={form.name} onChange={set('name')} />
         </Field>
-        <Field label="Category" error={fieldErrors.category}>
-          <select className="input" value={form.category} onChange={set('category')}>
-            <option value="">Select category</option>
-            {VENDOR_CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {CATEGORY_LABEL[c]}
-              </option>
-            ))}
-          </select>
-        </Field>
-        {form.category === 'other' && (
-          <Field label="Specify category" error={fieldErrors.otherCategory}>
-            <input
-              className="input"
-              placeholder="Mehendi artist"
-              value={form.otherCategory}
-              onChange={set('otherCategory')}
-            />
-          </Field>
-        )}
         <Field label="City" error={fieldErrors.city}>
           <input className="input" value={form.city} onChange={set('city')} />
         </Field>
       </div>
+
+      <CategoryPicker value={categories} onChange={setCategories} error={fieldErrors.categories} />
 
       <Field label="Description">
         <textarea

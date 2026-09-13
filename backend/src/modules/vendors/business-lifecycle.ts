@@ -175,8 +175,8 @@ export function canTransition(from: BusinessStatus, to: BusinessStatus): boolean
  */
 export const CORRECTABLE_BUSINESS_FIELDS = [
   'name',
+  // Opens the categories list (EZ1-I263); there is no free-text Other any more.
   'category',
-  'otherCategory',
   'description',
   'city',
   'gstNumber',

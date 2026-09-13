@@ -97,6 +97,7 @@ export class AdminConsoleService {
         id: vendor.id,
         name: vendor.name,
         category: vendor.category,
+        categories: vendor.categories ?? [],
         otherCategory: vendor.otherCategory,
         description: vendor.description,
         city: vendor.city,
