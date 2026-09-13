@@ -11,6 +11,7 @@ import { GSTIN_PATTERN, PAN_PATTERN, VENDOR_CATEGORIES } from '@/shared/permissi
 import { Divider, InfoNote } from '@/components/chrome';
 import { DateField, SelectField, Textarea } from '@/components/form';
 import { useCompletion, useRefreshBusiness } from '@/components/business/completion';
+import { VerifiedDetails } from '@/components/business/verified-details';
 import { DocumentList, MediaStrip, PhotoPicker } from '@/components/uploader';
 import {
   Alert,
@@ -81,6 +82,8 @@ export default function BusinessDetails() {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  // Behind "Edit details" on a verified listing's saved details.
+  const [editing, setEditing] = useState(false);
 
   /*
    * Whether this listing may still be edited, asked of the server.
@@ -111,10 +114,15 @@ export default function BusinessDetails() {
     });
     setPortfolio(listing.portfolio ?? []);
     setDocuments(listing.complianceDocuments ?? []);
-  }, [listing]);
+  }, [listing, editing]);
 
   const set = (key: keyof Form) => (value: string) =>
     setForm((f) => ({ ...f, [key]: value }));
+
+  // Into and out of the form behind a verified listing's saved details; the
+  // effect above resets the form to the saved listing either way.
+  const startEdit = () => { setNotice(''); setEditing(true); };
+  const cancelEdit = () => { setErrors({}); setError(''); setEditing(false); };
 
   /** Field-level, and specific about what is wrong rather than "invalid". */
   function validate(): Errors {
@@ -221,7 +229,8 @@ export default function BusinessDetails() {
       else await api.post('/vendors', payload);
 
       refresh();
-      void qc.invalidateQueries({ queryKey: ['businesses'] });
+      // Wait for the saved listing, so the details shown next are the saved ones.
+      await qc.refetchQueries({ queryKey: ['my-listing'] });
 
       if (created) {
         // A brand-new listing has nothing to sell yet, so the next step is the
@@ -234,6 +243,7 @@ export default function BusinessDetails() {
           ? 'Saved. Your listing stays live and the change is visible to couples now.'
           : 'Saved. A verification officer visits the registered address before the listing goes live.',
       );
+      if (presentationalOnly) setEditing(false);
     } catch (err) {
       setError(apiMessage(err, 'Could not save the listing.'));
     } finally {
@@ -247,6 +257,11 @@ export default function BusinessDetails() {
         <Loading rows={4} />
       </Screen>
     );
+  }
+
+  // A verified listing opens on its saved details, and a save returns to them.
+  if (presentationalOnly && listing && !editing) {
+    return <VerifiedDetails listing={listing} notice={notice} onEdit={startEdit} />;
   }
 
   if (readOnly) {
@@ -465,6 +480,9 @@ export default function BusinessDetails() {
         busy={busy}
         onPress={() => void save()}
       />
+      {presentationalOnly && listing ? (
+        <Button label="Cancel" variant="outline" disabled={busy} onPress={cancelEdit} />
+      ) : null}
       {listing ? (
         <Caption tone="faint">
           Nothing entered is lost on a failure — only the fields that are wrong are marked.

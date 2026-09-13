@@ -717,8 +717,10 @@ function VendorListingForm({
           ? 'Saved. Your listing stays live and the change is visible to couples now.'
           : 'Saved. A verification officer visits the registered address before the listing goes live.',
       );
+      // Wait for the saved listing before leaving the form, so the details shown
+      // next are the ones just saved rather than a flash of the old ones.
+      await qc.invalidateQueries({ queryKey: ['my-listing'] });
       setEditing(false);
-      qc.invalidateQueries({ queryKey: ['my-listing'] });
       qc.invalidateQueries({ queryKey: ['business-completion'] });
       // The business switcher drives which listing the wizard is about; without
       // refreshing it, a just-created first listing never becomes "active" and
@@ -732,8 +734,11 @@ function VendorListingForm({
       // The dashboard greeting and profile-completion come off /users/me.
       qc.invalidateQueries({ queryKey: ['me'] });
       // In the wizard, a successful save moves straight to the next step — no
-      // page refresh, the listing is created/updated in place (EZ1-I21).
-      onSaved?.();
+      // page refresh, the listing is created/updated in place (EZ1-I21). Not for
+      // a verified listing: that save is an edit to a live record, and the vendor
+      // should land on the record showing what was saved (EZ1-I207), not be moved
+      // on to Catalog & Services.
+      if (!presentationalOnly) onSaved?.();
     } catch (err) {
       setMsg(apiMessage(err, 'Could not save the listing.'));
     }
