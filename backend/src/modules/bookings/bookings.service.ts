@@ -37,7 +37,9 @@ import {
 import { AppConfigService } from '../../config/app-config.service';
 import { OutboxService } from '../../platform/events/outbox.service';
 import { PAYMENT_PROVIDER, PaymentProvider, PayoutDestination } from './payment.provider';
-import { collectedByBooking } from './payment-totals';
+import { collectedByBooking, isCollected } from './payment-totals';
+import { summariseQuotations } from './booking-summary';
+import { serviceNamesByIds } from '../catalog/service-names';
 import { SupportCasesService } from '../verification/support-cases.service';
 import { MatchmakingService } from '../matchmaking/matchmaking.service';
 import { AvailabilityService } from '../vendors/availability.service';
@@ -136,6 +138,13 @@ const HOLDS_SLOT: BookingStatus[] = [
  * so only cancellation and completion free the buyer to ask again.
  */
 const ACTIVE_REQUEST: BookingStatus[] = HOLDS_SLOT;
+
+/** Still being asked and priced: what the Requests and Request on Date tabs gather. */
+const REQUEST_STATUSES: BookingStatus[] = [
+  BookingStatus.REQUESTED,
+  BookingStatus.QUOTATION_SENT,
+  BookingStatus.QUOTATION_ACCEPTED,
+];
 
 @Injectable()
 export class BookingsService {
@@ -399,6 +408,7 @@ export class BookingsService {
       }
     }
 
+    let slotServiceId: string | null = null;
     if (dto.slotId) {
       const slot = await this.availability.findSlot(dto.slotId);
       // Both halves. A slot is identified by the provider it belongs to and
@@ -416,6 +426,10 @@ export class BookingsService {
       if (!(await this.availability.isBookable(dto.providerId, dto.slotId))) {
         throw new BadRequestException('That time slot is no longer open. Pick another.');
       }
+      // A window published for one service books that service, so both sides
+      // see which job it is even when the customer did not pick it again
+      // (EZ1-I264).
+      slotServiceId = slot.vendorServiceId ?? null;
     }
 
     // What the catalog contributes: the buyer's answers are validated against
@@ -473,7 +487,7 @@ export class BookingsService {
           currency: this.cfg.payments.currency,
           eventDate: dto.eventDate ?? null,
           requirements: dto.requirements ?? null,
-          vendorServiceId: dto.vendorServiceId ?? null,
+          vendorServiceId: dto.vendorServiceId ?? slotServiceId,
           offeringId: dto.offeringId ?? null,
           serviceAnswers,
           quantity: dto.quantity ?? null,
@@ -749,6 +763,15 @@ export class BookingsService {
       await this.autoEngagePlanner(result.booking).catch(() => undefined);
     }
 
+    // The balance can be the last thing escrow was waiting on. Nothing called
+    // settle, so the second and final instalments stayed held after the job
+    // was done (EZ1-I266). Outside the payment transaction, so a failed
+    // transfer never rolls the payment back; the money stays held and settle
+    // can still move it.
+    if (result.booking.status === BookingStatus.COMPLETED) {
+      await this.releaseIfSettled(actor, result.booking).catch(() => undefined);
+    }
+
     return result;
   }
 
@@ -980,7 +1003,22 @@ export class BookingsService {
       aggregateType: 'booking',
       payload: { bookingId, userId: booking.userId },
     });
+    await this.releaseIfSettled(actor, saved).catch(() => undefined);
     return saved;
+  }
+
+  /**
+   * Pays the provider once there is nothing left to wait on (EZ1-I266).
+   *
+   * The same conditions `settle` checks -- the balance is in, delivered work
+   * has been accepted, no case is open -- applied as soon as the last of them
+   * becomes true, rather than waiting on a button neither side was shown.
+   */
+  private async releaseIfSettled(actor: AuthUser, booking: Booking): Promise<void> {
+    if (booking.status !== BookingStatus.COMPLETED) return;
+    if (booking.deliveredAt && !booking.deliveryAcceptedAt) return;
+    if (await this.cases.hasOpenCaseFor(booking.id)) return;
+    await this.releaseHeld(actor, booking.id);
   }
 
   async settle(actor: AuthUser, bookingId: string): Promise<Booking> {
@@ -1409,20 +1447,57 @@ export class BookingsService {
     const events: { at: Date; label: string; detail: string | null }[] = [
       { at: booking.createdAt, label: 'Request placed', detail: null },
     ];
-    for (const q of quotations) {
-      events.push({ at: q.createdAt, label: 'Quotation sent', detail: money(q.amount) });
-      if (q.status === QuotationStatus.ACCEPTED && q.respondedAt) {
-        events.push({ at: q.respondedAt, label: 'Quotation accepted', detail: money(q.amount) });
-      } else if (q.status === QuotationStatus.REJECTED && q.respondedAt) {
-        events.push({ at: q.respondedAt, label: 'Quotation declined', detail: null });
+    // Every offer, and what became of each, so a declined price and the
+    // revision that followed it stay readable on both sides (EZ1-I264).
+    quotations.forEach((q, index) => {
+      const amount = money(q.amount);
+      events.push({
+        at: q.createdAt,
+        label: index === 0 ? 'Quotation sent' : 'Revised quotation sent',
+        detail: amount,
+      });
+      const at = q.respondedAt ?? q.updatedAt;
+      if (q.status === QuotationStatus.ACCEPTED) {
+        events.push({ at, label: 'Quotation accepted', detail: amount });
+      } else if (q.status === QuotationStatus.REJECTED) {
+        events.push({
+          at,
+          label: 'Quotation declined — re-quote requested',
+          detail: [amount, q.responseNote].filter(Boolean).join(' · '),
+        });
+      } else if (q.status === QuotationStatus.WITHDRAWN) {
+        events.push({ at, label: 'Quotation withdrawn by the provider', detail: amount });
+      } else if (q.status === QuotationStatus.EXPIRED) {
+        events.push({ at: q.validUntil ?? q.updatedAt, label: 'Quotation expired', detail: amount });
       }
-    }
+    });
+    const PAID_ON = [
+      PaymentStatus.RELEASED,
+      PaymentStatus.PENDING_PAYOUT,
+      PaymentStatus.PARTIALLY_SETTLED,
+    ];
     for (const p of payments) {
+      const milestone = p.milestone.replace(/_/g, ' ');
+      // Cash never passes through escrow; an online instalment that has moved
+      // on was received first and paid out later, which are two moments.
+      const movedOn = PAID_ON.includes(p.status) && p.provider !== 'cash';
       events.push({
         at: p.createdAt,
-        label: `Payment ${p.milestone.replace(/_/g, ' ')} — ${p.status.replace(/_/g, ' ')}`,
+        label: movedOn
+          ? `Payment ${milestone} — held in escrow`
+          : `Payment ${milestone} — ${p.status.replace(/_/g, ' ')}`,
         detail: money(p.amount),
       });
+      if (movedOn) {
+        events.push({
+          at: p.updatedAt,
+          label:
+            p.status === PaymentStatus.PENDING_PAYOUT
+              ? `Payout ${milestone} — owed to the provider`
+              : `Payout ${milestone} — released to the provider`,
+          detail: money(p.payoutAmount),
+        });
+      }
     }
     if (booking.startedAt) events.push({ at: booking.startedAt, label: 'Work started', detail: null });
     if (booking.completedAt)
@@ -1432,6 +1507,13 @@ export class BookingsService {
         // What the provider said they handed over, so the timeline carries it too.
         detail: booking.deliveryNotes ?? null,
       });
+    if (booking.deliveryAcceptedAt) {
+      events.push({
+        at: booking.deliveryAcceptedAt,
+        label: 'Delivery confirmed by the customer',
+        detail: null,
+      });
+    }
     if (booking.cancelledAt) {
       events.push({
         at: booking.cancelledAt,
@@ -1547,6 +1629,18 @@ export class BookingsService {
       counts[row.status] = Number(row.count);
       counts.all += Number(row.count);
     }
+
+    // Not a status, so not in the tally above. Counted with the same rule as
+    // the row's flag, across the whole queue rather than the rows a client
+    // happened to load (EZ1-I266).
+    counts.request_on_date = await this.bookings
+      .createQueryBuilder('b')
+      .leftJoin(WeddingEvent, 'e', 'e.id = b."eventId"')
+      .where('b."providerId" IN (:...ids)', { ids: providerIds })
+      .andWhere('b."slotId" IS NULL')
+      .andWhere('(b."eventDate" IS NOT NULL OR e."eventDate" IS NOT NULL)')
+      .andWhere('b.status IN (:...statuses)', { statuses: REQUEST_STATUSES })
+      .getCount();
     return counts;
   }
 
@@ -1606,22 +1700,36 @@ export class BookingsService {
     const serviceIds = [...new Set(rows.map((b) => b.vendorServiceId).filter(Boolean))] as string[];
     const offeringIds = [...new Set(rows.map((b) => b.offeringId).filter(Boolean))] as string[];
 
-    const [users, profiles, events, payments, services, offeringNames] = await Promise.all([
-      this.users.find({ where: { id: In(userIds) }, select: ['id', 'email', 'phone'] }),
-      this.profiles.find({ where: { userId: In(userIds) } }),
-      eventIds.length ? this.events.find({ where: { id: In(eventIds) } }) : Promise.resolve([]),
-      this.payments.find({ where: { bookingId: In(rows.map((b) => b.id)) } }),
-      serviceIds.length
-        ? this.serviceRows.find({ where: { id: In(serviceIds) } })
-        : Promise.resolve([]),
-      this.vendorServices.offeringNamesByIds(offeringIds),
-    ]);
+    const bookingIds = rows.map((b) => b.id);
+    const [users, profiles, events, payments, serviceNames, offeringNames, quotationRows] =
+      await Promise.all([
+        this.users.find({ where: { id: In(userIds) }, select: ['id', 'email', 'phone'] }),
+        this.profiles.find({ where: { userId: In(userIds) } }),
+        eventIds.length ? this.events.find({ where: { id: In(eventIds) } }) : Promise.resolve([]),
+        this.payments.find({ where: { bookingId: In(bookingIds) } }),
+        serviceNamesByIds(this.serviceRows, serviceIds),
+        this.vendorServices.offeringNamesByIds(offeringIds),
+        this.quotations.find({ where: { bookingId: In(bookingIds) } }),
+      ]);
 
     const byUser = new Map(users.map((u) => [u.id, u]));
     const nameByUser = new Map(profiles.map((p) => [p.userId as string, p.displayName]));
     const profileByUser = new Map(profiles.map((p) => [p.userId as string, p]));
     const byEvent = new Map(events.map((e) => [e.id, e]));
-    const byService = new Map(services.map((v) => [v.id, v]));
+
+    const quotationsByBooking = new Map<string, Quotation[]>();
+    for (const quotation of quotationRows) {
+      const list = quotationsByBooking.get(quotation.bookingId) ?? [];
+      list.push(quotation);
+      quotationsByBooking.set(quotation.bookingId, list);
+    }
+    const milestonesByBooking = new Map<string, string[]>();
+    for (const payment of payments) {
+      if (!isCollected(payment.status)) continue;
+      const list = milestonesByBooking.get(payment.bookingId) ?? [];
+      list.push(payment.milestone);
+      milestonesByBooking.set(payment.bookingId, list);
+    }
 
     // The furthest a booking's money has got. Several payments can exist for
     // one booking — an advance and a balance — and what a provider wants is
@@ -1669,10 +1777,18 @@ export class BookingsService {
       // planner's wedding brief show — so a couple moving the day is reflected
       // here rather than leaving a stale copy on the booking to diverge from it
       // (EZ1-I195). A booking with no linked event keeps its own date.
+      // Judged before the linked function's date replaces the booking's own,
+      // with the same rule incomingCounts uses for the tab.
+      booking.requestOnDate =
+        !booking.slotId &&
+        Boolean(booking.eventDate ?? event?.eventDate) &&
+        REQUEST_STATUSES.includes(booking.status);
       if (event) booking.eventDate = event.eventDate ?? null;
       booking.serviceName = booking.vendorServiceId
-        ? (byService.get(booking.vendorServiceId)?.displayName ?? null)
+        ? (serviceNames.get(booking.vendorServiceId) ?? null)
         : null;
+      booking.quotation = summariseQuotations(quotationsByBooking.get(booking.id) ?? []);
+      booking.collectedMilestones = milestonesByBooking.get(booking.id) ?? [];
       booking.offeringName = booking.offeringId
         ? (offeringNames.get(booking.offeringId) ?? null)
         : null;
@@ -1907,6 +2023,7 @@ export class BookingsService {
     ]);
 
     const clientProfile = await this.profiles.findOne({ where: { userId: booking.userId } });
+    const serviceNames = await serviceNamesByIds(this.serviceRows, [booking.vendorServiceId]);
 
     // The escrow position across the whole booking, summed the same way the
     // Accounts cards are: held/refunded count `amount`, the provider's share and
@@ -1945,7 +2062,7 @@ export class BookingsService {
       // many units were booked, and the agreed booking total.
       service: {
         id: service?.id ?? booking.vendorServiceId,
-        name: service?.displayName ?? null,
+        name: booking.vendorServiceId ? (serviceNames.get(booking.vendorServiceId) ?? null) : null,
         offering: booking.offeringId ? (offeringNames.get(booking.offeringId) ?? null) : null,
         quantity: booking.quantity,
         total: booking.amount,
@@ -2044,10 +2161,7 @@ export class BookingsService {
     const serviceIds = [
       ...new Set(named.map((b) => b.vendorServiceId).filter(Boolean)),
     ] as string[];
-    const services = serviceIds.length
-      ? await this.serviceRows.find({ where: { id: In(serviceIds) } })
-      : [];
-    const serviceName = new Map(services.map((s) => [s.id, s.displayName]));
+    const serviceName = await serviceNamesByIds(this.serviceRows, serviceIds);
     const byBooking = new Map(named.map((b) => [b.id, b]));
 
     // Same ranking the provider-facing list uses, so a booking whose instalments

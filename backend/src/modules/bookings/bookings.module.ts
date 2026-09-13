@@ -21,6 +21,7 @@ import { BookingsService } from './bookings.service';
 import { QuotationsService } from './quotations.service';
 import { BookingAddonsService } from './booking-addons.service';
 import { BookingChatService } from './booking-chat.service';
+import { BookingSummaryService } from './booking-summary.service';
 import { BookingsController } from './bookings.controller';
 import { PaymentsController } from './payments.controller';
 import {
@@ -65,6 +66,7 @@ import {
     QuotationsService,
     BookingAddonsService,
     BookingChatService,
+    BookingSummaryService,
     MockPaymentProvider,
     RazorpayPaymentProvider,
     paymentProviderFactory,

@@ -84,7 +84,10 @@ export class BookingAddonsService {
 
   /** Every add-on on a booking, newest first. Either side may read them. */
   async list(actor: AuthUser, bookingId: string): Promise<BookingAddon[]> {
-    const booking = await this.loadBooking(bookingId);
+    // Cancelled bookings included, so what was agreed stays readable after a
+    // job falls through (EZ1-I265).
+    const booking = await this.bookings.findOne({ where: { id: bookingId } });
+    if (!booking) throw new NotFoundException('Booking not found');
     await this.bookingsService.assertEitherSide(actor, booking);
     return this.addons.find({ where: { bookingId }, order: { createdAt: 'DESC' } });
   }

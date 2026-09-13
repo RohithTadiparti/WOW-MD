@@ -29,6 +29,7 @@ import {
   RespondBookingAddonDto,
 } from './dto/booking-addon.dto';
 import { BookingAddonsService } from './booking-addons.service';
+import { BookingSummaryService } from './booking-summary.service';
 import { AuthUser, CurrentUser } from '../../common/decorators/current-user.decorator';
 import {
   RequireAnyPermission,
@@ -45,6 +46,7 @@ export class BookingsController {
     private readonly quotations: QuotationsService,
     private readonly addons: BookingAddonsService,
     private readonly bookingChat: BookingChatService,
+    private readonly summaries: BookingSummaryService,
   ) {}
 
   // ------------------------------------------------------------ booking chat
@@ -229,6 +231,19 @@ export class BookingsController {
     return this.bookings.history(actor, id);
   }
 
+  // Either party to the booking, enforced in the service like the two above.
+  @ApiOperation({
+    summary: 'Budget, agreed price, add-ons, quotation history and where the money sits',
+    description:
+      'One read for the booking detail on both portals (EZ1-I264, EZ1-I265): the customer budget ' +
+      'against the accepted quotation, the add-on total and grand total, every quotation with what ' +
+      'became of it, and paid / pending / escrow / released / commission / earnings.',
+  })
+  @Get(':id/summary')
+  summary(@CurrentUser() actor: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.summaries.summary(actor, id);
+  }
+
   // ------------------------------------------------------------- quotations
 
   @RequirePermissions(Permission.BOOKING_CONFIRM)
@@ -253,6 +268,18 @@ export class BookingsController {
   @Get(':id/quotations')
   listQuotations(@CurrentUser() actor: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.quotations.list(actor, id);
+  }
+
+  @RequirePermissions(Permission.BOOKING_CONFIRM)
+  @ApiOperation({
+    summary: 'Withdraw the quotation waiting on the customer',
+    description:
+      'The offer is kept as withdrawn and the request returns to you to price again. The booking ' +
+      'is not cancelled and its slot is not released (EZ1-I266).',
+  })
+  @Put(':id/quotations/withdraw')
+  withdrawQuotation(@CurrentUser() actor: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.quotations.withdraw(actor, id);
   }
 
   @RequirePermissions(Permission.BOOKING_PAY)
