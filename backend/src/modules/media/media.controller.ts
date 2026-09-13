@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Req } from '@nestjs/common';
+import { Request } from 'express';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { MediaService } from './media.service';
 import {
@@ -11,6 +12,25 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { Permission } from '../../common/authz/permissions';
+
+/**
+ * The origin a request reached, as its client sees it.
+ *
+ * Used only to build a mock-storage URL the same device can reach (see
+ * MediaStorageProvider.mockBase). Behind the web proxy the Host header carries
+ * the port, and X-Forwarded-* wins where a further proxy sets it. Anything that
+ * is not a plain host[:port] over http or https is ignored rather than put into
+ * a URL.
+ */
+function requestOrigin(req: Request): string | undefined {
+  const first = (value: string | string[] | undefined) =>
+    (Array.isArray(value) ? value[0] : value)?.split(',')[0]?.trim();
+  const host = first(req.headers['x-forwarded-host']) || first(req.headers.host);
+  const proto = first(req.headers['x-forwarded-proto']) || req.protocol;
+  if (!host || !/^([A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\])(:\d{1,5})?$/.test(host)) return undefined;
+  if (proto !== 'http' && proto !== 'https') return undefined;
+  return `${proto}://${host}`;
+}
 
 @ApiTags('media')
 @Controller('media')
@@ -38,8 +58,9 @@ export class MediaController {
     @CurrentUser('userId') userId: string,
     @Param('id', ParseUUIDPipe) _id: string,
     @Body() dto: PresignDto,
+    @Req() req: Request,
   ) {
-    return this.media.presignUpload(userId, dto.filename);
+    return this.media.presignUpload(userId, dto.filename, requestOrigin(req));
   }
 
   /**
@@ -56,8 +77,12 @@ export class MediaController {
   @RequirePermissions(Permission.PROFILE_MANAGE_OWN)
   @ApiOperation({ summary: 'Get an upload URL for a profile photograph' })
   @Post('profile-photo/presign')
-  presignProfilePhoto(@CurrentUser('userId') userId: string, @Body() dto: PresignDto) {
-    return this.media.presignUpload(userId, dto.filename);
+  presignProfilePhoto(
+    @CurrentUser('userId') userId: string,
+    @Body() dto: PresignDto,
+    @Req() req: Request,
+  ) {
+    return this.media.presignUpload(userId, dto.filename, requestOrigin(req));
   }
 
   /**
@@ -76,8 +101,9 @@ export class MediaController {
   presignAttachment(
     @CurrentUser('userId') userId: string,
     @Body() dto: PresignAttachmentDto,
+    @Req() req: Request,
   ) {
-    return this.media.presignUpload(userId, dto.filename);
+    return this.media.presignUpload(userId, dto.filename, requestOrigin(req));
   }
 
   @ApiBearerAuth()

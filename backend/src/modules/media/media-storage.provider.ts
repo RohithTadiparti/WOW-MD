@@ -2,6 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { createHash, createHmac, randomBytes } from 'crypto';
 import { AppConfigService } from '../../config/app-config.service';
 
+/** A host that names this machine to itself and to nothing else. */
+const LOOPBACK = /^(localhost|127(?:\.\d{1,3}){3}|\[::1\])$/i;
+
 export interface PresignedUpload {
   uploadUrl: string; // client PUTs the file here
   publicUrl: string; // final CDN/public URL to persist
@@ -45,7 +48,7 @@ export class MediaStorageProvider {
     return extension ? `${folded}.${extension.replace(/[^a-z0-9]/g, '')}` : folded;
   }
 
-  presign(userId: string, filename: string): PresignedUpload {
+  presign(userId: string, filename: string, requestOrigin?: string): PresignedUpload {
     const key = `uploads/${userId}/${Date.now()}-${randomBytes(8).toString('hex')}-${this.safeName(filename)}`;
     if (this.cfg.media.storageProvider === 's3' && this.cfg.media.s3Bucket) {
       return this.presignS3(key);
@@ -53,8 +56,32 @@ export class MediaStorageProvider {
     // `?mock=put` is dropped: it distinguished nothing, and a client that has
     // to strip a query parameter before displaying the file is a client with a
     // rule the real provider does not have.
-    const base = this.cfg.media.cdnBaseUrl || this.cfg.media.mockBaseUrl;
+    const base = this.cfg.media.cdnBaseUrl || this.mockBase(requestOrigin);
     return { uploadUrl: `${base}/${key}`, publicUrl: `${base}/${key}`, key };
+  }
+
+  /**
+   * Where the mock storage is reached, for the device that asked.
+   *
+   * The configured base comes from APP_BASE_URL, which on a local stack is
+   * `http://localhost:8085`: this machine, to this machine and nothing else. A
+   * phone on the same Wi-Fi was handed an upload URL on its own loopback, so
+   * every photograph failed at the PUT, and a browser on a second laptop failed
+   * the same way. When the configured base is loopback, the origin the request
+   * actually reached is used instead. A real address in configuration always
+   * wins, and so does a CDN.
+   */
+  private mockBase(requestOrigin?: string): string {
+    const configured = this.cfg.media.mockBaseUrl;
+    if (!requestOrigin) return configured;
+    try {
+      const url = new URL(configured);
+      if (!LOOPBACK.test(url.hostname)) return configured;
+      const origin = new URL(requestOrigin);
+      return `${origin.protocol}//${origin.host}${url.pathname.replace(/\/+$/, '')}`;
+    } catch {
+      return configured;
+    }
   }
 
   /** AWS SigV4 presigned PUT URL (query-string auth, UNSIGNED-PAYLOAD). */

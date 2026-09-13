@@ -98,8 +98,8 @@ export class MediaService {
     return { removed: true };
   }
 
-  presignUpload(userId: string, filename: string) {
-    return this.storage.presign(userId, filename);
+  presignUpload(userId: string, filename: string, requestOrigin?: string) {
+    return this.storage.presign(userId, filename, requestOrigin);
   }
 
   async addItem(userId: string, albumId: string, dto: AddMediaItemDto) {
