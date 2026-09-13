@@ -52,6 +52,30 @@ const MAX_BYTES = 10 * 1024 * 1024;
 /** A refusal the person can act on, as opposed to one about the network. */
 class UploadError extends Error {}
 
+const LOOPBACK_URL = /^(https?:)\/\/(localhost|127(?:\.\d{1,3}){3}|\[::1\])(:\d{1,5})?(\/.*)?$/i;
+const ORIGIN = /^(https?:\/\/[^/]+)/i;
+
+/**
+ * A storage URL the phone can actually open (EZ1-I248).
+ *
+ * A server configured with `localhost` for its storage hands back URLs that
+ * mean the phone itself. The API the app already talks to is, by definition,
+ * reachable; so a loopback URL is re-pointed at that origin, path kept. A URL
+ * that is not loopback, or an app that is itself talking to localhost, is left
+ * alone.
+ */
+export function reachable(url: string): string {
+  const loopback = LOOPBACK_URL.exec(url);
+  const apiOrigin = ORIGIN.exec(api.defaults.baseURL ?? '');
+  if (!loopback || !apiOrigin) return url;
+  if (LOOPBACK_URL.test(apiOrigin[1])) return url;
+  return `${apiOrigin[1]}${loopback[4] ?? ''}`;
+}
+
+function hostOf(url: string): string {
+  return ORIGIN.exec(url)?.[1] ?? url;
+}
+
 function extensionOf(name: string): string {
   return (name.split('.').pop() ?? '').toLowerCase();
 }
@@ -85,8 +109,9 @@ async function upload(
     { filename: fileName },
   );
 
+  const uploadUrl = reachable(data.uploadUrl as string);
   const task = FileSystem.createUploadTask(
-    data.uploadUrl,
+    uploadUrl,
     uri,
     {
       httpMethod: 'PUT',
@@ -101,13 +126,19 @@ async function upload(
     },
   );
 
-  const response = await task.uploadAsync();
+  let response: Awaited<ReturnType<typeof task.uploadAsync>>;
+  try {
+    response = await task.uploadAsync();
+  } catch {
+    // Named, so "could not reach" says which address could not be reached.
+    throw new UploadError(`Could not reach storage at ${hostOf(uploadUrl)}. Check your connection and try again.`);
+  }
   if (!response) throw new UploadError('That upload was interrupted. Try again.');
   if (response.status < 200 || response.status >= 300) {
     throw new UploadError(`Storage refused the file (${response.status}). Try again.`);
   }
 
-  return data.publicUrl as string;
+  return reachable(data.publicUrl as string);
 }
 
 type Kind = 'photo' | 'attachment';
@@ -311,7 +342,7 @@ export function MediaStrip({
       {urls.map((url) => (
         <View key={url}>
           <Image
-            source={{ uri: url }}
+            source={{ uri: reachable(url) }}
             style={{ width: 116, height: 84, borderRadius: radius.sm, backgroundColor: rgb(theme.surfaceSunken) }}
             contentFit="cover"
             transition={150}
@@ -401,7 +432,7 @@ export function DocumentList({
           <Pressable
             accessibilityRole="link"
             onPress={() => {
-              void WebBrowser.openBrowserAsync(url).catch(() =>
+              void WebBrowser.openBrowserAsync(reachable(url)).catch(() =>
                 Alert.alert('That document could not be opened.'),
               );
             }}
