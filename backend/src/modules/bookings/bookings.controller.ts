@@ -412,8 +412,8 @@ export class BookingsController {
   @ApiOperation({
     summary: 'Mark the work delivered',
     description:
-      'Makes the balance payable rather than completing the booking — paying it is what does ' +
-      'that. Refused before the second instalment, and while a case is open.',
+      'Makes the balance payable rather than completing the booking. Refused before the second ' +
+      'instalment, and while a case is open.',
   })
   @Put(':id/complete')
   complete(
@@ -422,6 +422,18 @@ export class BookingsController {
     @Body() dto: MarkDeliveredDto,
   ) {
     return this.bookings.completeWork(actor, id, dto);
+  }
+
+  @RequirePermissions(Permission.BOOKING_COMPLETE)
+  @ApiOperation({
+    summary: 'Mark a delivered booking completed',
+    description:
+      'Once the customer has paid the balance and accepted the delivery (EZ1-I266). Completing ' +
+      'releases the held instalments to you. Refused while a case is open.',
+  })
+  @Put(':id/mark-completed')
+  markCompleted(@CurrentUser() actor: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.bookings.markCompleted(actor, id);
   }
 
   /**

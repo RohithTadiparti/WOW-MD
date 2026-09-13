@@ -20,6 +20,8 @@ interface Booking {
    */
   deliveredAt?: string | null;
   deliveryAcceptedAt?: string | null;
+  /** Which instalments are in, so a paid balance stops asking to be paid. */
+  collectedMilestones?: string[];
   /** What the provider said they handed over, and any evidence for it. */
   deliveryNotes?: string | null;
   deliveryEvidence?: string[];
@@ -358,7 +360,19 @@ export default function Bookings() {
             ['confirmed', 'in_progress', 'completed_pending_final_payment', 'completed'].includes(
               b.status,
             );
-          const primaryLabel = isOpen ? 'Hide details' : PRIMARY_LABEL[b.status] ?? 'View details';
+          // The balance no longer completes a booking by itself: the provider
+          // closes it once it is paid and the delivery accepted (EZ1-I266).
+          const balancePaid =
+            b.status === 'completed_pending_final_payment' &&
+            (b.collectedMilestones ?? []).includes('final');
+          const statusHint = balancePaid
+            ? b.deliveredAt && !b.deliveryAcceptedAt
+              ? 'Balance paid — accept the delivery so the provider can close the booking.'
+              : 'Balance paid — waiting for the provider to mark the booking completed.'
+            : STATUS_HINT[b.status];
+          const primaryLabel = isOpen
+            ? 'Hide details'
+            : (!balancePaid && PRIMARY_LABEL[b.status]) || 'View details';
           return (
           <div
             key={b.id}
@@ -396,7 +410,7 @@ export default function Bookings() {
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
-                  {BOOKING_STATUS_LABEL[b.status] ?? b.status}
+                  {balancePaid ? 'Balance paid' : (BOOKING_STATUS_LABEL[b.status] ?? b.status)}
                 </span>
                 {b.paymentStatus && (
                   <span className="rounded-full bg-brand-soft px-2 py-0.5 text-xs text-brand-strong">
@@ -404,9 +418,7 @@ export default function Bookings() {
                   </span>
                 )}
               </div>
-              {STATUS_HINT[b.status] && (
-                <p className="mt-1 text-xs text-gray-500">{STATUS_HINT[b.status]}</p>
-              )}
+              {statusHint && <p className="mt-1 text-xs text-gray-500">{statusHint}</p>}
             </div>
 
             {/* A glanceable progress bar while the booking is still moving (EZ1-I12, EZ1-I167). */}
@@ -478,7 +490,7 @@ export default function Bookings() {
                     run(() => api.put(`/bookings/${b.id}/confirm-delivery`, {}))
                   }
                 >
-                  Accept &amp; complete
+                  Accept delivery
                 </button>
               )}
               {canDispute && (

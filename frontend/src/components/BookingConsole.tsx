@@ -336,6 +336,9 @@ export default function BookingConsole({
                       Request on date
                     </span>
                   )}
+                  {booking.status === 'confirmed' && booking.collectedMilestones?.includes('advance') && (
+                    <span className="rounded-full bg-positive-bg px-2 py-0.5 text-xs text-positive-fg">Advance received</span>
+                  )}
                   {/* A declined, withdrawn or revised offer is not a new request,
                       and the row says so (EZ1-I264). */}
                   {booking.quotation &&

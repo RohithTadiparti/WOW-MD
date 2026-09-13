@@ -207,6 +207,40 @@ describe('BookingsService', () => {
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
+    it('lets the provider complete a delivered booking once the balance is in and accepted', async () => {
+      current = baseBooking({
+        status: BookingStatus.COMPLETED_PENDING_FINAL_PAYMENT,
+        deliveredAt: new Date(),
+        deliveryAcceptedAt: new Date(),
+      });
+      paymentsRepo.find.mockResolvedValueOnce([{ milestone: 'final', status: 'held_in_escrow' }] as never);
+      const result = await service.markCompleted(asUser('vendor-owner', UserRole.VENDOR), 'b1');
+      expect(result.status).toBe(BookingStatus.COMPLETED);
+    });
+
+    it('refuses to complete a booking before the balance is paid', async () => {
+      current = baseBooking({
+        status: BookingStatus.COMPLETED_PENDING_FINAL_PAYMENT,
+        deliveredAt: new Date(),
+        deliveryAcceptedAt: new Date(),
+      });
+      await expect(
+        service.markCompleted(asUser('vendor-owner', UserRole.VENDOR), 'b1'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('refuses to complete a booking the customer has not accepted', async () => {
+      current = baseBooking({
+        status: BookingStatus.COMPLETED_PENDING_FINAL_PAYMENT,
+        deliveredAt: new Date(),
+        deliveryAcceptedAt: null,
+      });
+      paymentsRepo.find.mockResolvedValueOnce([{ milestone: 'final', status: 'held_in_escrow' }] as never);
+      await expect(
+        service.markCompleted(asUser('vendor-owner', UserRole.VENDOR), 'b1'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
     it('refuses to start work before the advance is held', async () => {
       current = baseBooking({ status: BookingStatus.CONFIRMED });
       paymentsRepo.count.mockResolvedValueOnce(0);

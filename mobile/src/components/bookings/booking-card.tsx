@@ -13,6 +13,7 @@ import {
   QUOTATION_STAGE_LABEL,
   QUOTATION_STAGE_TONE,
   SELLER_STATUS_LABEL,
+  canMarkCompleted,
   canMarkDelivered,
   isRequestOnDate,
   nextActionFor,
@@ -124,6 +125,9 @@ export function BookingCard({
         {/* Marked on the row as well as gathered under its own tab, so it reads
             as one wherever the provider comes across it. */}
         {onDate ? <Badge tone="caution">Request on date</Badge> : null}
+        {booking.status === 'confirmed' && booking.collectedMilestones?.includes('advance') ? (
+          <Badge tone="positive">Advance received</Badge>
+        ) : null}
         {/* A declined, withdrawn or revised offer is not a new request, and the
             card says so (EZ1-I264). */}
         {booking.quotation && ['requested', 'quotation_sent'].includes(booking.status) ? (
@@ -279,7 +283,11 @@ export function BookingCard({
               variant={action.primary ? 'primary' : 'outline'}
               // The server refuses a delivery before the second instalment;
               // the Next line above says why (EZ1-I266).
-              disabled={acting || (action.path === 'complete' && !deliverable)}
+              disabled={
+                acting ||
+                (action.path === 'complete' && !deliverable) ||
+                (action.path === 'mark-completed' && !canMarkCompleted(booking))
+              }
               onPress={() => {
                 if (action.path === 'quotations/withdraw') {
                   NativeAlert.alert(

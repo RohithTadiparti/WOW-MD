@@ -9,7 +9,7 @@ import BookingDetail from './BookingDetail';
 import { BOOKING_STATUS_LABEL, Permission, can } from '../lib/permissions';
 import { useAuth } from '../store/auth';
 import { FieldSpec, formatAnswer } from './DynamicForm';
-import { canMarkDelivered } from '../lib/booking-progress';
+import { canMarkCompleted, canMarkDelivered } from '../lib/booking-progress';
 
 interface IncomingBooking {
   id: string;
@@ -61,6 +61,8 @@ const ACTIONS: Record<string, { label: string; path: string }[]> = {
     { label: 'Cancel', path: 'cancel' },
   ],
   in_progress: [{ label: 'Mark delivered', path: 'complete' }],
+  // Once the balance is in and the customer has accepted the delivery (EZ1-I266).
+  completed_pending_final_payment: [{ label: 'Mark as completed', path: 'mark-completed' }],
   completed: [],
   disputed: [],
   cancelled: [],
@@ -84,7 +86,7 @@ const SELLER_STATUS_LABEL: Record<string, string> = {
   quotation_accepted: 'Accepted by the customer',
   payment_pending: 'Awaiting the advance',
   pending: 'Paid, awaiting your confirmation',
-  completed_pending_final_payment: 'Delivered — awaiting the final payment',
+  completed_pending_final_payment: 'Delivered',
 };
 
 /**
@@ -183,11 +185,17 @@ export default function ProviderBookings({ canQuote }: { canQuote: boolean }) {
                 className={a.path === 'confirm' ? 'btn btn-sm' : 'btn-outline btn-sm'}
                 // The server refuses a delivery before the second instalment;
                 // saying so beats a button that fails when pressed (EZ1-I266).
-                disabled={act.isPending || (a.path === 'complete' && !canMarkDelivered(b))}
+                disabled={
+                  act.isPending ||
+                  (a.path === 'complete' && !canMarkDelivered(b)) ||
+                  (a.path === 'mark-completed' && !canMarkCompleted(b))
+                }
                 title={
                   a.path === 'complete' && !canMarkDelivered(b)
                     ? 'Available once the customer has paid the second instalment'
-                    : undefined
+                    : a.path === 'mark-completed' && !canMarkCompleted(b)
+                      ? 'Available once the customer has paid the balance and accepted the delivery'
+                      : undefined
                 }
                 onClick={() => {
                   if (
