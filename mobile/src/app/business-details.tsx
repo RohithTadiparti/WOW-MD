@@ -73,7 +73,7 @@ export default function BusinessDetails() {
   const refresh = useRefreshBusiness();
   const { activeId } = useBusinesses();
   const { listing, isPending } = useActiveListing(activeId);
-  const { data: completion } = useCompletion(activeId);
+  const { data: completion, isPending: completionPending } = useCompletion(activeId);
 
   const [form, setForm] = useState<Form>(EMPTY);
   const [portfolio, setPortfolio] = useState<string[]>([]);
@@ -251,7 +251,8 @@ export default function BusinessDetails() {
     }
   }
 
-  if (isPending) {
+  // Until the rules arrive a verified listing would open as the full form.
+  if (isPending || (listing && completionPending)) {
     return (
       <Screen>
         <Loading rows={4} />
