@@ -131,6 +131,10 @@ export const ACTIONS: Record<string, { label: string; path: string; primary?: bo
     { label: 'Cancel', path: 'cancel' },
   ],
   in_progress: [{ label: 'Mark delivered', path: 'complete', primary: true }],
+  // Once the balance is in and the customer has accepted the delivery (EZ1-I266).
+  completed_pending_final_payment: [
+    { label: 'Mark as completed', path: 'mark-completed', primary: true },
+  ],
   completed: [],
   disputed: [],
   cancelled: [],
@@ -155,7 +159,7 @@ export const SELLER_STATUS_LABEL: Record<string, string> = {
   pending: 'Paid, awaiting your confirmation',
   confirmed: 'Confirmed',
   in_progress: 'In progress',
-  completed_pending_final_payment: 'Delivered — awaiting the final payment',
+  completed_pending_final_payment: 'Delivered',
   completed: 'Completed',
   disputed: 'Under investigation',
   cancelled: 'Cancelled',
@@ -170,6 +174,18 @@ export const SELLER_STATUS_LABEL: Record<string, string> = {
  */
 export function canMarkDelivered(booking: IncomingBooking): boolean {
   return !booking.collectedMilestones || booking.collectedMilestones.includes('second');
+}
+
+/**
+ * Whether "Mark as completed" can go through yet: the balance is in and the
+ * customer has accepted the delivery (EZ1-I266). The server checks the same.
+ */
+export function canMarkCompleted(booking: IncomingBooking): boolean {
+  return (
+    booking.status === 'completed_pending_final_payment' &&
+    Boolean(booking.collectedMilestones?.includes('final')) &&
+    (!booking.deliveredAt || Boolean(booking.deliveryAcceptedAt))
+  );
 }
 
 /** The one thing this booking is waiting on the provider for, or on whom. */
@@ -195,7 +211,10 @@ export function nextActionFor(booking: IncomingBooking): string {
         ? 'Mark delivered when done'
         : 'Waiting for the second instalment before you can mark it delivered';
     case 'completed_pending_final_payment':
-      return 'Delivered — awaiting the final payment';
+      if (!booking.collectedMilestones?.includes('final')) return 'Delivered — awaiting the final payment';
+      return canMarkCompleted(booking)
+        ? 'Balance received — mark the booking completed'
+        : 'Balance received — waiting for the customer to confirm the delivery';
     case 'completed':
       return booking.deliveredAt && !booking.deliveryAcceptedAt
         ? 'Waiting for the customer to confirm the delivery before the payout'

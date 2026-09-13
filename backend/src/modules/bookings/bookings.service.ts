@@ -75,8 +75,9 @@ const toMajor = (minor: number): string => (minor / 100).toFixed(2);
  *          └─ advance held → CONFIRMED
  *               └─ provider starts → IN_PROGRESS
  *                    └─ second instalment → provider may finish
- *                         └─ provider confirms → COMPLETED_PENDING_FINAL_PAYMENT
- *                              └─ balance paid → COMPLETED [escrow released]
+ *                         └─ provider marks delivered → COMPLETED_PENDING_FINAL_PAYMENT
+ *                              └─ balance paid, delivery accepted by the buyer
+ *                                   └─ provider marks completed → COMPLETED [escrow released]
  *
  * A provider cannot start before being paid something, and a buyer cannot be
  * asked for the balance before the work is done. Every one of those gates is
@@ -717,17 +718,16 @@ export class BookingsService {
         }),
       );
 
-      // The advance is what turns an agreement into a booking; the balance is
-      // what closes it. The middle instalment changes no state of its own.
+      // The advance is what turns an agreement into a booking. The later
+      // instalments change no state of their own: the balance makes the job
+      // completable, and the provider completes it once the buyer has also
+      // accepted the delivery (EZ1-I266).
       if (milestone === PaymentMilestone.ADVANCE) {
         this.assertTransition(booking.status, BookingStatus.CONFIRMED);
         booking.status = BookingStatus.CONFIRMED;
         // Capacity was consumed when the provider accepted the job, not here.
         // The window has been theirs since then; the advance only releases
         // them to start work.
-      } else if (milestone === PaymentMilestone.FINAL) {
-        this.assertTransition(booking.status, BookingStatus.COMPLETED);
-        booking.status = BookingStatus.COMPLETED;
       }
       await bookingRepo.save(booking);
 
@@ -761,15 +761,6 @@ export class BookingsService {
       result.booking.status === BookingStatus.CONFIRMED
     ) {
       await this.autoEngagePlanner(result.booking).catch(() => undefined);
-    }
-
-    // The balance can be the last thing escrow was waiting on. Nothing called
-    // settle, so the second and final instalments stayed held after the job
-    // was done (EZ1-I266). Outside the payment transaction, so a failed
-    // transfer never rolls the payment back; the money stays held and settle
-    // can still move it.
-    if (result.booking.status === BookingStatus.COMPLETED) {
-      await this.releaseIfSettled(actor, result.booking).catch(() => undefined);
     }
 
     return result;
@@ -929,7 +920,8 @@ export class BookingsService {
 
   /**
    * The provider says the work is delivered. This does not complete the
-   * booking — it makes the balance payable, and paying it is what completes it.
+   * booking — it makes the balance payable, and the provider completes it once
+   * the balance is in and the buyer has accepted the delivery.
    */
   async completeWork(
     actor: AuthUser,
@@ -962,6 +954,50 @@ export class BookingsService {
       aggregateType: 'booking',
       payload: { bookingId, userId: booking.userId },
     });
+    return saved;
+  }
+
+  /**
+   * The provider closes the job (EZ1-I266).
+   *
+   * Only once nothing is left to wait on: the balance is in and, for delivered
+   * work, the buyer has accepted it. Paying the balance used to complete the
+   * booking on its own, which completed jobs the buyer had not signed off and
+   * left the provider no last step. Completing is also what pays them out.
+   */
+  async markCompleted(actor: AuthUser, bookingId: string): Promise<Booking> {
+    const booking = await this.loadOrFail(bookingId);
+    await this.assertSellerSide(actor, booking);
+
+    if (booking.status !== BookingStatus.COMPLETED_PENDING_FINAL_PAYMENT) {
+      throw new BadRequestException('Only a delivered booking can be marked completed');
+    }
+    if (await this.cases.hasOpenCaseFor(bookingId)) {
+      throw new BadRequestException(
+        'An open case is holding this booking. It moves on when a settlement is recorded.',
+      );
+    }
+    const balance = await this.payments.find({
+      where: { bookingId, milestone: PaymentMilestone.FINAL },
+    });
+    if (!balance.some((payment) => isCollected(payment.status))) {
+      throw new BadRequestException('The customer has not paid the balance yet');
+    }
+    if (booking.deliveredAt && !booking.deliveryAcceptedAt) {
+      throw new BadRequestException(
+        'The customer has not confirmed the delivery yet. They accept it, or raise a dispute.',
+      );
+    }
+
+    const saved = await this.transition(booking, BookingStatus.COMPLETED);
+    await this.outbox.record({
+      eventType: 'booking.completed',
+      aggregateType: 'booking',
+      payload: { bookingId, userId: booking.userId },
+    });
+    // After the state change rather than inside it, so a failed transfer
+    // leaves the money held with the booking complete, and settle can move it.
+    await this.releaseIfSettled(actor, saved).catch(() => undefined);
     return saved;
   }
 
