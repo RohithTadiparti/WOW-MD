@@ -6,7 +6,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { BusinessStatus, VendorCategory } from '../../../common/enums';
+import { BusinessStatus } from '../../../common/enums';
 
 export interface VendorPricing {
   currency?: string;
@@ -30,11 +30,20 @@ export class Vendor {
   @Column()
   name: string;
 
+  /**
+   * The first of `categories`, kept as its own column so every report and
+   * summary that reads one category keeps working (EZ1-I263). Null only for a
+   * listing that has not chosen yet.
+   */
   @Index()
-  @Column({ type: 'enum', enum: VendorCategory })
-  category: VendorCategory;
+  @Column({ type: 'varchar', length: 60, nullable: true })
+  category: string | null;
 
-  /** What the vendor actually does. Required when `category` is OTHER. */
+  /** One to five catalogue category slugs, in the order the vendor chose them (EZ1-I263). */
+  @Column({ type: 'varchar', length: 60, array: true, default: () => "'{}'" })
+  categories: string[];
+
+  /** The free text a listing filed under "Other" once carried. Kept for the record, no longer read (EZ1-I263). */
   @Column({ type: 'varchar', length: 80, nullable: true })
   otherCategory: string | null;
 

@@ -4,14 +4,14 @@ import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { api, apiMessage } from '@/lib/api';
-import { CATEGORY_LABEL } from '@/lib/business-status';
 import { todayIso } from '@/components/calendar';
 import { useActiveListing } from '@/lib/vendor-listing';
-import { GSTIN_PATTERN, PAN_PATTERN, VENDOR_CATEGORIES } from '@/shared/permissions';
+import { GSTIN_PATTERN, PAN_PATTERN } from '@/shared/permissions';
 import { Divider, InfoNote } from '@/components/chrome';
-import { DateField, SelectField, Textarea } from '@/components/form';
+import { DateField, Textarea } from '@/components/form';
 import { useCompletion, useRefreshBusiness } from '@/components/business/completion';
 import { VerifiedDetails } from '@/components/business/verified-details';
+import { CategoryPicker } from '@/components/business/category-picker';
 import { DocumentList, MediaStrip, PhotoPicker } from '@/components/uploader';
 import {
   Alert,
@@ -48,10 +48,6 @@ import { space } from '@/theme';
 
 const EMPTY = {
   name: '',
-  // No category is pre-selected — the vendor must choose one rather than have
-  // "Venue" default in on their behalf.
-  category: '',
-  otherCategory: '',
   city: '',
   description: '',
   gstNumber: '',
@@ -63,7 +59,7 @@ const EMPTY = {
 };
 
 type Form = typeof EMPTY;
-type Errors = Partial<Record<keyof Form | 'portfolio' | 'complianceDocuments', string>>;
+type Errors = Partial<Record<keyof Form | 'categories' | 'portfolio' | 'complianceDocuments', string>>;
 
 const MOBILE = /^(\+91)?[6-9]\d{9}$/;
 
@@ -76,6 +72,8 @@ export default function BusinessDetails() {
   const { data: completion, isPending: completionPending } = useCompletion(activeId);
 
   const [form, setForm] = useState<Form>(EMPTY);
+  // One to five catalogue categories, first one first (EZ1-I263).
+  const [categories, setCategories] = useState<string[]>([]);
   const [portfolio, setPortfolio] = useState<string[]>([]);
   const [documents, setDocuments] = useState<string[]>([]);
   const [errors, setErrors] = useState<Errors>({});
@@ -101,8 +99,6 @@ export default function BusinessDetails() {
     if (!listing) return;
     setForm({
       name: listing.name ?? '',
-      category: listing.category ?? '',
-      otherCategory: listing.otherCategory ?? '',
       city: listing.city ?? '',
       description: listing.description ?? '',
       gstNumber: listing.gstNumber ?? '',
@@ -112,6 +108,7 @@ export default function BusinessDetails() {
       registeredAddress: listing.registeredAddress ?? '',
       contactPhone: listing.contactPhone ?? '',
     });
+    setCategories(listing.categories ?? []);
     setPortfolio(listing.portfolio ?? []);
     setDocuments(listing.complianceDocuments ?? []);
   }, [listing, editing]);
@@ -131,10 +128,7 @@ export default function BusinessDetails() {
     // Category, city, registered address, a portfolio image and a compliance
     // document are all mandatory to submit a listing for verification — an
     // officer cannot verify a business that has named none of them.
-    if (!form.category) found.category = 'Choose a category';
-    if (form.category === 'other' && !form.otherCategory.trim()) {
-      found.otherCategory = 'Say what you do, so clients can find you';
-    }
+    if (categories.length === 0) found.categories = 'Choose at least one category';
     if (!form.city.trim()) found.city = 'A city is required';
     if (!form.registeredAddress.trim()) {
       found.registeredAddress = 'A registered address is required — it is where the officer visits';
@@ -200,14 +194,13 @@ export default function BusinessDetails() {
           }
         : {
             name: form.name.trim(),
-            category: form.category,
+            categories,
             // Portfolio is deliberately always sent, including empty: clearing
             // the last photo has to be able to reach the server.
             portfolio,
             complianceDocuments: documents,
           };
       if (!presentationalOnly) {
-        if (form.category === 'other') payload.otherCategory = form.otherCategory.trim();
         for (const key of [
           'city',
           'description',
@@ -314,26 +307,7 @@ export default function BusinessDetails() {
             error={errors.name}
             autoCapitalize="words"
           />
-          <SelectField
-            label="Category"
-            value={form.category}
-            onChange={set('category')}
-            error={errors.category}
-            placeholder="Select category"
-            options={VENDOR_CATEGORIES.map((c) => ({
-              value: c,
-              label: CATEGORY_LABEL[c] ?? c,
-            }))}
-          />
-          {form.category === 'other' && (
-            <Field
-              label="Specify category"
-              placeholder="Mehendi artist"
-              value={form.otherCategory}
-              onChangeText={set('otherCategory')}
-              error={errors.otherCategory}
-            />
-          )}
+          <CategoryPicker value={categories} onChange={setCategories} error={errors.categories} />
           <Field
             label="City"
             value={form.city}

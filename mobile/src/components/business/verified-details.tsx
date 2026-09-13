@@ -1,4 +1,5 @@
 import { View } from 'react-native';
+import { useCategoryNames } from '@/components/business/category-picker';
 
 import type { VendorListing } from '@/lib/vendor-listing';
 import { DetailGrid, DetailRow, Divider } from '@/components/chrome';
@@ -34,6 +35,7 @@ export function VerifiedDetails({
   notice: string;
   onEdit: () => void;
 }) {
+  const categoryNames = useCategoryNames();
   return (
     <Screen>
       <View style={{ gap: space(1) }}>
@@ -73,6 +75,9 @@ export function VerifiedDetails({
         <Divider />
         <DetailGrid>
           <DetailRow label="Business name">{listing.name}</DetailRow>
+          <DetailRow label="Categories">
+            {categoryNames(listing.categories).join(', ') || 'Not chosen yet'}
+          </DetailRow>
           <DetailRow label="City">{listing.city || 'Not provided'}</DetailRow>
           <DetailRow label="GST number">{listing.gstNumber ?? 'Not provided'}</DetailRow>
           <DetailRow label="PAN">{listing.panNumber ?? 'Not provided'}</DetailRow>

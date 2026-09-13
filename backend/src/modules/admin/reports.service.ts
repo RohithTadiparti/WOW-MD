@@ -209,7 +209,9 @@ export class ReportsService {
           providerId: b.providerId,
           name: vendor?.name ?? planner?.agencyName ?? 'A removed listing',
           category: vendor
-            ? (categoryName.get(vendor.category) ?? titleCase(vendor.category))
+            ? vendor.category
+              ? (categoryName.get(vendor.category) ?? titleCase(vendor.category))
+              : 'Uncategorised'
             : (categoryName.get('planning') ?? 'Wedding Planner'),
           city: vendor?.city ?? planner?.city ?? null,
           rating: vendor?.ratingCount || planner?.ratingCount ? Number(vendor?.ratingAvg ?? planner?.ratingAvg) : null,

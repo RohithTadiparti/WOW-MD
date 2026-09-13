@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
-import { categoryLabel } from '@/lib/business-status';
+import { CategoryNames } from '@/components/business/category-picker';
 import { shortDate } from '@/lib/format';
 import { priceLabel } from '@/lib/pricing';
 import { useActiveListing } from '@/lib/vendor-listing';
@@ -103,7 +103,7 @@ export default function BusinessReview() {
         <DetailGrid>
           <DetailRow label="Business name">{listing.name}</DetailRow>
           <DetailRow label="Category">
-            {categoryLabel(listing.category, listing.otherCategory)}
+            <CategoryNames slugs={listing.categories} fallback="Not chosen yet" />
           </DetailRow>
           <DetailRow label="City">{listing.city || 'Not provided'}</DetailRow>
           <DetailRow label="PAN">{listing.panNumber ?? 'Not provided'}</DetailRow>

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useCategoryNames } from '../components/CategoryPicker';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { api } from '../lib/api';
@@ -19,7 +20,9 @@ import { MapPin, Star, Storefront } from '@phosphor-icons/react';
 interface PublicVendor {
   id: string;
   name: string;
-  category: string;
+  /** The first of `categories` (EZ1-I263). */
+  category: string | null;
+  categories?: string[];
   otherCategory: string | null;
   description: string;
   city: string;
@@ -55,19 +58,11 @@ interface Review {
   createdAt: string;
 }
 
-const CATEGORY_LABEL: Record<string, string> = {
-  venue: 'Venue',
-  catering: 'Catering',
-  photography: 'Photography',
-  decor: 'Decor',
-  makeup: 'Makeup',
-  entertainment: 'Entertainment',
-  other: 'Other',
-};
 
 export default function VendorDetail() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
+  const categoryNames = useCategoryNames();
   const permissions = useAuth((s) => s.user?.permissions ?? []);
   const canBook = can(permissions, Permission.BOOKING_CREATE);
   /*
@@ -150,10 +145,7 @@ export default function VendorDetail() {
     );
   }
 
-  const category =
-    vendor.category === 'other'
-      ? (vendor.otherCategory ?? 'Other')
-      : (CATEGORY_LABEL[vendor.category] ?? vendor.category);
+  const category = categoryNames(vendor.categories?.length ? vendor.categories : [vendor.category]).join(', ');
 
   return (
     <div className="space-y-6">

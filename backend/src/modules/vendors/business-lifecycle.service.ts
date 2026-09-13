@@ -86,7 +86,7 @@ export class BusinessLifecycleService {
     // and trading-since stay optional.
     const missingIdentity: string[] = [];
     if (!business.name) missingIdentity.push('business name');
-    if (!business.category) missingIdentity.push('category');
+    if (!business.categories?.length) missingIdentity.push('category');
     if (!business.city) missingIdentity.push('city');
     if (!business.registeredAddress) missingIdentity.push('registered address');
     if (!business.panNumber) missingIdentity.push('PAN number');
@@ -304,6 +304,9 @@ export class BusinessLifecycleService {
     if (!allowed || allowed.length === 0) return;
 
     const allow = new Set(allowed);
+    // The correction key for categories is still 'category'; it opens the list
+    // that replaced it (EZ1-I263).
+    if (allow.has('category')) allow.add('categories');
     const current = business as unknown as Record<string, unknown>;
     for (const [key, value] of Object.entries(dto)) {
       if (value === undefined || allow.has(key)) continue;

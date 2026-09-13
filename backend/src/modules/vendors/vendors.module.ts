@@ -1,4 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
+import { ServiceCategory } from '../catalog/entities/service-category.entity';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Vendor } from './entities/vendor.entity';
 import { User } from '../auth/entities/user.entity';
@@ -23,6 +24,8 @@ import { CatalogModule } from '../catalog/catalog.module';
     NotificationsModule,
     TypeOrmModule.forFeature([
       Vendor,
+      // Read-only, to check a listing's categories against the catalogue (EZ1-I263).
+      ServiceCategory,
       VendorReview,
       VendorAvailabilitySlot,
       VendorService,

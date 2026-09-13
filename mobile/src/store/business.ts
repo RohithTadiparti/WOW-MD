@@ -58,7 +58,9 @@ export const useBusinessStore = create<BusinessState>((set) => ({
 export interface BusinessSummary {
   id: string;
   name: string;
-  category: string;
+  /** The first of `categories` (EZ1-I263). */
+  category: string | null;
+  categories?: string[];
   status: string;
   isApproved: boolean;
   payoutAccountId?: string | null;

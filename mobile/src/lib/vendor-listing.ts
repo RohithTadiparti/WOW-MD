@@ -15,7 +15,10 @@ import { api } from '@/lib/api';
 export interface VendorListing {
   id: string;
   name: string;
-  category: string;
+  /** The first of `categories` (EZ1-I263). */
+  category: string | null;
+  /** One to five catalogue category slugs, first one first. */
+  categories: string[];
   otherCategory: string | null;
   city: string;
   description: string;

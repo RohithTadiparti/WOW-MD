@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { CaretUpDown, Check } from 'phosphor-react-native';
 
-import { BUSINESS_STATUS_LABEL, businessTone, categoryLabel } from '@/lib/business-status';
+import { BUSINESS_STATUS_LABEL, businessTone } from '@/lib/business-status';
+import { CategoryNames } from '@/components/business/category-picker';
 import { Badge } from '@/components/chrome';
 import { Sheet } from '@/components/sheet';
 import { Body, Caption } from '@/components/ui';
@@ -85,7 +86,7 @@ export function BusinessSwitcher() {
                 <View style={{ flex: 1, gap: space(1) }}>
                   <Body numberOfLines={1}>{business.name}</Body>
                   <Caption tone="faint" numberOfLines={1}>
-                    {categoryLabel(business.category)}
+                    <CategoryNames slugs={business.categories?.length ? business.categories : [business.category]} />
                   </Caption>
                 </View>
                 <Badge tone={businessTone(business.status)}>
