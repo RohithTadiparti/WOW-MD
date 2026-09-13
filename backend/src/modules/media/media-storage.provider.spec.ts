@@ -72,6 +72,61 @@ describe('MediaStorageProvider', () => {
     });
   });
 
+  /*
+   * A phone on the same Wi-Fi.
+   *
+   * The configured base on a local stack is http://localhost:8085, and a phone
+   * handed an upload URL on its own loopback failed every photograph at the
+   * PUT. When the configured base is loopback, the address the device reached
+   * is used instead; anything real in configuration is left alone.
+   */
+  describe('when the configured base is loopback', () => {
+    const provider = (mockBaseUrl = 'http://localhost:8085/api/mock-storage', cdnBaseUrl = '') =>
+      new MediaStorageProvider(cfgWith({ storageProvider: 'mock', cdnBaseUrl, mockBaseUrl }));
+
+    it('points a phone at the address it reached, keeping the storage path', () => {
+      const r = provider().presign('user-1', 'photo.jpg', 'http://192.168.31.178:8085');
+      expect(r.uploadUrl).toBe(`http://192.168.31.178:8085/api/mock-storage/${r.key}`);
+      expect(r.publicUrl).toBe(r.uploadUrl);
+    });
+
+    it.each(['http://127.0.0.1:8085/api/mock-storage', 'http://[::1]:8085/api/mock-storage'])(
+      'treats %s as loopback too',
+      (base) => {
+        const r = provider(base).presign('user-1', 'photo.jpg', 'http://192.168.31.178:8085');
+        expect(r.uploadUrl.startsWith('http://192.168.31.178:8085/api/mock-storage/')).toBe(true);
+      },
+    );
+
+    it('leaves the configured base alone when there is no request origin', () => {
+      const r = provider().presign('user-1', 'photo.jpg');
+      expect(r.uploadUrl.startsWith('http://localhost:8085/api/mock-storage/')).toBe(true);
+    });
+
+    it('never overrides a real configured address', () => {
+      const r = provider('https://wow.example.org/api/mock-storage').presign(
+        'user-1',
+        'photo.jpg',
+        'http://192.168.31.178:8085',
+      );
+      expect(r.uploadUrl.startsWith('https://wow.example.org/api/mock-storage/')).toBe(true);
+    });
+
+    it('never overrides a CDN', () => {
+      const r = provider(undefined, 'https://cdn.example.com').presign(
+        'user-1',
+        'photo.jpg',
+        'http://192.168.31.178:8085',
+      );
+      expect(r.publicUrl.startsWith('https://cdn.example.com/')).toBe(true);
+    });
+
+    it('ignores an origin that is not a URL', () => {
+      const r = provider().presign('user-1', 'photo.jpg', 'not a url');
+      expect(r.uploadUrl.startsWith('http://localhost:8085/api/mock-storage/')).toBe(true);
+    });
+  });
+
   it('prefers a CDN when one is configured', () => {
     const p = new MediaStorageProvider(
       cfgWith({
