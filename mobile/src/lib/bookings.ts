@@ -51,7 +51,59 @@ export interface IncomingBooking {
   vendorServiceId?: string | null;
   serviceAnswers?: Record<string, unknown>;
   quantity?: number | null;
+  /** The newest quotation and where the negotiation stands (EZ1-I264). */
+  quotation?: QuotationSummary | null;
+  /** Worked out by the server with the same rule as the tab count (EZ1-I266). */
+  requestOnDate?: boolean;
+  /** Which instalments are in, so an action that needs one can say so. */
+  collectedMilestones?: string[];
+  deliveredAt?: string | null;
+  deliveryAcceptedAt?: string | null;
 }
+
+export type QuotationStage =
+  | 'sent'
+  | 'requoted'
+  | 'accepted'
+  | 'declined'
+  | 'withdrawn'
+  | 'expired'
+  | 'superseded';
+
+export interface QuotationSummary {
+  id: string;
+  amount: string;
+  currency: string;
+  status: string;
+  stage: QuotationStage;
+  responseNote: string | null;
+  respondedAt: string | null;
+  sentAt: string;
+  count: number;
+  declinedCount: number;
+}
+
+export const QUOTATION_STAGE_LABEL: Record<QuotationStage, string> = {
+  sent: 'Quotation sent',
+  requoted: 'Revised quotation sent',
+  accepted: 'Quotation accepted',
+  // Declining hands the booking back to the provider to re-price, so the two
+  // are one fact and are said as one.
+  declined: 'Declined — re-quote requested',
+  withdrawn: 'Quotation withdrawn',
+  expired: 'Quotation expired',
+  superseded: 'Replaced by a revised quotation',
+};
+
+export const QUOTATION_STAGE_TONE: Record<QuotationStage, Tone> = {
+  sent: 'brand',
+  requoted: 'brand',
+  accepted: 'positive',
+  declined: 'critical',
+  withdrawn: 'caution',
+  expired: 'caution',
+  superseded: 'neutral',
+};
 
 /**
  * Actions the seller side may take, by current status.
@@ -61,7 +113,9 @@ export interface IncomingBooking {
  */
 export const ACTIONS: Record<string, { label: string; path: string; primary?: boolean }[]> = {
   requested: [{ label: 'Decline', path: 'cancel' }],
-  quotation_sent: [{ label: 'Withdraw', path: 'cancel' }],
+  // Takes the offer back and leaves the request with the provider to re-price.
+  // It used to cancel the whole booking (EZ1-I266).
+  quotation_sent: [{ label: 'Withdraw quotation', path: 'quotations/withdraw' }],
   quotation_accepted: [
     { label: 'Accept the job', path: 'confirm', primary: true },
     { label: 'Decline', path: 'cancel' },
@@ -108,17 +162,77 @@ export const SELLER_STATUS_LABEL: Record<string, string> = {
 };
 
 /**
- * The one thing this booking is waiting on the provider to do, by status.
- * Empty when the ball is in the customer's court or the job is done.
+ * Whether "Mark delivered" can go through yet.
+ *
+ * The server refuses it until the second instalment is in. A row from before
+ * the server said which instalments were collected is given the benefit of the
+ * doubt, and the server's refusal still explains itself.
  */
-export const NEXT_ACTION: Record<string, string> = {
-  requested: 'Send a quotation',
-  quotation_accepted: 'Accept the job',
-  payment_pending: 'Awaiting the advance',
-  confirmed: 'Start the work',
-  in_progress: 'Mark delivered when done',
-  completed_pending_final_payment: 'Awaiting the final payment',
-};
+export function canMarkDelivered(booking: IncomingBooking): boolean {
+  return !booking.collectedMilestones || booking.collectedMilestones.includes('second');
+}
+
+/** The one thing this booking is waiting on the provider for, or on whom. */
+export function nextActionFor(booking: IncomingBooking): string {
+  const stage = booking.quotation?.stage;
+  switch (booking.status) {
+    case 'requested':
+      if (stage === 'declined') return 'The customer declined your quotation — send a revised one';
+      if (stage === 'withdrawn' || stage === 'expired') return 'Send a new quotation';
+      return 'Send a quotation';
+    case 'quotation_sent':
+      return stage === 'expired'
+        ? 'Your quotation has expired — send a new one'
+        : 'Waiting for the customer to answer your quotation';
+    case 'quotation_accepted':
+      return 'Accept the job';
+    case 'payment_pending':
+      return 'Awaiting the advance';
+    case 'confirmed':
+      return 'Advance received — start the work';
+    case 'in_progress':
+      return canMarkDelivered(booking)
+        ? 'Mark delivered when done'
+        : 'Waiting for the second instalment before you can mark it delivered';
+    case 'completed_pending_final_payment':
+      return 'Delivered — awaiting the final payment';
+    case 'completed':
+      return booking.deliveredAt && !booking.deliveryAcceptedAt
+        ? 'Waiting for the customer to confirm the delivery before the payout'
+        : '';
+    default:
+      return '';
+  }
+}
+
+/**
+ * The step a booking is on in LIFECYCLE, or null for one that left the path
+ * (cancelled, disputed). Paying the advance is what confirms a booking, so a
+ * confirmed job has passed both Paid and Confirmed.
+ */
+export function progressIndex(status: string, quotation?: QuotationSummary | null): number | null {
+  switch (status) {
+    case 'requested':
+      return quotation ? 1 : 0;
+    case 'quotation_sent':
+      return 1;
+    case 'quotation_accepted':
+    case 'payment_pending':
+      return 2;
+    case 'pending':
+      return 3;
+    case 'confirmed':
+      return 4;
+    case 'in_progress':
+      return 5;
+    case 'completed_pending_final_payment':
+      return 6;
+    case 'completed':
+      return 7;
+    default:
+      return null;
+  }
+}
 
 /** The tabs, and which statuses each gathers. */
 export const BOOKING_TABS: { key: string; label: string; statuses: string[] }[] = [
@@ -182,6 +296,7 @@ export const PAYMENT_TONE: Record<string, Tone> = {
  * than given a status of its own.
  */
 export function isRequestOnDate(booking: IncomingBooking): boolean {
+  if (booking.requestOnDate !== undefined) return booking.requestOnDate;
   return (
     !booking.slotId &&
     Boolean(booking.eventDate) &&

@@ -9,6 +9,7 @@ import BookingDetail from './BookingDetail';
 import { BOOKING_STATUS_LABEL, Permission, can } from '../lib/permissions';
 import { useAuth } from '../store/auth';
 import { FieldSpec, formatAnswer } from './DynamicForm';
+import { canMarkDelivered } from '../lib/booking-progress';
 
 interface IncomingBooking {
   id: string;
@@ -42,7 +43,9 @@ interface IncomingBooking {
  */
 const ACTIONS: Record<string, { label: string; path: string }[]> = {
   requested: [{ label: 'Decline', path: 'cancel' }],
-  quotation_sent: [{ label: 'Withdraw', path: 'cancel' }],
+  // Takes the offer back and leaves the request with the provider to re-price.
+  // It used to cancel the whole booking (EZ1-I266).
+  quotation_sent: [{ label: 'Withdraw quotation', path: 'quotations/withdraw' }],
   quotation_accepted: [
     { label: 'Accept the job', path: 'confirm' },
     { label: 'Decline', path: 'cancel' },
@@ -125,6 +128,7 @@ export default function ProviderBookings({ canQuote }: { canQuote: boolean }) {
         'incoming-counts',
         'booking-quotations',
         'booking-milestones',
+        'booking-summary',
         'booking-history',
         'incoming-addons',
         'earnings',
@@ -177,8 +181,23 @@ export default function ProviderBookings({ canQuote }: { canQuote: boolean }) {
               <button
                 key={a.path}
                 className={a.path === 'confirm' ? 'btn btn-sm' : 'btn-outline btn-sm'}
-                disabled={act.isPending}
+                // The server refuses a delivery before the second instalment;
+                // saying so beats a button that fails when pressed (EZ1-I266).
+                disabled={act.isPending || (a.path === 'complete' && !canMarkDelivered(b))}
+                title={
+                  a.path === 'complete' && !canMarkDelivered(b)
+                    ? 'Available once the customer has paid the second instalment'
+                    : undefined
+                }
                 onClick={() => {
+                  if (
+                    a.path === 'quotations/withdraw' &&
+                    !window.confirm(
+                      'Withdraw this quotation? The customer can no longer accept it, and the request comes back to you to price again.',
+                    )
+                  ) {
+                    return;
+                  }
                   /*
                     Marking a delivery asks what was delivered (EZ1-I228).
 
@@ -212,7 +231,7 @@ export default function ProviderBookings({ canQuote }: { canQuote: boolean }) {
                 className="btn btn-sm"
                 onClick={() => setQuoting(quoting === b.id ? null : b.id)}
               >
-                {b.status === 'quotation_sent' ? 'Re-quote' : 'Send quotation'}
+                {b.quotation ? 'Re-quote' : 'Send quotation'}
               </button>
             )}
             {canQuote && quoting === b.id && (
@@ -222,6 +241,7 @@ export default function ProviderBookings({ canQuote }: { canQuote: boolean }) {
                   setQuoting(null);
                   qc.invalidateQueries({ queryKey: ['incoming-bookings'] });
                   qc.invalidateQueries({ queryKey: ['incoming-counts'] });
+                  qc.invalidateQueries({ queryKey: ['booking-summary', b.id] });
                 }}
               />
             )}
@@ -590,6 +610,7 @@ function VendorAddOns({ bookingId }: { bookingId: string }) {
       for (const key of [
         ['incoming-addons', bookingId],
         ['booking-milestones', bookingId],
+        ['booking-summary', bookingId],
         ['booking-history', bookingId],
         ['incoming-bookings'],
         ['incoming-counts'],

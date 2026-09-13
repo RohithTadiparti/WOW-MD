@@ -7,6 +7,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { BookingStatus, ProviderType } from '../../../common/enums';
+import type { QuotationSummary } from '../booking-summary';
 
 @Entity('bookings')
 @Index(['providerType', 'providerId'])
@@ -237,4 +238,14 @@ export class Booking {
    * "booked by your partner" without a second lookup, and is never stored.
    */
   sharedFromPartner?: boolean;
+  /** The newest quotation, and where the price negotiation stands (EZ1-I264). */
+  quotation?: QuotationSummary | null;
+  /**
+   * Asked for on a date the provider never published a window for (EZ1-I266).
+   * Worked out on the server so the row, its badge and the tab count share one
+   * rule.
+   */
+  requestOnDate?: boolean;
+  /** The instalments collected so far, so an action that needs one can say so. */
+  collectedMilestones?: string[];
 }

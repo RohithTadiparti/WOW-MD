@@ -164,9 +164,51 @@ export class QuotationsService {
     return saved;
   }
 
-  /** Every quotation on a booking, newest first. Either side may read them. */
-  async list(actor: AuthUser, bookingId: string): Promise<Quotation[]> {
+  /**
+   * The provider takes back the offer waiting on the customer (EZ1-I266).
+   *
+   * "Withdraw" used to cancel the whole booking, slot and all. Taking back a
+   * price is not refusing the job: the offer is kept as withdrawn and the
+   * request returns to the provider to price again.
+   */
+  async withdraw(actor: AuthUser, bookingId: string): Promise<Booking> {
     const booking = await this.loadBooking(bookingId);
+    await this.bookingsService.assertSeller(actor, booking);
+    if (booking.status !== BookingStatus.QUOTATION_SENT) {
+      throw new BadRequestException('There is no quotation waiting on the customer to withdraw');
+    }
+
+    const live = await this.quotations.find({
+      where: { bookingId, status: QuotationStatus.SENT },
+    });
+    const now = new Date();
+    for (const quotation of live) {
+      quotation.status = QuotationStatus.WITHDRAWN;
+      quotation.respondedByUserId = actor.userId;
+      quotation.respondedAt = now;
+    }
+    await this.quotations.save(live);
+
+    booking.status = BookingStatus.REQUESTED;
+    const saved = await this.bookings.save(booking);
+
+    await this.outbox.record({
+      eventType: 'booking.quotation_withdrawn',
+      aggregateType: 'booking',
+      payload: { bookingId },
+    });
+    return saved;
+  }
+
+  /**
+   * Every quotation on a booking, newest first. Either side may read them.
+   *
+   * Cancelled bookings included: what was offered and declined is the record
+   * somebody reaches for after a job falls through (EZ1-I265).
+   */
+  async list(actor: AuthUser, bookingId: string): Promise<Quotation[]> {
+    const booking = await this.bookings.findOne({ where: { id: bookingId } });
+    if (!booking) throw new NotFoundException('Booking not found');
     await this.bookingsService.assertEitherSide(actor, booking);
 
     const rows = await this.quotations.find({

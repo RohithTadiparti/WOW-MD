@@ -93,6 +93,9 @@ export default function Bookings() {
     queryKey: ['incoming-bookings'],
     queryFn: async () => (await api.get('/bookings/incoming', { params: { limit: 100 } })).data,
     retry: false,
+    // A customer accepting a quote or paying an instalment moves this list and
+    // its counts too, and nothing pushes that here (EZ1-I266).
+    refetchInterval: 30_000,
   });
 
   const { data: counts } = useQuery({
@@ -100,6 +103,7 @@ export default function Bookings() {
     queryFn: async () =>
       (await api.get('/bookings/incoming/counts')).data as Record<string, number>,
     retry: false,
+    refetchInterval: 30_000,
   });
 
   const act = useMutation({
@@ -126,6 +130,7 @@ export default function Bookings() {
         'incoming-counts',
         'booking-quotations',
         'booking-milestones',
+        'booking-summary',
         'booking-history',
         'incoming-addons',
         'earnings',
@@ -182,10 +187,10 @@ export default function Bookings() {
     key: entry.key,
     label: entry.label,
     count:
-      // Counted from the rows for the derived tab, because the server counts
-      // statuses and this tab is not one.
+      // Counted by the server across the whole queue, not from the rows loaded
+      // (EZ1-I266); the rows are the fallback for a server that predates it.
       entry.key === 'request_on_date'
-        ? all.filter(isRequestOnDate).length
+        ? (counts?.request_on_date ?? all.filter(isRequestOnDate).length)
         : !counts
           ? undefined
           : entry.key === 'all'

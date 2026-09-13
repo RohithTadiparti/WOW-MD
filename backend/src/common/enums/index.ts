@@ -230,6 +230,8 @@ export enum QuotationStatus {
   EXPIRED = 'expired',
   /** Replaced by a newer quotation on the same booking. */
   SUPERSEDED = 'superseded',
+  /** Taken back by the provider before the customer answered (EZ1-I266). */
+  WITHDRAWN = 'withdrawn',
 }
 
 /**

@@ -70,6 +70,7 @@ export function VendorAddOns({ bookingId }: { bookingId: string }) {
       for (const key of [
         ['incoming-addons', bookingId],
         ['booking-milestones', bookingId],
+        ['booking-summary', bookingId],
         ['booking-history', bookingId],
         ['incoming-bookings'],
         ['incoming-counts'],

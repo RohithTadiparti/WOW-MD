@@ -5,6 +5,14 @@ import { CalendarBlank, MapPin, UsersThree } from '@phosphor-icons/react';
 import { api } from '../lib/api';
 import { formatDate } from '../lib/dates';
 import { EmptyState, Loading } from './ui/Feedback';
+import {
+  PROGRESS_STEPS,
+  QUOTATION_STAGE_LABEL,
+  QUOTATION_STAGE_TONE,
+  isRequestOnDate,
+  nextActionFor,
+  type QuotationSummary,
+} from '../lib/booking-progress';
 
 /**
  * The work coming in, as one screen instead of four.
@@ -59,37 +67,17 @@ interface IncomingBooking {
   cancellationReason?: string | null;
   cancelledByName?: string | null;
   cancelledByRole?: string | null;
-}
-
-/**
- * The one thing this booking is waiting on the provider to do, by status
- * (EZ1-I68). Empty when the ball is in the customer's court or the job is done.
- */
-const NEXT_ACTION: Record<string, string> = {
-  requested: 'Send a quotation',
-  quotation_accepted: 'Accept the job',
-  payment_pending: 'Awaiting the advance',
-  confirmed: 'Start the work',
-  in_progress: 'Mark delivered when done',
-  completed_pending_final_payment: 'Awaiting the final payment',
-};
-
-/**
- * Whether this arrived as a request against a date the provider never opened.
- *
- * The customer wanted a day with no published window and asked anyway, which
- * the provider has to answer differently: they are being asked whether they
- * *can* do it at all, not merely for a price against a slot they already
- * offered (EZ1-I227). Still an ordinary booking underneath — accepting it puts
- * it back on the same quotation-to-payment path as everything else — so it is
- * derived here rather than given a status of its own.
- */
-function isRequestOnDate(b: IncomingBooking): boolean {
-  return (
-    !b.slotId &&
-    Boolean(b.eventDate) &&
-    ['requested', 'quotation_sent', 'quotation_accepted'].includes(b.status)
-  );
+  /** What has been collected so far, summed by the server (EZ1-I259). */
+  paidAmount?: string | null;
+  /** The newest quotation and where the negotiation stands (EZ1-I264). */
+  quotation?: QuotationSummary | null;
+  /** Worked out by the server with the same rule as the tab count (EZ1-I266). */
+  requestOnDate?: boolean;
+  /** Which instalments are in, so an action that needs one can say so. */
+  collectedMilestones?: string[];
+  deliveredAt?: string | null;
+  deliveryAcceptedAt?: string | null;
+  quantity?: number | null;
 }
 
 /** The tabs, and which statuses each gathers. */
@@ -124,22 +112,6 @@ const PAYMENT_TONE: Record<string, string> = {
   released: 'bg-positive-bg text-positive-fg',
   refunded: 'bg-critical-bg text-critical-fg',
 };
-
-/** Where a job goes, said once rather than implied by six section headings. */
-const LIFECYCLE = [
-  'Request',
-  'Quotation',
-  'Accepted',
-  'Paid',
-  'Confirmed',
-  'In progress',
-  // Delivered is its own step, not a synonym for completed: the vendor has
-  // handed the work over and the customer has still to confirm it and pay the
-  // balance. Leaving it out is what made "Awaiting the final payment" look like
-  // a variety of Completed (EZ1-I259).
-  'Delivered',
-  'Completed',
-];
 
 export default function BookingConsole({
   statusLabels,
@@ -190,12 +162,16 @@ export default function BookingConsole({
     queryKey: ['incoming-bookings'],
     queryFn: async () => (await api.get('/bookings/incoming', { params: { limit: 100 } })).data,
     retry: false,
+    // A customer accepting a quote or paying an instalment moves this list and
+    // its counts too, and nothing pushes that here (EZ1-I266).
+    refetchInterval: 30_000,
   });
 
   const { data: counts } = useQuery({
     queryKey: ['incoming-counts'],
     queryFn: async () => (await api.get('/bookings/incoming/counts')).data as Record<string, number>,
     retry: false,
+    refetchInterval: 30_000,
   });
 
   const all: IncomingBooking[] = data?.data ?? data?.items ?? [];
@@ -228,9 +204,11 @@ export default function BookingConsole({
   }, [all, tab, search, sort]);
 
   const countFor = (entry: (typeof TABS)[number]): number | undefined => {
-    // Counted from the rows, not the server's per-status tally: the server
-    // counts statuses and this tab is not one (EZ1-I227).
-    if (entry.key === 'request_on_date') return all.filter(isRequestOnDate).length;
+    // Counted by the server across the whole queue, not from the rows loaded
+    // (EZ1-I266); the rows are the fallback for a server that predates it.
+    if (entry.key === 'request_on_date') {
+      return counts?.request_on_date ?? all.filter(isRequestOnDate).length;
+    }
     if (!counts) return undefined;
     if (entry.key === 'all') return counts.all;
     return entry.statuses.reduce((n, status) => n + (counts[status] ?? 0), 0);
@@ -284,10 +262,10 @@ export default function BookingConsole({
         anything was expected of them next.
       */}
       <ol className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[0.6875rem] text-gray-400">
-        {LIFECYCLE.map((step, i) => (
+        {PROGRESS_STEPS.map((step, i) => (
           <li key={step} className="flex items-center gap-1.5">
             <span>{step}</span>
-            {i < LIFECYCLE.length - 1 && <span aria-hidden>&rarr;</span>}
+            {i < PROGRESS_STEPS.length - 1 && <span aria-hidden>&rarr;</span>}
           </li>
         ))}
       </ol>
@@ -358,6 +336,16 @@ export default function BookingConsole({
                       Request on date
                     </span>
                   )}
+                  {/* A declined, withdrawn or revised offer is not a new request,
+                      and the row says so (EZ1-I264). */}
+                  {booking.quotation &&
+                    ['requested', 'quotation_sent'].includes(booking.status) && (
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs ${QUOTATION_STAGE_TONE[booking.quotation.stage]}`}
+                      >
+                        {QUOTATION_STAGE_LABEL[booking.quotation.stage]}
+                      </span>
+                    )}
                   {booking.paymentStatus && (
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs ${
@@ -394,12 +382,32 @@ export default function BookingConsole({
                     <dd>{booking.expectedGuests} guests</dd>
                   </div>
                 ) : null}
-                <div className="flex items-center gap-1.5">
-                  <dt className="text-gray-400">Amount</dt>
-                  <dd className="font-mono">
-                    {booking.currency} {Number(booking.amount).toLocaleString('en-IN')}
-                  </dd>
-                </div>
+                {/* The agreed total once there is one; until then the latest
+                    offer, rather than an "INR 0" that reads as free (EZ1-I264). */}
+                {Number(booking.amount) > 0 ? (
+                  <div className="flex items-center gap-1.5">
+                    <dt className="text-gray-400">Total</dt>
+                    <dd className="font-mono">
+                      {booking.currency} {Number(booking.amount).toLocaleString('en-IN')}
+                    </dd>
+                  </div>
+                ) : booking.quotation ? (
+                  <div className="flex items-center gap-1.5">
+                    <dt className="text-gray-400">Quoted</dt>
+                    <dd className="font-mono">
+                      {booking.quotation.currency}{' '}
+                      {Number(booking.quotation.amount).toLocaleString('en-IN')}
+                    </dd>
+                  </div>
+                ) : null}
+                {Number(booking.paidAmount ?? 0) > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <dt className="text-gray-400">Paid</dt>
+                    <dd className="font-mono">
+                      {booking.currency} {Number(booking.paidAmount).toLocaleString('en-IN')}
+                    </dd>
+                  </div>
+                )}
                 {/*
                   The number the customer actually entered when they asked
                   (EZ1-I78): the booking amount is 0 until a quote is agreed, so
@@ -418,9 +426,9 @@ export default function BookingConsole({
 
               {/* The one thing waiting on the provider, so the queue reads as a
                   to-do list rather than a wall of statuses (EZ1-I68). */}
-              {NEXT_ACTION[booking.status] && (
+              {nextActionFor(booking) && (
                 <p className="mt-2 text-xs font-medium text-amber-700">
-                  Next: {NEXT_ACTION[booking.status]}
+                  Next: {nextActionFor(booking)}
                 </p>
               )}
 

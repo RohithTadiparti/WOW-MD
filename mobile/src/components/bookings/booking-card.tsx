@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { Alert as NativeAlert, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { CalendarBlank, MapPin, UsersThree } from 'phosphor-react-native';
@@ -7,12 +7,15 @@ import { CalendarBlank, MapPin, UsersThree } from 'phosphor-react-native';
 import { api } from '@/lib/api';
 import {
   ACTIONS,
-  NEXT_ACTION,
   PAYMENT_LABEL,
   PAYMENT_TONE,
   QUOTABLE,
+  QUOTATION_STAGE_LABEL,
+  QUOTATION_STAGE_TONE,
   SELLER_STATUS_LABEL,
+  canMarkDelivered,
   isRequestOnDate,
+  nextActionFor,
   type IncomingBooking,
 } from '@/lib/bookings';
 import { money, shortDate } from '@/lib/format';
@@ -73,6 +76,8 @@ export function BookingCard({
   const onDate = isRequestOnDate(booking);
   const paid = Number(booking.paidAmount ?? 0);
   const remaining = Math.max(0, Number(booking.amount ?? 0) - paid);
+  const nextAction = nextActionFor(booking);
+  const deliverable = canMarkDelivered(booking);
 
   return (
     <Card>
@@ -119,6 +124,13 @@ export function BookingCard({
         {/* Marked on the row as well as gathered under its own tab, so it reads
             as one wherever the provider comes across it. */}
         {onDate ? <Badge tone="caution">Request on date</Badge> : null}
+        {/* A declined, withdrawn or revised offer is not a new request, and the
+            card says so (EZ1-I264). */}
+        {booking.quotation && ['requested', 'quotation_sent'].includes(booking.status) ? (
+          <Badge tone={QUOTATION_STAGE_TONE[booking.quotation.stage]}>
+            {QUOTATION_STAGE_LABEL[booking.quotation.stage]}
+          </Badge>
+        ) : null}
         {booking.paymentStatus ? (
           <Badge tone={PAYMENT_TONE[booking.paymentStatus] ?? 'neutral'}>
             {PAYMENT_LABEL[booking.paymentStatus] ?? booking.paymentStatus}
@@ -148,9 +160,19 @@ export function BookingCard({
 
       <DetailGrid>
         <View style={{ flexDirection: 'row', gap: space(4) }}>
-          <View style={{ flex: 1 }}>
-            <DetailRow label="Amount">{money(booking.amount, booking.currency)}</DetailRow>
-          </View>
+          {/* The agreed total once there is one; until then the latest offer,
+              rather than an amount of 0 that reads as free (EZ1-I264). */}
+          {Number(booking.amount) > 0 ? (
+            <View style={{ flex: 1 }}>
+              <DetailRow label="Total">{money(booking.amount, booking.currency)}</DetailRow>
+            </View>
+          ) : booking.quotation ? (
+            <View style={{ flex: 1 }}>
+              <DetailRow label="Quoted">
+                {money(booking.quotation.amount, booking.quotation.currency)}
+              </DetailRow>
+            </View>
+          ) : null}
           {/*
             Once the advance has cleared, what is paid and what is left are the
             two figures a vendor is actually tracking — and both come off the
@@ -182,9 +204,9 @@ export function BookingCard({
 
       {/* The one thing waiting on the provider, so the queue reads as a to-do
           list rather than a wall of statuses. */}
-      {NEXT_ACTION[booking.status] ? (
+      {nextAction ? (
         <Caption style={{ color: rgb(theme.cautionFg), fontWeight: '600' }}>
-          Next: {NEXT_ACTION[booking.status]}
+          Next: {nextAction}
         </Caption>
       ) : null}
 
@@ -246,7 +268,7 @@ export function BookingCard({
         <View style={{ gap: space(2) }}>
           {canQuote && QUOTABLE.includes(booking.status) ? (
             <Button
-              label={booking.status === 'quotation_sent' ? 'Re-quote' : 'Send quotation'}
+              label={booking.quotation ? 'Re-quote' : 'Send quotation'}
               onPress={() => setQuoting((q) => !q)}
             />
           ) : null}
@@ -255,8 +277,25 @@ export function BookingCard({
               key={action.path}
               label={action.label}
               variant={action.primary ? 'primary' : 'outline'}
-              disabled={acting}
+              // The server refuses a delivery before the second instalment;
+              // the Next line above says why (EZ1-I266).
+              disabled={acting || (action.path === 'complete' && !deliverable)}
               onPress={() => {
+                if (action.path === 'quotations/withdraw') {
+                  NativeAlert.alert(
+                    'Withdraw this quotation?',
+                    'The customer can no longer accept it, and the request comes back to you to price again.',
+                    [
+                      { text: 'Keep it', style: 'cancel' },
+                      {
+                        text: 'Withdraw',
+                        style: 'destructive',
+                        onPress: () => onAct(booking.id, action.path),
+                      },
+                    ],
+                  );
+                  return;
+                }
                 /*
                   Marking a delivery asks what was delivered.
 

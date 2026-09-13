@@ -8,6 +8,7 @@ import { BusinessLifecycleService } from './business-lifecycle.service';
 import { VendorReview } from './entities/vendor-review.entity';
 import { VendorService } from '../catalog/entities/vendor-service.entity';
 import { ServiceOffering } from '../catalog/entities/service-offering.entity';
+import { serviceNamesByIds } from '../catalog/service-names';
 import { Booking } from '../bookings/entities/booking.entity';
 import { User } from '../auth/entities/user.entity';
 import { screenText } from '../../common/util/text-moderation';
@@ -467,13 +468,10 @@ export class VendorsService {
 
     const serviceIds = [...new Set(bookings.map((b) => b.vendorServiceId).filter(Boolean))] as string[];
     const offeringIds = [...new Set(bookings.map((b) => b.offeringId).filter(Boolean))] as string[];
-    const services = serviceIds.length
-      ? await this.serviceRows.find({ where: { id: In(serviceIds) } })
-      : [];
     const offerings = offeringIds.length
       ? await this.offeringRows.find({ where: { id: In(offeringIds) } })
       : [];
-    const serviceName = new Map(services.map((s) => [s.id, s.displayName]));
+    const serviceName = await serviceNamesByIds(this.serviceRows, serviceIds);
     const offeringName = new Map(offerings.map((o) => [o.id, o.name]));
 
     return reviews.map((r) => {
