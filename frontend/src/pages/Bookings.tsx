@@ -5,6 +5,7 @@ import { api, apiMessage } from '../lib/api';
 import { useAuth } from '../store/auth';
 import { BOOKING_STATUS_LABEL, MILESTONE_LABEL, Permission, can, canAny } from '../lib/permissions';
 import ProviderBookings from '../components/ProviderBookings';
+import PlacedForClients from '../components/PlacedForClients';
 import BookingChat from '../components/BookingChat';
 import PaymentMethodPicker from '../components/PaymentMethodPicker';
 import PhotoUploader from '../components/PhotoUploader';
@@ -269,6 +270,12 @@ export default function Bookings() {
             job is what takes the window off your calendar.
           </p>
         </div>
+        {/* A planner also books vendors for their couples; those bookings are
+            the couples', so they are listed apart from the agency's own queue. */}
+        {can(permissions, Permission.BOOKING_REQUEST_FOR_CLIENT) && <PlacedForClients />}
+        {can(permissions, Permission.BOOKING_REQUEST_FOR_CLIENT) && (
+          <h2 className="section-title">Booked with your agency</h2>
+        )}
         <ProviderBookings canQuote={canQuote} />
       </div>
     );
