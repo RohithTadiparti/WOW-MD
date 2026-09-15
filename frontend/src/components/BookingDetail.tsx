@@ -2,7 +2,10 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { formatDate, formatDateTime } from '../lib/dates';
-import { BOOKING_STATUS_LABEL } from '../lib/permissions';
+import { Link } from 'react-router-dom';
+import { BOOKING_STATUS_LABEL, Permission, can } from '../lib/permissions';
+import { useAuth } from '../store/auth';
+import { usePlacedForClients } from './PlacedForClients';
 import type { QuotationSummary } from '../lib/booking-progress';
 import {
   BookingProgress,
@@ -34,6 +37,10 @@ import {
  */
 interface DetailBooking {
   id: string;
+  /** The customer the booking is for. */
+  userId?: string;
+  /** The listing that was booked. */
+  providerName?: string | null;
   status: string;
   eventDate: string | null;
   clientName: string | null;
@@ -59,6 +66,12 @@ export default function BookingDetail({
 }) {
   const [showTimeline, setShowTimeline] = useState(false);
   const summary = useBookingSummary(booking.id);
+  // A planner books vendors for the couples who hired them, and those are the
+  // couple's bookings rather than rows in this queue — so they are named on the
+  // couple's booking with the planner, where the planner looks for them.
+  const isPlanner = can(useAuth((s) => s.user?.permissions ?? []), Permission.BOOKING_REQUEST_FOR_CLIENT);
+  const placed = usePlacedForClients(isPlanner);
+  const vendorsForClient = (placed.data ?? []).filter((v) => v.clientUserId === booking.userId);
 
   const history = useQuery({
     queryKey: ['booking-history', booking.id],
@@ -84,6 +97,20 @@ export default function BookingDetail({
         </Row>
         <Row label="Status">{BOOKING_STATUS_LABEL[booking.status] ?? booking.status}</Row>
         <Row label="Customer">{booking.clientName ?? 'Customer'}</Row>
+        {booking.providerName && <Row label="Booked with">{booking.providerName}</Row>}
+        {isPlanner && (
+          <Row label="Vendors booked">
+            {vendorsForClient.length === 0 ? (
+              'None for this client yet'
+            ) : (
+              <Link className="text-brand-strong underline" to={`/my-clients/${booking.userId}#vendors`}>
+                {vendorsForClient
+                  .map((v) => `${v.name} (${BOOKING_STATUS_LABEL[v.status] ?? v.status.replace(/_/g, ' ')})`)
+                  .join(', ')}
+              </Link>
+            )}
+          </Row>
+        )}
         <Row label="Event">{booking.eventName ?? 'Not linked to an event'}</Row>
         <Row label="Date">{formatDate(booking.eventDate)}</Row>
         <Row label="Venue">
