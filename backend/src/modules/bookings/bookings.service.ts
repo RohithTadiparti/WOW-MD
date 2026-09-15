@@ -39,6 +39,7 @@ import { OutboxService } from '../../platform/events/outbox.service';
 import { PAYMENT_PROVIDER, PaymentProvider, PayoutDestination } from './payment.provider';
 import { collectedByBooking, isCollected } from './payment-totals';
 import { summariseQuotations } from './booking-summary';
+import { dateOf, guestsOf, venueOf } from './booking-venue';
 import { serviceNamesByIds } from '../catalog/service-names';
 import { SupportCasesService } from '../verification/support-cases.service';
 import { MatchmakingService } from '../matchmaking/matchmaking.service';
@@ -1805,9 +1806,20 @@ export class BookingsService {
       booking.clientCity = clientProfile?.city ?? null;
       booking.clientPhoto = clientProfile?.photos?.[0] ?? null;
       booking.eventName = event?.name ?? null;
-      booking.eventVenue = event?.venue ?? null;
-      booking.eventCity = event?.city ?? null;
-      booking.expectedGuests = event?.expectedGuests ?? null;
+      // A booking with no linked function still says where it is held: at the
+      // venue that was booked, or wherever the customer said on the service's
+      // form. Only the event was read, so those bookings all read "Not given".
+      const place = event
+        ? { venue: event.venue ?? null, city: event.city ?? null }
+        : venueOf({
+            answers: booking.serviceAnswers,
+            providerName: (booking as { providerName?: string }).providerName,
+            providerCity: booking.providerCity,
+            providerIsVenue: booking.providerIsVenue,
+          });
+      booking.eventVenue = place.venue;
+      booking.eventCity = place.city;
+      booking.expectedGuests = event?.expectedGuests ?? guestsOf(booking.serviceAnswers);
       // When the booking is tied to a wedding function, that function's own date
       // is the single source of truth — the same date the Events page and the
       // planner's wedding brief show — so a couple moving the day is reflected
@@ -1820,6 +1832,7 @@ export class BookingsService {
         Boolean(booking.eventDate ?? event?.eventDate) &&
         REQUEST_STATUSES.includes(booking.status);
       if (event) booking.eventDate = event.eventDate ?? null;
+      else if (!booking.eventDate) booking.eventDate = dateOf(booking.serviceAnswers);
       booking.serviceName = booking.vendorServiceId
         ? (serviceNames.get(booking.vendorServiceId) ?? null)
         : null;
@@ -1872,10 +1885,17 @@ export class BookingsService {
     const names = new Map<string, string>();
     for (const v of vendors) names.set(v.id, v.name);
     for (const p of planners) names.set(p.id, p.agencyName);
+    const vendorById = new Map(vendors.map((v) => [v.id, v]));
 
-    return rows.map((row) =>
-      Object.assign(row, { providerName: names.get(row.providerId) ?? 'Provider' }),
-    );
+    return rows.map((row) => {
+      const vendor =
+        row.providerType === ProviderType.VENDOR ? vendorById.get(row.providerId) : undefined;
+      return Object.assign(row, {
+        providerName: names.get(row.providerId) ?? 'Provider',
+        providerCity: vendor?.city ?? null,
+        providerIsVenue: Boolean(vendor?.categories?.includes('venue')),
+      });
+    });
   }
 
   /** Seller-side listing: bookings against the caller's own listings. */

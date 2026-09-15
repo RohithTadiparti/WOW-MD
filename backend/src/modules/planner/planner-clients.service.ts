@@ -13,6 +13,7 @@ import { Vendor } from '../vendors/entities/vendor.entity';
 import { VendorService } from '../catalog/entities/vendor-service.entity';
 import { ServiceOffering } from '../catalog/entities/service-offering.entity';
 import { serviceNamesByIds } from '../catalog/service-names';
+import { dateOf, guestsOf, venueOf } from '../bookings/booking-venue';
 import { PlannerProfile } from '../wedding-planners/entities/planner-profile.entity';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { BookingStatus, ProviderType, TaskStatus, UserRole, VendorCategory } from '../../common/enums';
@@ -613,6 +614,12 @@ export class PlannerClientsService {
 
     return bookings.map((b) => {
       const listing = b.providerType === ProviderType.VENDOR ? vendorById.get(b.providerId) : null;
+      const place = venueOf({
+        answers: b.serviceAnswers,
+        providerName: listing?.name,
+        providerCity: listing?.city,
+        providerIsVenue: Boolean(listing?.categories?.includes('venue')),
+      });
       return {
         bookingId: b.id,
         name: listing?.name ?? (b.providerType === ProviderType.PLANNER ? 'Planning' : 'Provider'),
@@ -623,7 +630,15 @@ export class PlannerClientsService {
         paymentStatus: paymentByBooking.get(b.id) ?? null,
         amount: b.amount,
         currency: b.currency,
-        eventDate: b.eventDate ?? null,
+        // What the request was placed with: the day, the place, the head
+        // count, the budget and the brief, so a planner can see what they
+        // asked the vendor for without opening the booking.
+        eventDate: b.eventDate ?? dateOf(b.serviceAnswers),
+        venue: place.venue,
+        city: place.city,
+        guests: guestsOf(b.serviceAnswers),
+        expectedBudget: b.expectedBudget,
+        requirements: b.requirements,
       };
     });
   }

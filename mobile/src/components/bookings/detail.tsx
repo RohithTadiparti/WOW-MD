@@ -6,8 +6,8 @@ import { api } from '@/lib/api';
 import { SELLER_STATUS_LABEL, type IncomingBooking } from '@/lib/bookings';
 import { dateTime, shortDate } from '@/lib/format';
 import { formatAnswer, type FieldSpec } from '@/shared/dynamic-form';
-import { BOOKING_STATUS_LABEL, Permission, can } from '@/shared/permissions';
-import { usePlacedForClients } from '@/components/bookings/placed-for-clients';
+import { Permission, can } from '@/shared/permissions';
+import { PlacedBookingFacts, usePlacedForClients } from '@/components/bookings/placed-for-clients';
 import { useAuth } from '@/store/auth';
 import { DetailGrid, DetailRow, Divider } from '@/components/chrome';
 import { VendorAddOns } from '@/components/bookings/addons';
@@ -77,21 +77,28 @@ export function BookingDetail({ booking }: { booking: IncomingBooking }) {
           {booking.providerName ? (
             <DetailRow label="Booked with">{booking.providerName}</DetailRow>
           ) : null}
-          {isPlanner ? (
-            <DetailRow label="Vendors booked">
-              {vendorsForClient.length === 0
-                ? 'None for this client yet'
-                : vendorsForClient
-                    .map((v) => `${v.name} (${BOOKING_STATUS_LABEL[v.status] ?? v.status.replace(/_/g, ' ')})`)
-                    .join(', ')}
-            </DetailRow>
-          ) : null}
           <DetailRow label="Event">{booking.eventName ?? 'Not linked to an event'}</DetailRow>
           <DetailRow label="Date">{shortDate(booking.eventDate)}</DetailRow>
           <DetailRow label="Venue">
             {[booking.eventVenue, booking.eventCity].filter(Boolean).join(', ') || 'Not given'}
           </DetailRow>
         </DetailGrid>
+        {/* Every vendor booked for this couple, with what each was asked for. */}
+        {isPlanner ? (
+          <View style={{ gap: space(1) }}>
+            <Caption tone="faint">Vendors booked for this client</Caption>
+            {vendorsForClient.length === 0 ? (
+              <Caption>None yet</Caption>
+            ) : (
+              vendorsForClient.map((v, index) => (
+                <View key={v.bookingId} style={{ gap: space(1) }}>
+                  {index > 0 ? <Divider /> : null}
+                  <PlacedBookingFacts booking={v} />
+                </View>
+              ))
+            )}
+          </View>
+        ) : null}
       </Section>
 
       <Section title="Service">

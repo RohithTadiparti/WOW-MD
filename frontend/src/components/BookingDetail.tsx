@@ -5,7 +5,7 @@ import { formatDate, formatDateTime } from '../lib/dates';
 import { Link } from 'react-router-dom';
 import { BOOKING_STATUS_LABEL, Permission, can } from '../lib/permissions';
 import { useAuth } from '../store/auth';
-import { usePlacedForClients } from './PlacedForClients';
+import { PlacedBookingFacts, usePlacedForClients } from './PlacedForClients';
 import type { QuotationSummary } from '../lib/booking-progress';
 import {
   BookingProgress,
@@ -98,24 +98,30 @@ export default function BookingDetail({
         <Row label="Status">{BOOKING_STATUS_LABEL[booking.status] ?? booking.status}</Row>
         <Row label="Customer">{booking.clientName ?? 'Customer'}</Row>
         {booking.providerName && <Row label="Booked with">{booking.providerName}</Row>}
-        {isPlanner && (
-          <Row label="Vendors booked">
-            {vendorsForClient.length === 0 ? (
-              'None for this client yet'
-            ) : (
-              <Link className="text-brand-strong underline" to={`/my-clients/${booking.userId}#vendors`}>
-                {vendorsForClient
-                  .map((v) => `${v.name} (${BOOKING_STATUS_LABEL[v.status] ?? v.status.replace(/_/g, ' ')})`)
-                  .join(', ')}
-              </Link>
-            )}
-          </Row>
-        )}
         <Row label="Event">{booking.eventName ?? 'Not linked to an event'}</Row>
         <Row label="Date">{formatDate(booking.eventDate)}</Row>
         <Row label="Venue">
           {[booking.eventVenue, booking.eventCity].filter(Boolean).join(', ') || 'Not given'}
         </Row>
+        {/* Every vendor booked for this couple, with what each was asked for. */}
+        {isPlanner && (
+          <div className="mt-1 sm:col-span-2">
+            <p className="text-gray-400">Vendors booked for this client</p>
+            {vendorsForClient.length === 0 ? (
+              <p className="text-gray-800">None yet</p>
+            ) : (
+              <ul className="mt-1 space-y-1.5">
+                {vendorsForClient.map((v) => (
+                  <li key={v.bookingId} className="rounded-sm bg-surface-sunken p-2">
+                    <Link to={`/my-clients/${booking.userId}#vendors`} className="block hover:opacity-80">
+                      <PlacedBookingFacts booking={v} />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </Section>
 
       <Section title="Service">
