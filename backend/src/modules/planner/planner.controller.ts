@@ -57,6 +57,18 @@ export class PlannerController {
     return this.clients.clientDetail(actor, userId);
   }
 
+  @RequirePermissions(Permission.BOOKING_REQUEST_FOR_CLIENT)
+  @ApiOperation({
+    summary: 'Bookings this planner placed with vendors on behalf of their clients',
+    description:
+      'Newest first, with the vendor, the service, the client it is for and where it stands. ' +
+      'The bookings belong to the couples; this is the planner-side list of what they asked for.',
+  })
+  @Get('bookings-placed')
+  placedForClients(@CurrentUser() actor: AuthUser) {
+    return this.clients.placedForClients(actor);
+  }
+
   @RequirePermissions(Permission.PLAN_MANAGE_ENGAGED)
   @ApiOperation({
     summary: "A booking request's wedding brief",

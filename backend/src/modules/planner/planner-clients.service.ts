@@ -12,6 +12,7 @@ import { Payment } from '../bookings/entities/payment.entity';
 import { Vendor } from '../vendors/entities/vendor.entity';
 import { VendorService } from '../catalog/entities/vendor-service.entity';
 import { ServiceOffering } from '../catalog/entities/service-offering.entity';
+import { serviceNamesByIds } from '../catalog/service-names';
 import { PlannerProfile } from '../wedding-planners/entities/planner-profile.entity';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { BookingStatus, ProviderType, TaskStatus, UserRole, VendorCategory } from '../../common/enums';
@@ -479,47 +480,7 @@ export class PlannerClientsService {
       this.dashboard.summary(clientUserId),
     ]);
 
-    const vendorIds = bookings
-      .filter((b) => b.providerType === ProviderType.VENDOR)
-      .map((b) => b.providerId);
-    // The service and package a booking is for, and where its money has got to,
-    // so the client-detail vendor list says what was booked and how it stands
-    // (EZ1-I56), not just the provider name and a status word.
-    const serviceIds = [...new Set(bookings.map((b) => b.vendorServiceId).filter(Boolean))] as string[];
-    const offeringIds = [...new Set(bookings.map((b) => b.offeringId).filter(Boolean))] as string[];
-    const [listings, serviceRows, offeringRows, paymentRows] = await Promise.all([
-      vendorIds.length ? this.vendors.find({ where: { id: In(vendorIds) } }) : Promise.resolve([]),
-      serviceIds.length
-        ? this.vendorServices.find({ where: { id: In(serviceIds) } })
-        : Promise.resolve([]),
-      offeringIds.length
-        ? this.offerings.find({ where: { id: In(offeringIds) } })
-        : Promise.resolve([]),
-      bookings.length
-        ? this.payments.find({ where: { bookingId: In(bookings.map((b) => b.id)) } })
-        : Promise.resolve([]),
-    ]);
-    const vendorById = new Map(listings.map((v) => [v.id, v]));
-    const serviceNameById = new Map(serviceRows.map((s) => [s.id, s.displayName]));
-    const offeringNameById = new Map(offeringRows.map((o) => [o.id, o.name]));
-    // The furthest a booking's money has reached, ranked, mirroring the booking
-    // service's own rollup so the two screens agree.
-    const PAYMENT_RANK: Record<string, number> = {
-      initiated: 1,
-      held_in_escrow: 2,
-      disputed: 3,
-      pending_payout: 4,
-      released: 5,
-      refunded: 6,
-    };
-    const paymentByBooking = new Map<string, string>();
-    for (const p of paymentRows) {
-      const seen = paymentByBooking.get(p.bookingId);
-      if (!seen || (PAYMENT_RANK[p.status] ?? 0) > (PAYMENT_RANK[seen] ?? 0)) {
-        paymentByBooking.set(p.bookingId, p.status);
-      }
-    }
-
+    const vendorRows = await this.vendorRows(bookings);
     const { bride, groom } = this.couple(user?.role ?? null, profiles);
 
     return {
@@ -564,21 +525,106 @@ export class PlannerClientsService {
         status: t.status,
       })),
       /** Spec section 6: who has been booked, and where each stands. */
-      vendors: bookings.map((b) => {
-        const listing = b.providerType === ProviderType.VENDOR ? vendorById.get(b.providerId) : null;
-        return {
-          bookingId: b.id,
-          name: listing?.name ?? (b.providerType === ProviderType.PLANNER ? 'Planning' : 'Provider'),
-          category: listing?.category ?? b.providerType,
-          service: b.vendorServiceId ? (serviceNameById.get(b.vendorServiceId) ?? null) : null,
-          package: b.offeringId ? (offeringNameById.get(b.offeringId) ?? null) : null,
-          status: b.status,
-          paymentStatus: paymentByBooking.get(b.id) ?? null,
-          amount: b.amount,
-          currency: b.currency,
-          eventDate: b.eventDate ?? null,
-        };
-      }),
+      vendors: vendorRows,
     };
+  }
+
+  /**
+   * Every booking this planner placed on a client's behalf, newest first.
+   *
+   * A planner's Bookings page lists the work coming in against their own
+   * agency, and a request they raised with a vendor for a couple (EZ1-I235) is
+   * the couple's booking, not theirs — so it appeared nowhere on it, and the
+   * planner could not see which vendor they had just asked. It was only on
+   * each client's page, one client at a time.
+   *
+   * Scoped to rows the caller placed for somebody else, so a planner never
+   * reads another planner's requests or a couple's own bookings.
+   */
+  async placedForClients(actor: AuthUser) {
+    const bookings = await this.bookings.find({
+      where: { bookedByUserId: actor.userId },
+      order: { createdAt: 'DESC' },
+      take: 100,
+    });
+    const forClients = bookings.filter((b) => b.userId !== actor.userId);
+    if (forClients.length === 0) return [];
+
+    const clientIds = [...new Set(forClients.map((b) => b.userId))];
+    const [rows, users, profiles] = await Promise.all([
+      this.vendorRows(forClients),
+      this.users.find({ where: { id: In(clientIds) }, select: ['id', 'email'] }),
+      this.profiles.find({ where: { userId: In(clientIds) } }),
+    ]);
+    const emailById = new Map(users.map((u) => [u.id, u.email]));
+    const nameById = new Map<string, string>();
+    for (const p of profiles) {
+      if (p.userId && !nameById.has(p.userId)) nameById.set(p.userId, p.displayName);
+    }
+
+    return forClients.map((b, i) => ({
+      ...rows[i],
+      clientUserId: b.userId,
+      clientName: nameById.get(b.userId) ?? emailById.get(b.userId) ?? 'A client',
+      createdAt: b.createdAt,
+    }));
+  }
+
+  /**
+   * Who each booking is with, what was booked, and where its money has got to
+   * (EZ1-I56), in the order the bookings were given.
+   */
+  private async vendorRows(bookings: Booking[]) {
+    const vendorIds = bookings
+      .filter((b) => b.providerType === ProviderType.VENDOR)
+      .map((b) => b.providerId);
+    const offeringIds = [...new Set(bookings.map((b) => b.offeringId).filter(Boolean))] as string[];
+    const [listings, serviceNameById, offeringRows, paymentRows] = await Promise.all([
+      vendorIds.length ? this.vendors.find({ where: { id: In(vendorIds) } }) : Promise.resolve([]),
+      // The vendor's own wording when they gave one, the catalogue's otherwise
+      // (EZ1-I264).
+      serviceNamesByIds(this.vendorServices, bookings.map((b) => b.vendorServiceId)),
+      offeringIds.length
+        ? this.offerings.find({ where: { id: In(offeringIds) } })
+        : Promise.resolve([]),
+      bookings.length
+        ? this.payments.find({ where: { bookingId: In(bookings.map((b) => b.id)) } })
+        : Promise.resolve([]),
+    ]);
+    const vendorById = new Map(listings.map((v) => [v.id, v]));
+    const offeringNameById = new Map(offeringRows.map((o) => [o.id, o.name]));
+    // The furthest a booking's money has reached, ranked, mirroring the booking
+    // service's own rollup so the two screens agree.
+    const PAYMENT_RANK: Record<string, number> = {
+      initiated: 1,
+      held_in_escrow: 2,
+      disputed: 3,
+      pending_payout: 4,
+      released: 5,
+      refunded: 6,
+    };
+    const paymentByBooking = new Map<string, string>();
+    for (const p of paymentRows) {
+      const seen = paymentByBooking.get(p.bookingId);
+      if (!seen || (PAYMENT_RANK[p.status] ?? 0) > (PAYMENT_RANK[seen] ?? 0)) {
+        paymentByBooking.set(p.bookingId, p.status);
+      }
+    }
+
+    return bookings.map((b) => {
+      const listing = b.providerType === ProviderType.VENDOR ? vendorById.get(b.providerId) : null;
+      return {
+        bookingId: b.id,
+        name: listing?.name ?? (b.providerType === ProviderType.PLANNER ? 'Planning' : 'Provider'),
+        category: listing?.category ?? b.providerType,
+        service: b.vendorServiceId ? (serviceNameById.get(b.vendorServiceId) ?? null) : null,
+        package: b.offeringId ? (offeringNameById.get(b.offeringId) ?? null) : null,
+        status: b.status,
+        paymentStatus: paymentByBooking.get(b.id) ?? null,
+        amount: b.amount,
+        currency: b.currency,
+        eventDate: b.eventDate ?? null,
+      };
+    });
   }
 }
