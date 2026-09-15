@@ -29,6 +29,8 @@ export interface BookingSummaryData {
   price: {
     budget: string | null;
     quoted: string | null;
+    /** Agreed at a listed price rather than through a quotation. */
+    listedPrice?: boolean;
     base: string | null;
     addonsTotal: string;
     addonsAgreed: number;
@@ -132,7 +134,11 @@ export function PriceBreakdown({ summary }: { summary: BookingSummaryData }) {
   return (
     <Section title="Price">
       <Row label="Customer budget">{price.budget ? money(price.budget) : 'Not given'}</Row>
-      <Row label="Accepted quotation">{price.quoted ? money(price.quoted) : 'Not agreed yet'}</Row>
+      {price.quoted || !price.listedPrice ? (
+        <Row label="Accepted quotation">{price.quoted ? money(price.quoted) : 'Not agreed yet'}</Row>
+      ) : (
+        <Row label="Agreed price">{`${money(price.base ?? price.grandTotal)} (listed price, no quotation)`}</Row>
+      )}
       <Row label="Add-ons agreed">
         {`${money(price.addonsTotal)} (${price.addonsAgreed})`}
         {price.addonsAwaiting > 0 && (
