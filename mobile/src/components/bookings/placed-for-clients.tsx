@@ -22,6 +22,11 @@ export interface PlacedBooking {
   amount: string;
   currency: string;
   eventDate: string | null;
+  venue: string | null;
+  city: string | null;
+  guests: number | null;
+  expectedBudget: string | null;
+  requirements: string | null;
   createdAt: string;
 }
 
@@ -37,6 +42,47 @@ export function usePlacedForClients(enabled = true) {
 
 const statusLabel = (status: string) =>
   BOOKING_STATUS_LABEL[status] ?? SELLER_STATUS_LABEL[status] ?? status.replace(/_/g, ' ');
+
+/**
+ * One vendor booking a planner placed for a client, with everything it was
+ * placed with: the day, the place, the head count, the budget and the brief.
+ * Shared by the list and the couple's booking detail, as on the web.
+ */
+export function PlacedBookingFacts({ booking: b }: { booking: PlacedBooking }) {
+  const place = [b.venue, b.city].filter(Boolean).join(', ');
+  return (
+    <View style={{ gap: space(0.5) }}>
+      <Body numberOfLines={2}>{`${b.name} · for ${b.clientName}`}</Body>
+      <Caption tone="faint" numberOfLines={2}>
+        {[b.category.replace(/_/g, ' '), b.service, b.package].filter(Boolean).join(' · ')}
+      </Caption>
+      <Caption>
+        {[
+          b.eventDate ? shortDate(b.eventDate) : 'Date not set',
+          place || 'Venue not given',
+          b.guests ? `${b.guests} guests` : null,
+          b.expectedBudget && Number(b.expectedBudget) > 0
+            ? `budget ${money(b.expectedBudget, b.currency)}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(' · ')}
+      </Caption>
+      {b.requirements ? <Caption tone="muted">{`“${b.requirements}”`}</Caption> : null}
+      <Caption tone="faint">
+        {[
+          Number(b.amount) > 0
+            ? money(b.amount, b.currency)
+            : b.status === 'quotation_sent'
+              ? 'Quotation with the couple'
+              : 'Awaiting a quotation',
+          statusLabel(b.status),
+          `asked ${shortDate(b.createdAt)}`,
+        ].join(' · ')}
+      </Caption>
+    </View>
+  );
+}
 
 /**
  * The vendors a planner has asked on their clients' behalf (EZ1-I235).
@@ -64,25 +110,9 @@ export function PlacedForClients() {
         </Caption>
       ) : (
         data.map((b, index) => (
-          <View key={b.bookingId} style={{ gap: space(0.5) }}>
+          <View key={b.bookingId} style={{ gap: space(1) }}>
             {index > 0 ? <Divider /> : null}
-            <Body numberOfLines={2}>{`${b.name} · for ${b.clientName}`}</Body>
-            <Caption tone="faint" numberOfLines={2}>
-              {[b.category.replace(/_/g, ' '), b.service, b.package, b.eventDate ? shortDate(b.eventDate) : null]
-                .filter(Boolean)
-                .join(' · ')}
-            </Caption>
-            <Caption>
-              {[
-                Number(b.amount) > 0
-                  ? money(b.amount, b.currency)
-                  : b.status === 'quotation_sent'
-                    ? 'Quotation with the couple'
-                    : 'Awaiting a quotation',
-                statusLabel(b.status),
-                `asked ${shortDate(b.createdAt)}`,
-              ].join(' · ')}
-            </Caption>
+            <PlacedBookingFacts booking={b} />
           </View>
         ))
       )}

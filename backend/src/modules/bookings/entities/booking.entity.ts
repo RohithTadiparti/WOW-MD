@@ -248,4 +248,7 @@ export class Booking {
   requestOnDate?: boolean;
   /** The instalments collected so far, so an action that needs one can say so. */
   collectedMilestones?: string[];
+  /** The booked listing's city, and whether it is a venue — where its bookings are held. */
+  providerCity?: string | null;
+  providerIsVenue?: boolean;
 }
