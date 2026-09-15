@@ -4,6 +4,7 @@ import { CaretLeft } from '@phosphor-icons/react';
 import { api, apiMessage } from '../../lib/api';
 import { formatDate, formatDateTime } from '../../lib/dates';
 import { BOOKING_STATUS_LABEL, MILESTONE_LABEL } from '../../lib/permissions';
+import { humanize, paymentStatusLabel } from '../../lib/labels';
 import { EmptyState, Loading } from '../../components/ui/Feedback';
 
 /**
@@ -42,6 +43,11 @@ interface PaymentDetail {
     amount: string;
     currency: string;
     eventDate: string | null;
+    /** Where and what, derived by the server when no event is linked. */
+    eventName?: string | null;
+    venue?: string | null;
+    city?: string | null;
+    serviceName?: string | null;
     createdAt: string;
   } | null;
   customer: {
@@ -78,17 +84,6 @@ interface PaymentDetail {
   };
 }
 
-const PAYMENT_STATUS_LABEL: Record<string, string> = {
-  initiated: 'Initiated',
-  held_in_escrow: 'Held in escrow',
-  disputed: 'Disputed',
-  released: 'Released',
-  pending_payout: 'Pending payout',
-  refunded: 'Refunded',
-  partially_settled: 'Partially settled',
-  failed: 'Failed',
-};
-
 const PAYMENT_STATUS_STYLE: Record<string, string> = {
   held_in_escrow: 'bg-amber-50 text-amber-800',
   released: 'bg-emerald-50 text-emerald-800',
@@ -108,7 +103,7 @@ const money = (v: string | null | undefined, ccy = 'INR') =>
 function StatusPill({ status }: { status: string }) {
   return (
     <span className={`pill ${PAYMENT_STATUS_STYLE[status] ?? 'bg-gray-100 text-gray-600'}`}>
-      {PAYMENT_STATUS_LABEL[status] ?? status.replace(/_/g, ' ')}
+      {paymentStatusLabel(status, 'admin')}
     </span>
   );
 }
@@ -191,8 +186,12 @@ export default function AdminPaymentDetail() {
               <Row label="Booking status">
                 {BOOKING_STATUS_LABEL[booking.status] ?? booking.status}
               </Row>
-              <Row label="Booking total">{money(booking.amount, booking.currency)}</Row>
-              {booking.eventDate && <Row label="Event date">{formatDate(booking.eventDate)}</Row>}
+              <Row label="Booking total">
+                {Number(booking.amount) > 0 ? money(booking.amount, booking.currency) : 'Not yet priced'}
+              </Row>
+              {(booking.eventDate || event?.eventDate) && (
+                <Row label="Event date">{formatDate(booking.eventDate ?? event?.eventDate)}</Row>
+              )}
               <Link className="btn-outline btn-sm mt-2" to={`/admin/bookings/${booking.id}`}>
                 Open booking
               </Link>
@@ -218,7 +217,7 @@ export default function AdminPaymentDetail() {
           {provider && (
             <>
               <Row label="Provider">{provider.name ?? provider.id.slice(0, 8)}</Row>
-              <Row label="Type">{provider.category ?? provider.type}</Row>
+              <Row label="Type">{humanize(provider.category ?? provider.type)}</Row>
               {providerRoute && (
                 <Link className="btn-outline btn-sm mt-2" to={providerRoute}>
                   Open provider
@@ -231,7 +230,14 @@ export default function AdminPaymentDetail() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Section title="Service & event">
-          <Row label="Service / package">{service?.name ?? '—'}</Row>
+          {/* A planner booking has no catalogue service and a booking may
+              never have been linked to an event; say which, rather than a dash
+              that reads as data that failed to load. */}
+          <Row label="Service / package">
+            {service?.name ??
+              booking?.serviceName ??
+              (provider?.type === 'planner' ? 'Wedding planning' : 'No service chosen')}
+          </Row>
           {event ? (
             <>
               <Row label="Event">{event.name}</Row>
@@ -241,7 +247,12 @@ export default function AdminPaymentDetail() {
               {event.startTime && <Row label="Starts">{event.startTime}</Row>}
             </>
           ) : (
-            <Row label="Event">—</Row>
+            <>
+              {/* No function linked: the server's derived name and place stand in. */}
+              <Row label="Event">{booking?.eventName ?? 'Not linked to an event'}</Row>
+              {booking?.venue && <Row label="Venue">{booking.venue}</Row>}
+              {booking?.city && <Row label="City">{booking.city}</Row>}
+            </>
           )}
         </Section>
 

@@ -13,6 +13,7 @@ import {
   canAny,
 } from '../lib/permissions';
 import { Visit, VISIT_TONE, isTodayVisit, scheduledLabel } from '../lib/visits';
+import { BUSINESS_STATUS_LABEL, humanize } from '../lib/labels';
 import { ReactNode } from 'react';
 import ClaimRequests from '../components/ClaimRequests';
 import GetStarted from '../components/GetStarted';
@@ -605,7 +606,11 @@ export default function Dashboard() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Counter
             label={businesses.length > 1 ? active.name : 'Your business'}
-            value={active.status.replace(/_/g, ' ')}
+            value={
+              active.isApproved
+                ? 'Live in search'
+                : (BUSINESS_STATUS_LABEL[active.status] ?? humanize(active.status))
+            }
             to="/console"
             tone={active.isApproved ? 'text-emerald-700' : 'text-amber-700'}
           />

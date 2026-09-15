@@ -4,6 +4,13 @@ import { ArrowLeft } from '@phosphor-icons/react';
 import { api, apiMessage } from '../lib/api';
 import { formatDate } from '../lib/dates';
 import { BOOKING_STATUS_LABEL } from '../lib/permissions';
+import {
+  TASK_STATUS_LABEL,
+  bookingAmountLabel,
+  humanize,
+  labelFrom,
+  paymentStatusLabel,
+} from '../lib/labels';
 import { Loading } from '../components/ui/Feedback';
 
 /**
@@ -30,6 +37,8 @@ interface Detail {
   wedding: {
     planId: string;
     weddingDate: string | null;
+    /** Worked out from the wedding's functions when the plan carries no date. */
+    derivedWeddingDate?: string | null;
     countdown: { weddingDate: string | null; daysAway: number | null; passed: boolean };
     functions: number;
     venues: string[];
@@ -66,6 +75,8 @@ interface Detail {
     amount: string;
     currency: string;
     eventDate: string | null;
+    /** The newest offer, while nothing has been agreed. */
+    quotation?: { amount: string; currency?: string; stage?: string } | null;
   }[];
 }
 
@@ -102,6 +113,8 @@ export default function PlannerClientDetail() {
   const { client, wedding, budget, events, tasks, vendors } = data;
   const money = (v: string | number) => `₹${Number(v || 0).toLocaleString('en-IN')}`;
   const doneCount = tasks.filter((t) => t.status === 'done').length;
+  const weddingDate =
+    wedding.weddingDate ?? wedding.derivedWeddingDate ?? wedding.countdown?.weddingDate ?? null;
 
   return (
     <div className="space-y-4">
@@ -137,7 +150,10 @@ export default function PlannerClientDetail() {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Wedding" value={wedding.weddingDate ? formatDate(wedding.weddingDate) : 'Not set'} />
+        {/* The countdown beside it is worked out from the wedding's own dates
+            when the plan carries none, so the date is read from the same place
+            rather than saying "Not set" next to a number of days. */}
+        <Stat label="Wedding" value={formatDate(weddingDate, 'Not set')} />
         <Stat
           label="Days away"
           value={
@@ -158,7 +174,7 @@ export default function PlannerClientDetail() {
           <Row label="Phone" value={client.phone ?? '-'} />
           <Row label="Bride" value={client.bride ?? '-'} />
           <Row label="Groom" value={client.groom ?? '-'} />
-          <Row label="Status" value={client.status} />
+          <Row label="Status" value={humanize(client.status)} />
         </Section>
 
         {/*
@@ -177,8 +193,14 @@ export default function PlannerClientDetail() {
           {budget.categories.slice(0, 5).map((c) => (
             <Row
               key={c.category}
-              label={c.category.replace(/_/g, ' ')}
-              value={`${money(c.committed)} of ${money(c.budgeted)}`}
+              label={humanize(c.category)}
+              // A category with spending but no budget line of its own read
+              // "₹4,50,000 of ₹0", which looks like an overspend of everything.
+              value={
+                Number(c.budgeted) > 0
+                  ? `${money(c.committed)} of ${money(c.budgeted)}`
+                  : `${money(c.committed)} committed · no budget set`
+              }
             />
           ))}
         </Section>
@@ -226,14 +248,14 @@ export default function PlannerClientDetail() {
                 <div>
                   <p className="text-sm font-medium text-gray-900">{t.title}</p>
                   <p className="text-xs text-gray-500">
-                    {t.category}
+                    {humanize(t.category, 'General')}
                     {t.dueDate ? ` · due ${formatDate(t.dueDate)}` : ''}
                   </p>
                 </div>
                 <span
                   className={`rounded-full px-2 py-0.5 text-xs ${TASK_TONE[t.status] ?? TASK_TONE.pending}`}
                 >
-                  {t.status.replace(/_/g, ' ')}
+                  {labelFrom(TASK_STATUS_LABEL, t.status)}
                 </span>
               </div>
             ))}
@@ -251,8 +273,8 @@ export default function PlannerClientDetail() {
               <div key={v.bookingId} className="flex flex-wrap items-center justify-between gap-2 py-2">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-gray-900">{v.name}</p>
-                  <p className="text-xs capitalize text-gray-500">
-                    {String(v.category).replace(/_/g, ' ')}
+                  <p className="text-xs text-gray-500">
+                    {humanize(v.category)}
                     {/* What was booked, not just from whom (EZ1-I56). */}
                     {v.service ? ` · ${v.service}` : ''}
                     {v.package ? ` · ${v.package}` : ''}
@@ -260,11 +282,13 @@ export default function PlannerClientDetail() {
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-medium">{money(v.amount)}</p>
+                  {/* The latest offer, or "Not yet priced" — never ₹0. */}
+                  <p className="text-sm font-medium">{bookingAmountLabel(v)}</p>
                   <p className="text-xs text-gray-500">
-                    {BOOKING_STATUS_LABEL[v.status] ?? v.status.replace(/_/g, ' ')}
-                    {/* Where the money has got to (EZ1-I56). */}
-                    {v.paymentStatus ? ` · ${v.paymentStatus.replace(/_/g, ' ')}` : ''}
+                    {BOOKING_STATUS_LABEL[v.status] ?? humanize(v.status)}
+                    {/* Where the money has got to (EZ1-I56), in the neutral
+                        words used for somebody watching rather than paying. */}
+                    {v.paymentStatus ? ` · ${paymentStatusLabel(v.paymentStatus, 'admin')}` : ''}
                   </p>
                 </div>
               </div>

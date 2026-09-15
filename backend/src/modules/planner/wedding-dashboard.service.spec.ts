@@ -10,6 +10,7 @@ import { Booking } from '../bookings/entities/booking.entity';
 import { Payment } from '../bookings/entities/payment.entity';
 import { PlannerProfile } from '../wedding-planners/entities/planner-profile.entity';
 import { Vendor } from '../vendors/entities/vendor.entity';
+import { MatchmakingService } from '../matchmaking/matchmaking.service';
 import { BookingStatus, PaymentStatus, ProviderType, TaskStatus } from '../../common/enums';
 
 const iso = (offsetDays: number) => {
@@ -51,6 +52,8 @@ describe('WeddingDashboardService.plannerOverview', () => {
         { provide: getRepositoryToken(Payment), useValue: repos.payments },
         { provide: getRepositoryToken(PlannerProfile), useValue: repos.plannerProfiles },
         { provide: getRepositoryToken(Vendor), useValue: repos.vendors },
+        // Nobody in these weddings is in a fixed match.
+        { provide: MatchmakingService, useValue: { fixedPartnerUserId: jest.fn(async () => null) } },
       ],
     }).compile();
     service = moduleRef.get(WeddingDashboardService);

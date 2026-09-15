@@ -337,8 +337,8 @@ export class AdminController {
 
   @RequirePermissions(Permission.ADMIN_VENDOR_APPROVE)
   @Put('planners/:id/approve')
-  approvePlanner(@Param('id', ParseUUIDPipe) id: string) {
-    return this.admin.approvePlanner(id);
+  approvePlanner(@CurrentUser() actor: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.admin.approvePlanner(actor, id);
   }
 
   /**

@@ -59,12 +59,12 @@ export function IndividualHome({ profileId }: { profileId: string | null }) {
 
   const events = useQuery({
     queryKey: ['events'],
-    queryFn: async () => (await api.get('/events', { params: { limit: 50 } })).data,
+    queryFn: async () => (await api.get('/events')).data,
     retry: false,
   });
 
   const counts = board.data?.counts ?? {};
-  const rows: WeddingEvent[] = events.data?.data ?? events.data?.items ?? [];
+  const rows: WeddingEvent[] = Array.isArray(events.data) ? events.data : (events.data?.data ?? []);
   const today = new Date().toISOString().slice(0, 10);
   const upcoming = rows
     .filter((row) => row.eventDate && row.eventDate >= today)

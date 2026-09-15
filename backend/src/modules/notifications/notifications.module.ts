@@ -8,6 +8,7 @@ import { PlannerProfile } from '../wedding-planners/entities/planner-profile.ent
 import { VendorService } from '../catalog/entities/vendor-service.entity';
 import { ServiceDefinition } from '../catalog/entities/service-definition.entity';
 import { User } from '../auth/entities/user.entity';
+import { WeddingEvent } from '../events/entities/event.entity';
 import { NotificationsService } from './notifications.service';
 import { NotificationsController } from './notifications.controller';
 import { NotificationsConsumer } from './notifications.consumer';
@@ -27,6 +28,8 @@ import { NotificationsConsumer } from './notifications.consumer';
       ServiceDefinition,
       // For the WhatsApp opt-in and the number to send to. Read-only.
       User,
+      // The linked function's date on a booking notification. Read-only.
+      WeddingEvent,
     ]),
   ],
   providers: [NotificationsService, NotificationsConsumer],

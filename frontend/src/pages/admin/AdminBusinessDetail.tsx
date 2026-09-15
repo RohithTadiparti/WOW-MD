@@ -4,7 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { CaretLeft } from '@phosphor-icons/react';
 import { api, apiMessage } from '../../lib/api';
 import { formatDate } from '../../lib/dates';
-import { BOOKING_STATUS_LABEL } from '../../lib/permissions';
+import { BOOKING_STATUS_LABEL, VERIFICATION_LABEL } from '../../lib/permissions';
+import { BUSINESS_STATUS_LABEL, bookingAmountLabel, labelFrom } from '../../lib/labels';
 import { EmptyState, Loading } from '../../components/ui/Feedback';
 
 /**
@@ -91,6 +92,8 @@ interface BusinessDetail {
     buyerName: string | null;
     serviceName: string | null;
     amountPaid: string;
+    /** The newest offer on a request with no agreed amount yet. */
+    quotation?: { amount: string; currency?: string; stage?: string } | null;
   }[];
 }
 
@@ -146,7 +149,7 @@ export default function AdminBusinessDetail() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <span className="pill bg-gray-100 text-gray-600">{b.status.replace(/_/g, ' ')}</span>
+            <span className="pill bg-gray-100 text-gray-600">{labelFrom(BUSINESS_STATUS_LABEL, b.status)}</span>
             <span className={`pill ${b.isApproved ? 'bg-positive-bg text-positive-fg' : 'bg-caution-bg text-caution-fg'}`}>
               {b.isApproved ? 'Live' : 'Not live'}
             </span>
@@ -181,7 +184,7 @@ export default function AdminBusinessDetail() {
         </Section>
 
         <Section title="Lifecycle">
-          <Row label="Status">{b.status.replace(/_/g, ' ')}</Row>
+          <Row label="Status">{labelFrom(BUSINESS_STATUS_LABEL, b.status)}</Row>
           <Row label="Submitted">{b.submittedAt ? formatDate(b.submittedAt) : '—'}</Row>
           <Row label="Verified">{b.verifiedAt ? formatDate(b.verifiedAt) : '—'}</Row>
           <Row label="Revisions">{String(b.revisionCount)}</Row>
@@ -284,7 +287,7 @@ export default function AdminBusinessDetail() {
                   <span className="text-gray-700">
                     {v.decidedAt ? `Decided ${formatDate(v.decidedAt)}` : `Raised ${formatDate(v.createdAt)}`}
                   </span>
-                  <span className="pill bg-gray-100 text-gray-600">{v.status.replace(/_/g, ' ')}</span>
+                  <span className="pill bg-gray-100 text-gray-600">{labelFrom(VERIFICATION_LABEL, v.status)}</span>
                 </div>
                 {v.findings?.observations && (
                   <p className="mt-1 text-xs text-gray-500">{v.findings.observations}</p>
@@ -312,13 +315,13 @@ export default function AdminBusinessDetail() {
                     {bk.serviceName ? ` · ${bk.serviceName}` : ''}
                   </span>
                   <span className="text-xs text-gray-500">
-                    {bk.eventDate ?? formatDate(bk.createdAt)} · #{bk.id.slice(0, 8)}
+                    {formatDate(bk.eventDate ?? bk.createdAt)} · #{bk.id.slice(0, 8)}
                   </span>
                 </span>
                 <span className="flex items-center gap-2">
+                  {/* The latest quotation, or "Not yet priced" — never ₹0. */}
                   <span className="text-sm font-medium tabular-nums text-gray-900">
-                    {bk.currency === 'INR' ? '₹' : `${bk.currency} `}
-                    {Number(bk.amount).toLocaleString('en-IN')}
+                    {bookingAmountLabel(bk)}
                   </span>
                   <span className="pill bg-brand-soft text-brand-strong">
                     {BOOKING_STATUS_LABEL[bk.status] ?? bk.status}

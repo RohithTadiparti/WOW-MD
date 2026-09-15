@@ -12,8 +12,16 @@ import { Payment } from '../bookings/entities/payment.entity';
 import { AgentCharge } from '../agents/entities/agent-charge.entity';
 import { VerificationRequest } from '../verification/entities/verification-request.entity';
 import { SupportCase } from '../verification/entities/support-case.entity';
+import { AgentProfile } from '../agents/entities/agent-profile.entity';
+import { VendorService } from '../catalog/entities/vendor-service.entity';
+import { Quotation } from '../bookings/entities/quotation.entity';
+import { serviceNamesByIds } from '../catalog/service-names';
+import { summariseQuotations } from '../bookings/booking-summary';
+import { displayNamesByUserIds } from '../users/display-names';
+import { VerificationService } from '../verification/verification.service';
 import { RaiseDisputeDto, ResolveDisputeDto, UpdateUserStatusDto } from './dto/admin.dto';
 import {
+  ApplicantType,
   BookingStatus,
   CaseStatus,
   DisputeStatus,
@@ -55,7 +63,13 @@ export class AdminService {
     @InjectRepository(VerificationRequest)
     private readonly verifications: Repository<VerificationRequest>,
     @InjectRepository(SupportCase) private readonly cases: Repository<SupportCase>,
+    // Read-only, to put names, the service and the quoted price on a dispute.
+    @InjectRepository(AgentProfile) private readonly agencies: Repository<AgentProfile>,
+    @InjectRepository(VendorService) private readonly vendorServices: Repository<VendorService>,
+    @InjectRepository(Quotation) private readonly quotations: Repository<Quotation>,
     private readonly redis: RedisService,
+    // Approving a planner here decides the verification request it raised.
+    private readonly verification: VerificationService,
   ) {}
 
   async listUsers(page: number, limit: number, role?: UserRole): Promise<PaginatedResult<AdminUserView>> {
@@ -90,11 +104,19 @@ export class AdminService {
     return this.planners.find({ where: { isApproved: false }, order: { createdAt: 'ASC' } });
   }
 
-  async approvePlanner(plannerId: string) {
+  async approvePlanner(actor: AuthUser, plannerId: string) {
     const planner = await this.planners.findOne({ where: { id: plannerId } });
     if (!planner) throw new NotFoundException('Planner not found');
     planner.isApproved = true;
     const saved = await this.planners.save(planner);
+    // The request raised when the listing was saved is decided too, or it stays
+    // in the officer queue and the SLA sweep later rejects a live planner.
+    await this.verification.closeOnAdminApproval(
+      actor,
+      ApplicantType.PLANNER,
+      planner.ownerUserId,
+      planner.id,
+    );
     await this.invalidateListingCaches();
     return saved;
   }
@@ -154,12 +176,49 @@ export class AdminService {
     const bookingById = new Map(bookings.map((b) => [b.id, b]));
     const raiserById = new Map(raisers.map((u) => [u.id, u]));
 
+    // Who is arguing with whom, over what, at what price. The raiser is named
+    // by their profile, else their business — a vendor raising a dispute has no
+    // profile — else their email, which is all this used to show.
+    const idsOf = (type: ProviderType) => [
+      ...new Set(bookings.filter((b) => b.providerType === type).map((b) => b.providerId)),
+    ];
+    const [raiserNames, buyerNames, vendors, planners, serviceNames, quotes] = await Promise.all([
+      displayNamesByUserIds(
+        {
+          users: this.users,
+          profiles: this.profiles,
+          vendors: this.vendors,
+          planners: this.planners,
+          agencies: this.agencies,
+        },
+        rows.map((r) => r.raisedBy),
+      ),
+      displayNamesByUserIds(
+        { users: this.users, profiles: this.profiles },
+        bookings.map((b) => b.userId),
+      ),
+      idsOf(ProviderType.VENDOR).length
+        ? this.vendors.find({ where: { id: In(idsOf(ProviderType.VENDOR)) } })
+        : Promise.resolve([]),
+      idsOf(ProviderType.PLANNER).length
+        ? this.planners.find({ where: { id: In(idsOf(ProviderType.PLANNER)) } })
+        : Promise.resolve([]),
+      serviceNamesByIds(this.vendorServices, bookings.map((b) => b.vendorServiceId)),
+      bookings.length
+        ? this.quotations.find({ where: { bookingId: In(bookings.map((b) => b.id)) } })
+        : Promise.resolve([]),
+    ]);
+    const providerName = new Map<string, string>([
+      ...vendors.map((v) => [v.id, v.name] as [string, string]),
+      ...planners.map((p) => [p.id, p.agencyName] as [string, string]),
+    ]);
+
     return rows.map((r) => {
       const booking = bookingById.get(r.bookingId);
       const raiser = raiserById.get(r.raisedBy);
       return {
         ...r,
-        raisedByName: raiser?.email ?? 'Unknown',
+        raisedByName: raiserNames.get(r.raisedBy) ?? raiser?.email ?? 'Unknown',
         raisedByRole: raiser?.role ?? null,
         booking: booking
           ? {
@@ -169,6 +228,18 @@ export class AdminService {
               currency: booking.currency,
               providerType: booking.providerType,
               eventDate: booking.eventDate ?? null,
+              buyerName: buyerNames.get(booking.userId) ?? null,
+              providerName: providerName.get(booking.providerId) ?? null,
+              serviceName: booking.vendorServiceId
+                ? (serviceNames.get(booking.vendorServiceId) ?? null)
+                : booking.providerType === ProviderType.PLANNER
+                  ? 'Wedding planning'
+                  : null,
+              // The newest quotation's price. `amount` stays the agreed total,
+              // which is 0.00 until a quotation is accepted.
+              quotedAmount:
+                summariseQuotations(quotes.filter((q) => q.bookingId === booking.id))?.amount ??
+                null,
             }
           : null,
       };

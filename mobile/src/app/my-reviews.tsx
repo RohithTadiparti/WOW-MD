@@ -4,6 +4,7 @@ import { Star } from 'phosphor-react-native';
 
 import { api } from '@/lib/api';
 import { shortDate } from '@/lib/format';
+import { isPlannerAccount, usePlannerListing } from '@/lib/planner-listing';
 import { BusinessSwitcher } from '@/components/business/switcher';
 import {
   Body,
@@ -14,11 +15,16 @@ import {
   PageSubtitle,
   Screen,
 } from '@/components/ui';
+import { useAuth } from '@/store/auth';
 import { useBusinesses } from '@/store/business';
 import { rgb, space, useTheme } from '@/theme';
 
 /**
- * A vendor's own reviews (EZ1-I103), on a phone.
+ * A provider's own reviews (EZ1-I103), on a phone.
+ *
+ * A vendor's are per business, behind the switcher. A planner has one listing
+ * and reads theirs from `/wedding-planners/:id/reviews/mine`, which carries the
+ * day each reviewed booking was for.
  *
  * Each one shows the service, the package and the booking it is about, its
  * rating, its comment and its date. The reviewer is never named — a vendor who
@@ -32,17 +38,36 @@ interface OwnerReview {
   comment: string;
   createdAt: string;
   bookingId: string | null;
-  serviceName: string | null;
-  offeringName: string | null;
+  /** A vendor's review names the service and package; a planner's does not. */
+  serviceName?: string | null;
+  offeringName?: string | null;
+  /** The day the reviewed booking was for, when the server returns it. */
+  eventDate?: string | null;
 }
 
 export default function MyReviews() {
   const { activeId } = useBusinesses();
+  const permissions = useAuth((s) => s.user?.permissions ?? []);
+  // A planner has no business to switch between: their reviews hang off the one
+  // planner listing, and the vendor read answered them with nothing.
+  const isPlanner = isPlannerAccount(permissions);
+  const planner = usePlannerListing(isPlanner);
+  const listingId = isPlanner ? (planner.data?.id ?? null) : activeId;
 
   const { data, isPending } = useQuery({
-    queryKey: ['my-reviews', activeId],
-    enabled: Boolean(activeId),
-    queryFn: async () => (await api.get(`/vendors/${activeId}/reviews/mine`)).data as OwnerReview[],
+    queryKey: ['my-reviews', isPlanner ? 'planner' : 'vendor', listingId],
+    enabled: Boolean(listingId),
+    queryFn: async () => {
+      if (isPlanner) {
+        // The owner's read: the reviews, with the event each is about, and a
+        // rating summary beside them.
+        const body = (await api.get(`/wedding-planners/${listingId}/reviews/mine`)).data as {
+          reviews: OwnerReview[];
+        };
+        return body.reviews;
+      }
+      return (await api.get(`/vendors/${listingId}/reviews/mine`)).data as OwnerReview[];
+    },
     retry: false,
   });
 
@@ -55,11 +80,17 @@ export default function MyReviews() {
         remove a review — if one breaks the rules, raise it on Support.
       </PageSubtitle>
 
-      <BusinessSwitcher />
+      {isPlanner ? null : <BusinessSwitcher />}
 
-      {!activeId ? (
+      {isPlanner && planner.isLoading ? (
+        <Loading rows={3} />
+      ) : !listingId ? (
         <Card>
-          <Caption tone="faint">Pick a business above to see its reviews.</Caption>
+          <Caption tone="faint">
+            {isPlanner
+              ? 'Write your listing first. Reviews arrive against it once couples have completed a booking with you.'
+              : 'Pick a business above to see its reviews.'}
+          </Caption>
         </Card>
       ) : isPending ? (
         <Loading rows={3} />
@@ -80,7 +111,9 @@ export default function MyReviews() {
               {[
                 review.serviceName ? `Service: ${review.serviceName}` : null,
                 review.offeringName ? `Package: ${review.offeringName}` : null,
-                review.bookingId ? `Booking ${review.bookingId.slice(0, 8)}` : null,
+                // The day it was about, rather than a truncated booking id
+                // nobody can match to a wedding.
+                review.eventDate ? `Event ${shortDate(review.eventDate)}` : null,
               ]
                 .filter(Boolean)
                 .join(' · ')}

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, In, IsNull, Not, Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
+import { Profile } from '../users/entities/profile.entity';
 import { Vendor } from '../vendors/entities/vendor.entity';
 import { PlannerProfile } from '../wedding-planners/entities/planner-profile.entity';
 import { Booking } from '../bookings/entities/booking.entity';
@@ -96,6 +97,8 @@ export class ReportsService {
     @InjectRepository(VerificationRequest)
     private readonly verificationRows: Repository<VerificationRequest>,
     @InjectRepository(Dispute) private readonly disputeRows: Repository<Dispute>,
+    // Read-only, to name an officer on the workload table.
+    @InjectRepository(Profile) private readonly profiles: Repository<Profile>,
   ) {}
 
   /** Every transaction in the window, by state, by instalment and by where the money went. */
@@ -413,10 +416,14 @@ export class ReportsService {
     });
     const load = new Map<string, number>();
     for (const r of open) load.set(r.assignedToUserId!, (load.get(r.assignedToUserId!) ?? 0) + 1);
-    const officers = load.size
-      ? await this.users.find({ where: { id: In([...load.keys()]) }, select: ['id', 'email'] })
-      : [];
+    const [officers, officerProfiles] = load.size
+      ? await Promise.all([
+          this.users.find({ where: { id: In([...load.keys()]) }, select: ['id', 'email'] }),
+          this.profiles.find({ where: { userId: In([...load.keys()]) } }),
+        ])
+      : [[], []];
     const emailOf = new Map(officers.map((o) => [o.id, o.email]));
+    const profileNameOf = new Map(officerProfiles.map((p) => [p.userId, p.displayName]));
 
     return {
       requests: rows.length,
@@ -436,6 +443,8 @@ export class ReportsService {
         .map(([officerId, openRequests]) => ({
           officerId,
           email: emailOf.get(officerId) ?? null,
+          // Their profile name when they have one, which officers seldom do.
+          name: profileNameOf.get(officerId) ?? emailOf.get(officerId) ?? null,
           open: openRequests,
         }))
         .sort((a, b) => b.open - a.open),

@@ -4,6 +4,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiMessage } from '../../lib/api';
 import { useAuth } from '../../store/auth';
 import { CaseStatus, Permission, can } from '../../lib/permissions';
+import { formatDate } from '../../lib/dates';
+import { DISPUTE_STATUS_LABEL, formatMoney, humanize, labelFrom, roleLabel } from '../../lib/labels';
 import {
   CASE_FILTERS,
   CaseRow,
@@ -263,6 +265,12 @@ interface Dispute {
     amount: string;
     currency: string;
     providerType: string;
+    /** The business or agency the booking was with, when the server names it. */
+    providerName?: string | null;
+    serviceName?: string | null;
+    buyerName?: string | null;
+    /** The newest quotation's price; `amount` is 0 until one is accepted. */
+    quotedAmount?: string | null;
     eventDate: string | null;
   } | null;
 }
@@ -310,19 +318,28 @@ function DisputesPanel({
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="text-sm font-medium text-gray-800">
+                {/* Who the booking was with, by name; the kind of provider only
+                    when the name is not known. */}
                 {d.booking
-                  ? `${d.booking.currency} ${Number(d.booking.amount).toLocaleString('en-IN')} · ${d.booking.providerType}`
+                  ? `${
+                      Number(d.booking.amount) > 0
+                        ? formatMoney(d.booking.amount, d.booking.currency)
+                        : Number(d.booking.quotedAmount ?? 0) > 0
+                          ? `Quoted ${formatMoney(d.booking.quotedAmount, d.booking.currency)}`
+                          : 'Not yet priced'
+                    } · ${[d.booking.providerName ?? humanize(d.booking.providerType), d.booking.serviceName]
+                      .filter(Boolean)
+                      .join(' · ')}`
                   : 'Booking no longer available'}
               </p>
               <p className="text-xs text-gray-500">
                 Raised by {d.raisedByName}
-                {d.raisedByRole ? ` (${d.raisedByRole})` : ''} on{' '}
-                {new Date(d.createdAt).toLocaleDateString()}
-                {d.booking?.eventDate ? ` · event ${d.booking.eventDate}` : ''}
+                {d.raisedByRole ? ` (${roleLabel(d.raisedByRole)})` : ''} on {formatDate(d.createdAt)}
+                {d.booking?.eventDate ? ` · event ${formatDate(d.booking.eventDate)}` : ''}
               </p>
             </div>
             <span className={`rounded-full px-2 py-1 text-xs ${DISPUTE_TONE[d.status]}`}>
-              {d.status}
+              {labelFrom(DISPUTE_STATUS_LABEL, d.status)}
             </span>
           </div>
 

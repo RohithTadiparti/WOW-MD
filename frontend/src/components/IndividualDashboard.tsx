@@ -2,8 +2,10 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { usePermissions } from '../store/auth';
+import { useMatchmakingGate } from '../lib/matchmaking-gate';
 import { Permission, PermissionValue, canAny } from '../lib/permissions';
 import { formatDate } from '../lib/dates';
+import { bookingStatusLabel } from '../lib/labels';
 import { UNREAD_POLL_MS, type Notification } from '../lib/notification-copy';
 import { Progress, QuickAction, RecentNotifications, Stat } from './IndividualDashboardParts';
 import AgentReviewCard from './AgentReviewCard';
@@ -35,6 +37,9 @@ export default function IndividualDashboard() {
   const canPlan = has(Permission.PLAN_MANAGE_OWN);
   const canTravel = has(Permission.TRAVEL_BOOK);
   const canProfile = has(Permission.PROFILE_MANAGE_OWN);
+  // Whether matchmaking is open for this profile at all: a fixed match or an
+  // unfinished profile is refused suggestions, so the count is not asked for.
+  const { status: matchStatus, gate: matchGate } = useMatchmakingGate(undefined, canMatch);
 
   // Poll while open, refresh on focus, and never serve a stale figure on
   // navigation back to the dashboard.
@@ -71,7 +76,7 @@ export default function IndividualDashboard() {
       (await api.get('/matches/suggestions', { params: { limit: 1 } })).data as {
         meta: { total: number };
       },
-    enabled: canMatch,
+    enabled: canMatch && Boolean(matchStatus) && !matchGate,
     ...live,
   });
 
@@ -314,7 +319,7 @@ export default function IndividualDashboard() {
                         </p>
                         <p className="text-xs text-gray-500">
                           {b.eventDate ? `${formatDate(b.eventDate)} · ` : ''}
-                          <span className="capitalize">{b.status.replace(/_/g, ' ')}</span>
+                          <span>{bookingStatusLabel(b.status)}</span>
                         </p>
                       </Link>
                     </li>

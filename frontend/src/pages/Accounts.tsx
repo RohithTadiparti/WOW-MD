@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api, apiMessage } from '../lib/api';
 import { MILESTONE_LABEL, Permission, can } from '../lib/permissions';
+import { paymentStatusLabel } from '../lib/labels';
 import { Loading } from '../components/ui/Feedback';
 import PayoutAccount from '../components/PayoutAccount';
 import { useAuth } from '../store/auth';
@@ -18,6 +19,9 @@ interface LedgerRow {
   payoutAmount: string;
   confirmedAt: string | null;
   createdAt: string;
+  /** Who the booking was for and what was sold, when the server names them. */
+  clientName?: string | null;
+  serviceName?: string | null;
 }
 
 interface Earnings {
@@ -31,16 +35,6 @@ interface Earnings {
   currency: string;
   ledger: LedgerRow[];
 }
-
-const STATUS_LABEL: Record<string, string> = {
-  initiated: 'Starting',
-  held_in_escrow: 'In escrow',
-  disputed: 'Frozen: case open',
-  released: 'Paid out',
-  pending_payout: 'Owed to you',
-  refunded: 'Refunded',
-  partially_settled: 'Part settled',
-};
 
 const STATUS_STYLE: Record<string, string> = {
   initiated: 'bg-gray-100 text-gray-600',
@@ -189,8 +183,16 @@ export default function Accounts() {
                     <td className="py-2 text-gray-600">
                       {new Date(row.createdAt).toLocaleDateString()}
                     </td>
-                    <td className="py-2 font-mono text-xs text-brand-strong hover:underline">
-                      {row.bookingId.slice(0, 8)}
+                    {/* Who and what the money was for, with the reference
+                        underneath for anyone matching it against a statement. */}
+                    <td className="py-2">
+                      <span className="block text-gray-900">
+                        {[row.clientName, row.serviceName].filter(Boolean).join(' · ') ||
+                          'Booking'}
+                      </span>
+                      <span className="font-mono text-xs text-brand-strong hover:underline">
+                        {row.bookingId.slice(0, 8)}
+                      </span>
                     </td>
                     <td className="py-2">{MILESTONE_LABEL[row.milestone] ?? row.milestone}</td>
                     <td className="py-2 text-right">{money(row.amount)}</td>
@@ -204,7 +206,7 @@ export default function Accounts() {
                           STATUS_STYLE[row.status] ?? 'bg-gray-100 text-gray-600'
                         }`}
                       >
-                        {STATUS_LABEL[row.status] ?? row.status}
+                        {paymentStatusLabel(row.status, 'provider')}
                       </span>
                       {/*
                         Only where the money is stuck. A "settle my payment"

@@ -6,6 +6,7 @@ import { CaretRight } from 'phosphor-react-native';
 
 import { api, apiMessage } from '@/lib/api';
 import { rupeesExact, shortDate } from '@/lib/format';
+import { isPlannerAccount } from '@/lib/planner-listing';
 import { MILESTONE_LABEL, Permission, can } from '@/shared/permissions';
 import { Badge, Divider, StatTile, TileGrid, type Tone } from '@/components/chrome';
 import { PayoutAccount } from '@/components/accounts/payout-account';
@@ -26,6 +27,9 @@ interface LedgerRow {
   payoutAmount: string;
   confirmedAt: string | null;
   createdAt: string;
+  /** Who and what the payment was for, when the server names them. */
+  clientName?: string | null;
+  serviceName?: string | null;
 }
 
 interface Earnings {
@@ -103,6 +107,13 @@ export default function Accounts() {
   const router = useRouter();
   const permissions = useAuth((s) => s.user?.permissions ?? []);
   const isVendor = can(permissions, Permission.VENDOR_LISTING_MANAGE);
+  /*
+   * A planner is a provider too, with one listing addressed as `me`. Without
+   * this a planner was told money was owed, waiting on a payout account, with
+   * no control anywhere that could supply one — the same gap the web page
+   * closed (council round 2).
+   */
+  const isPlanner = isPlannerAccount(permissions);
   const { activeId } = useBusinesses();
   // Null is every payment, which is what somebody arriving at the page wants.
   const [card, setCard] = useState<string | null>(null);
@@ -112,11 +123,14 @@ export default function Accounts() {
     queryFn: async () => (await api.get('/bookings/earnings')).data,
   });
 
-  // The vendor's payout account lives here, not in My Business.
+  // The provider's payout account lives here, not in My Business.
   const { data: payout } = useQuery<{ payoutAccountId: string | null } | null>({
-    queryKey: ['payout-account', activeId],
-    enabled: isVendor && Boolean(activeId),
+    queryKey: ['payout-account', isPlanner ? 'planner' : activeId],
+    enabled: (isVendor && Boolean(activeId)) || isPlanner,
     queryFn: async () => {
+      if (isPlanner) {
+        return (await api.get('/wedding-planners/me')).data as { payoutAccountId: string | null };
+      }
       const listings = (await api.get('/vendors/me')).data as {
         id: string;
         payoutAccountId: string | null;
@@ -146,7 +160,16 @@ export default function Accounts() {
           <BusinessSwitcher />
 
           {isVendor && activeId ? (
-            <PayoutAccount vendorId={activeId} current={payout?.payoutAccountId ?? null} />
+            <PayoutAccount
+              endpoint={`/vendors/${activeId}/payout-account`}
+              current={payout?.payoutAccountId ?? null}
+            />
+          ) : null}
+          {isPlanner ? (
+            <PayoutAccount
+              endpoint="/wedding-planners/me/payout-account"
+              current={payout?.payoutAccountId ?? null}
+            />
           ) : null}
 
           {data && (
@@ -251,8 +274,10 @@ function LedgerCard({ row, onPress }: { row: LedgerRow; onPress: () => void }) {
       >
         <View style={{ flex: 1, gap: space(0.5) }}>
           <Body>{MILESTONE_LABEL[row.milestone] ?? row.milestone}</Body>
-          <Caption tone="faint">
-            Booking {row.bookingId.slice(0, 8)} · {shortDate(row.createdAt)}
+          {/* Who and what, when the server names them. A truncated booking id
+              told a provider nothing they could act on. */}
+          <Caption tone="faint" numberOfLines={2}>
+            {[row.clientName, row.serviceName, shortDate(row.createdAt)].filter(Boolean).join(' · ')}
           </Caption>
         </View>
         <Badge tone={STATUS_TONE[row.status] ?? 'neutral'}>

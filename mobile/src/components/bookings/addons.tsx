@@ -126,6 +126,11 @@ export function VendorAddOns({ bookingId }: { bookingId: string }) {
           {addon.vendorPrice != null ? (
             <Body>Your price: {money(addon.vendorPrice, addon.currency)}</Body>
           ) : null}
+          {/* What was said back with the answer, so a declined or requoted
+              extra carries its reason rather than only its badge. */}
+          {addon.responseNote ? (
+            <Caption tone="muted">Response: {addon.responseNote}</Caption>
+          ) : null}
 
           {addon.status === 'requested' && (
             <View style={{ gap: space(2), marginTop: space(1) }}>

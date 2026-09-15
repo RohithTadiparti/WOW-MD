@@ -9,6 +9,9 @@ import { Interest } from '../matchmaking/entities/interest.entity';
 import { User } from '../auth/entities/user.entity';
 import { Profile } from '../users/entities/profile.entity';
 import { ProfileDetails } from '../profile-details/entities/profile-details.entity';
+import { Vendor } from '../vendors/entities/vendor.entity';
+import { PlannerProfile } from '../wedding-planners/entities/planner-profile.entity';
+import { AgentProfile } from '../agents/entities/agent-profile.entity';
 import { ChatService } from './chat.service';
 import { ChatController } from './chat.controller';
 import { ChatGateway } from './chat.gateway';
@@ -27,6 +30,10 @@ import { CompatibilityEngine } from '../matchmaking/compatibility.engine';
       ChatBlock,
       ChatReport,
       ChatPreference,
+      // Read-only: the business name for a thread with a provider or agency.
+      Vendor,
+      PlannerProfile,
+      AgentProfile,
     ]),
     JwtModule.register({}),
   ],

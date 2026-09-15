@@ -1,4 +1,4 @@
-import { dateOf, guestsOf, venueOf, weddingContextOf } from './booking-venue';
+import { bookingContextOf, dateOf, guestsOf, venueOf, weddingContextOf } from './booking-venue';
 
 describe('the wedding a planner was booked for', () => {
   const events = [
@@ -98,5 +98,93 @@ describe('where a booking is held', () => {
     expect(guestsOf({ guest_count: 450 })).toBe(450);
     expect(guestsOf({ guest_count: 'lots' })).toBeNull();
     expect(guestsOf(null)).toBeNull();
+  });
+});
+
+describe('what a booking is for, where and when', () => {
+  const event = { name: 'Sangeet', eventDate: '2026-11-20', venue: 'Hall A', city: 'Pune', expectedGuests: 300 };
+  const booking = {
+    eventDate: '2026-11-01',
+    serviceAnswers: {
+      event_date: '2026-10-15',
+      guest_count: 120,
+      venue_address: { label: 'Taj Krishna', city: 'Hyderabad' },
+    },
+  };
+
+  it('takes each fact from the linked function when it has one', () => {
+    expect(bookingContextOf(booking, event)).toEqual({
+      eventName: 'Sangeet',
+      eventDate: '2026-11-20',
+      venue: 'Hall A',
+      city: 'Pune',
+      guests: 300,
+    });
+  });
+
+  it('keeps the booking’s own date and form place when the linked function has none', () => {
+    const bare = { name: 'Sangeet', eventDate: null, venue: null, city: null, expectedGuests: null };
+    expect(bookingContextOf(booking, bare)).toEqual({
+      eventName: 'Sangeet',
+      eventDate: '2026-11-01',
+      venue: 'Taj Krishna',
+      city: 'Hyderabad',
+      guests: 120,
+    });
+    expect(bookingContextOf({ ...booking, eventDate: null }, bare).eventDate).toBe('2026-10-15');
+  });
+
+  it('reads a planner booking off the wedding when nothing closer says', () => {
+    const wedding = {
+      weddingDate: '2027-01-10',
+      events: [{ name: 'Wedding', eventDate: null, venue: null, city: 'Goa', expectedGuests: 500 }],
+      vendorBookings: [{ eventDate: null, venue: 'Beach Resort', city: 'Goa', isVenue: true }],
+    };
+    expect(bookingContextOf({}, null, wedding)).toEqual({
+      eventName: 'Wedding',
+      eventDate: '2027-01-10',
+      venue: 'Beach Resort',
+      city: 'Goa',
+      guests: 500,
+    });
+    const bare = { name: 'Reception', eventDate: null, venue: null, city: null, expectedGuests: null };
+    expect(bookingContextOf({}, bare, wedding)).toMatchObject({
+      eventName: 'Reception',
+      eventDate: '2027-01-10',
+      venue: 'Beach Resort',
+    });
+  });
+
+  it('reads a vendor booking off the same day of the wedding only', () => {
+    const wedding = {
+      weddingDate: null,
+      events: [{ name: 'Sangeet', eventDate: '2026-12-12', venue: 'Hall B', city: 'Hyderabad', expectedGuests: 300 }],
+      vendorBookings: [
+        { eventDate: '2026-12-12', venue: 'Charminar Pearl Convention', city: 'Hyderabad', isVenue: true },
+        { eventDate: '2026-12-20', venue: 'Other Palace', city: 'Hyderabad', isVenue: true },
+      ],
+    };
+    expect(bookingContextOf({ eventDate: '2026-12-12' }, null, wedding, { wholeWedding: false })).toEqual({
+      eventName: 'Sangeet',
+      eventDate: '2026-12-12',
+      venue: 'Charminar Pearl Convention',
+      city: 'Hyderabad',
+      guests: 300,
+    });
+    // A day the couple has nothing booked for says nothing, rather than
+    // borrowing another day's venue.
+    expect(
+      bookingContextOf({ eventDate: '2026-12-01' }, null, wedding, { wholeWedding: false }).venue,
+    ).toBeNull();
+  });
+
+  it('says nothing when nothing was given', () => {
+    expect(bookingContextOf({})).toEqual({
+      eventName: null,
+      eventDate: null,
+      venue: null,
+      city: null,
+      guests: null,
+    });
   });
 });

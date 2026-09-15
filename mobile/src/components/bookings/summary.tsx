@@ -13,6 +13,7 @@ import {
   type QuotationSummary,
 } from '@/lib/bookings';
 import { dateTime, money } from '@/lib/format';
+import { formatDate } from '@/shared/dates';
 import { MILESTONE_LABEL } from '@/shared/permissions';
 import { Badge, DetailGrid, DetailRow, Divider } from '@/components/chrome';
 import { Alert, Button, Caption, SectionTitle } from '@/components/ui';
@@ -51,6 +52,10 @@ export interface BookingSummaryData {
     stage: QuotationStage;
     notes: string | null;
     validUntil: string | null;
+    /** What the price is made of, line by line. */
+    lines?: { description: string; amount: number | string }[] | null;
+    /** What a dispute is argued from, so it is shown with the offer it belongs to. */
+    terms?: string | null;
     responseNote: string | null;
     respondedAt: string | null;
     createdAt: string;
@@ -151,11 +156,19 @@ export function PriceBreakdown({ summary }: { summary: BookingSummaryData }) {
           </DetailRow>
         )}
         <DetailRow label="Add-ons agreed">
-          {`${money(price.addonsTotal, currency)} (${price.addonsAgreed})${
+          {`${price.addonsAgreed > 0 ? `${money(price.addonsTotal, currency)} (${price.addonsAgreed})` : 'None'}${
             price.addonsAwaiting > 0 ? ` · ${price.addonsAwaiting} awaiting an answer` : ''
           }`}
         </DetailRow>
-        <DetailRow label="Grand total">{money(price.grandTotal, currency)}</DetailRow>
+        {/* A request has no price until a quotation is accepted; "INR 0" read
+            as free, not as not-yet-priced. */}
+        <DetailRow label="Grand total">
+          {Number(price.grandTotal) > 0
+            ? money(price.grandTotal, currency)
+            : summary.quotation
+              ? `Not agreed yet · latest quote ${money(summary.quotation.amount, currency)}`
+              : 'Not priced yet'}
+        </DetailRow>
       </DetailGrid>
     </Section>
   );
@@ -177,8 +190,25 @@ export function QuotationHistory({ summary }: { summary: BookingSummaryData }) {
           <Caption tone="faint">
             {`Sent ${dateTime(q.createdAt)}${q.respondedAt ? ` · answered ${dateTime(q.respondedAt)}` : ''}`}
           </Caption>
+          {q.validUntil ? (
+            <Caption tone="faint">{`Valid until ${formatDate(q.validUntil)}`}</Caption>
+          ) : null}
           {q.responseNote ? <Caption>{`Customer: ${q.responseNote}`}</Caption> : null}
+          {(q.lines ?? []).map((line, i) => (
+            <View key={`${q.id}-line-${i}`} style={{ flexDirection: 'row', gap: space(2) }}>
+              <Caption style={{ flex: 1 }}>{line.description}</Caption>
+              <Caption style={{ fontVariant: ['tabular-nums'] }}>
+                {money(line.amount, q.currency)}
+              </Caption>
+            </View>
+          ))}
           {q.notes ? <Caption tone="muted">{q.notes}</Caption> : null}
+          {q.terms ? (
+            <Caption>
+              <Caption tone="faint">Terms: </Caption>
+              {q.terms}
+            </Caption>
+          ) : null}
         </View>
       ))}
     </Section>
@@ -212,6 +242,16 @@ export function PaymentBreakdown({ summary }: { summary: BookingSummaryData }) {
     } finally {
       setReleasing(false);
     }
+  }
+
+  // Nothing is payable before a price is agreed, so instalments and money rows
+  // of INR 0 would only look like a booking that costs nothing.
+  if (Number(summary.price.grandTotal) <= 0) {
+    return (
+      <Section title="Payment">
+        <Caption tone="faint">The instalments are set once the customer accepts a quotation.</Caption>
+      </Section>
+    );
   }
 
   return (
@@ -258,6 +298,14 @@ export function PaymentBreakdown({ summary }: { summary: BookingSummaryData }) {
               ? `confirmed by the customer ${dateTime(delivery.deliveryAcceptedAt)}`
               : 'waiting for the customer to confirm'
           }`}
+        </Caption>
+      ) : null}
+      {/* What the provider said they handed over — a gallery link, a note —
+          which is what the customer reads before confirming. */}
+      {delivery.deliveryNotes ? (
+        <Caption>
+          <Caption tone="faint">What was delivered: </Caption>
+          {delivery.deliveryNotes}
         </Caption>
       ) : null}
       {canRelease ? (

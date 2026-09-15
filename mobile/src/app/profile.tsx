@@ -3,6 +3,7 @@ import { View } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api, apiMessage } from '@/lib/api';
+import { formatDate } from '@/shared/dates';
 import { ROLE_LABEL } from '@/shared/permissions';
 import { DetailGrid, DetailRow } from '@/components/chrome';
 import { DateField, SelectField, Textarea } from '@/components/form';
@@ -210,7 +211,7 @@ export default function Profile() {
             <DetailRow label="Gender">
               {GENDERS.find((g) => g.value === data?.gender)?.label ?? '—'}
             </DetailRow>
-            <DetailRow label="Date of birth">{data?.dateOfBirth || '—'}</DetailRow>
+            <DetailRow label="Date of birth">{formatDate(data?.dateOfBirth, '—')}</DetailRow>
             <DetailRow label="City">{data?.city || '—'}</DetailRow>
             <DetailRow label="Address">{data?.address || '—'}</DetailRow>
             <DetailRow label="Contact number">{data?.contactPhone || '—'}</DetailRow>

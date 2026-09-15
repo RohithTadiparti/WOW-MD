@@ -4,6 +4,7 @@ import { CaretLeft } from '@phosphor-icons/react';
 import { api, apiMessage } from '../lib/api';
 import { formatDate, formatDateTime } from '../lib/dates';
 import { BOOKING_STATUS_LABEL, MILESTONE_LABEL } from '../lib/permissions';
+import { paymentStatusLabel } from '../lib/labels';
 import { EmptyState, Loading } from '../components/ui/Feedback';
 
 /**
@@ -43,6 +44,10 @@ interface TransactionDetail {
     amount: string;
     currency: string;
     eventDate: string | null;
+    /** Where the job is, derived by the server when no event is linked. */
+    eventName?: string | null;
+    venue?: string | null;
+    city?: string | null;
     createdAt: string;
   };
   customer: {
@@ -78,17 +83,6 @@ interface TransactionDetail {
   };
 }
 
-const PAYMENT_STATUS_LABEL: Record<string, string> = {
-  initiated: 'Starting',
-  held_in_escrow: 'In escrow',
-  disputed: 'Frozen: case open',
-  released: 'Paid out',
-  pending_payout: 'Owed to you',
-  refunded: 'Refunded',
-  partially_settled: 'Part settled',
-  failed: 'Failed',
-};
-
 const PAYMENT_STATUS_STYLE: Record<string, string> = {
   held_in_escrow: 'bg-amber-50 text-amber-800',
   released: 'bg-emerald-50 text-emerald-800',
@@ -108,7 +102,7 @@ const money = (v: string | null | undefined, ccy = 'INR') =>
 function StatusPill({ status }: { status: string }) {
   return (
     <span className={`pill ${PAYMENT_STATUS_STYLE[status] ?? 'bg-gray-100 text-gray-600'}`}>
-      {PAYMENT_STATUS_LABEL[status] ?? status.replace(/_/g, ' ')}
+      {paymentStatusLabel(status, 'provider')}
     </span>
   );
 }
@@ -200,20 +194,32 @@ export default function AccountsTransaction() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Section title="Service & catalog">
-          <Row label="Service">{service.name ?? '—'}</Row>
-          <Row label="Package">{service.offering ?? '—'}</Row>
-          <Row label="Quantity">{service.quantity ?? '—'}</Row>
+          {/*
+            A booking made without a catalogue service or a linked event still
+            has a name and a day: a planner booking is "Wedding planning", and
+            the wedding's own event stands in for one the booking never linked.
+            Dashes here read as missing data when the fact was simply elsewhere.
+          */}
+          <Row label="Service">{service.name ?? 'No service chosen'}</Row>
+          <Row label="Package">{service.offering ?? 'No package'}</Row>
+          <Row label="Quantity">{service.quantity ?? 'Not specified'}</Row>
           <Row label="Booking total">{money(service.total, ccy)}</Row>
           {event ? (
             <>
               <Row label="Event">{event.name}</Row>
               {event.venue && <Row label="Venue">{event.venue}</Row>}
               {event.city && <Row label="City">{event.city}</Row>}
-              {event.eventDate && <Row label="Event date">{formatDate(event.eventDate)}</Row>}
+              <Row label="Event date">{formatDate(event.eventDate ?? booking.eventDate)}</Row>
               {event.startTime && <Row label="Starts">{event.startTime}</Row>}
             </>
           ) : (
-            <Row label="Event">—</Row>
+            <>
+              {/* No function linked: the server's derived name, place and date. */}
+              <Row label="Event">{booking.eventName ?? 'Not linked to an event'}</Row>
+              {booking.venue && <Row label="Venue">{booking.venue}</Row>}
+              {booking.city && <Row label="City">{booking.city}</Row>}
+              {booking.eventDate && <Row label="Event date">{formatDate(booking.eventDate)}</Row>}
+            </>
           )}
         </Section>
 

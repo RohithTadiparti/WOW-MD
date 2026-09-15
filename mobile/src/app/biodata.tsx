@@ -3,6 +3,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle, CircleDashed } from 'phosphor-react-native';
 
 import { api } from '@/lib/api';
+import { labelFor } from '@/lib/labels';
+import { formatDate } from '@/shared/dates';
+import { COMPLEXION_LABEL, MARITAL_LABEL, OCCUPATION_LABEL } from '@/shared/permissions';
 import { HoroscopeSection } from '@/components/biodata/horoscope-section';
 import { PreferencesSection } from '@/components/biodata/preferences-section';
 import { DetailGrid, DetailRow } from '@/components/chrome';
@@ -44,6 +47,14 @@ interface Completion {
   missing: string[];
 }
 
+/** What `GET /profiles/:id/details` answers: the biodata is one field of it. */
+interface BiodataResponse {
+  profileId: string;
+  details: Record<string, unknown> | null;
+  /** The profile's own date of birth, which is kept on the profile, not the biodata. */
+  dateOfBirth: string | null;
+}
+
 export default function Biodata() {
   const theme = useTheme();
   const qc = useQueryClient();
@@ -66,10 +77,16 @@ export default function Biodata() {
     retry: false,
   });
 
-  const { data: details, isPending } = useQuery({
+  // The biodata is `details` inside the answer, beside the siblings, the assets,
+  // the contact numbers and the profile's own date of birth. Reading the whole
+  // answer as the biodata printed a dash on every row, read the horoscope as
+  // unavailable, and seeded the preferences form with defaults that a save then
+  // wrote back over the real ones.
+  const { data: full, isPending } = useQuery({
     queryKey: ['biodata-details', profileId],
     enabled: Boolean(profileId),
-    queryFn: async () => (await api.get(`/profiles/${profileId}/details`)).data,
+    queryFn: async () =>
+      (await api.get(`/profiles/${profileId}/details`)).data as BiodataResponse,
     retry: false,
   });
 
@@ -103,10 +120,10 @@ export default function Biodata() {
     );
   }
 
-  const d = (details ?? {}) as Record<string, unknown>;
-  const text = (key: string): string => {
+  const d = (full?.details ?? {}) as Record<string, unknown>;
+  const text = (key: string): string | null => {
     const value = d[key];
-    return typeof value === 'string' && value.trim() ? value : '—';
+    return typeof value === 'string' && value.trim() ? value : null;
   };
   const bag = (key: string): Record<string, unknown> =>
     (d[key] as Record<string, unknown> | undefined) ?? {};
@@ -191,21 +208,26 @@ export default function Biodata() {
         <SectionTitle>Personal</SectionTitle>
         <DetailGrid>
           <DetailRow label="Name">
-            {[text('firstName'), text('lastName')].filter((v) => v !== '—').join(' ') || '—'}
+            {[text('firstName'), text('lastName') ?? text('surname')].filter(Boolean).join(' ') ||
+              '—'}
           </DetailRow>
-          <DetailRow label="Date of birth">{text('dateOfBirth')}</DetailRow>
+          <DetailRow label="Date of birth">
+            {formatDate(full?.dateOfBirth ?? text('dateOfBirth'), '—')}
+          </DetailRow>
           <DetailRow label="Height">
             {typeof d.heightCm === 'number' ? `${d.heightCm} cm` : '—'}
           </DetailRow>
-          <DetailRow label="Complexion">{text('complexion')}</DetailRow>
-          <DetailRow label="Religion">{text('religion')}</DetailRow>
-          <DetailRow label="Caste">{text('caste')}</DetailRow>
-          <DetailRow label="Mother tongue">{text('motherTongue')}</DetailRow>
-          <DetailRow label="Qualification">{text('highestQualification')}</DetailRow>
+          <DetailRow label="Complexion">{labelFor(COMPLEXION_LABEL, d.complexion) ?? '—'}</DetailRow>
+          <DetailRow label="Religion">{text('religion') ?? '—'}</DetailRow>
+          <DetailRow label="Caste">{text('caste') ?? '—'}</DetailRow>
+          <DetailRow label="Mother tongue">{text('motherTongue') ?? '—'}</DetailRow>
+          <DetailRow label="Qualification">{text('highestQualification') ?? '—'}</DetailRow>
           <DetailRow label="Occupation">
-            {text('occupationStatus').replace(/_/g, ' ')}
+            {labelFor(OCCUPATION_LABEL, d.occupationStatus) ?? '—'}
           </DetailRow>
-          <DetailRow label="Marital status">{text('maritalStatus').replace(/_/g, ' ')}</DetailRow>
+          <DetailRow label="Marital status">
+            {labelFor(MARITAL_LABEL, d.maritalStatus) ?? '—'}
+          </DetailRow>
           <DetailRow label="Father">{(bag('father').name as string) || '—'}</DetailRow>
           <DetailRow label="Mother">{(bag('mother').name as string) || '—'}</DetailRow>
         </DetailGrid>

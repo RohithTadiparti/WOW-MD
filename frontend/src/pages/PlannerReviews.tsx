@@ -25,6 +25,10 @@ interface PlannerReview {
   createdAt: string;
   bookingId: string | null;
   eventDate: string | null;
+  /** The wedding's own date, when the booking carried none of its own. */
+  weddingDate?: string | null;
+  /** What was booked, so the review is recognisable without the reference. */
+  serviceName?: string | null;
 }
 
 interface Summary {
@@ -158,10 +162,19 @@ export default function PlannerReviews() {
               </div>
 
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600">
-                {review.eventDate && (
+                {/* The couple stay unnamed (see above); the day and what was
+                    booked are what identify the wedding. */}
+                {(review.eventDate || review.weddingDate) && (
                   <span>
                     Wedding:{' '}
-                    <span className="font-medium text-gray-800">{formatDate(review.eventDate)}</span>
+                    <span className="font-medium text-gray-800">
+                      {formatDate(review.eventDate ?? review.weddingDate)}
+                    </span>
+                  </span>
+                )}
+                {review.serviceName && (
+                  <span>
+                    Service: <span className="font-medium text-gray-800">{review.serviceName}</span>
                   </span>
                 )}
                 {review.bookingId && (

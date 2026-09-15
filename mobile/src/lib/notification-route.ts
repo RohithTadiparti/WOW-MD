@@ -15,8 +15,8 @@ import type { Notification } from '@/shared/notification-copy';
  * Null means this app has no screen for it. That is not a failure to be papered
  * over: sending somebody to the wrong screen, or to a blank one, is worse than
  * a row that says what happened and does not pretend to lead anywhere
- * (EZ1-I254). The three that answer null today — a chat thread, a planner task,
- * a wedding event — are web-only screens.
+ * (EZ1-I254). The two that answer null today — a planner task and a client's
+ * workspace — are web-only screens.
  */
 type RouteOptions = { canVerify?: boolean; canReadIncoming?: boolean };
 
@@ -58,10 +58,14 @@ export function routeFor(n: Notification, opts: RouteOptions = {}): Href | null 
         return '/verification';
       case 'matches':
         return '/matches';
+      // A new message targets the person who sent it, which is the thread's own
+      // address in this app.
       case 'chat':
+        return n.targetId ? { pathname: '/chat/[id]', params: { id: n.targetId } } : '/chat';
+      case 'events':
+        return '/events';
       case 'planner':
       case 'clients':
-      case 'events':
         return null;
     }
   }

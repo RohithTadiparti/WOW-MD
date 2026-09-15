@@ -4,12 +4,12 @@ import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api, apiMessage } from '@/lib/api';
-import { formatDate } from '@/shared/dates';
 import { FilterChips } from '@/components/chrome';
+import { ActingClientPicker, useActingClient } from '@/components/matches/acting-client';
 import { InterestRow, type Interest } from '@/components/matches/interest-row';
 import { ListScreen } from '@/components/layout';
 import { PromptSheet } from '@/components/prompt';
-import { Alert, Caption, Field, PageSubtitle, PageTitle } from '@/components/ui';
+import { Alert, Field, PageSubtitle, PageTitle } from '@/components/ui';
 import { space } from '@/theme';
 
 /**
@@ -62,9 +62,16 @@ export default function Interests() {
   const [error, setError] = useState('');
   const [confirm, setConfirm] = useState<{ row: Interest; kind: 'withdraw' | 'block' } | null>(null);
 
+  const acting = useActingClient();
   const { data, isPending, isFetching, refetch } = useQuery({
-    queryKey: ['interest-board'],
-    queryFn: async () => (await api.get('/matches/interests')).data as Board,
+    queryKey: ['interest-board', acting.profileId],
+    queryFn: async () =>
+      (
+        await api.get('/matches/interests', {
+          params: acting.profileId ? { profileId: acting.profileId } : {},
+        })
+      ).data as Board,
+    enabled: acting.ready,
     retry: false,
   });
 
@@ -113,6 +120,8 @@ export default function Interests() {
               </PageSubtitle>
             </View>
 
+            <ActingClientPicker acting={acting} />
+
             {error ? <Alert tone="critical">{error}</Alert> : null}
 
             <FilterChips options={chips} value={tab} onChange={(key) => setTab(key ?? 'received')} />
@@ -125,21 +134,15 @@ export default function Interests() {
               autoCapitalize="none"
               autoCorrect={false}
             />
-
-            {data?.profileId ? (
-              <Caption tone="faint">
-                Last updated {formatDate(new Date().toISOString())}
-              </Caption>
-            ) : null}
           </>
         }
         data={rows}
         keyExtractor={(row) => row.id}
-        loading={isPending}
+        loading={acting.ready && isPending}
         refreshing={isFetching && !isPending}
         onRefresh={() => void refetch()}
-        emptyTitle="Nothing here"
-        emptyBody={active?.empty}
+        emptyTitle={acting.ready ? 'Nothing here' : 'Choose a client'}
+        emptyBody={acting.ready ? active?.empty : 'Pick which client’s interests you are looking at.'}
         renderItem={(row) => (
           <InterestRow
             interest={row}

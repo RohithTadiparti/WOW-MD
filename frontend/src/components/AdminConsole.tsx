@@ -2,7 +2,15 @@ import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import { BOOKING_STATUS_LABEL } from '../lib/permissions';
+import { BOOKING_STATUS_LABEL, CASE_STATUS_LABEL } from '../lib/permissions';
+import { formatDate } from '../lib/dates';
+import {
+  BUSINESS_STATUS_LABEL,
+  bookingAmountLabel,
+  humanize,
+  labelFrom,
+  roleLabel,
+} from '../lib/labels';
 import { Loading } from './ui/Feedback';
 
 /**
@@ -149,7 +157,7 @@ export function Directory({
           <select className="input w-40" value={role} onChange={(e) => setRole(e.target.value)}>
             {roles.map((r) => (
               <option key={r} value={r}>
-                {r === '' ? 'Any role' : r.replace(/_/g, ' ')}
+                {r === '' ? 'Any role' : roleLabel(r)}
               </option>
             ))}
           </select>
@@ -173,7 +181,7 @@ export function Directory({
               <span className="min-w-0">
                 <span className="block truncate text-sm font-medium text-gray-900">{u.email}</span>
                 <span className="text-xs text-gray-500">
-                  {u.role.replace(/_/g, ' ')} · joined{' '}
+                  {roleLabel(u.role)} · joined{' '}
                   {new Date(u.createdAt).toLocaleDateString()}
                 </span>
               </span>
@@ -222,23 +230,34 @@ function AccountDetail({ userId }: { userId: string }) {
       (data.businesses ?? []).map((b: { id: string; name: string; status: string }) => ({
         id: b.id,
         label: b.name,
-        note: b.status.replace(/_/g, ' '),
+        note: labelFrom(BUSINESS_STATUS_LABEL, b.status),
       })),
     ],
     [
       'Bookings',
-      (data.bookings ?? []).map((b: { id: string; status: string; amount: string }) => ({
-        id: b.id,
-        label: `₹${b.amount}`,
-        note: BOOKING_STATUS_LABEL[b.status] ?? b.status,
-      })),
+      (
+        data.bookings ?? []
+      ).map(
+        (b: {
+          id: string;
+          status: string;
+          amount: string;
+          currency?: string;
+          quotation?: { amount: string; currency?: string } | null;
+        }) => ({
+          id: b.id,
+          // An unpriced request reads as one, never as "₹0".
+          label: bookingAmountLabel(b),
+          note: BOOKING_STATUS_LABEL[b.status] ?? humanize(b.status),
+        }),
+      ),
     ],
     [
       'Cases raised',
       (data.casesRaised ?? []).map((c: { id: string; title: string; status: string }) => ({
         id: c.id,
         label: c.title,
-        note: c.status.replace(/_/g, ' '),
+        note: labelFrom(CASE_STATUS_LABEL, c.status),
       })),
     ],
     // An agency's own clients — the accounts they brought on (EZ1-I111).
@@ -248,7 +267,7 @@ function AccountDetail({ userId }: { userId: string }) {
         (u: { id: string; email: string; role: string; isActive: boolean }) => ({
           id: u.id,
           label: u.email,
-          note: `${u.role}${u.isActive ? '' : ' · suspended'}`,
+          note: `${roleLabel(u.role)}${u.isActive ? '' : ' · suspended'}`,
         }),
       ),
     ],
@@ -319,7 +338,7 @@ export function Businesses() {
         <select className="input w-56" value={status} onChange={(e) => setStatus(e.target.value)}>
           {BUSINESS_STATES.map((sv) => (
             <option key={sv} value={sv}>
-              {sv === '' ? 'Any state' : sv.replace(/_/g, ' ')}
+              {sv === '' ? 'Any state' : labelFrom(BUSINESS_STATUS_LABEL, sv)}
             </option>
           ))}
         </select>
@@ -335,7 +354,7 @@ export function Businesses() {
               </p>
             </div>
             <span className="whitespace-nowrap rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
-              {b.status.replace(/_/g, ' ')}
+              {labelFrom(BUSINESS_STATUS_LABEL, b.status)}
             </span>
           </div>
         ))}
@@ -535,19 +554,23 @@ export function AllBookings({ initialStatus = '' }: { initialStatus?: string } =
                   <td className="px-4 py-3">
                     <span className="font-mono text-xs text-gray-500">#{b.id.slice(0, 8)}</span>
                     <span className="block text-xs text-gray-400">
-                      {b.eventDate ?? new Date(b.createdAt).toLocaleDateString()}
+                      {formatDate(b.eventDate ?? b.createdAt)}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-gray-800">{b.buyerName ?? '—'}</td>
                   <td className="px-4 py-3 text-gray-800">
                     {b.providerName ?? '—'}
                     {b.providerType && (
-                      <span className="block text-xs capitalize text-gray-400">{b.providerType}</span>
+                      <span className="block text-xs text-gray-400">{humanize(b.providerType)}</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-gray-600">{b.serviceName ?? '—'}</td>
-                  <td className="px-4 py-3 text-right text-gray-900">{money(b.amount, b.currency)}</td>
-                  <td className="px-4 py-3 text-right text-gray-600">{money(b.amountPaid, b.currency)}</td>
+                  {/* An unpriced request reads as one, with its latest quote when
+                      it has one — never "₹0 ₹0". */}
+                  <td className="px-4 py-3 text-right text-gray-900">{bookingAmountLabel(b)}</td>
+                  <td className="px-4 py-3 text-right text-gray-600">
+                    {Number(b.amount) > 0 ? money(b.amountPaid, b.currency) : '—'}
+                  </td>
                   <td className="px-4 py-3">
                     <span
                       className={`pill ${BOOKING_STATUS_TONE[b.status] ?? 'bg-gray-100 text-gray-600'}`}

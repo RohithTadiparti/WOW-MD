@@ -3,7 +3,16 @@ import { useQuery } from '@tanstack/react-query';
 import { CaretLeft } from '@phosphor-icons/react';
 import { api, apiMessage } from '../../lib/api';
 import { formatDate } from '../../lib/dates';
-import { BOOKING_STATUS_LABEL } from '../../lib/permissions';
+import { BOOKING_STATUS_LABEL, CASE_STATUS_LABEL } from '../../lib/permissions';
+import {
+  BUSINESS_STATUS_LABEL,
+  formatMoney,
+  humanize,
+  labelFrom,
+  milestoneLabel,
+  paymentStatusLabel,
+  roleLabel,
+} from '../../lib/labels';
 import { EmptyState, Loading } from '../../components/ui/Feedback';
 
 /**
@@ -17,6 +26,8 @@ import { EmptyState, Loading } from '../../components/ui/Feedback';
 
 interface Party {
   id: string;
+  /** The customer's display name, when the server resolves one. */
+  name?: string | null;
   email?: string;
   phone?: string | null;
   role?: string;
@@ -67,6 +78,22 @@ interface BookingDetail {
   service: { id: string; name: string | null } | null;
   payments: Payment[];
   disputes: Dispute[];
+  /**
+   * The wedding event behind the booking, and the names the list rows already
+   * carry — read when the server sends them, so a booking without its own
+   * event or service link still says what it was for.
+   */
+  context?: {
+    eventName: string | null;
+    eventDate: string | null;
+    venue: string | null;
+    city: string | null;
+    guests?: number | null;
+  } | null;
+  customerName?: string | null;
+  serviceName?: string | null;
+  /** The newest offer, so an unpriced booking shows what was quoted. */
+  quotation?: { amount: string; currency?: string; stage?: string } | null;
 }
 
 // The ordinary forward path, so the timeline can show what is done, where the
@@ -108,6 +135,15 @@ export default function AdminBookingDetail() {
     );
 
   const { booking, client, agent, provider, service, payments, disputes } = data;
+  // When and where, as the server derives them (linked function, then the
+  // booking form, then the wedding) — the same date the booking lists show.
+  const context = data.context ?? null;
+  const event = context
+    ? { name: context.eventName, venue: context.venue, city: context.city }
+    : null;
+  const eventDate = context?.eventDate ?? booking.eventDate ?? null;
+  const customerName = client?.name ?? data.customerName ?? null;
+  const serviceName = service?.name ?? data.serviceName ?? null;
   const providerRoute =
     provider.ownerUserId && provider.type === 'planner'
       ? `/admin/planners/${provider.ownerUserId}`
@@ -126,7 +162,7 @@ export default function AdminBookingDetail() {
           <h1 className="page-title">Booking #{booking.id.slice(0, 8)}</h1>
           <p className="page-subtitle">
             Placed {formatDate(booking.createdAt)}
-            {booking.eventDate ? ` · event ${booking.eventDate}` : ''}
+            {eventDate ? ` · event ${formatDate(eventDate)}` : ''}
           </p>
         </div>
         <span
@@ -142,9 +178,10 @@ export default function AdminBookingDetail() {
         <Section title="Booked by">
           {client ? (
             <>
-              <Row label="Email">{client.email ?? '—'}</Row>
-              <Row label="Mobile">{client.phone ?? '—'}</Row>
-              <Row label="Account">{client.role ?? '—'}</Row>
+              {customerName && <Row label="Name">{customerName}</Row>}
+              <Row label="Email">{client.email ?? 'Not given'}</Row>
+              <Row label="Mobile">{client.phone ?? 'Not given'}</Row>
+              <Row label="Account">{client.role ? roleLabel(client.role) : 'Not given'}</Row>
               <Link className="btn-outline btn-sm mt-2" to={`/admin/clients/${client.id}`}>
                 Open client
               </Link>
@@ -156,8 +193,10 @@ export default function AdminBookingDetail() {
 
         <Section title="Booked with">
           <Row label="Name">{provider.name ?? provider.id.slice(0, 8)}</Row>
-          <Row label="Category">{provider.category ?? provider.type ?? '—'}</Row>
-          {provider.status && <Row label="Status">{provider.status.replace(/_/g, ' ')}</Row>}
+          <Row label="Category">{humanize(provider.category ?? provider.type, 'Not given')}</Row>
+          {provider.status && (
+            <Row label="Status">{labelFrom(BUSINESS_STATUS_LABEL, provider.status)}</Row>
+          )}
           {providerRoute && (
             <Link className="btn-outline btn-sm mt-2" to={providerRoute}>
               Open provider
@@ -166,9 +205,23 @@ export default function AdminBookingDetail() {
         </Section>
 
         <Section title="Service & money">
-          <Row label="Service">{service?.name ?? '—'}</Row>
+          <Row label="Service">
+            {serviceName ?? (booking.providerType === 'planner' ? 'Wedding planning' : 'No service chosen')}
+          </Row>
           {booking.quantity != null && <Row label="Quantity">{String(booking.quantity)}</Row>}
-          <Row label="Amount">{money(booking.amount, booking.currency)}</Row>
+          {/* The agreed total, else the latest offer, else honestly unpriced. */}
+          <Row label="Amount">
+            {Number(booking.amount) > 0
+              ? formatMoney(booking.amount, booking.currency)
+              : data.quotation && Number(data.quotation.amount) > 0
+                ? `Quoted ${formatMoney(data.quotation.amount, data.quotation.currency ?? booking.currency)}`
+                : 'Not yet priced'}
+          </Row>
+          <Row label="Event">{event?.name ?? 'Not linked to an event'}</Row>
+          {eventDate && <Row label="Date">{formatDate(eventDate)}</Row>}
+          {(event?.venue || event?.city) && (
+            <Row label="Venue">{[event?.venue, event?.city].filter(Boolean).join(', ')}</Row>
+          )}
           {agent && (
             <>
               <Row label="Via agency">{agent.email ?? '—'}</Row>
@@ -234,14 +287,14 @@ export default function AdminBookingDetail() {
                 {payments.map((p) => (
                   <tr key={p.id}>
                     <td className="py-2 pr-3 text-gray-600">{formatDate(p.createdAt)}</td>
-                    <td className="py-2 pr-3 capitalize">{p.milestone.replace(/_/g, ' ')}</td>
+                    <td className="py-2 pr-3">{milestoneLabel(p.milestone)}</td>
                     <td className="py-2 pr-3 text-right">{money(p.amount, p.currency)}</td>
                     <td className="py-2 pr-3 text-right text-gray-600">
                       {money(p.payoutAmount, p.currency)}
                     </td>
                     <td className="py-2">
                       <span className="pill bg-gray-100 text-gray-600">
-                        {p.status.replace(/_/g, ' ')}
+                        {paymentStatusLabel(p.status, 'admin')}
                       </span>
                     </td>
                   </tr>
@@ -259,7 +312,7 @@ export default function AdminBookingDetail() {
               <div key={d.id} className="flex items-center justify-between gap-3 py-2 text-sm">
                 <span className="text-gray-800">{d.title}</span>
                 <span className="pill bg-critical-bg text-critical-fg">
-                  {d.status.replace(/_/g, ' ')}
+                  {labelFrom(CASE_STATUS_LABEL, d.status)}
                 </span>
               </div>
             ))}

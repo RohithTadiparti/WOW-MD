@@ -15,6 +15,7 @@ import {
 } from '../lib/permissions';
 import ProfileSelector from '../components/ProfileSelector';
 import ChoiceField from '../components/ChoiceField';
+import { matchmakingGate } from '../lib/matchmaking-gate';
 import {
   CASTES_BY_RELIGION,
   CITIES,
@@ -233,11 +234,22 @@ export default function Matches() {
     limit: PAGE_SIZE * pages,
   };
 
+  const { data: status } = useQuery({
+    queryKey: ['match-status', profileId],
+    queryFn: async () => (await api.get('/matches/status', { params })).data as MatchStatus,
+    retry: false,
+    enabled: ready,
+  });
+  // A profile with a fixed match, or one not yet filled in, is refused
+  // suggestions by the server; asking anyway was a 403 on every visit. The
+  // status says which, and the page already explains it.
+  const canBrowse = ready && Boolean(status) && !matchmakingGate(status);
+
   const { data, isLoading } = useQuery({
     queryKey: ['suggestions', profileId, JSON.stringify(filters), pages],
     queryFn: async () => (await api.get('/matches/suggestions', { params: searchParams })).data,
     retry: false,
-    enabled: ready,
+    enabled: canBrowse,
   });
 
   // The engine's own shortlist, unfiltered — it answers a different question
@@ -246,14 +258,7 @@ export default function Matches() {
     queryKey: ['recommended', profileId],
     queryFn: async () => (await api.get('/ai/recommendations/matches', { params })).data,
     retry: false,
-    enabled: ready && can(permissions, Permission.AI_ASSIST),
-  });
-
-  const { data: status } = useQuery({
-    queryKey: ['match-status', profileId],
-    queryFn: async () => (await api.get('/matches/status', { params })).data as MatchStatus,
-    retry: false,
-    enabled: ready,
+    enabled: canBrowse && can(permissions, Permission.AI_ASSIST),
   });
 
   const { data: accepted } = useQuery({

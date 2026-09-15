@@ -3,7 +3,7 @@ import { View } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api, apiMessage } from '@/lib/api';
-import { dateTime, humanise } from '@/lib/format';
+import { dateTime, humanise, shortDate } from '@/lib/format';
 import { isProvider } from '@/shared/permissions';
 import { Badge, DetailGrid, DetailRow, Divider, type Tone } from '@/components/chrome';
 import { SelectField, Textarea } from '@/components/form';
@@ -45,6 +45,34 @@ interface SupportCase {
   findings?: string | null;
   settlementNotes?: string | null;
   resolvedAt?: string | null;
+  /** What the case is about, as the server fills it in for a booking or a listing. */
+  booking?: {
+    buyerName: string | null;
+    providerName: string | null;
+    serviceName?: string | null;
+    eventDate?: string | null;
+  } | null;
+  business?: { name: string } | null;
+}
+
+/**
+ * What a case is about, in words: the service booked, who it was with and the
+ * day, or the business's name. Nothing when the server has no context for it —
+ * a truncated id meant nothing to the person who raised the case.
+ *
+ * A provider is told who the customer was, and a customer who the provider was:
+ * each already knows which side of it they are on.
+ */
+function aboutLine(row: SupportCase, provider: boolean): string | null {
+  if (row.booking) {
+    const parts = [
+      row.booking.serviceName,
+      provider ? row.booking.buyerName : row.booking.providerName,
+      row.booking.eventDate ? shortDate(row.booking.eventDate) : null,
+    ].filter(Boolean);
+    return parts.length > 0 ? parts.join(' · ') : null;
+  }
+  return row.business?.name ?? null;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -186,8 +214,8 @@ export default function Support() {
                 <Body tone="muted">{row.description}</Body>
                 <DetailGrid>
                   <DetailRow label="Reference">{row.id.slice(0, 8)}</DetailRow>
-                  {row.subjectId ? (
-                    <DetailRow label="About">{row.subjectId.slice(0, 8)}</DetailRow>
+                  {aboutLine(row, isProvider(role)) ? (
+                    <DetailRow label="About">{aboutLine(row, isProvider(role))}</DetailRow>
                   ) : null}
                   {row.resolvedAt ? (
                     <DetailRow label="Resolved">{dateTime(row.resolvedAt)}</DetailRow>

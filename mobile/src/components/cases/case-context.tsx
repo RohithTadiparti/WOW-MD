@@ -1,8 +1,12 @@
 import { View } from 'react-native';
 
-import { humanise, money, shortDate } from '@/lib/format';
+import { PAYMENT_LABEL } from '@/lib/bookings';
+import { BUSINESS_STATUS_LABEL } from '@/lib/business-status';
+import { hhmm, humanise, money, shortDate } from '@/lib/format';
+import { labelFor, roleLabel } from '@/lib/labels';
 import type { SupportCase } from '@/lib/verification';
-import { hhmm } from '@/lib/format';
+import { BOOKING_STATUS_LABEL, MILESTONE_LABEL, SLOT_STATE_LABEL } from '@/shared/permissions';
+import { useCategoryNames } from '@/components/business/category-picker';
 import { readableTime } from '@/components/form';
 import { DocumentList } from '@/components/uploader';
 import { Body, Caption, Card, SectionTitle } from '@/components/ui';
@@ -16,8 +20,16 @@ import { space } from '@/theme';
  * standing — so an officer can investigate without opening four other screens.
  * Each block appears only when the case has one, which is why a payout dispute
  * shows escrow and a listing complaint shows compliance numbers.
+ *
+ * Every value is said in words. A booking titled by the first eight characters
+ * of its id, a role printed as `in_person` and a payment as `final · pending
+ * payout` were each a database value on an officer's screen.
  */
 export function CaseContext({ item }: { item: SupportCase }) {
+  const categoryNames = useCategoryNames();
+  const raisedRole = roleLabel(item.raisedByRole);
+  const currency = item.booking?.currency ?? 'INR';
+
   return (
     <>
       {/* Who raised it. */}
@@ -26,7 +38,7 @@ export function CaseContext({ item }: { item: SupportCase }) {
           <Caption tone="faint">Raised by</Caption>
           <Body>
             {item.raisedByName ?? item.raisedByEmail}
-            {item.raisedByRole ? ` · ${item.raisedByRole}` : ''}
+            {raisedRole ? ` · ${raisedRole}` : ''}
           </Body>
           {item.raisedByName && item.raisedByEmail ? (
             <Caption tone="faint">{item.raisedByEmail}</Caption>
@@ -36,8 +48,17 @@ export function CaseContext({ item }: { item: SupportCase }) {
 
       {item.booking ? (
         <Card>
-          <SectionTitle>Booking {item.booking.id.slice(0, 8)}</SectionTitle>
-          <Caption tone="faint">{humanise(item.booking.status)}</Caption>
+          <SectionTitle>
+            {item.booking.serviceName ?? item.booking.providerName ?? 'The booking'}
+          </SectionTitle>
+          <Caption tone="faint">
+            {[
+              labelFor(BOOKING_STATUS_LABEL, item.booking.status),
+              item.booking.eventDate ? `Event ${shortDate(item.booking.eventDate)}` : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </Caption>
           <Body>{money(item.booking.amount, item.booking.currency)}</Body>
           {item.booking.buyerName ? (
             <Caption>Buyer: {item.booking.buyerName}</Caption>
@@ -56,12 +77,13 @@ export function CaseContext({ item }: { item: SupportCase }) {
           {item.payments.map((payment, i) => (
             <View key={i} style={{ gap: space(0.5) }}>
               <Body>
-                {humanise(payment.milestone)} · {humanise(payment.status)}
+                {labelFor(MILESTONE_LABEL, payment.milestone)} ·{' '}
+                {labelFor(PAYMENT_LABEL, payment.status)}
               </Body>
               <Caption tone="faint">
-                {money(payment.amount)}
+                {money(payment.amount, currency)}
                 {Number(payment.payoutAmount) > 0
-                  ? ` · payout ${money(payment.payoutAmount)}`
+                  ? ` · payout ${money(payment.payoutAmount, currency)}`
                   : ''}
                 {payment.payoutNote ? ` · ${payment.payoutNote}` : ''}
               </Caption>
@@ -75,9 +97,9 @@ export function CaseContext({ item }: { item: SupportCase }) {
       {item.business ? (
         <Card>
           <SectionTitle>{item.business.name}</SectionTitle>
-          <Caption tone="faint">{humanise(item.business.category)}</Caption>
+          <Caption tone="faint">{categoryNames([item.business.category])[0] ?? 'No category'}</Caption>
           <Body>
-            {humanise(item.business.status)}
+            {labelFor(BUSINESS_STATUS_LABEL, item.business.status)}
             {item.business.isApproved ? ' · approved' : ' · not approved'}
             {item.business.city ? ` · ${item.business.city}` : ''}
           </Body>
@@ -111,7 +133,8 @@ export function CaseContext({ item }: { item: SupportCase }) {
             <Caption key={i} tone="faint">
               {shortDate(slot.date)} {readableTime(hhmm(slot.startTime))}–
               {readableTime(hhmm(slot.endTime))} · {slot.confirmed}/{slot.capacity} booked
-              {slot.pending > 0 ? ` · ${slot.pending} pending` : ''} · {humanise(slot.status)}
+              {slot.pending > 0 ? ` · ${slot.pending} pending` : ''} ·{' '}
+              {labelFor(SLOT_STATE_LABEL, slot.status) ?? humanise(slot.status)}
             </Caption>
           ))}
         </Card>
@@ -123,7 +146,7 @@ export function CaseContext({ item }: { item: SupportCase }) {
           <SectionTitle>Account</SectionTitle>
           <Body>{item.account.email ?? '—'}</Body>
           <Caption tone="faint">
-            {item.account.role ? `${item.account.role} · ` : ''}
+            {item.account.role ? `${roleLabel(item.account.role)} · ` : ''}
             {item.account.isActive ? 'active' : 'suspended'}
           </Caption>
         </Card>

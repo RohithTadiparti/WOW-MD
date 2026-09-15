@@ -9,9 +9,11 @@ import { PlannerProfile } from '../wedding-planners/entities/planner-profile.ent
 import { SupportCase } from '../verification/entities/support-case.entity';
 import { VerificationRequest } from '../verification/entities/verification-request.entity';
 import { Dispute } from './entities/dispute.entity';
+import { WeddingEvent } from '../events/entities/event.entity';
 import { MONEY_TAKEN } from './reports.service';
 import { ActivityQueryDto } from './dto/console.dto';
-import { VerificationStatus } from '../../common/enums';
+import { UserRole, VerificationStatus, isIndividual } from '../../common/enums';
+import { bookingContextOf } from '../bookings/booking-venue';
 
 /** One line in the activity feed. Deliberately uniform across every source. */
 export interface ActivityItem {
@@ -43,7 +45,17 @@ export class AdminActivityService {
     private readonly verifications: Repository<VerificationRequest>,
     // Read-only, for disputes raised in the activity feed (EZ1-I242).
     @InjectRepository(Dispute) private readonly disputes: Repository<Dispute>,
+    // Read-only: a booking's date is its linked function's date.
+    @InjectRepository(WeddingEvent) private readonly events: Repository<WeddingEvent>,
   ) {}
+
+  /** Who raised a dispute, by the side they are on. */
+  private static disputeRaiser(role: UserRole | undefined): string {
+    if (!role) return 'Somebody';
+    if (isIndividual(role) || role === UserRole.AGENT) return 'A customer';
+    if (role === UserRole.VENDOR || role === UserRole.PLANNER) return 'A provider';
+    return 'Support';
+  }
 
   /**
    * What has been happening, across the whole platform.
@@ -131,6 +143,24 @@ export class AdminActivityService {
       }),
     ]);
 
+    // The day a booking is for, read the way the booking itself reads it: the
+    // linked function's date, else the booking's, else the form's. And who
+    // raised each dispute, because providers raise them too.
+    const eventIds = [...new Set(bookings.map((b) => b.eventId).filter(Boolean))] as string[];
+    const [linkedEvents, raisers] = await Promise.all([
+      eventIds.length ? this.events.find({ where: { id: In(eventIds) } }) : Promise.resolve([]),
+      disputes.length
+        ? this.users.find({
+            where: { id: In([...new Set(disputes.map((d) => d.raisedBy))]) },
+            select: ['id', 'role'],
+          })
+        : Promise.resolve([]),
+    ]);
+    const eventById = new Map(linkedEvents.map((e) => [e.id, e]));
+    const roleOf = new Map(raisers.map((u) => [u.id, u.role]));
+    const dayOf = (b: Booking) =>
+      bookingContextOf(b, b.eventId ? eventById.get(b.eventId) : null).eventDate;
+
     const items: ActivityItem[] = [
       ...users.map((u) => ({
         at: u.createdAt,
@@ -149,7 +179,7 @@ export class AdminActivityService {
       ...bookings.map((b) => ({
         at: b.createdAt,
         kind: 'booking.placed',
-        summary: `A booking was placed${b.eventDate ? ` for ${b.eventDate}` : ''}`,
+        summary: `A booking was placed${dayOf(b) ? ` for ${dayOf(b)}` : ''}`,
         resourceType: 'booking',
         resourceId: b.id,
       })),
@@ -218,7 +248,7 @@ export class AdminActivityService {
       ...disputes.map((d) => ({
         at: d.createdAt,
         kind: 'dispute.raised',
-        summary: 'A buyer raised a dispute on a booking',
+        summary: `${AdminActivityService.disputeRaiser(roleOf.get(d.raisedBy))} raised a dispute on a booking`,
         resourceType: 'dispute',
         resourceId: d.id,
       })),

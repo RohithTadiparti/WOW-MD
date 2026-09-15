@@ -101,7 +101,7 @@ export function BookingCard({
           {/* The real customer name; "Customer" only when the record genuinely
               has no name, never "A client". */}
           <Body numberOfLines={2}>
-            {booking.clientName ?? 'Customer'}
+            {booking.clientName ?? booking.clientEmail ?? 'Customer'}
             {booking.serviceName ? ` · ${booking.serviceName}` : ''}
             {booking.offeringName ? ` · ${booking.offeringName}` : ''}
           </Body>
@@ -137,7 +137,7 @@ export function BookingCard({
         ) : null}
         {booking.paymentStatus ? (
           <Badge tone={PAYMENT_TONE[booking.paymentStatus] ?? 'neutral'}>
-            {PAYMENT_LABEL[booking.paymentStatus] ?? booking.paymentStatus}
+            {PAYMENT_LABEL[booking.paymentStatus] ?? booking.paymentStatus.replace(/_/g, ' ')}
           </Badge>
         ) : null}
       </View>

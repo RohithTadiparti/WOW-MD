@@ -11,6 +11,7 @@ import { Booking } from '../../modules/bookings/entities/booking.entity';
 import { Profile } from '../../modules/users/entities/profile.entity';
 import { ProfileConsent } from '../../modules/circulation/entities/profile-consent.entity';
 import { Vendor } from '../../modules/vendors/entities/vendor.entity';
+import { PlannerProfile } from '../../modules/wedding-planners/entities/planner-profile.entity';
 
 /**
  * Scheduled maintenance.
@@ -23,7 +24,7 @@ import { Vendor } from '../../modules/vendors/entities/vendor.entity';
 @Module({
   imports: [
     ScheduleModule.forRoot(),
-    TypeOrmModule.forFeature([Payment, Booking, Profile, ProfileConsent, Vendor]),
+    TypeOrmModule.forFeature([Payment, Booking, Profile, ProfileConsent, Vendor, PlannerProfile]),
     AuthModule,
     NotificationsModule,
     UsersModule,

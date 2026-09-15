@@ -16,10 +16,23 @@ import { BookingsModule } from '../bookings/bookings.module';
 import { Booking } from '../bookings/entities/booking.entity';
 import { User } from '../auth/entities/user.entity';
 import { Profile } from '../users/entities/profile.entity';
+import { WeddingEvent } from '../events/entities/event.entity';
+import { WeddingPlan } from '../planner/entities/wedding-plan.entity';
+import { Vendor } from '../vendors/entities/vendor.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([PlannerProfile, PlannerReview, Booking, User, Profile]),
+    TypeOrmModule.forFeature([
+      PlannerProfile,
+      PlannerReview,
+      Booking,
+      User,
+      Profile,
+      // Read-only: the day a reviewed planner booking was for, from the wedding.
+      WeddingEvent,
+      WeddingPlan,
+      Vendor,
+    ]),
     VerificationModule,
     // For AvailabilityService, which serves both kinds of provider now.
     forwardRef(() => VendorsModule),

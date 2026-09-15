@@ -11,6 +11,8 @@ import { ServiceOffering } from '../catalog/entities/service-offering.entity';
 import { serviceNamesByIds } from '../catalog/service-names';
 import { Booking } from '../bookings/entities/booking.entity';
 import { User } from '../auth/entities/user.entity';
+import { Profile } from '../users/entities/profile.entity';
+import { displayNamesByUserIds } from '../users/display-names';
 import { screenText } from '../../common/util/text-moderation';
 import {
   CreateReviewDto,
@@ -115,6 +117,8 @@ export class VendorsService {
     // Only to put a name and an address on a review for the administrator
     // moderating it: deciding in the dark is not deciding.
     @InjectRepository(User) private readonly users: Repository<User>,
+    // Read-only, for the reviewer's name on the administrator's review list.
+    @InjectRepository(Profile) private readonly profiles: Repository<Profile>,
     private readonly redis: RedisService,
     private readonly dataSource: DataSource,
     private readonly lifecycle: BusinessLifecycleService,
@@ -530,10 +534,16 @@ export class VendorsService {
     ]);
     const byUser = new Map(users.map((u) => [u.id, u.email]));
     const byVendor = new Map(vendors.map((v) => [v.id, v.name]));
+    // A name reads faster than an address; the email stays for contacting them.
+    const reviewerNames = await displayNamesByUserIds(
+      { users: this.users, profiles: this.profiles },
+      rows.map((r) => r.userId),
+    );
 
     return rows.map((r) => ({
       ...r,
       reviewerEmail: byUser.get(r.userId) ?? null,
+      reviewerName: reviewerNames.get(r.userId) ?? null,
       vendorName: byVendor.get(r.vendorId) ?? null,
     }));
   }

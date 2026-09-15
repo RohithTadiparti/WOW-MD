@@ -9,6 +9,7 @@ import { Booking } from '../../modules/bookings/entities/booking.entity';
 import { Profile } from '../../modules/users/entities/profile.entity';
 import { ProfileConsent } from '../../modules/circulation/entities/profile-consent.entity';
 import { Vendor } from '../../modules/vendors/entities/vendor.entity';
+import { PlannerProfile } from '../../modules/wedding-planners/entities/planner-profile.entity';
 import { NotificationsService } from '../../modules/notifications/notifications.service';
 import { SmsService } from '../sms/sms.service';
 import { DataRightsService } from '../../modules/users/data-rights.service';
@@ -19,7 +20,9 @@ import {
   ConsentScope,
   NetworkVisibility,
   NotificationType,
+  PaymentMilestone,
   PaymentStatus,
+  ProviderType,
 } from '../../common/enums';
 
 /** How long a booking sits at a payment step before anybody is chased. */
@@ -53,6 +56,8 @@ export class JobsService {
     @InjectRepository(Profile) private readonly profiles: Repository<Profile>,
     @InjectRepository(ProfileConsent) private readonly consents: Repository<ProfileConsent>,
     @InjectRepository(Vendor) private readonly vendors: Repository<Vendor>,
+    // Read-only, to name a planner in a payment reminder.
+    @InjectRepository(PlannerProfile) private readonly planners: Repository<PlannerProfile>,
     private readonly notifications: NotificationsService,
     private readonly sms: SmsService,
     private readonly audit: AuditService,
@@ -187,11 +192,21 @@ export class JobsService {
 
         const profile = await this.profiles.findOne({ where: { userId: booking.userId } });
         if (profile?.contactPhone) {
+          // What this instalment actually costs, priced against what earlier
+          // ones were really billed at. The booking total asked a couple who
+          // had paid their advance for the whole amount again.
+          const amount = this.bookingsService.milestoneAmount(
+            booking.amount,
+            booking.status === BookingStatus.PAYMENT_PENDING
+              ? PaymentMilestone.ADVANCE
+              : PaymentMilestone.FINAL,
+            await this.bookingsService.chargedSoFar(booking.id),
+          );
           await this.sms.sendMilestoneReminder({
             to: profile.contactPhone,
             providerName: providerNames.get(booking.providerId) ?? 'your provider',
             milestone: due,
-            amount: booking.amount,
+            amount,
           });
         }
         sent += 1;
@@ -203,11 +218,23 @@ export class JobsService {
     }
   }
 
+  /** The business behind each booking, vendor or planner alike. */
   private async providerNames(bookings: Booking[]): Promise<Map<string, string>> {
-    const ids = [...new Set(bookings.map((b) => b.providerId))];
-    if (ids.length === 0) return new Map();
-    const vendors = await this.vendors.find({ where: { id: In(ids) } });
-    return new Map(vendors.map((v) => [v.id, v.name]));
+    const idsOf = (type: ProviderType) => [
+      ...new Set(bookings.filter((b) => b.providerType === type).map((b) => b.providerId)),
+    ];
+    const vendorIds = idsOf(ProviderType.VENDOR);
+    const plannerIds = idsOf(ProviderType.PLANNER);
+    const [vendors, planners] = await Promise.all([
+      vendorIds.length ? this.vendors.find({ where: { id: In(vendorIds) } }) : Promise.resolve([]),
+      plannerIds.length
+        ? this.planners.find({ where: { id: In(plannerIds) } })
+        : Promise.resolve([]),
+    ]);
+    return new Map([
+      ...vendors.map((v) => [v.id, v.name] as [string, string]),
+      ...planners.map((p) => [p.id, p.agencyName] as [string, string]),
+    ]);
   }
 
   /**

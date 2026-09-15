@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { CalendarBlank, MapPin, UsersThree } from '@phosphor-icons/react';
 import { api } from '../lib/api';
 import { formatDate } from '../lib/dates';
+import { CANCELLED_BY_LABEL, labelFrom, partialListNote, paymentStatusLabel } from '../lib/labels';
 import { EmptyState, Loading } from './ui/Feedback';
 import {
   PROGRESS_STEPS,
@@ -95,15 +96,6 @@ const TABS: { key: string; label: string; statuses: string[] }[] = [
   { key: 'cancelled', label: 'Cancelled', statuses: ['cancelled', 'disputed'] },
 ];
 
-const PAYMENT_LABEL: Record<string, string> = {
-  initiated: 'Payment started',
-  held_in_escrow: 'Held in escrow',
-  disputed: 'Disputed',
-  pending_payout: 'Owed to you',
-  released: 'Paid out',
-  refunded: 'Refunded',
-};
-
 const PAYMENT_TONE: Record<string, string> = {
   initiated: 'bg-surface-sunken text-gray-600',
   held_in_escrow: 'bg-brand-soft text-brand-strong',
@@ -111,6 +103,8 @@ const PAYMENT_TONE: Record<string, string> = {
   pending_payout: 'bg-caution-bg text-caution-fg',
   released: 'bg-positive-bg text-positive-fg',
   refunded: 'bg-critical-bg text-critical-fg',
+  partially_settled: 'bg-brand-soft text-brand-strong',
+  failed: 'bg-critical-bg text-critical-fg',
 };
 
 export default function BookingConsole({
@@ -238,6 +232,12 @@ export default function BookingConsole({
         })}
       </div>
 
+      {/* The tab counts are the whole queue; the rows are the newest hundred.
+          When those differ the list says so rather than looking incomplete. */}
+      {!isPending && partialListNote(all.length, counts?.all) && (
+        <p className="text-xs text-gray-500">{partialListNote(all.length, counts?.all)}.</p>
+      )}
+
       <div className="flex flex-wrap gap-2">
         <input
           className="input flex-1 py-1.5 text-sm sm:max-w-xs"
@@ -298,7 +298,7 @@ export default function BookingConsole({
                   <p className="font-medium text-gray-900">
                     {/* The real customer/couple name; "Customer" only when the
                         record genuinely has no name (EZ1-I33), never "A client". */}
-                    {booking.clientName ?? 'Customer'}
+                    {booking.clientName ?? booking.clientEmail ?? 'Customer'}
                     {booking.serviceName && (
                       <span className="font-normal text-gray-500"> · {booking.serviceName}</span>
                     )}
@@ -355,7 +355,7 @@ export default function BookingConsole({
                         PAYMENT_TONE[booking.paymentStatus] ?? 'bg-surface-sunken text-gray-600'
                       }`}
                     >
-                      {PAYMENT_LABEL[booking.paymentStatus] ?? booking.paymentStatus}
+                      {paymentStatusLabel(booking.paymentStatus, 'provider')}
                     </span>
                   )}
                 </div>
@@ -442,7 +442,9 @@ export default function BookingConsole({
                     Cancelled
                     {booking.cancelledByName
                       ? ` by ${booking.cancelledByName}${
-                          booking.cancelledByRole ? ` (${booking.cancelledByRole})` : ''
+                          booking.cancelledByRole
+                            ? ` (${labelFrom(CANCELLED_BY_LABEL, booking.cancelledByRole)})`
+                            : ''
                         }`
                       : ''}
                     {booking.cancellationReason ? ` — ${booking.cancellationReason}` : ''}

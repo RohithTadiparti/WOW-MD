@@ -124,6 +124,47 @@ const minor = (value: string | null | undefined): number =>
   Math.round(parseFloat(value || '0') * 100);
 const major = (value: number): string => (value / 100).toFixed(2);
 
+/** Customer money the platform is holding, disputed money included. */
+const HELD: PaymentStatus[] = [PaymentStatus.HELD_IN_ESCROW, PaymentStatus.DISPUTED];
+/** Transferred to the provider, in full or as part of a settlement. */
+const PAID_OUT: PaymentStatus[] = [PaymentStatus.RELEASED, PaymentStatus.PARTIALLY_SETTLED];
+/** Earned by the provider, whether or not it has been transferred yet. */
+const EARNED: PaymentStatus[] = [PaymentStatus.PENDING_PAYOUT, ...PAID_OUT];
+
+export interface EscrowSummary {
+  held: string;
+  released: string;
+  refunded: string;
+  commission: string;
+  payout: string;
+}
+
+/**
+ * The escrow position across one booking's instalments, as a payment's detail
+ * screen shows it.
+ *
+ * The admin's copy of this counted only HELD_IN_ESCROW as held and only
+ * RELEASED as paid out, while the provider's counted disputed money as held,
+ * a partial settlement as paid and a pending payout as commission earned — so
+ * the same payment read differently on the two screens. One set of groups, the
+ * same buckets the Accounts page uses, for both.
+ */
+export function escrowSummary(payments: PaymentLike[]): EscrowSummary {
+  const sum = (statuses: PaymentStatus[], column: keyof Omit<PaymentLike, 'status'>) =>
+    major(
+      payments
+        .filter((p) => statuses.includes(p.status))
+        .reduce((total, p) => total + minor(p[column]), 0),
+    );
+  return {
+    held: sum(HELD, 'amount'),
+    released: sum(PAID_OUT, 'amount'),
+    refunded: sum([PaymentStatus.REFUNDED], 'amount'),
+    commission: sum(EARNED, 'commissionAmount'),
+    payout: sum(PAID_OUT, 'payoutAmount'),
+  };
+}
+
 /**
  * Where every rupee on one booking is (EZ1-I265).
  *

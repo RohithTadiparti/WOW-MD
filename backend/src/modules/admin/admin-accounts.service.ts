@@ -108,7 +108,13 @@ export class AdminAccountsService {
     const [profiles, listings, placed, raised, against, verifications] = await Promise.all([
       this.profiles.find({ where: [{ userId }, { managedByUserId: userId }] }),
       this.vendors.find({ where: { ownerUserId: userId } }),
-      this.bookings.find({ where: { userId }, order: { createdAt: 'DESC' }, take: 20 }),
+      // Booked for this account, or placed by it for somebody else — a planner
+      // or agent requesting for a couple.
+      this.bookings.find({
+        where: [{ userId }, { bookedByUserId: userId }],
+        order: { createdAt: 'DESC' },
+        take: 20,
+      }),
       this.cases.find({
         where: { raisedByUserId: userId },
         order: { createdAt: 'DESC' },
@@ -221,7 +227,9 @@ export class AdminAccountsService {
         status: v.status,
         isApproved: v.isApproved,
       })),
-      bookings: placed,
+      // Named the same way as `providerBookings`: buyer, provider, service,
+      // what has been paid and the quotation on the table.
+      bookings: await this.adminBookings.attachParties(placed),
       /** Bookings made *with* this account (vendor/planner), newest first. */
       providerBookings,
       /**

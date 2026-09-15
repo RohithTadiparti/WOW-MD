@@ -11,6 +11,7 @@ import { PlacedBookingFacts, usePlacedForClients } from '@/components/bookings/p
 import { useAuth } from '@/store/auth';
 import { DetailGrid, DetailRow, Divider } from '@/components/chrome';
 import { VendorAddOns } from '@/components/bookings/addons';
+import { WeddingBrief } from '@/components/bookings/wedding-brief';
 import {
   BookingProgress,
   PaymentBreakdown,
@@ -50,6 +51,9 @@ export function BookingDetail({ booking }: { booking: IncomingBooking }) {
   const isPlanner = can(permissions, Permission.BOOKING_REQUEST_FOR_CLIENT);
   const placed = usePlacedForClients(isPlanner);
   const vendorsForClient = (placed.data ?? []).filter((v) => v.clientUserId === booking.userId);
+  // The couple's whole wedding, read before quoting (EZ1-I162). The same
+  // capability the brief endpoint checks.
+  const readsBriefs = can(permissions, Permission.PLAN_MANAGE_ENGAGED);
 
   const history = useQuery({
     queryKey: ['booking-history', booking.id],
@@ -73,16 +77,20 @@ export function BookingDetail({ booking }: { booking: IncomingBooking }) {
           <DetailRow label="Status">
             {SELLER_STATUS_LABEL[booking.status] ?? booking.status.replace(/_/g, ' ')}
           </DetailRow>
-          <DetailRow label="Customer">{booking.clientName ?? 'Customer'}</DetailRow>
+          <DetailRow label="Customer">
+            {booking.clientName ?? booking.clientEmail ?? 'Customer'}
+          </DetailRow>
           {booking.providerName ? (
             <DetailRow label="Booked with">{booking.providerName}</DetailRow>
           ) : null}
           <DetailRow label="Event">{booking.eventName ?? 'Not linked to an event'}</DetailRow>
           <DetailRow label="Date">{shortDate(booking.eventDate)}</DetailRow>
           <DetailRow label="Venue">
-            {[booking.eventVenue, booking.eventCity].filter(Boolean).join(', ') || 'Not given'}
+            {[booking.eventVenue, booking.eventCity].filter(Boolean).join(', ') ||
+              (booking.clientCity ? `${booking.clientCity} · venue not fixed for this date` : 'Not given')}
           </DetailRow>
         </DetailGrid>
+        {readsBriefs ? <WeddingBrief bookingId={booking.id} /> : null}
         {/* Every vendor booked for this couple, with what each was asked for. */}
         {isPlanner ? (
           <View style={{ gap: space(1) }}>

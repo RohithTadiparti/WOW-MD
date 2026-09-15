@@ -3,7 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { formatDate, formatDateTime } from '../lib/dates';
 import { Link } from 'react-router-dom';
-import { BOOKING_STATUS_LABEL, Permission, can } from '../lib/permissions';
+import { Permission, can } from '../lib/permissions';
+import { SELLER_STATUS_LABEL, humanize } from '../lib/labels';
 import { useAuth } from '../store/auth';
 import { PlacedBookingFacts, usePlacedForClients } from './PlacedForClients';
 import type { QuotationSummary } from '../lib/booking-progress';
@@ -44,9 +45,13 @@ interface DetailBooking {
   status: string;
   eventDate: string | null;
   clientName: string | null;
+  /** Named when there is no display name, rather than a bare "Customer". */
+  clientEmail?: string | null;
   eventName: string | null;
   eventVenue: string | null;
   eventCity: string | null;
+  /** The customer's own city: where the work is when no event names a venue. */
+  clientCity?: string | null;
   serviceName: string | null;
   offeringName?: string | null;
   quantity?: number | null;
@@ -95,13 +100,15 @@ export default function BookingDetail({
         <Row label="Booking ID">
           <span className="font-mono">{booking.id}</span>
         </Row>
-        <Row label="Status">{BOOKING_STATUS_LABEL[booking.status] ?? booking.status}</Row>
-        <Row label="Customer">{booking.clientName ?? 'Customer'}</Row>
+        {/* Said from the provider's side, the same words as the row above it. */}
+        <Row label="Status">{SELLER_STATUS_LABEL[booking.status] ?? humanize(booking.status)}</Row>
+        <Row label="Customer">{booking.clientName ?? booking.clientEmail ?? 'Customer'}</Row>
         {booking.providerName && <Row label="Booked with">{booking.providerName}</Row>}
         <Row label="Event">{booking.eventName ?? 'Not linked to an event'}</Row>
         <Row label="Date">{formatDate(booking.eventDate)}</Row>
         <Row label="Venue">
-          {[booking.eventVenue, booking.eventCity].filter(Boolean).join(', ') || 'Not given'}
+          {[booking.eventVenue, booking.eventCity].filter(Boolean).join(', ') ||
+            (booking.clientCity ? `${booking.clientCity} · venue not fixed for this date` : 'Not given')}
         </Row>
         {/* Every vendor booked for this couple, with what each was asked for. */}
         {isPlanner && (

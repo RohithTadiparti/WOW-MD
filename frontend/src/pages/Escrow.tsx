@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom';
 import { Vault } from '@phosphor-icons/react';
 import { api, apiMessage } from '../lib/api';
 import { MILESTONE_LABEL } from '../lib/permissions';
+import { formatDate } from '../lib/dates';
+import { paymentStatusLabel } from '../lib/labels';
 import { EmptyState, Loading } from '../components/ui/Feedback';
 
 interface EscrowPayment {
@@ -41,21 +43,11 @@ interface Escrow {
   records: EscrowRecord[];
 }
 
-/**
- * Buyer-facing wording for a payment's escrow status. The provider's Accounts
- * page reads the same states from the other side ("Paid out to you"); here they
- * are told in the language of the person whose money it is.
+/*
+ * Buyer-facing wording for a payment's escrow status, from the shared map. The
+ * provider's Accounts page reads the same states from the other side ("Owed to
+ * you"); here they are told in the language of the person whose money it is.
  */
-const STATUS_LABEL: Record<string, string> = {
-  initiated: 'Processing',
-  held_in_escrow: 'Held in escrow',
-  disputed: 'Frozen: case open',
-  pending_payout: 'Released to provider',
-  released: 'Released to provider',
-  partially_settled: 'Part settled',
-  refunded: 'Refunded to you',
-};
-
 const STATUS_STYLE: Record<string, string> = {
   initiated: 'bg-gray-100 text-gray-600',
   held_in_escrow: 'bg-amber-50 text-amber-800',
@@ -73,7 +65,7 @@ function StatusBadge({ status }: { status: string }) {
         STATUS_STYLE[status] ?? 'bg-gray-100 text-gray-600'
       }`}
     >
-      {STATUS_LABEL[status] ?? status.replace(/_/g, ' ')}
+      {paymentStatusLabel(status, 'buyer')}
     </span>
   );
 }
@@ -152,20 +144,22 @@ export default function Escrow() {
                 <div key={r.bookingId} className="card space-y-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="font-medium text-gray-900">
-                        {r.providerName}
-                        {r.serviceName && (
-                          <span className="font-normal text-gray-500"> · {r.serviceName}</span>
-                        )}
-                      </p>
+                      <p className="font-medium text-gray-900">{r.providerName}</p>
+                      {/* What was bought, with the kind of provider as the quieter
+                          fact beside it rather than a shouted "VENDOR" tag. */}
                       <p className="text-sm text-gray-500">
-                        <span className="uppercase tracking-wide text-gray-400">
-                          {r.providerType}
+                        <span className="text-gray-700">
+                          {r.serviceName ??
+                            (r.providerType === 'planner' ? 'Wedding planning' : 'Vendor service')}
+                        </span>
+                        <span className="text-gray-400">
+                          {' · '}
+                          {r.providerType === 'planner' ? 'Wedding planner' : 'Vendor'}
                         </span>
                         {Number(r.bookingAmount) > 0
                           ? ` · ${money(r.bookingAmount, r.currency)}`
                           : ''}
-                        {r.eventDate ? ` · ${r.eventDate}` : ''}
+                        {r.eventDate ? ` · ${formatDate(r.eventDate)}` : ''}
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">

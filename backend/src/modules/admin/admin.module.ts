@@ -14,6 +14,9 @@ import { Profile } from '../users/entities/profile.entity';
 import { ProfileDetails } from '../profile-details/entities/profile-details.entity';
 import { Interest } from '../matchmaking/entities/interest.entity';
 import { Payment } from '../bookings/entities/payment.entity';
+import { Quotation } from '../bookings/entities/quotation.entity';
+import { WeddingPlan } from '../planner/entities/wedding-plan.entity';
+import { AgentProfile } from '../agents/entities/agent-profile.entity';
 import { WeddingEvent } from '../events/entities/event.entity';
 import { AgentCharge } from '../agents/entities/agent-charge.entity';
 import { VerificationRequest } from '../verification/entities/verification-request.entity';
@@ -23,6 +26,7 @@ import { OfficerAvailability } from '../verification/entities/officer-availabili
 import { AgentsModule } from '../agents/agents.module';
 import { BookingsModule } from '../bookings/bookings.module';
 import { CatalogModule } from '../catalog/catalog.module';
+import { VerificationModule } from '../verification/verification.module';
 import { AdminService } from './admin.service';
 import { AdminConsoleService } from './admin-console.service';
 import { AdminActivityService } from './admin-activity.service';
@@ -55,6 +59,12 @@ import { AdminController } from './admin.controller';
       SupportCase,
       RefreshSession,
       OfficerAvailability,
+      // Read-only: the price on the table while a booking's total is 0.00, and
+      // the wedding a planner booking's date and place are read from.
+      Quotation,
+      WeddingPlan,
+      // Read-only: an agency's name, for whoever raised a dispute.
+      AgentProfile,
     ]),
     AgentsModule,
     // For the on-demand payout sweep: the retry lives with the booking service
@@ -63,6 +73,8 @@ import { AdminController } from './admin.controller';
     // For the held price changes. The catalog owns the rule; the console only
     // asks it what is waiting and tells it what was decided.
     forwardRef(() => CatalogModule),
+    // Approving a planner decides the verification request it raised.
+    VerificationModule,
   ],
   providers: [
     AdminService,

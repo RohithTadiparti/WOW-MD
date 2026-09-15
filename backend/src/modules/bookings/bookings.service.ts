@@ -8,7 +8,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, In, Not, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { Booking } from './entities/booking.entity';
 import { Payment } from './entities/payment.entity';
 import { Quotation } from './entities/quotation.entity';
@@ -37,10 +37,12 @@ import {
 import { AppConfigService } from '../../config/app-config.service';
 import { OutboxService } from '../../platform/events/outbox.service';
 import { PAYMENT_PROVIDER, PaymentProvider, PayoutDestination } from './payment.provider';
-import { collectedByBooking, isCollected } from './payment-totals';
-import { summariseQuotations } from './booking-summary';
-import { WeddingFacts, dateOf, guestsOf, venueOf, weddingContextOf } from './booking-venue';
+import { PAYMENT_STATUS_RANK, collectedByBooking, isCollected } from './payment-totals';
+import { escrowSummary, summariseQuotations } from './booking-summary';
+import { WeddingFacts, bookingContextOf } from './booking-venue';
+import { loadWeddingFacts } from './wedding-facts';
 import { serviceNamesByIds } from '../catalog/service-names';
+import { displayNamesByUserIds } from '../users/display-names';
 import { SupportCasesService } from '../verification/support-cases.service';
 import { MatchmakingService } from '../matchmaking/matchmaking.service';
 import { AvailabilityService } from '../vendors/availability.service';
@@ -265,7 +267,7 @@ export class BookingsService {
    * later instalment is priced against what really happened rather than
    * against a percentage of a total that has since moved.
    */
-  private async chargedSoFar(
+  async chargedSoFar(
     bookingId: string,
   ): Promise<Partial<Record<PaymentMilestone, string>>> {
     const rows = await this.payments.find({ where: { bookingId } });
@@ -1754,14 +1756,14 @@ export class BookingsService {
     const profileByUser = new Map(profiles.map((p) => [p.userId as string, p]));
     const byEvent = new Map(events.map((e) => [e.id, e]));
     // A planner is booked for the whole wedding, not one function, so the
-    // when and where of those bookings come from the wedding itself.
+    // when and where of those bookings come from the wedding itself — also
+    // when a function is linked but does not say.
     const weddingByClient = await this.weddingFactsFor([
-      ...new Set(
-        rows
-          .filter((b) => b.providerType === ProviderType.PLANNER && !b.eventId)
-          .map((b) => b.userId),
-      ),
+      // Every couple on the page: a vendor booking with no place of its own is
+      // read off what the couple has on that same day.
+      ...new Set(rows.map((b) => b.userId)),
     ]);
+    const cancellers = await this.cancellersOf(rows);
 
     const quotationsByBooking = new Map<string, Quotation[]>();
     for (const quotation of quotationRows) {
@@ -1780,14 +1782,7 @@ export class BookingsService {
     // The furthest a booking's money has got. Several payments can exist for
     // one booking — an advance and a balance — and what a provider wants is
     // the state of the job, not a list of transactions.
-    const RANK: Record<string, number> = {
-      initiated: 1,
-      held_in_escrow: 2,
-      disputed: 3,
-      pending_payout: 4,
-      released: 5,
-      refunded: 6,
-    };
+    const RANK = PAYMENT_STATUS_RANK;
     const paymentByBooking = new Map<string, string>();
     for (const payment of payments) {
       const seen = paymentByBooking.get(payment.bookingId);
@@ -1809,53 +1804,42 @@ export class BookingsService {
       const user = byUser.get(booking.userId);
       const event = booking.eventId ? byEvent.get(booking.eventId) : undefined;
       const clientProfile = profileByUser.get(booking.userId);
-      booking.clientName = nameByUser.get(booking.userId) ?? null;
+      // A provider's account often has no profile, and a couple's may not yet:
+      // the email still says who it is where "Customer" says nothing.
+      booking.clientName = nameByUser.get(booking.userId) ?? user?.email ?? null;
       booking.clientEmail = user?.email ?? null;
       booking.clientPhone = user?.phone ?? null;
       booking.clientCity = clientProfile?.city ?? null;
       booking.clientPhoto = clientProfile?.photos?.[0] ?? null;
-      booking.eventName = event?.name ?? null;
-      // A booking with no linked function still says where it is held: at the
-      // venue that was booked, or wherever the customer said on the service's
-      // form. Only the event was read, so those bookings all read "Not given".
-      const place = event
-        ? { venue: event.venue ?? null, city: event.city ?? null }
-        : venueOf({
-            answers: booking.serviceAnswers,
-            providerName: (booking as { providerName?: string }).providerName,
-            providerCity: booking.providerCity,
-            providerIsVenue: booking.providerIsVenue,
-          });
-      booking.eventVenue = place.venue;
-      booking.eventCity = place.city;
-      booking.expectedGuests = event?.expectedGuests ?? guestsOf(booking.serviceAnswers);
-      // A planner's booking reads the couple's plan, their functions and the
-      // venue already booked for them, rather than saying "not set" over them.
-      const wedding =
-        !event && booking.providerType === ProviderType.PLANNER
-          ? weddingByClient.get(booking.userId)
-          : undefined;
-      const context = wedding ? weddingContextOf(wedding) : null;
-      if (context) {
-        booking.eventName = context.eventNames;
-        booking.eventVenue = booking.eventVenue ?? context.venue;
-        booking.eventCity = booking.eventCity ?? context.city;
-        booking.expectedGuests = booking.expectedGuests ?? context.guests;
-      }
-      // When the booking is tied to a wedding function, that function's own date
-      // is the single source of truth — the same date the Events page and the
-      // planner's wedding brief show — so a couple moving the day is reflected
-      // here rather than leaving a stale copy on the booking to diverge from it
-      // (EZ1-I195). A booking with no linked event keeps its own date.
       // Judged before the linked function's date replaces the booking's own,
       // with the same rule incomingCounts uses for the tab.
       booking.requestOnDate =
         !booking.slotId &&
         Boolean(booking.eventDate ?? event?.eventDate) &&
         REQUEST_STATUSES.includes(booking.status);
-      if (event) booking.eventDate = event.eventDate ?? null;
-      else if (!booking.eventDate) booking.eventDate = dateOf(booking.serviceAnswers);
-      if (!booking.eventDate && context) booking.eventDate = context.date;
+      // When the booking is tied to a wedding function, that function's own date
+      // and place are the single source of truth — the same the Events page and
+      // the planner's wedding brief show (EZ1-I195). Where the function does not
+      // say, the booking's own date, the venue that was booked or the place on
+      // the service's form still do, and a planner's booking reads the couple's
+      // plan, functions and booked venue, rather than "not set" over all of it.
+      const context = bookingContextOf(
+        {
+          eventDate: booking.eventDate,
+          serviceAnswers: booking.serviceAnswers,
+          providerName: (booking as { providerName?: string }).providerName,
+          providerCity: booking.providerCity,
+          providerIsVenue: booking.providerIsVenue,
+        },
+        event,
+        weddingByClient.get(booking.userId),
+        { wholeWedding: booking.providerType === ProviderType.PLANNER },
+      );
+      booking.eventName = context.eventName;
+      booking.eventVenue = context.venue;
+      booking.eventCity = context.city;
+      booking.expectedGuests = context.guests;
+      booking.eventDate = context.eventDate;
       booking.serviceName = booking.vendorServiceId
         ? (serviceNames.get(booking.vendorServiceId) ?? null)
         : booking.providerType === ProviderType.PLANNER
@@ -1868,17 +1852,26 @@ export class BookingsService {
         : null;
       booking.paymentStatus = paymentByBooking.get(booking.id) ?? null;
       booking.paidAmount = (paidByBooking.get(booking.id) ?? 0).toFixed(2);
-      // Who cancelled, for the booking detail (EZ1-I77). Either the customer or
-      // the provider; withProviderNames has already put the provider's name on
-      // the row when this runs, so both sides resolve without another query.
+      // Who cancelled, for the booking detail (EZ1-I77). withProviderNames has
+      // already put the provider's name on the row when this runs.
       if (booking.cancelledByUserId) {
-        if (booking.cancelledByUserId === booking.userId) {
+        const by = booking.cancelledByUserId;
+        if (by === booking.userId) {
           booking.cancelledByRole = 'customer';
           booking.cancelledByName = booking.clientName;
-        } else {
+        } else if (by === cancellers.ownerByProvider.get(booking.providerId)) {
           booking.cancelledByRole = 'provider';
           booking.cancelledByName =
             (booking as { providerName?: string }).providerName ?? null;
+        } else if (cancellers.staff.has(by)) {
+          // Anybody else used to read as the provider, so a booking an
+          // administrator cancelled told the couple their vendor had walked.
+          booking.cancelledByRole = 'support';
+          booking.cancelledByName = 'Support team';
+        } else {
+          // Somebody acting for the customer: the planner or agent who placed it.
+          booking.cancelledByRole = 'customer';
+          booking.cancelledByName = cancellers.names.get(by) ?? null;
         }
       }
     }
@@ -1886,65 +1879,71 @@ export class BookingsService {
   }
 
   /**
+   * What is needed to say who cancelled a set of bookings, beyond the customer:
+   * each provider's owning account, which platform staff did it, and the name of
+   * anyone else. Nothing is read when no row was cancelled by somebody else.
+   */
+  private async cancellersOf(rows: Booking[]): Promise<{
+    ownerByProvider: Map<string, string>;
+    staff: Set<string>;
+    names: Map<string, string>;
+  }> {
+    const cancelled = rows.filter((b) => b.cancelledByUserId && b.cancelledByUserId !== b.userId);
+    const ownerByProvider = new Map<string, string>();
+    if (cancelled.length === 0) return { ownerByProvider, staff: new Set(), names: new Map() };
+
+    const idsOf = (type: ProviderType) =>
+      [...new Set(cancelled.filter((b) => b.providerType === type).map((b) => b.providerId))];
+    const cancellerIds = [...new Set(cancelled.map((b) => b.cancelledByUserId as string))];
+    const [vendors, planners, accounts, names] = await Promise.all([
+      idsOf(ProviderType.VENDOR).length
+        ? this.vendors.find({ where: { id: In(idsOf(ProviderType.VENDOR)) } })
+        : Promise.resolve([]),
+      idsOf(ProviderType.PLANNER).length
+        ? this.planners.find({ where: { id: In(idsOf(ProviderType.PLANNER)) } })
+        : Promise.resolve([]),
+      this.users.find({ where: { id: In(cancellerIds) }, select: ['id', 'role'] }),
+      displayNamesByUserIds(
+        { users: this.users, profiles: this.profiles, vendors: this.vendors, planners: this.planners },
+        cancellerIds,
+      ),
+    ]);
+    for (const listing of [...vendors, ...planners]) {
+      ownerByProvider.set(listing.id, listing.ownerUserId);
+    }
+    const staff = new Set(
+      accounts
+        .filter((u) => u.role === UserRole.ADMIN || u.role === UserRole.IN_PERSON)
+        .map((u) => u.id),
+    );
+    return { ownerByProvider, staff, names };
+  }
+
+  /**
    * What each couple's wedding already says about when and where it is: their
    * plan's date, their functions, and the vendors they have booked with the
-   * place each is held. Three queries for every couple on the page, and none
-   * when no planner booking needs them.
+   * place each is held — the match-fixed partner's included, because the two
+   * share one wedding (EZ1-I160). A handful of queries for every couple on the
+   * page, and none when no planner booking needs them.
    */
   private async weddingFactsFor(userIds: string[]): Promise<Map<string, WeddingFacts>> {
-    const facts = new Map<string, WeddingFacts>();
-    if (userIds.length === 0) return facts;
-
-    const [plans, functions, vendorBookings] = await Promise.all([
-      this.weddingPlans.find({ where: { userId: In(userIds) } }),
-      this.events.find({ where: { userId: In(userIds) } }),
-      this.bookings.find({
-        where: {
-          userId: In(userIds),
-          providerType: ProviderType.VENDOR,
-          status: Not(BookingStatus.CANCELLED),
-        },
-      }),
-    ]);
-    const vendorIds = [...new Set(vendorBookings.map((b) => b.providerId))];
-    const vendors = vendorIds.length
-      ? await this.vendors.find({ where: { id: In(vendorIds) } })
-      : [];
-    const vendorById = new Map(vendors.map((v) => [v.id, v]));
-
-    for (const userId of userIds) {
-      facts.set(userId, {
-        weddingDate: plans.find((p) => p.userId === userId && p.weddingDate)?.weddingDate ?? null,
-        events: functions
-          .filter((e) => e.userId === userId)
-          .map((e) => ({
-            name: e.name,
-            eventDate: e.eventDate ?? null,
-            venue: e.venue ?? null,
-            city: e.city ?? null,
-            expectedGuests: e.expectedGuests ?? null,
-          })),
-        vendorBookings: vendorBookings
-          .filter((b) => b.userId === userId)
-          .map((b) => {
-            const vendor = vendorById.get(b.providerId);
-            const isVenue = Boolean(vendor?.categories?.includes('venue'));
-            const place = venueOf({
-              answers: b.serviceAnswers,
-              providerName: vendor?.name,
-              providerCity: vendor?.city,
-              providerIsVenue: isVenue,
-            });
-            return {
-              eventDate: b.eventDate ?? dateOf(b.serviceAnswers),
-              venue: place.venue,
-              city: place.city,
-              isVenue,
-            };
-          }),
-      });
-    }
-    return facts;
+    if (userIds.length === 0) return new Map();
+    const partners = await Promise.all(
+      userIds.map(async (id) => [id, await this.matchmaking.fixedPartnerUserId(id)] as const),
+    );
+    const partnerOf = new Map(
+      partners.filter((pair): pair is readonly [string, string] => Boolean(pair[1])),
+    );
+    return loadWeddingFacts(
+      {
+        plans: this.weddingPlans,
+        events: this.events,
+        bookings: this.bookings,
+        vendors: this.vendors,
+      },
+      userIds,
+      partnerOf,
+    );
   }
 
   /**
@@ -2027,6 +2026,10 @@ export class BookingsService {
     ledger: {
       paymentId: string;
       bookingId: string;
+      /** Who the booking is for: their profile name, else their email. */
+      clientName: string | null;
+      /** What was booked: the service's name, or 'Wedding planning' for a planner. */
+      serviceName: string | null;
       milestone: PaymentMilestone;
       status: PaymentStatus;
       amount: string;
@@ -2055,7 +2058,7 @@ export class BookingsService {
 
     const bookings = await this.bookings.find({
       where: { providerId: In(providerIds) },
-      select: ['id', 'currency'],
+      select: ['id', 'currency', 'userId', 'providerType', 'vendorServiceId'],
     });
     if (bookings.length === 0) return empty;
 
@@ -2063,6 +2066,25 @@ export class BookingsService {
       where: { bookingId: In(bookings.map((b) => b.id)) },
       order: { createdAt: 'DESC' },
     });
+
+    // A ledger row that says only a booking id cannot be matched to a job, so
+    // each carries who it was for and what was booked.
+    const bookingById = new Map(bookings.map((b) => [b.id, b]));
+    const [clientNames, serviceNames] = await Promise.all([
+      displayNamesByUserIds(
+        { users: this.users, profiles: this.profiles },
+        bookings.map((b) => b.userId),
+      ),
+      serviceNamesByIds(this.serviceRows, bookings.map((b) => b.vendorServiceId)),
+    ]);
+    const serviceNameOf = (b: Booking | undefined) =>
+      !b
+        ? null
+        : b.vendorServiceId
+          ? (serviceNames.get(b.vendorServiceId) ?? null)
+          : b.providerType === ProviderType.PLANNER
+            ? 'Wedding planning'
+            : null;
 
     // Money is added in minor units. Summing the decimal strings directly would
     // drift a paisa at a time and eventually disagree with the ledger below it.
@@ -2112,6 +2134,8 @@ export class BookingsService {
       ledger: payments.map((p) => ({
         paymentId: p.id,
         bookingId: p.bookingId,
+        clientName: clientNames.get(bookingById.get(p.bookingId)?.userId ?? '') ?? null,
+        serviceName: serviceNameOf(bookingById.get(p.bookingId)),
         milestone: p.milestone,
         status: p.status,
         amount: p.amount,
@@ -2165,22 +2189,31 @@ export class BookingsService {
         : Promise.resolve(new Map<string, string>()),
     ]);
 
-    const clientProfile = await this.profiles.findOne({ where: { userId: booking.userId } });
-    const serviceNames = await serviceNamesByIds(this.serviceRows, [booking.vendorServiceId]);
+    const [clientProfile, serviceNames, vendor, weddings] = await Promise.all([
+      this.profiles.findOne({ where: { userId: booking.userId } }),
+      serviceNamesByIds(this.serviceRows, [booking.vendorServiceId]),
+      booking.providerType === ProviderType.VENDOR
+        ? this.vendors.findOne({ where: { id: booking.providerId } })
+        : Promise.resolve(null),
+      booking.providerType === ProviderType.PLANNER
+        ? this.weddingFactsFor([booking.userId])
+        : Promise.resolve(new Map<string, WeddingFacts>()),
+    ]);
 
-    // The escrow position across the whole booking, summed the same way the
-    // Accounts cards are: held/refunded count `amount`, the provider's share and
-    // commission come off the released rows.
-    // The same buckets as earnings(), so a payment's own screen and the
-    // Accounts card it was opened from cannot disagree about where money sits.
-    const HELD = [PaymentStatus.HELD_IN_ESCROW, PaymentStatus.DISPUTED];
-    const PAID_OUT = [PaymentStatus.RELEASED, PaymentStatus.PARTIALLY_SETTLED];
-    const EARNED = [PaymentStatus.PENDING_PAYOUT, ...PAID_OUT];
-    const sum = (predicate: (p: Payment) => boolean, column: keyof Payment) =>
-      siblings
-        .filter(predicate)
-        .reduce((t, p) => t + Number((p[column] as string) ?? 0), 0)
-        .toFixed(2);
+    // When, where and for how many, from the function when it says and from
+    // the booking form, the booked venue or the wedding when it does not — the
+    // same derivation as the booking list, so the two screens agree.
+    const context = bookingContextOf(
+      {
+        eventDate: booking.eventDate,
+        serviceAnswers: booking.serviceAnswers,
+        providerName: vendor?.name,
+        providerCity: vendor?.city,
+        providerIsVenue: Boolean(vendor?.categories?.includes('venue')),
+      },
+      event,
+      weddings.get(booking.userId),
+    );
 
     return {
       payment,
@@ -2189,13 +2222,17 @@ export class BookingsService {
         status: booking.status,
         amount: booking.amount,
         currency: booking.currency,
-        eventDate: booking.eventDate,
+        eventDate: context.eventDate,
+        eventName: context.eventName,
+        venue: context.venue,
+        city: context.city,
+        guests: context.guests,
         createdAt: booking.createdAt,
       },
       customer: client
         ? {
             id: client.id,
-            name: clientProfile?.displayName ?? null,
+            name: clientProfile?.displayName ?? client.email ?? null,
             email: client.email,
             phone: client.phone,
             city: clientProfile?.city ?? null,
@@ -2205,7 +2242,11 @@ export class BookingsService {
       // many units were booked, and the agreed booking total.
       service: {
         id: service?.id ?? booking.vendorServiceId,
-        name: booking.vendorServiceId ? (serviceNames.get(booking.vendorServiceId) ?? null) : null,
+        name: booking.vendorServiceId
+          ? (serviceNames.get(booking.vendorServiceId) ?? null)
+          : booking.providerType === ProviderType.PLANNER
+            ? 'Wedding planning'
+            : null,
         offering: booking.offeringId ? (offeringNames.get(booking.offeringId) ?? null) : null,
         quantity: booking.quantity,
         total: booking.amount,
@@ -2214,22 +2255,20 @@ export class BookingsService {
         ? {
             id: event.id,
             name: event.name,
-            venue: event.venue ?? null,
-            city: event.city,
-            eventDate: event.eventDate,
+            venue: context.venue,
+            city: context.city,
+            eventDate: context.eventDate,
             startTime: event.startTime,
           }
         : null,
       // Every instalment on the booking, oldest first: the milestone breakdown
       // (advance/second/final) and the payment timeline are read off this list.
       payments: siblings,
+      // The same buckets as earnings() and the admin's view of this payment, so
+      // no two screens disagree about where the money sits.
       summary: {
         total: booking.amount,
-        held: sum((p) => HELD.includes(p.status), 'amount'),
-        released: sum((p) => PAID_OUT.includes(p.status), 'amount'),
-        refunded: sum((p) => p.status === PaymentStatus.REFUNDED, 'amount'),
-        commission: sum((p) => EARNED.includes(p.status), 'commissionAmount'),
-        payout: sum((p) => PAID_OUT.includes(p.status), 'payoutAmount'),
+        ...escrowSummary(siblings),
       },
     };
   }
@@ -2304,19 +2343,22 @@ export class BookingsService {
     const serviceIds = [
       ...new Set(named.map((b) => b.vendorServiceId).filter(Boolean)),
     ] as string[];
-    const serviceName = await serviceNamesByIds(this.serviceRows, serviceIds);
+    const eventIds = [...new Set(named.map((b) => b.eventId).filter(Boolean))] as string[];
+    const [serviceName, linkedEvents, weddings] = await Promise.all([
+      serviceNamesByIds(this.serviceRows, serviceIds),
+      eventIds.length ? this.events.find({ where: { id: In(eventIds) } }) : Promise.resolve([]),
+      this.weddingFactsFor([
+        ...new Set(
+          named.filter((b) => b.providerType === ProviderType.PLANNER).map((b) => b.userId),
+        ),
+      ]),
+    ]);
+    const eventById = new Map(linkedEvents.map((e) => [e.id, e]));
     const byBooking = new Map(named.map((b) => [b.id, b]));
 
     // Same ranking the provider-facing list uses, so a booking whose instalments
     // sit in different states reports the one that best describes the whole.
-    const RANK: Record<string, number> = {
-      initiated: 1,
-      held_in_escrow: 2,
-      disputed: 3,
-      pending_payout: 4,
-      released: 5,
-      refunded: 6,
-    };
+    const RANK = PAYMENT_STATUS_RANK;
 
     const grouped = new Map<string, Payment[]>();
     for (const p of payments) {
@@ -2366,8 +2408,19 @@ export class BookingsService {
           providerName: (booking as { providerName?: string }).providerName ?? 'Provider',
           serviceName: booking.vendorServiceId
             ? (serviceName.get(booking.vendorServiceId) ?? null)
-            : null,
-          eventDate: booking.eventDate ?? null,
+            : booking.providerType === ProviderType.PLANNER
+              ? 'Wedding planning'
+              : null,
+          // The function's date, else the form's, else the wedding's for a
+          // planner — the same date the booking list shows for this booking.
+          eventDate: bookingContextOf(
+            {
+              eventDate: booking.eventDate,
+              serviceAnswers: booking.serviceAnswers,
+            },
+            booking.eventId ? eventById.get(booking.eventId) : null,
+            booking.providerType === ProviderType.PLANNER ? weddings.get(booking.userId) : null,
+          ).eventDate,
           bookingAmount: booking.amount,
           currency: booking.currency,
           status: top,
@@ -2448,6 +2501,12 @@ export class BookingsService {
       // Not the buyer; fall through to the seller check, which throws if that
       // does not hold either.
     }
+    // A match-fixed couple share one wedding, and the list already shows each
+    // of them the other's bookings (EZ1-I160) — so opening one to read its
+    // quotations, instalments, history or add-ons must not answer 403. Reading
+    // only: paying and answering quotations stay with the one who booked.
+    const partnerUserId = await this.matchmaking.fixedPartnerUserId(actor.userId);
+    if (partnerUserId && booking.userId === partnerUserId) return;
     await this.assertSellerSide(actor, booking);
   }
 

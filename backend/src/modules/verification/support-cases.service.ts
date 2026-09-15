@@ -19,6 +19,14 @@ import { Vendor } from '../vendors/entities/vendor.entity';
 import { VendorAvailabilitySlot } from '../vendors/entities/vendor-availability-slot.entity';
 import { PlannerProfile } from '../wedding-planners/entities/planner-profile.entity';
 import { Profile } from '../users/entities/profile.entity';
+import { AgentProfile } from '../agents/entities/agent-profile.entity';
+import { Quotation } from '../bookings/entities/quotation.entity';
+import { VendorService } from '../catalog/entities/vendor-service.entity';
+import { WeddingEvent } from '../events/entities/event.entity';
+import { serviceNamesByIds } from '../catalog/service-names';
+import { summariseQuotations } from '../bookings/booking-summary';
+import { bookingContextOf } from '../bookings/booking-venue';
+import { displayNamesByUserIds } from '../users/display-names';
 import { OfficerAvailability, isOnLeaveNow } from './entities/officer-availability.entity';
 import {
   AllocateCaseDto,
@@ -105,6 +113,12 @@ export class SupportCasesService {
     // Read to refuse allocation to an officer who is out (EZ1-I221).
     @InjectRepository(OfficerAvailability)
     private readonly availability: Repository<OfficerAvailability>,
+    // Read-only, to name an agency that raised a case and to describe the
+    // booking behind one: the service, the day and the quoted price.
+    @InjectRepository(AgentProfile) private readonly agencies: Repository<AgentProfile>,
+    @InjectRepository(Quotation) private readonly quotations: Repository<Quotation>,
+    @InjectRepository(VendorService) private readonly vendorServices: Repository<VendorService>,
+    @InjectRepository(WeddingEvent) private readonly events: Repository<WeddingEvent>,
     private readonly audit: AuditService,
     private readonly notifications: NotificationsService,
     // Reopening a locked listing to resolve a "My Business Listing" case is a
@@ -155,19 +169,34 @@ export class SupportCasesService {
   private async withContext(rows: SupportCase[]): Promise<SupportCase[]> {
     if (rows.length === 0) return rows;
 
-    // Raiser identity: account plus display name.
+    // Raiser identity: account plus display name. Vendors, planners and
+    // agencies raise cases too and seldom have a profile, so the name falls
+    // back to their business and then their email. The officer a case is
+    // allocated to is named the same way, so a client need not fetch the roster.
     const raiserIds = [...new Set(rows.map((r) => r.raisedByUserId).filter(Boolean))] as string[];
-    const [raiserUsers, raiserProfiles] = await Promise.all([
+    const [raiserUsers, nameByUser, assigneeNames] = await Promise.all([
       raiserIds.length
         ? this.users.find({
             where: { id: In(raiserIds) },
             select: ['id', 'email', 'role', 'isActive'],
           })
         : [],
-      raiserIds.length ? this.profiles.find({ where: { userId: In(raiserIds) } }) : [],
+      displayNamesByUserIds(
+        {
+          users: this.users,
+          profiles: this.profiles,
+          vendors: this.vendors,
+          planners: this.planners,
+          agencies: this.agencies,
+        },
+        raiserIds,
+      ),
+      displayNamesByUserIds(
+        { users: this.users, profiles: this.profiles },
+        rows.map((r) => r.assignedToUserId),
+      ),
     ]);
     const userById = new Map(raiserUsers.map((u) => [u.id, u]));
-    const nameByUser = new Map(raiserProfiles.map((p) => [p.userId, p.displayName]));
 
     // BOOKING and PAYMENT cases both carry a booking id in subjectId: the
     // support form asks for a booking reference, and the settlement-request flow
@@ -204,13 +233,21 @@ export class SupportCasesService {
       paymentsByBooking.set(p.bookingId, list);
     }
 
-    // Party names for those bookings: buyer display name, and the provider's
-    // business name resolved per provider type.
+    // Party names for those bookings: buyer display name (else email), and the
+    // provider's business name resolved per provider type. Also what was
+    // booked, for which day and at what quoted price, because a booking total
+    // of 0.00 on a request still being priced says nothing about the argument.
     const buyerIds = [...new Set(bookings.map((b) => b.userId).filter(Boolean))] as string[];
-    const buyerProfiles = buyerIds.length
-      ? await this.profiles.find({ where: { userId: In(buyerIds) } })
-      : [];
-    const buyerNameByUser = new Map(buyerProfiles.map((p) => [p.userId, p.displayName]));
+    const eventIds = [...new Set(bookings.map((b) => b.eventId).filter(Boolean))] as string[];
+    const [buyerNameByUser, serviceNames, linkedEvents, quotes] = await Promise.all([
+      displayNamesByUserIds({ users: this.users, profiles: this.profiles }, buyerIds),
+      serviceNamesByIds(this.vendorServices, bookings.map((b) => b.vendorServiceId)),
+      eventIds.length ? this.events.find({ where: { id: In(eventIds) } }) : Promise.resolve([]),
+      allBookingIds.length
+        ? this.quotations.find({ where: { bookingId: In(allBookingIds) } })
+        : Promise.resolve([]),
+    ]);
+    const eventById = new Map(linkedEvents.map((e) => [e.id, e]));
     const vendorIds = bookings
       .filter((b) => b.providerType === ProviderType.VENDOR)
       .map((b) => b.providerId);
@@ -229,6 +266,9 @@ export class SupportCasesService {
       row.raisedByName = row.raisedByUserId ? (nameByUser.get(row.raisedByUserId) ?? null) : null;
       row.raisedByEmail = user?.email ?? null;
       row.raisedByRole = user?.role ?? null;
+      row.assignedToName = row.assignedToUserId
+        ? (assigneeNames.get(row.assignedToUserId) ?? null)
+        : null;
 
       const bookingId =
         row.subjectType === CaseSubject.BOOKING ||
@@ -247,6 +287,18 @@ export class SupportCasesService {
               booking.providerType === ProviderType.VENDOR
                 ? (vendorNameById.get(booking.providerId) ?? null)
                 : (plannerNameById.get(booking.providerId) ?? null),
+            serviceName: booking.vendorServiceId
+              ? (serviceNames.get(booking.vendorServiceId) ?? null)
+              : booking.providerType === ProviderType.PLANNER
+                ? 'Wedding planning'
+                : null,
+            eventDate: bookingContextOf(
+              booking,
+              booking.eventId ? eventById.get(booking.eventId) : null,
+            ).eventDate,
+            quotedAmount:
+              summariseQuotations(quotes.filter((q) => q.bookingId === booking.id))?.amount ??
+              null,
           }
         : null;
 

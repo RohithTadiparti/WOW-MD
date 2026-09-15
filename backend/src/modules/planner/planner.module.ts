@@ -10,10 +10,12 @@ import { Guest } from '../events/entities/guest.entity';
 import { EventInvite } from '../events/entities/event-invite.entity';
 import { Vendor } from '../vendors/entities/vendor.entity';
 import { Payment } from '../bookings/entities/payment.entity';
+import { Quotation } from '../bookings/entities/quotation.entity';
 import { VendorService } from '../catalog/entities/vendor-service.entity';
 import { ServiceOffering } from '../catalog/entities/service-offering.entity';
 import { Profile } from '../users/entities/profile.entity';
 import { AgentsModule } from '../agents/agents.module';
+import { MatchmakingModule } from '../matchmaking/matchmaking.module';
 import { PlannerService } from './planner.service';
 import { WeddingDashboardService } from './wedding-dashboard.service';
 import { PlannerClientsService } from './planner-clients.service';
@@ -40,8 +42,13 @@ import { PlannerController } from './planner.controller';
       VendorService,
       ServiceOffering,
       Profile,
+      // Read-only: the quotation on a booking the planner is looking at.
+      Quotation,
     ]),
     AgentsModule,
+    // For a couple's match-fixed partner, whose bookings belong to the same
+    // wedding (EZ1-I160). Nothing in matchmaking's imports reaches back here.
+    MatchmakingModule,
   ],
   providers: [PlannerService, WeddingDashboardService, PlannerClientsService],
   controllers: [PlannerController],

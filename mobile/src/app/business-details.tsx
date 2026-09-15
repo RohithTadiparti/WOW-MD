@@ -6,6 +6,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { api, apiMessage } from '@/lib/api';
 import { todayIso } from '@/components/calendar';
 import { useActiveListing } from '@/lib/vendor-listing';
+import { isPlannerAccount } from '@/lib/planner-listing';
+import { PlannerListingForm } from '@/components/business/planner-listing';
+import { useAuth } from '@/store/auth';
 import { GSTIN_PATTERN, PAN_PATTERN } from '@/shared/permissions';
 import { Divider, InfoNote } from '@/components/chrome';
 import { DateField, Textarea } from '@/components/form';
@@ -63,7 +66,19 @@ type Errors = Partial<Record<keyof Form | 'categories' | 'portfolio' | 'complian
 
 const MOBILE = /^(\+91)?[6-9]\d{9}$/;
 
-export default function BusinessDetails() {
+/**
+ * The route, for either kind of provider.
+ *
+ * A planner's listing is one form rather than the vendor's guided set-up, and
+ * is reached from More. It writes `/wedding-planners/me`; the vendor form below
+ * writes `/vendors`, which a planner cannot hold, and was all this route did.
+ */
+export default function BusinessDetailsRoute() {
+  const permissions = useAuth((s) => s.user?.permissions ?? []);
+  return isPlannerAccount(permissions) ? <PlannerListingForm /> : <BusinessDetails />;
+}
+
+function BusinessDetails() {
   const router = useRouter();
   const qc = useQueryClient();
   const refresh = useRefreshBusiness();

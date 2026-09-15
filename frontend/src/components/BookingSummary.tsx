@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiMessage } from '../lib/api';
-import { formatDateTime } from '../lib/dates';
+import { formatDate, formatDateTime } from '../lib/dates';
 import { MILESTONE_LABEL } from '../lib/permissions';
+import { paymentStatusLabel } from '../lib/labels';
 import {
   PROGRESS_STEPS,
   QUOTATION_STAGE_LABEL,
@@ -46,6 +47,8 @@ export interface BookingSummaryData {
     notes: string | null;
     terms: string | null;
     validUntil: string | null;
+    /** The priced lines the offer was made of, when the server sends them. */
+    lines?: { description: string; amount: number | string }[];
     responseNote: string | null;
     respondedAt: string | null;
     createdAt: string;
@@ -66,16 +69,6 @@ export interface BookingSummaryData {
   instalments: { milestone: string; amount: string; status: string | null }[];
   delivery: { deliveredAt: string | null; deliveryNotes: string | null; deliveryAcceptedAt: string | null };
 }
-
-const PAYMENT_LABEL: Record<string, string> = {
-  initiated: 'Payment started',
-  held_in_escrow: 'Held in escrow',
-  disputed: 'Disputed',
-  pending_payout: 'Owed to you',
-  released: 'Paid out',
-  refunded: 'Refunded',
-  partially_settled: 'Part settled',
-};
 
 const UNPAID = ['initiated', 'failed', 'refunded'];
 
@@ -140,13 +133,21 @@ export function PriceBreakdown({ summary }: { summary: BookingSummaryData }) {
         <Row label="Agreed price">{`${money(price.base ?? price.grandTotal)} (listed price, no quotation)`}</Row>
       )}
       <Row label="Add-ons agreed">
-        {`${money(price.addonsTotal)} (${price.addonsAgreed})`}
+        {price.addonsAgreed > 0 ? `${money(price.addonsTotal)} (${price.addonsAgreed})` : 'None'}
         {price.addonsAwaiting > 0 && (
           <span className="text-gray-400"> · {price.addonsAwaiting} awaiting an answer</span>
         )}
       </Row>
+      {/* A request has no price until a quotation is accepted; "INR 0" read as
+          free, not as not-yet-priced. */}
       <Row label="Grand total">
-        <span className="font-medium">{money(price.grandTotal)}</span>
+        {Number(price.grandTotal) > 0 ? (
+          <span className="font-medium">{money(price.grandTotal)}</span>
+        ) : summary.quotation ? (
+          `Not agreed yet · latest quote ${money(summary.quotation.amount)}`
+        ) : (
+          'Not priced yet'
+        )}
       </Row>
     </Section>
   );
@@ -172,6 +173,27 @@ export function QuotationHistory({ summary }: { summary: BookingSummaryData }) {
             </p>
             {q.responseNote && <p className="mt-0.5 text-gray-700">Customer: {q.responseNote}</p>}
             {q.notes && <p className="mt-0.5 text-gray-600">{q.notes}</p>}
+            {/* What the offer was made of and on what terms — the same record
+                the customer accepted or declined, not just its total. */}
+            {(q.lines ?? []).length > 0 && (
+              <ul className="mt-1 space-y-0.5 text-gray-600">
+                {(q.lines ?? []).map((line, i) => (
+                  <li key={i} className="flex justify-between gap-2">
+                    <span>{line.description}</span>
+                    <span className="font-mono">{money(line.amount)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {q.terms && (
+              <p className="mt-0.5 whitespace-pre-wrap text-gray-600">
+                <span className="text-gray-400">Terms: </span>
+                {q.terms}
+              </p>
+            )}
+            {q.validUntil && (
+              <p className="mt-0.5 text-gray-500">Valid until {formatDate(q.validUntil)}</p>
+            )}
           </li>
         ))}
       </ol>
@@ -209,6 +231,18 @@ export function PaymentBreakdown({ summary }: { summary: BookingSummaryData }) {
     }
   }
 
+  // Nothing is payable before a price is agreed, so instalments and money rows
+  // of INR 0 would only look like a booking that costs nothing.
+  if (Number(summary.price.grandTotal) <= 0) {
+    return (
+      <Section title="Payment">
+        <p className="text-gray-500 sm:col-span-2">
+          The instalments are set once the customer accepts a quotation.
+        </p>
+      </Section>
+    );
+  }
+
   return (
     <Section title="Payment">
       {summary.instalments.length > 0 && (
@@ -218,7 +252,7 @@ export function PaymentBreakdown({ summary }: { summary: BookingSummaryData }) {
               <span className="text-gray-600">{MILESTONE_LABEL[row.milestone] ?? row.milestone}</span>
               <span className="font-mono">{money(row.amount)}</span>
               <span className={row.status && !UNPAID.includes(row.status) ? '' : 'text-gray-400'}>
-                {row.status ? (PAYMENT_LABEL[row.status] ?? row.status.replace(/_/g, ' ')) : 'Not due yet'}
+                {row.status ? paymentStatusLabel(row.status, 'provider') : 'Not due yet'}
               </span>
             </li>
           ))}
@@ -246,6 +280,14 @@ export function PaymentBreakdown({ summary }: { summary: BookingSummaryData }) {
           {delivery.deliveryAcceptedAt
             ? `confirmed by the customer ${formatDateTime(delivery.deliveryAcceptedAt)}`
             : 'waiting for the customer to confirm'}
+        </p>
+      )}
+      {/* What the provider recorded as handed over, the note the customer
+          reads before accepting the delivery. */}
+      {delivery.deliveryNotes && (
+        <p className="whitespace-pre-wrap text-gray-600 sm:col-span-2">
+          <span className="text-gray-400">Delivery notes: </span>
+          {delivery.deliveryNotes}
         </p>
       )}
       {canRelease && (

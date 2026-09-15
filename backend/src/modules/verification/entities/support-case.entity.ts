@@ -155,6 +155,8 @@ export class SupportCase {
   raisedByName?: string | null;
   raisedByEmail?: string | null;
   raisedByRole?: string | null;
+  /** The officer the case is allocated to, by name (profile, else email). */
+  assignedToName?: string | null;
   booking?: {
     id: string;
     status: string;
@@ -162,6 +164,12 @@ export class SupportCase {
     currency: string;
     buyerName: string | null;
     providerName: string | null;
+    /** What was booked: the service, or 'Wedding planning' for a planner. */
+    serviceName?: string | null;
+    /** The linked function's date, else the booking's, else the form's. */
+    eventDate?: string | null;
+    /** The newest quotation's price; `amount` is 0.00 until one is accepted. */
+    quotedAmount?: string | null;
   } | null;
 
   /**

@@ -6,7 +6,8 @@ import { formatDate } from '../lib/dates';
 import BookingChat from './BookingChat';
 import BookingConsole from './BookingConsole';
 import BookingDetail from './BookingDetail';
-import { BOOKING_STATUS_LABEL, Permission, can } from '../lib/permissions';
+import { Permission, can } from '../lib/permissions';
+import { SELLER_STATUS_LABEL } from '../lib/labels';
 import { useAuth } from '../store/auth';
 import { FieldSpec, formatAnswer } from './DynamicForm';
 import { canMarkCompleted, canMarkDelivered } from '../lib/booking-progress';
@@ -70,24 +71,6 @@ const ACTIONS: Record<string, { label: string; path: string }[]> = {
 
 /** A provider can quote while the job is still unpriced or being re-priced. */
 const QUOTABLE = ['requested', 'quotation_sent'];
-
-/**
- * The same statuses, said from the seller's side of the table.
- *
- * The shared labels are written for the buyer — "Request sent", "Quotation
- * received" — and a vendor reading their own queue was being told what they had
- * been sent by themselves. The status is the same status the customer sees; it
- * is the sentence that differs (EZ1-I259).
- */
-const SELLER_STATUS_LABEL: Record<string, string> = {
-  ...BOOKING_STATUS_LABEL,
-  requested: 'New request',
-  quotation_sent: 'Quotation sent',
-  quotation_accepted: 'Accepted by the customer',
-  payment_pending: 'Awaiting the advance',
-  pending: 'Paid, awaiting your confirmation',
-  completed_pending_final_payment: 'Delivered',
-};
 
 /**
  * Everything coming in to a vendor or a planner.
@@ -663,6 +646,10 @@ function VendorAddOns({ bookingId }: { bookingId: string }) {
                 </span>
               )}
             </div>
+            {/* What the provider said when they answered, kept on the record. */}
+            {a.responseNote && (
+              <p className="mt-1 text-xs text-gray-500">Your note: {a.responseNote}</p>
+            )}
 
             {a.status === 'requested' && (
               <div className="mt-2 flex flex-wrap items-center gap-2">

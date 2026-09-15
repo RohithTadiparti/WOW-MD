@@ -9,11 +9,15 @@ import { Profile } from '../users/entities/profile.entity';
 import { WeddingEvent } from '../events/entities/event.entity';
 import { Booking } from '../bookings/entities/booking.entity';
 import { Payment } from '../bookings/entities/payment.entity';
+import { Quotation } from '../bookings/entities/quotation.entity';
+import { summariseQuotations } from '../bookings/booking-summary';
 import { Vendor } from '../vendors/entities/vendor.entity';
 import { VendorService } from '../catalog/entities/vendor-service.entity';
 import { ServiceOffering } from '../catalog/entities/service-offering.entity';
 import { serviceNamesByIds } from '../catalog/service-names';
-import { dateOf, guestsOf, venueOf } from '../bookings/booking-venue';
+import { WeddingFacts, bookingContextOf, weddingContextOf } from '../bookings/booking-venue';
+import { loadWeddingFacts } from '../bookings/wedding-facts';
+import { PAYMENT_STATUS_RANK } from '../bookings/payment-totals';
 import { PlannerProfile } from '../wedding-planners/entities/planner-profile.entity';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { BookingStatus, ProviderType, TaskStatus, UserRole, VendorCategory } from '../../common/enums';
@@ -49,6 +53,8 @@ export class PlannerClientsService {
     private readonly offerings: Repository<ServiceOffering>,
     @InjectRepository(PlannerProfile)
     private readonly plannerProfiles: Repository<PlannerProfile>,
+    // Read-only: the price on the table while a booking's total is still 0.00.
+    @InjectRepository(Quotation) private readonly quotations: Repository<Quotation>,
     private readonly dashboard: WeddingDashboardService,
   ) {}
 
@@ -75,24 +81,97 @@ export class PlannerClientsService {
    * always present, so it leads, and gender is used only to name a second
    * person the account holder manages.
    *
-   * A partner with no account of their own simply has no name to show, which
-   * is the truth rather than a blank pretending to be a missing field.
+   * The profiles are the account's own first and then the ones it manages. The
+   * other half of a match-fixed couple has an account and a profile of their
+   * own, which no read keyed on this account ever reached, so a bride's groom
+   * read "-" once the match was fixed; `partnerName` is that profile's name. A
+   * partner with no account of their own simply has no name to show, which is
+   * the truth rather than a blank pretending to be a missing field.
    */
   private couple(
     role: UserRole | null,
     profiles: Profile[],
+    partnerName: string | null = null,
   ): { bride: string | null; groom: string | null } {
     const holder = profiles[0]?.displayName ?? null;
     const byGender = (g: string) =>
       profiles.slice(1).find((p) => (p.gender ?? '').toLowerCase() === g)?.displayName ?? null;
 
-    if (role === UserRole.BRIDE) return { bride: holder, groom: byGender('male') };
-    if (role === UserRole.GROOM) return { bride: byGender('female'), groom: holder };
+    if (role === UserRole.BRIDE) return { bride: holder, groom: byGender('male') ?? partnerName };
+    if (role === UserRole.GROOM) return { bride: byGender('female') ?? partnerName, groom: holder };
     // A family member holds the account for somebody else, so neither name is
     // theirs; both come from the profiles they manage.
     return {
       bride: profiles.find((p) => (p.gender ?? '').toLowerCase() === 'female')?.displayName ?? null,
       groom: profiles.find((p) => (p.gender ?? '').toLowerCase() === 'male')?.displayName ?? null,
+    };
+  }
+
+  /**
+   * Each account's profiles in the order couple() reads them: its own, then
+   * the ones it manages — a family account's bride and groom are managed
+   * profiles, not rows under its own user id.
+   */
+  private async profilesByAccount(userIds: string[]): Promise<Map<string, Profile[]>> {
+    const rows = userIds.length
+      ? await this.profiles.find({
+          where: [{ userId: In(userIds) }, { managedByUserId: In(userIds) }],
+        })
+      : [];
+    return new Map(
+      userIds.map((id) => [
+        id,
+        [
+          ...rows.filter((p) => p.userId === id),
+          ...rows.filter((p) => p.managedByUserId === id && p.userId !== id),
+        ],
+      ]),
+    );
+  }
+
+  /** The partner's own profile name, when the account has a match-fixed partner. */
+  private partnerNameOf(
+    partnerUserId: string | undefined,
+    profilesBy: Map<string, Profile[]>,
+  ): string | null {
+    if (!partnerUserId) return null;
+    return (
+      (profilesBy.get(partnerUserId) ?? []).find((p) => p.userId === partnerUserId)?.displayName ??
+      null
+    );
+  }
+
+  /** The couples' wedding facts, the match-fixed partner's included (EZ1-I160). */
+  private weddingFacts(
+    userIds: string[],
+    partners: Map<string, string>,
+  ): Promise<Map<string, WeddingFacts>> {
+    return loadWeddingFacts(
+      { plans: this.plans, events: this.events, bookings: this.bookings, vendors: this.vendors },
+      userIds,
+      partners,
+    );
+  }
+
+  /**
+   * The wedding's date, read the same way on every planner screen and on the
+   * dashboard: the engaged plan's, else the earliest function's, else the
+   * earliest vendor booking's. The plan's date alone left a wedding with dated
+   * functions reading "Date not set" and never becoming completed.
+   */
+  private weddingDateOf(plan: WeddingPlan | null, facts?: WeddingFacts): string | null {
+    return plan?.weddingDate ?? (facts ? weddingContextOf(facts).date : null);
+  }
+
+  /** Every venue and city the wedding is held at: its functions' and its booked vendors'. */
+  private placesOf(facts?: WeddingFacts): { venues: string[]; cities: string[] } {
+    const unique = (values: (string | null)[]) =>
+      [...new Set(values.filter((v): v is string => Boolean(v)))];
+    const events = facts?.events ?? [];
+    const booked = facts?.vendorBookings ?? [];
+    return {
+      venues: unique([...events.map((e) => e.venue), ...booked.map((b) => b.venue)]),
+      cities: unique([...events.map((e) => e.city), ...booked.map((b) => b.city)]),
     };
   }
 
@@ -121,35 +200,43 @@ export class PlannerClientsService {
     }
 
     const hostIds = [...new Set(plans.map((p) => p.userId))];
-    const [users, profiles, events, tasks, bookings] = await Promise.all([
+    const partners = await this.dashboard.fixedPartners(hostIds);
+    const accounts = [...new Set([...hostIds, ...partners.values()])];
+    const [users, profilesBy, events, tasks, bookings, facts] = await Promise.all([
       this.users.find({ where: { id: In(hostIds) }, select: ['id', 'email', 'phone', 'role'] }),
-      this.profiles.find({ where: { userId: In(hostIds) } }),
+      this.profilesByAccount(accounts),
       this.events.find({ where: { userId: In(hostIds) }, order: { eventDate: 'ASC' } }),
       this.tasks.find({ where: { planId: In(plans.map((p) => p.id)) } }),
       // The client's bookings, so the card can carry where each wedding's
-      // spending has got to, not only its tasks (EZ1-I7).
-      this.bookings.find({ where: { userId: In(hostIds) } }),
+      // spending has got to, not only its tasks (EZ1-I7) — the match-fixed
+      // partner's included, because either of the couple may have booked.
+      this.bookings.find({ where: { userId: In(accounts) } }),
+      this.weddingFacts(hostIds, partners),
     ]);
 
     const userById = new Map(users.map((u) => [u.id, u]));
-    const profilesByUser = new Map<string, Profile[]>();
-    for (const p of profiles) {
-      if (!p.userId) continue;
-      profilesByUser.set(p.userId, [...(profilesByUser.get(p.userId) ?? []), p]);
-    }
 
     const clients = plans.map((plan) => {
       const user = userById.get(plan.userId);
-      const own = profilesByUser.get(plan.userId) ?? [];
+      const all = profilesBy.get(plan.userId) ?? [];
+      const own = all.filter((p) => p.userId === plan.userId);
+      const partner = partners.get(plan.userId);
       const mine = events.filter((e) => e.userId === plan.userId);
       const planTasks = tasks.filter((t) => t.planId === plan.id);
       const next = mine.find((e) => e.eventDate && new Date(e.eventDate) >= new Date());
+      const weddingDate = this.weddingDateOf(plan, facts.get(plan.userId));
 
-      const { bride, groom } = this.couple(user?.role ?? null, own);
+      const { bride, groom } = this.couple(
+        user?.role ?? null,
+        all,
+        this.partnerNameOf(partner, profilesBy),
+      );
 
       // A booking is "confirmed" once the vendor has taken the job; anything
       // earlier (requested, quoted, accepted) is still being negotiated.
-      const clientBookings = bookings.filter((b) => b.userId === plan.userId);
+      const clientBookings = bookings.filter(
+        (b) => b.userId === plan.userId || (partner !== undefined && b.userId === partner),
+      );
       const confirmed = clientBookings.filter((b) =>
         [BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS, BookingStatus.COMPLETED].includes(
           b.status,
@@ -166,6 +253,8 @@ export class PlannerClientsService {
         email: user?.email ?? null,
         phone: user?.phone ?? null,
         weddingDate: plan.weddingDate ?? null,
+        /** The plan's date, else the earliest function's, else the earliest vendor booking's. */
+        derivedWeddingDate: weddingDate,
         location: next?.city ?? mine[0]?.city ?? own[0]?.city ?? null,
         events: mine.length,
         nextEvent: next ? { id: next.id, name: next.name, date: next.eventDate } : null,
@@ -178,7 +267,7 @@ export class PlannerClientsService {
           confirmed,
           pending: pendingBookings,
         },
-        status: this.lifecycle(plan.weddingDate ?? null, planTasks),
+        status: this.lifecycle(weddingDate, planTasks),
       };
     });
 
@@ -218,22 +307,24 @@ export class PlannerClientsService {
    */
   private async openRequests(actor: AuthUser) {
     if (actor.role !== UserRole.PLANNER) return [];
-    const rows = await this.bookings.find({
+    // The provider id on a planner booking is the planner *profile*, not the
+    // user, so this planner's profiles are found first and the query narrowed
+    // to them. Taking the fifty newest requests across every planner and
+    // filtering afterwards lost this planner's whenever others had newer ones.
+    const mine = await this.plannerProfiles.find({
+      where: { ownerUserId: actor.userId },
+      select: ['id'],
+    });
+    if (mine.length === 0) return [];
+    const requests = await this.bookings.find({
       where: {
         providerType: ProviderType.PLANNER,
+        providerId: In(mine.map((p) => p.id)),
         status: BookingStatus.REQUESTED,
       },
       order: { createdAt: 'DESC' },
       take: 50,
     });
-    // The provider id on a planner booking is the planner *profile*, not the
-    // user, so the rows are narrowed by ownership after the fact.
-    const mine = await this.plannerProfiles.find({
-      where: { ownerUserId: actor.userId },
-      select: ['id'],
-    });
-    const ids = new Set(mine.map((p) => p.id));
-    const requests = rows.filter((b) => ids.has(b.providerId));
 
     // Who is asking, by name — a request the planner cannot put a name to reads
     // as noise, and the My Clients page is where they decide whether to take it
@@ -253,6 +344,9 @@ export class PlannerClientsService {
       userId: b.userId,
       name: nameOf(b.userId),
       amount: b.amount,
+      // What the couple hopes to spend: the only figure on a request that has
+      // not been quoted, where `amount` is still 0.00.
+      expectedBudget: b.expectedBudget ?? null,
       currency: b.currency,
       requestedAt: b.createdAt,
     }));
@@ -276,13 +370,20 @@ export class PlannerClientsService {
     await this.assertMayReviewRequest(actor, booking);
 
     const clientUserId = booking.userId;
-    const [plan, events, clientBookings, profiles, user] = await Promise.all([
+    // A match-fixed couple share one wedding (EZ1-I160): what either of them
+    // has arranged is arranged.
+    const partners = await this.dashboard.fixedPartners([clientUserId]);
+    const partner = partners.get(clientUserId);
+    const accounts = partner ? [clientUserId, partner] : [clientUserId];
+    const [plan, events, clientBookings, profiles, user, facts] = await Promise.all([
       this.plans.findOne({ where: { userId: clientUserId }, order: { createdAt: 'DESC' } }),
-      this.events.find({ where: { userId: clientUserId }, order: { eventDate: 'ASC' } }),
-      this.bookings.find({ where: { userId: clientUserId }, order: { createdAt: 'DESC' } }),
+      this.events.find({ where: { userId: In(accounts) }, order: { eventDate: 'ASC' } }),
+      this.bookings.find({ where: { userId: In(accounts) }, order: { createdAt: 'DESC' } }),
       this.profiles.find({ where: { userId: clientUserId } }),
       this.users.findOne({ where: { id: clientUserId }, select: ['id', 'email', 'role'] }),
+      this.weddingFacts([clientUserId], partners),
     ]);
+    const wedding = facts.get(clientUserId);
 
     // What the couple has already arranged for themselves: the vendor bookings,
     // named and resolved to the service booked, so the planner sees per day what
@@ -292,21 +393,19 @@ export class PlannerClientsService {
       (b) => b.providerType === ProviderType.VENDOR && b.status !== BookingStatus.CANCELLED,
     );
     const vendorIds = vendorBookings.map((b) => b.providerId);
-    const serviceIds = [
-      ...new Set(vendorBookings.map((b) => b.vendorServiceId).filter(Boolean)),
-    ] as string[];
-    const [listings, serviceRows] = await Promise.all([
+    const [listings, serviceNameById] = await Promise.all([
       vendorIds.length ? this.vendors.find({ where: { id: In(vendorIds) } }) : Promise.resolve([]),
-      serviceIds.length
-        ? this.vendorServices.find({ where: { id: In(serviceIds) } })
-        : Promise.resolve([]),
+      // The vendor's own wording when they gave one, the catalogue's otherwise
+      // (EZ1-I264): `displayName` alone is empty on ordinary catalogue services.
+      serviceNamesByIds(this.vendorServices, vendorBookings.map((b) => b.vendorServiceId)),
     ]);
     const vendorById = new Map(listings.map((v) => [v.id, v]));
-    const serviceNameById = new Map(serviceRows.map((s) => [s.id, s.displayName]));
+    const eventById = new Map(events.map((e) => [e.id, e]));
 
     const arranged = vendorBookings.map((b) => ({
       eventId: b.eventId,
-      eventDate: b.eventDate ?? null,
+      // The function's date, else the booking's, else the date on its form.
+      eventDate: bookingContextOf(b, b.eventId ? eventById.get(b.eventId) : null).eventDate,
       name: vendorById.get(b.providerId)?.name ?? 'Vendor',
       category: vendorById.get(b.providerId)?.category ?? null,
       service: b.vendorServiceId ? (serviceNameById.get(b.vendorServiceId) ?? null) : null,
@@ -378,12 +477,14 @@ export class PlannerClientsService {
           : null,
       },
       wedding: {
-        weddingDate: plan?.weddingDate ?? null,
+        // The plan's date, else the earliest function's or vendor booking's.
+        weddingDate: this.weddingDateOf(plan, wedding),
         // The largest function is the wedding's headline guest count; summing the
         // functions would double-count guests invited to more than one day.
         guestCount: events.reduce((n, e) => Math.max(n, e.expectedGuests ?? 0), 0) || null,
-        venues: [...new Set(events.map((e) => e.venue).filter(Boolean))],
-        cities: [...new Set(events.map((e) => e.city).filter(Boolean))],
+        // Where the functions are held and where the booked vendors are, so a
+        // venue already booked shows even when no function names it.
+        ...this.placesOf(wedding),
         functions: events.length,
       },
       /**
@@ -466,7 +567,11 @@ export class PlannerClientsService {
     });
     if (!plan) throw new NotFoundException('You are not engaged on that wedding');
 
-    const [user, profiles, events, tasks, bookings, summary] = await Promise.all([
+    // A match-fixed couple share one wedding (EZ1-I160).
+    const partners = await this.dashboard.fixedPartners([clientUserId]);
+    const partner = partners.get(clientUserId);
+    const accounts = partner ? [clientUserId, partner] : [clientUserId];
+    const [user, profilesBy, events, tasks, bookings, summary, facts] = await Promise.all([
       this.users.findOne({
         where: { id: clientUserId },
         // `role` is what names the bride or the groom — see couple(). Leaving
@@ -474,35 +579,44 @@ export class PlannerClientsService {
         // beside it showed a name, off the same data.
         select: ['id', 'email', 'phone', 'createdAt', 'role'],
       }),
-      this.profiles.find({ where: { userId: clientUserId } }),
+      this.profilesByAccount(accounts),
       this.events.find({ where: { userId: clientUserId }, order: { eventDate: 'ASC' } }),
       this.tasks.find({ where: { planId: plan.id }, order: { dueDate: 'ASC' } }),
-      this.bookings.find({ where: { userId: clientUserId }, order: { createdAt: 'DESC' } }),
+      this.bookings.find({ where: { userId: In(accounts) }, order: { createdAt: 'DESC' } }),
       this.dashboard.summary(clientUserId),
+      this.weddingFacts([clientUserId], partners),
     ]);
 
-    const vendorRows = await this.vendorRows(bookings);
-    const { bride, groom } = this.couple(user?.role ?? null, profiles);
+    // Every booking here is this one wedding's, the partner's included.
+    const vendorRows = await this.vendorRows(bookings, () => facts.get(clientUserId));
+    const all = profilesBy.get(clientUserId) ?? [];
+    const own = all.filter((p) => p.userId === clientUserId);
+    const { bride, groom } = this.couple(
+      user?.role ?? null,
+      all,
+      this.partnerNameOf(partner, profilesBy),
+    );
+    const wedding = facts.get(clientUserId);
+    const weddingDate = this.weddingDateOf(plan, wedding);
 
     return {
       client: {
         userId: clientUserId,
-        name: profiles[0]?.displayName ?? user?.email ?? 'A client',
+        name: own[0]?.displayName ?? user?.email ?? 'A client',
         bride,
         groom,
         email: user?.email ?? null,
         phone: user?.phone ?? null,
-        city: profiles[0]?.city ?? null,
+        city: own[0]?.city ?? null,
         since: user?.createdAt ?? null,
-        status: this.lifecycle(plan.weddingDate ?? null, tasks),
+        status: this.lifecycle(weddingDate, tasks),
       },
       wedding: {
         planId: plan.id,
-        weddingDate: plan.weddingDate ?? null,
+        weddingDate,
         countdown: summary.countdown,
         functions: events.length,
-        venues: [...new Set(events.map((e) => e.venue).filter(Boolean))],
-        cities: [...new Set(events.map((e) => e.city).filter(Boolean))],
+        ...this.placesOf(wedding),
       },
       /** Spec section 3, and the couple's own journey view — one derivation. */
       progress: summary.journey,
@@ -552,8 +666,9 @@ export class PlannerClientsService {
     if (forClients.length === 0) return [];
 
     const clientIds = [...new Set(forClients.map((b) => b.userId))];
+    const facts = await this.weddingFacts(clientIds, new Map());
     const [rows, users, profiles] = await Promise.all([
-      this.vendorRows(forClients),
+      this.vendorRows(forClients, (userId) => facts.get(userId)),
       this.users.find({ where: { id: In(clientIds) }, select: ['id', 'email'] }),
       this.profiles.find({ where: { userId: In(clientIds) } }),
     ]);
@@ -575,68 +690,100 @@ export class PlannerClientsService {
    * Who each booking is with, what was booked, and where its money has got to
    * (EZ1-I56), in the order the bookings were given.
    */
-  private async vendorRows(bookings: Booking[]) {
-    const vendorIds = bookings
-      .filter((b) => b.providerType === ProviderType.VENDOR)
-      .map((b) => b.providerId);
+  private async vendorRows(
+    bookings: Booking[],
+    // The couple's wedding, so a vendor booking with no place of its own reads
+    // the venue or function the couple has on that same day.
+    weddingOf: (userId: string) => WeddingFacts | undefined = () => undefined,
+  ) {
+    const idsOf = (type: ProviderType) => [
+      ...new Set(bookings.filter((b) => b.providerType === type).map((b) => b.providerId)),
+    ];
+    const vendorIds = idsOf(ProviderType.VENDOR);
+    const plannerIds = idsOf(ProviderType.PLANNER);
     const offeringIds = [...new Set(bookings.map((b) => b.offeringId).filter(Boolean))] as string[];
-    const [listings, serviceNameById, offeringRows, paymentRows] = await Promise.all([
-      vendorIds.length ? this.vendors.find({ where: { id: In(vendorIds) } }) : Promise.resolve([]),
-      // The vendor's own wording when they gave one, the catalogue's otherwise
-      // (EZ1-I264).
-      serviceNamesByIds(this.vendorServices, bookings.map((b) => b.vendorServiceId)),
-      offeringIds.length
-        ? this.offerings.find({ where: { id: In(offeringIds) } })
-        : Promise.resolve([]),
-      bookings.length
-        ? this.payments.find({ where: { bookingId: In(bookings.map((b) => b.id)) } })
-        : Promise.resolve([]),
-    ]);
+    const eventIds = [...new Set(bookings.map((b) => b.eventId).filter(Boolean))] as string[];
+    const bookingIds = bookings.map((b) => b.id);
+    const [listings, planners, serviceNameById, offeringRows, paymentRows, linkedEvents, quotes] =
+      await Promise.all([
+        vendorIds.length ? this.vendors.find({ where: { id: In(vendorIds) } }) : Promise.resolve([]),
+        // A planner booked by the couple is named by their agency, not "Planning".
+        plannerIds.length
+          ? this.plannerProfiles.find({ where: { id: In(plannerIds) } })
+          : Promise.resolve([]),
+        // The vendor's own wording when they gave one, the catalogue's otherwise
+        // (EZ1-I264).
+        serviceNamesByIds(this.vendorServices, bookings.map((b) => b.vendorServiceId)),
+        offeringIds.length
+          ? this.offerings.find({ where: { id: In(offeringIds) } })
+          : Promise.resolve([]),
+        bookings.length
+          ? this.payments.find({ where: { bookingId: In(bookings.map((b) => b.id)) } })
+          : Promise.resolve([]),
+        // The function a booking is linked to says when and where it is.
+        eventIds.length ? this.events.find({ where: { id: In(eventIds) } }) : Promise.resolve([]),
+        bookingIds.length
+          ? this.quotations.find({ where: { bookingId: In(bookingIds) } })
+          : Promise.resolve([]),
+      ]);
     const vendorById = new Map(listings.map((v) => [v.id, v]));
+    const plannerById = new Map(planners.map((p) => [p.id, p]));
     const offeringNameById = new Map(offeringRows.map((o) => [o.id, o.name]));
-    // The furthest a booking's money has reached, ranked, mirroring the booking
+    const eventById = new Map(linkedEvents.map((e) => [e.id, e]));
+    // The furthest a booking's money has reached, ranked with the booking
     // service's own rollup so the two screens agree.
-    const PAYMENT_RANK: Record<string, number> = {
-      initiated: 1,
-      held_in_escrow: 2,
-      disputed: 3,
-      pending_payout: 4,
-      released: 5,
-      refunded: 6,
-    };
     const paymentByBooking = new Map<string, string>();
     for (const p of paymentRows) {
       const seen = paymentByBooking.get(p.bookingId);
-      if (!seen || (PAYMENT_RANK[p.status] ?? 0) > (PAYMENT_RANK[seen] ?? 0)) {
+      if (!seen || (PAYMENT_STATUS_RANK[p.status] ?? 0) > (PAYMENT_STATUS_RANK[seen] ?? 0)) {
         paymentByBooking.set(p.bookingId, p.status);
       }
     }
 
     return bookings.map((b) => {
-      const listing = b.providerType === ProviderType.VENDOR ? vendorById.get(b.providerId) : null;
-      const place = venueOf({
-        answers: b.serviceAnswers,
-        providerName: listing?.name,
-        providerCity: listing?.city,
-        providerIsVenue: Boolean(listing?.categories?.includes('venue')),
-      });
+      const isPlanner = b.providerType === ProviderType.PLANNER;
+      const listing = isPlanner ? null : vendorById.get(b.providerId);
+      // The linked function first, then the day, place and head count the
+      // request was placed with, so a function with no venue does not hide the
+      // one typed on the form.
+      const context = bookingContextOf(
+        {
+          eventDate: b.eventDate,
+          serviceAnswers: b.serviceAnswers,
+          providerName: listing?.name,
+          providerCity: listing?.city,
+          providerIsVenue: Boolean(listing?.categories?.includes('venue')),
+        },
+        b.eventId ? eventById.get(b.eventId) : null,
+        weddingOf(b.userId),
+        { wholeWedding: isPlanner },
+      );
       return {
         bookingId: b.id,
-        name: listing?.name ?? (b.providerType === ProviderType.PLANNER ? 'Planning' : 'Provider'),
+        name:
+          listing?.name ??
+          (isPlanner ? (plannerById.get(b.providerId)?.agencyName ?? 'Planning') : 'Provider'),
         category: listing?.category ?? b.providerType,
-        service: b.vendorServiceId ? (serviceNameById.get(b.vendorServiceId) ?? null) : null,
+        service: b.vendorServiceId
+          ? (serviceNameById.get(b.vendorServiceId) ?? null)
+          : isPlanner
+            ? 'Wedding planning'
+            : null,
         package: b.offeringId ? (offeringNameById.get(b.offeringId) ?? null) : null,
         status: b.status,
         paymentStatus: paymentByBooking.get(b.id) ?? null,
         amount: b.amount,
         currency: b.currency,
+        // The newest quotation and where it stands. `amount` stays the agreed
+        // total, which is 0.00 until a quotation is accepted.
+        quotation: summariseQuotations(quotes.filter((q) => q.bookingId === b.id)),
         // What the request was placed with: the day, the place, the head
         // count, the budget and the brief, so a planner can see what they
         // asked the vendor for without opening the booking.
-        eventDate: b.eventDate ?? dateOf(b.serviceAnswers),
-        venue: place.venue,
-        city: place.city,
-        guests: guestsOf(b.serviceAnswers),
+        eventDate: context.eventDate,
+        venue: context.venue,
+        city: context.city,
+        guests: context.guests,
         expectedBudget: b.expectedBudget,
         requirements: b.requirements,
       };
