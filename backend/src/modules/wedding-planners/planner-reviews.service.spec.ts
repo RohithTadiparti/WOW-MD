@@ -8,6 +8,9 @@ import { PlannerReview } from './entities/planner-review.entity';
 import { Booking } from '../bookings/entities/booking.entity';
 import { User } from '../auth/entities/user.entity';
 import { Profile } from '../users/entities/profile.entity';
+import { WeddingEvent } from '../events/entities/event.entity';
+import { WeddingPlan } from '../planner/entities/wedding-plan.entity';
+import { Vendor } from '../vendors/entities/vendor.entity';
 import { RedisService } from '../../platform/redis/redis.service';
 import { ReviewStatus } from '../../common/enums';
 
@@ -103,6 +106,10 @@ describe('PlannerReviewsService', () => {
         { provide: getRepositoryToken(Booking), useValue: bare },
         { provide: getRepositoryToken(User), useValue: bare },
         { provide: getRepositoryToken(Profile), useValue: bare },
+        // Only read to date a review on the owner's list, which these tests do not open.
+        { provide: getRepositoryToken(WeddingEvent), useValue: bare },
+        { provide: getRepositoryToken(WeddingPlan), useValue: bare },
+        { provide: getRepositoryToken(Vendor), useValue: bare },
         { provide: DataSource, useValue: dataSource },
         { provide: RedisService, useValue: redis },
       ],

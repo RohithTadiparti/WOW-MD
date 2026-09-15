@@ -14,6 +14,10 @@ import { ChatPreference } from './entities/chat-preference.entity';
 import { AuditAction, AuditService } from '../../platform/audit/audit.service';
 import { Profile } from '../users/entities/profile.entity';
 import { User } from '../auth/entities/user.entity';
+import { Vendor } from '../vendors/entities/vendor.entity';
+import { PlannerProfile } from '../wedding-planners/entities/planner-profile.entity';
+import { AgentProfile } from '../agents/entities/agent-profile.entity';
+import { displayNamesByUserIds } from '../users/display-names';
 import {
   InterestStatus,
   MatchFixedState,
@@ -100,6 +104,11 @@ export class ChatService {
     private readonly engine: CompatibilityEngine,
     @InjectRepository(ProfileDetails)
     private readonly details: Repository<ProfileDetails>,
+    // Read-only: a provider or agency in an enquiry thread is named by its
+    // business, having no marriage profile.
+    @InjectRepository(Vendor) private readonly vendors: Repository<Vendor>,
+    @InjectRepository(PlannerProfile) private readonly planners: Repository<PlannerProfile>,
+    @InjectRepository(AgentProfile) private readonly agencies: Repository<AgentProfile>,
     private readonly outbox: OutboxService,
   ) {}
 
@@ -624,6 +633,19 @@ export class ChatService {
     const profileByUser = new Map(profiles.map((p) => [p.userId as string, p]));
     const accountById = new Map(accounts.map((u) => [u.id, u]));
     const me = accountById.get(userId);
+    // An enquiry with a vendor, planner or agency, or a thread with support, is
+    // with an account that has no marriage profile. Those are named by their
+    // business, else their email; "Match" is only for somebody with nothing.
+    const accountNames = await displayNamesByUserIds(
+      {
+        users: this.users,
+        profiles: this.profiles,
+        vendors: this.vendors,
+        planners: this.planners,
+        agencies: this.agencies,
+      },
+      otherIds.filter((id) => !profileByUser.get(id)?.displayName),
+    );
 
     const myProfile = await this.profiles.findOne({ where: { userId } });
 
@@ -640,7 +662,7 @@ export class ChatService {
           conversationId: '',
           withUserId: otherUserId,
           muted: false,
-          displayName: profile?.displayName ?? 'Match',
+          displayName: profile?.displayName ?? accountNames.get(otherUserId) ?? 'Match',
           photoUrl: profile?.photos?.[0] ?? null,
           lastMessage: null,
           lastMessageAt: null,
@@ -697,7 +719,7 @@ export class ChatService {
           conversationId: convo.id,
           withUserId: otherUserId,
           muted: Boolean(pref?.muted),
-          displayName: profile?.displayName ?? 'Match',
+          displayName: profile?.displayName ?? accountNames.get(otherUserId) ?? 'Match',
           photoUrl: profile?.photos?.[0] ?? null,
           lastMessage: last?.body ?? null,
           lastMessageAt: last?.createdAt ?? null,

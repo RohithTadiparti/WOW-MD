@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import { money, shortDate } from '@/lib/format';
 import { SELLER_STATUS_LABEL } from '@/lib/bookings';
 import { BOOKING_STATUS_LABEL } from '@/shared/permissions';
+import { useCategoryNames } from '@/components/business/category-picker';
 import { Divider } from '@/components/chrome';
 import { Body, Caption, Card, SectionTitle } from '@/components/ui';
 import { space } from '@/theme';
@@ -14,7 +15,10 @@ export interface PlacedBooking {
   clientUserId: string;
   clientName: string;
   name: string;
+  /** The listing's first category, or the provider type when there is no listing. */
   category: string;
+  /** Every category the listing is under, when the server returns them. */
+  categories?: string[] | null;
   service: string | null;
   package: string | null;
   status: string;
@@ -49,12 +53,25 @@ const statusLabel = (status: string) =>
  * Shared by the list and the couple's booking detail, as on the web.
  */
 export function PlacedBookingFacts({ booking: b }: { booking: PlacedBooking }) {
+  const categoryNames = useCategoryNames();
   const place = [b.venue, b.city].filter(Boolean).join(', ');
+  /*
+   * The server falls back to the provider type when a booking has no vendor
+   * listing behind it, so `category` can be the word "planner" or "vendor".
+   * That is not a category: a planner is said as planning, and a bare "vendor"
+   * is left out rather than printed as though it described the service.
+   */
+  const categories =
+    b.category === 'planner'
+      ? ['Wedding planning']
+      : b.category === 'vendor'
+        ? []
+        : categoryNames(b.categories && b.categories.length > 0 ? b.categories : [b.category]);
   return (
     <View style={{ gap: space(0.5) }}>
       <Body numberOfLines={2}>{`${b.name} · for ${b.clientName}`}</Body>
       <Caption tone="faint" numberOfLines={2}>
-        {[b.category.replace(/_/g, ' '), b.service, b.package].filter(Boolean).join(' · ')}
+        {[categories.join(', '), b.service, b.package].filter(Boolean).join(' · ')}
       </Caption>
       <Caption>
         {[

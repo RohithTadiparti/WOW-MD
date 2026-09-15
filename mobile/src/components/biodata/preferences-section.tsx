@@ -27,6 +27,10 @@ const NRI_OPTIONS = [
   { value: 'no', label: 'No, prefer non-NRI' },
 ];
 
+/** A stored number as the field's text; blank when nothing is stored. */
+const stored = (value: unknown): string =>
+  typeof value === 'number' || (typeof value === 'string' && value.trim()) ? String(value) : '';
+
 const NRI_LABEL: Record<string, string> = {
   no_preference: "Doesn't matter",
   yes: 'Yes, prefer NRI',
@@ -47,10 +51,12 @@ export function PreferencesSection({
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [form, setForm] = useState({
-    preferredAgeMin: String(details.preferredAgeMin ?? 24),
-    preferredAgeMax: String(details.preferredAgeMax ?? 34),
-    preferredHeightMinCm: String(details.preferredHeightMinCm ?? 150),
-    preferredHeightMaxCm: String(details.preferredHeightMaxCm ?? 190),
+    // Seeded from what is stored and nothing else. Defaults here were written
+    // back over a family's real preferences by the next press of Save.
+    preferredAgeMin: stored(details.preferredAgeMin),
+    preferredAgeMax: stored(details.preferredAgeMax),
+    preferredHeightMinCm: stored(details.preferredHeightMinCm),
+    preferredHeightMaxCm: stored(details.preferredHeightMaxCm),
     religion: String(bag.religion ?? ''),
     caste: String(bag.caste ?? ''),
     education: String(bag.education ?? ''),
@@ -94,6 +100,18 @@ export function PreferencesSection({
     setForm((current) => ({ ...current, [key]: value }));
 
   function submit() {
+    const ranges = [
+      form.preferredAgeMin,
+      form.preferredAgeMax,
+      form.preferredHeightMinCm,
+      form.preferredHeightMaxCm,
+    ];
+    // Asked for rather than filled in: a blank sent as 0 would be saved as a
+    // preference nobody stated.
+    if (ranges.some((value) => !value.trim())) {
+      setError('Give both ends of the age range and the height range before saving.');
+      return;
+    }
     if (Number(form.preferredAgeMin) > Number(form.preferredAgeMax)) {
       setError('The minimum age cannot be above the maximum.');
       return;

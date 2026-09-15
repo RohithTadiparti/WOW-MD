@@ -5,8 +5,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle } from 'phosphor-react-native';
 
 import { api, apiMessage } from '@/lib/api';
-import { useAuth } from '@/store/auth';
-import { Permission, can } from '@/shared/permissions';
+import { useMatchmakingGate } from '@/lib/matchmaking';
+import { ActingClientPicker, useActingClient } from '@/components/matches/acting-client';
 import {
   Alert,
   Body,
@@ -70,19 +70,25 @@ interface Suggestion {
  */
 export default function Matches() {
   const router = useRouter();
-  const permissions = useAuth((s) => s.user?.permissions ?? []);
-  const isAgent = can(permissions, Permission.AGENCY_MANAGE);
   const [error, setError] = useState('');
   const qc = useQueryClient();
+  const acting = useActingClient();
+  const clientParam = acting.profileId ? { profileId: acting.profileId } : {};
+  // Asked before the list, so a profile the server would refuse is told why
+  // rather than shown a refusal.
+  const { status, gate, settled } = useMatchmakingGate(acting.profileId, acting.ready);
 
-  const { data, isPending, error: loadError } = useQuery({
-    queryKey: ['suggestions'],
-    queryFn: async () => (await api.get('/matches/suggestions', { params: { limit: 20 } })).data,
+  const { data, isLoading, error: loadError } = useQuery({
+    queryKey: ['suggestions', acting.profileId],
+    queryFn: async () =>
+      (await api.get('/matches/suggestions', { params: { limit: 20, ...clientParam } })).data,
+    enabled: acting.ready && settled && !gate,
     retry: false,
   });
 
   const sendInterest = useMutation({
-    mutationFn: (toProfileId: string) => api.post('/matches/interest', { toProfileId }),
+    mutationFn: (toProfileId: string) =>
+      api.post('/matches/interest', { toProfileId, ...clientParam }),
     onSuccess: () => {
       setError('');
       void qc.invalidateQueries({ queryKey: ['suggestions'] });
@@ -100,7 +106,7 @@ export default function Matches() {
    */
   const suggestions: Suggestion[] = data?.data ?? [];
 
-  if (isPending) {
+  if (isLoading || (acting.ready && !settled)) {
     return (
       <View style={{ flex: 1, padding: space(4), gap: space(4) }}>
         <Header />
@@ -117,21 +123,23 @@ export default function Matches() {
       ListHeaderComponent={
         <View style={{ gap: space(3), marginBottom: space(1) }}>
           <Header />
+          <ActingClientPicker acting={acting} />
           {error ? <Alert tone="critical">{error}</Alert> : null}
           {loadError ? (
-            <Alert tone="critical">
-              {apiMessage(
-                loadError,
-                isAgent
-                  ? 'Choose which client you are browsing for before matches can be suggested.'
-                  : 'Matches could not be loaded.',
-              )}
-            </Alert>
+            <Alert tone="critical">{apiMessage(loadError, 'Matches could not be loaded.')}</Alert>
           ) : null}
         </View>
       }
       ListEmptyComponent={
-        loadError ? null : (
+        loadError ? null : !acting.ready ? (
+          <EmptyState title="Choose a client">
+            Pick which client you are browsing for, and the matches suggested for them appear here.
+          </EmptyState>
+        ) : gate ? (
+          <EmptyState title={status?.profileCompleted ? 'Matchmaking is closed' : 'Finish the profile first'}>
+            {gate}
+          </EmptyState>
+        ) : (
           <EmptyState title="No matches to show yet">
             As more profiles are completed and verified, the ones worth your attention appear here.
           </EmptyState>

@@ -16,6 +16,15 @@ import {
   VerificationStatus,
   can,
 } from '../lib/permissions';
+import {
+  BUSINESS_STATUS_LABEL,
+  bookingStatusLabel,
+  humanize,
+  labelFrom,
+  milestoneLabel,
+  paymentStatusLabel,
+  roleLabel,
+} from '../lib/labels';
 
 /** What an officer wrote up after attending. */
 interface VerificationFindings {
@@ -1416,7 +1425,7 @@ export function CaseRow({
           <span className="font-medium text-gray-800">
             {item.raisedByName ?? item.raisedByEmail}
           </span>
-          {item.raisedByRole ? ` · ${item.raisedByRole}` : ''}
+          {item.raisedByRole ? ` · ${roleLabel(item.raisedByRole)}` : ''}
           {item.raisedByName && item.raisedByEmail ? ` · ${item.raisedByEmail}` : ''}
         </p>
       )}
@@ -1424,7 +1433,7 @@ export function CaseRow({
       {item.booking && (
         <div className="rounded-sm bg-gray-50 p-2 text-sm text-gray-700">
           <p className="font-medium text-gray-900">
-            Booking {item.booking.id.slice(0, 8)} · {item.booking.status.replace(/_/g, ' ')}
+            Booking {item.booking.id.slice(0, 8)} · {bookingStatusLabel(item.booking.status)}
           </p>
           <p className="text-gray-600">
             {item.booking.currency} {Number(item.booking.amount).toLocaleString('en-IN')}
@@ -1442,8 +1451,8 @@ export function CaseRow({
           <ul className="mt-1 space-y-0.5">
             {item.payments.map((p, i) => (
               <li key={i} className="text-gray-600">
-                <span className="capitalize">{p.milestone.replace(/_/g, ' ')}</span> ·{' '}
-                <span className="capitalize">{p.status.replace(/_/g, ' ')}</span> ·{' '}
+                <span>{milestoneLabel(p.milestone)}</span> ·{' '}
+                <span>{paymentStatusLabel(p.status, 'admin')}</span> ·{' '}
                 {Number(p.amount).toLocaleString('en-IN')}
                 {Number(p.payoutAmount) > 0
                   ? ` · payout ${Number(p.payoutAmount).toLocaleString('en-IN')}`
@@ -1461,10 +1470,10 @@ export function CaseRow({
       {item.business && (
         <div className="rounded-sm bg-gray-50 p-2 text-sm text-gray-700">
           <p className="font-medium text-gray-900">
-            {item.business.name} · <span className="capitalize">{item.business.category.replace(/_/g, ' ')}</span>
+            {item.business.name} · <span>{humanize(item.business.category)}</span>
           </p>
           <p className="text-gray-600">
-            <span className="capitalize">{item.business.status.replace(/_/g, ' ')}</span>
+            <span>{labelFrom(BUSINESS_STATUS_LABEL, item.business.status)}</span>
             {item.business.isApproved ? ' · approved' : ' · not approved'}
             {item.business.city ? ` · ${item.business.city}` : ''}
             {item.business.revisionCount > 0 ? ` · ${item.business.revisionCount} revisions` : ''}

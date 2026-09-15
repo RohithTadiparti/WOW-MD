@@ -22,6 +22,7 @@ import {
 import { ApplicantType, BusinessStatus, UserRole } from '../../common/enums';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { AuditAction, AuditService } from '../../platform/audit/audit.service';
+import { RedisService } from '../../platform/redis/redis.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../../common/enums';
 
@@ -53,6 +54,8 @@ export class BusinessLifecycleService {
     private readonly verification: VerificationService,
     private readonly audit: AuditService,
     private readonly notifications: NotificationsService,
+    // Search results are cached; a status change decides who appears in them.
+    private readonly redis: RedisService,
   ) {}
 
   private async owned(actor: AuthUser, businessId: string): Promise<Vendor> {
@@ -418,6 +421,20 @@ export class BusinessLifecycleService {
     business.status = to;
     business.isApproved = BUSINESS_RULES[to].visible;
     const saved = await this.vendors.save(business);
+
+    // Every status move can change who search shows — going live, being
+    // suspended or unlisted — and search is cached for a minute, so a vendor
+    // just approved was missing from it until the cache ran out. Cleared here,
+    // at the one writer of a business's status. A cache that cannot be reached
+    // must not undo a decision already saved; it expires on its own.
+    if (from !== to) {
+      try {
+        const keys = await this.redis.raw.keys('vendors:search:*');
+        if (keys.length) await this.redis.del(...keys);
+      } catch {
+        // The cached pages lapse within their 60-second lifetime regardless.
+      }
+    }
 
     await this.audit.record({
       action: AuditAction.VENDOR_APPROVED,

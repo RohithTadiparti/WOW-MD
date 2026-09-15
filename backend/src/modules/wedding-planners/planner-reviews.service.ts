@@ -16,6 +16,11 @@ import { CreatePlannerReviewDto } from './dto/wedding-planner.dto';
 import { Booking } from '../bookings/entities/booking.entity';
 import { User } from '../auth/entities/user.entity';
 import { Profile } from '../users/entities/profile.entity';
+import { WeddingEvent } from '../events/entities/event.entity';
+import { WeddingPlan } from '../planner/entities/wedding-plan.entity';
+import { Vendor } from '../vendors/entities/vendor.entity';
+import { bookingContextOf, weddingContextOf } from '../bookings/booking-venue';
+import { loadWeddingFacts } from '../bookings/wedding-facts';
 import { ReviewStatus } from '../../common/enums';
 import { screenText } from '../../common/util/text-moderation';
 import { RedisService } from '../../platform/redis/redis.service';
@@ -53,6 +58,10 @@ export class PlannerReviewsService {
     @InjectRepository(Booking) private readonly bookings: Repository<Booking>,
     @InjectRepository(User) private readonly users: Repository<User>,
     @InjectRepository(Profile) private readonly profiles: Repository<Profile>,
+    // Read-only: the day a reviewed booking was for, from the wedding.
+    @InjectRepository(WeddingEvent) private readonly events: Repository<WeddingEvent>,
+    @InjectRepository(WeddingPlan) private readonly plans: Repository<WeddingPlan>,
+    @InjectRepository(Vendor) private readonly vendors: Repository<Vendor>,
     private readonly dataSource: DataSource,
     private readonly redis: RedisService,
   ) {}
@@ -139,6 +148,10 @@ export class PlannerReviewsService {
       createdAt: Date;
       bookingId: string | null;
       eventDate: string | null;
+      /** The wedding's date: plan, else earliest function, else earliest vendor booking. */
+      weddingDate: string | null;
+      /** What was booked — a planner is booked for 'Wedding planning'. */
+      serviceName: string | null;
     }[];
   }> {
     const planner = await this.planners.findOne({ where: { id: plannerId } });
@@ -159,6 +172,32 @@ export class PlannerReviewsService {
       : [];
     const byId = new Map(bookings.map((b) => [b.id, b]));
 
+    // A planner booking carries no date of its own, so its column was null on
+    // every review. The day is the linked function's, else the booking form's,
+    // else the wedding's — the date the booking itself shows.
+    const eventIds = [...new Set(bookings.map((b) => b.eventId).filter(Boolean))] as string[];
+    const [linkedEvents, weddings] = await Promise.all([
+      eventIds.length ? this.events.find({ where: { id: In(eventIds) } }) : Promise.resolve([]),
+      loadWeddingFacts(
+        { plans: this.plans, events: this.events, bookings: this.bookings, vendors: this.vendors },
+        [...new Set(bookings.map((b) => b.userId))],
+      ),
+    ]);
+    const eventById = new Map(linkedEvents.map((e) => [e.id, e]));
+    const dayOf = (bookingId: string | null) => {
+      const booking = bookingId ? byId.get(bookingId) : undefined;
+      if (!booking) return null;
+      return bookingContextOf(
+        booking,
+        booking.eventId ? eventById.get(booking.eventId) : null,
+        weddings.get(booking.userId),
+      ).eventDate;
+    };
+    const weddingDateOf = (bookingId: string | null) => {
+      const wedding = bookingId ? weddings.get(byId.get(bookingId)?.userId ?? '') : undefined;
+      return wedding ? weddingContextOf(wedding).date : null;
+    };
+
     return {
       summary: await this.summary(plannerId),
       reviews: rows.map((r) => ({
@@ -168,7 +207,11 @@ export class PlannerReviewsService {
         categories: r.categories ?? {},
         createdAt: r.createdAt,
         bookingId: r.bookingId,
-        eventDate: r.bookingId ? (byId.get(r.bookingId)?.eventDate ?? null) : null,
+        eventDate: dayOf(r.bookingId),
+        weddingDate: weddingDateOf(r.bookingId),
+        // Every review here is of this planner, so a review on a booking is a
+        // review of their wedding planning.
+        serviceName: r.bookingId && byId.has(r.bookingId) ? 'Wedding planning' : null,
       })),
     };
   }

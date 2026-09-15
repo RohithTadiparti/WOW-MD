@@ -1,7 +1,7 @@
 import { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Receipt } from '@phosphor-icons/react';
-import { BOOKING_STATUS_LABEL } from '../lib/permissions';
+import { SELLER_STATUS_LABEL, humanize } from '../lib/labels';
 import { formatShortDate } from '../lib/dates';
 import { EmptyState, Loading } from './ui/Feedback';
 
@@ -16,6 +16,7 @@ export interface IncomingBooking {
   eventDate: string | null;
   createdAt: string;
   clientName: string | null;
+  clientEmail?: string | null;
   eventName: string | null;
   eventVenue: string | null;
   eventCity: string | null;
@@ -24,18 +25,9 @@ export interface IncomingBooking {
 
 export const rupees = (v: string | number) => `₹${Number(v || 0).toLocaleString('en-IN')}`;
 
-/** The server's business-status enum, humanised. */
-export const BUSINESS_STATUS_LABEL: Record<string, string> = {
-  draft: 'Draft',
-  ready_for_review: 'Ready for review',
-  first_review: 'In review',
-  pending_verification: 'Awaiting verification',
-  verification_in_progress: 'Verification in progress',
-  verified: 'Verified',
-  live: 'Live in search',
-  reverification_required: 'Re-verification required',
-  rejected: 'Rejected',
-};
+/** The server's business-status enum, humanised. Lives with the other labels
+ *  now; re-exported here for the screens that already import it from this file. */
+export { BUSINESS_STATUS_LABEL } from '../lib/labels';
 
 export function greeting(): string {
   const hour = new Date().getHours();
@@ -142,11 +134,12 @@ export function BookingList({
             <li key={b.id} className="flex items-center justify-between gap-3 py-2">
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-gray-900">
-                  {b.clientName ?? 'Customer'}
+                  {b.clientName ?? b.clientEmail ?? 'Customer'}
                   {b.serviceName && <span className="font-normal text-gray-500"> · {b.serviceName}</span>}
                 </p>
                 <p className="truncate text-xs text-gray-500">
-                  {BOOKING_STATUS_LABEL[b.status] ?? b.status}
+                  {/* The provider's own wording, as in the queue these open onto. */}
+                  {SELLER_STATUS_LABEL[b.status] ?? humanize(b.status)}
                   {Number(b.amount) > 0 ? ` · ${rupees(b.amount)}` : ''}
                 </p>
               </div>

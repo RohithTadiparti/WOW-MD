@@ -7,6 +7,7 @@ import { ServiceDefinition } from './entities/service-definition.entity';
 import { ServiceCategory } from './entities/service-category.entity';
 import { Vendor } from '../vendors/entities/vendor.entity';
 import { CatalogService } from './catalog.service';
+import { serviceNamesByIds } from './service-names';
 import { UpsertOfferingDto, UpsertVendorServiceDto } from './dto/catalog.dto';
 import { describeForm, validateAttributes } from './attribute-validation';
 import { AttributeScope, BusinessStatus, PricingModel, UserRole } from '../../common/enums';
@@ -346,7 +347,18 @@ export class VendorServicesService {
 
   /** Price changes waiting on somebody, across the platform. */
   async pendingPriceChanges(): Promise<
-    { offeringId: string; vendorId: string; name: string; from: string | null; to: string | null; since: Date | null }[]
+    {
+      offeringId: string;
+      vendorId: string;
+      /** The business asking for the change. */
+      vendorName: string | null;
+      /** The service the offering is priced under. */
+      serviceName: string | null;
+      name: string;
+      from: string | null;
+      to: string | null;
+      since: Date | null;
+    }[]
   > {
     const offerings = await this.offerings.find({
       where: { pendingPrice: Not(IsNull()) },
@@ -354,14 +366,25 @@ export class VendorServicesService {
     });
     if (offerings.length === 0) return [];
 
-    const services = await this.services.find({
-      where: { id: In(offerings.map((o) => o.vendorServiceId)) },
-    });
+    const serviceIds = [...new Set(offerings.map((o) => o.vendorServiceId))];
+    const [services, serviceNames] = await Promise.all([
+      this.services.find({ where: { id: In(serviceIds) } }),
+      serviceNamesByIds(this.services, serviceIds),
+    ]);
     const vendorOf = new Map(services.map((s) => [s.id, s.vendorId]));
+    // An administrator deciding on "Gold package: 40,000 to 55,000" needs to
+    // know whose package, under which service.
+    const vendorIds = [...new Set(services.map((s) => s.vendorId))];
+    const vendors = vendorIds.length
+      ? await this.vendors.find({ where: { id: In(vendorIds) } })
+      : [];
+    const vendorName = new Map(vendors.map((v) => [v.id, v.name]));
 
     return offerings.map((o) => ({
       offeringId: o.id,
       vendorId: vendorOf.get(o.vendorServiceId) ?? '',
+      vendorName: vendorName.get(vendorOf.get(o.vendorServiceId) ?? '') ?? null,
+      serviceName: serviceNames.get(o.vendorServiceId) ?? null,
       name: o.name,
       from: o.price,
       to: o.pendingPrice,

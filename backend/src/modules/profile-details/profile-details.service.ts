@@ -825,6 +825,9 @@ export class ProfileDetailsService {
         city: profile.city,
         gender: profile.gender,
         dateOfBirth: profile.dateOfBirth,
+        // The same band the limited view shows, so a client renders one field
+        // whichever view it was given.
+        ageRange: ageBand(profile.dateOfBirth),
         photos: profile.photos ?? [],
         bio: profile.bio,
         // Whether a verification officer has seen the document, which is the

@@ -108,9 +108,11 @@ export default function MyBusiness() {
             The account is locked while it is rejected — Business Details, Services, Availability
             and Bookings cannot be changed. If you think this is a mistake, raise it on Support.
           </Body>
-          <Caption tone="faint">
-            Support is on the web app for now; this screen does not raise a case on its own.
-          </Caption>
+          <Button
+            label="Raise it on Support"
+            variant="outline"
+            onPress={() => router.push('/support')}
+          />
         </Card>
       </Screen>
     );

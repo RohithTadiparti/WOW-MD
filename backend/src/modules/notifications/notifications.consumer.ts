@@ -9,7 +9,11 @@ import { Vendor } from '../vendors/entities/vendor.entity';
 import { PlannerProfile } from '../wedding-planners/entities/planner-profile.entity';
 import { VendorService } from '../catalog/entities/vendor-service.entity';
 import { ServiceDefinition } from '../catalog/entities/service-definition.entity';
-import { NotificationType, ProviderType } from '../../common/enums';
+import { User } from '../auth/entities/user.entity';
+import { WeddingEvent } from '../events/entities/event.entity';
+import { NotificationType, ProviderType, UserRole } from '../../common/enums';
+import { bookingContextOf } from '../bookings/booking-venue';
+import { displayNamesByUserIds } from '../users/display-names';
 
 /**
  * Translates domain events (delivered via the outbox to the event bus) into
@@ -36,6 +40,11 @@ export class NotificationsConsumer implements OnModuleInit {
     @InjectRepository(VendorService) private readonly services: Repository<VendorService>,
     @InjectRepository(ServiceDefinition)
     private readonly definitions: Repository<ServiceDefinition>,
+    // Read-only: who a canceller is, and the email that names an account with
+    // no profile.
+    @InjectRepository(User) private readonly users: Repository<User>,
+    // Read-only: the linked function's date, which is the booking's date.
+    @InjectRepository(WeddingEvent) private readonly events: Repository<WeddingEvent>,
   ) {}
 
   onModuleInit() {
@@ -150,10 +159,19 @@ export class NotificationsConsumer implements OnModuleInit {
     const booking = await this.bookings.findOne({ where: { id: bookingId } });
     if (!booking) return;
 
-    const sellerUserId = await this.providerOwner(booking);
+    const seller = await this.provider(booking);
+    const sellerUserId = seller?.ownerUserId ?? null;
     const recipients = new Set<string>();
     if (to !== 'buyer' && sellerUserId) recipients.add(sellerUserId);
-    if (to !== 'seller') recipients.add(booking.userId);
+    if (to !== 'seller') {
+      recipients.add(booking.userId);
+      // A planner or agent who placed the request for the couple is waiting on
+      // the answer too; telling only the couple left them to find out by
+      // opening the booking.
+      if (booking.bookedByUserId && booking.bookedByUserId !== booking.userId) {
+        recipients.add(booking.bookedByUserId);
+      }
+    }
 
     // A directed event already encodes who did it — a request goes to the
     // seller precisely because the buyer sent it — so nothing needs
@@ -164,23 +182,46 @@ export class NotificationsConsumer implements OnModuleInit {
     }
     if (recipients.size === 0) return;
 
-    const [buyerProfile, serviceName] = await Promise.all([
+    const cancelledBy = typeof extra.cancelledBy === 'string' ? extra.cancelledBy : null;
+    const [buyerProfile, buyer, serviceName, event, canceller] = await Promise.all([
       this.profiles.findOne({ where: { userId: booking.userId } }),
+      this.users.findOne({ where: { id: booking.userId }, select: ['id', 'email'] }),
       this.serviceName(booking),
+      booking.eventId
+        ? this.events.findOne({ where: { id: booking.eventId } })
+        : Promise.resolve(null),
+      cancelledBy
+        ? this.users.findOne({ where: { id: cancelledBy }, select: ['id', 'role'] })
+        : Promise.resolve(null),
     ]);
 
-    // Who cancelled, in words the recipient can act on (EZ1-I77): the side
-    // (customer or provider) and their name, resolved from the payload's
-    // cancelledBy so the notification can say who, not just that it happened.
+    // Who cancelled, in words the recipient can act on (EZ1-I77): the side and
+    // their name, resolved from the payload's cancelledBy. A provider is named
+    // by their business, because most provider accounts have no profile, and
+    // anybody who is neither party nor acting for the customer is platform
+    // staff — which used to read as "the provider" with no name.
     let cancelledByName: string | null = null;
     let cancelledByRole: string | null = null;
-    if (typeof extra.cancelledBy === 'string') {
-      const isBuyer = extra.cancelledBy === booking.userId;
-      cancelledByRole = isBuyer ? 'the customer' : 'the provider';
-      const cancellerProfile = isBuyer
-        ? buyerProfile
-        : await this.profiles.findOne({ where: { userId: extra.cancelledBy } });
-      cancelledByName = cancellerProfile?.displayName ?? null;
+    if (cancelledBy) {
+      if (cancelledBy === sellerUserId) {
+        cancelledByRole = 'the provider';
+        cancelledByName = seller?.name ?? null;
+      } else if (canceller?.role === UserRole.ADMIN || canceller?.role === UserRole.IN_PERSON) {
+        cancelledByRole = 'the support team';
+        cancelledByName = 'Support team';
+      } else {
+        cancelledByRole = 'the customer';
+        const names = await displayNamesByUserIds(
+          {
+            users: this.users,
+            profiles: this.profiles,
+            vendors: this.vendors,
+            planners: this.planners,
+          },
+          [cancelledBy],
+        );
+        cancelledByName = names.get(cancelledBy) ?? null;
+      }
     }
 
     const payload = {
@@ -189,11 +230,16 @@ export class NotificationsConsumer implements OnModuleInit {
       // Short enough to read out, long enough not to collide in one vendor's book.
       reference: booking.id.slice(0, 8),
       status: booking.status,
-      clientName: buyerProfile?.displayName ?? 'A client',
+      clientName: buyerProfile?.displayName ?? buyer?.email ?? 'A client',
       service: serviceName,
-      eventDate: booking.eventDate,
+      // The linked function's date, else the booking's own, else the date on
+      // the booking form — the same date the booking itself shows.
+      eventDate: bookingContextOf(booking, event).eventDate,
       slotId: booking.slotId,
-      amount: booking.amount,
+      // An event that carries its own amount — a quotation's price, an
+      // instalment — keeps it. Spreading the booking total over it told a
+      // couple they had been quoted 0.00 on a request not yet priced.
+      amount: extra.amount ?? booking.amount,
       currency: booking.currency,
       cancelledByName,
       cancelledByRole,
@@ -204,13 +250,16 @@ export class NotificationsConsumer implements OnModuleInit {
     }
   }
 
-  private async providerOwner(booking: Booking): Promise<string | null> {
+  /** The account that owns the booked listing, and the business's name. */
+  private async provider(
+    booking: Booking,
+  ): Promise<{ ownerUserId: string; name: string | null } | null> {
     if (booking.providerType === ProviderType.VENDOR) {
       const vendor = await this.vendors.findOne({ where: { id: booking.providerId } });
-      return vendor?.ownerUserId ?? null;
+      return vendor ? { ownerUserId: vendor.ownerUserId, name: vendor.name ?? null } : null;
     }
     const planner = await this.planners.findOne({ where: { id: booking.providerId } });
-    return planner?.ownerUserId ?? null;
+    return planner ? { ownerUserId: planner.ownerUserId, name: planner.agencyName ?? null } : null;
   }
 
   /** What was booked, in words. Falls back gracefully for pre-catalog rows. */

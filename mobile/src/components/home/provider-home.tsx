@@ -4,13 +4,15 @@ import { useQuery } from '@tanstack/react-query';
 import { CaretRight } from 'phosphor-react-native';
 
 import { api } from '@/lib/api';
-import { tabForStatus } from '@/lib/bookings';
+import { SELLER_STATUS_LABEL, tabForStatus } from '@/lib/bookings';
 import { BUSINESS_STATUS_LABEL, businessTone } from '@/lib/business-status';
 import { rupees, shortDate } from '@/lib/format';
-import { BOOKING_STATUS_LABEL } from '@/shared/permissions';
+import { isPlannerAccount, usePlannerListing } from '@/lib/planner-listing';
 import { Badge, SectionHeader, StatTile, TileGrid } from '@/components/chrome';
 import { BusinessSwitcher } from '@/components/business/switcher';
+import { PlannerAgencyCard, PlannerBook } from '@/components/home/planner-home';
 import { Body, Caption, Card, Loading, SectionTitle } from '@/components/ui';
+import { useAuth } from '@/store/auth';
 import { useBusinesses } from '@/store/business';
 import { rgb, space, useTheme } from '@/theme';
 
@@ -29,6 +31,7 @@ interface IncomingBooking {
   eventDate: string | null;
   createdAt: string;
   clientName: string | null;
+  clientEmail: string | null;
   eventName: string | null;
   eventVenue: string | null;
   eventCity: string | null;
@@ -91,18 +94,33 @@ export function ProviderHome() {
     ...live,
   });
 
+  // A planner has no vendor listing. Their rating and their windows are on the
+  // one planner listing, and asking /vendors/me for them answered with an empty
+  // business card, "No reviews" and a blank Open windows.
+  const permissions = useAuth((s) => s.user?.permissions ?? []);
+  const isPlanner = isPlannerAccount(permissions);
+  const planner = usePlannerListing(isPlanner);
+
   const vendorRows = useQuery({
     queryKey: ['vendor-me'],
     queryFn: async () =>
       (await api.get('/vendors/me')).data as { id: string; ratingAvg: number; ratingCount: number }[],
+    enabled: !isPlanner,
     retry: false,
   });
 
+  const windowsId = isPlanner ? (planner.data?.id ?? null) : activeId;
   const slots = useQuery({
-    queryKey: ['availability-summary', activeId],
+    queryKey: ['availability-summary', isPlanner ? 'planner' : 'vendor', windowsId],
     queryFn: async () =>
-      (await api.get(`/vendors/${activeId}/availability/summary`)).data as { openSlots: number },
-    enabled: Boolean(activeId),
+      (
+        await api.get(
+          isPlanner
+            ? `/wedding-planners/${windowsId}/availability/summary`
+            : `/vendors/${windowsId}/availability/summary`,
+        )
+      ).data as { openSlots: number },
+    enabled: Boolean(windowsId),
     retry: false,
   });
 
@@ -122,11 +140,12 @@ export function ProviderHome() {
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, 5);
 
-  // This month's earnings, from the escrow ledger: released payouts confirmed
-  // (or, failing a confirmation timestamp, created) in the current month.
+  // This month's earnings, from the escrow ledger: payouts confirmed (or,
+  // failing a confirmation timestamp, created) in the current month. A payment
+  // a case settled in part counts as paid out, the same as on Accounts.
   const now = new Date();
   const thisMonth = (earnings.data?.ledger ?? []).reduce((sum, payment) => {
-    if (payment.status !== 'released') return sum;
+    if (payment.status !== 'released' && payment.status !== 'partially_settled') return sum;
     const at = new Date(payment.confirmedAt ?? payment.createdAt);
     if (at.getFullYear() === now.getFullYear() && at.getMonth() === now.getMonth()) {
       return sum + Number(payment.payoutAmount || 0);
@@ -134,15 +153,22 @@ export function ProviderHome() {
     return sum;
   }, 0);
 
-  const row = vendorRows.data?.find((v) => v.id === activeId);
+  const row = isPlanner ? planner.data : vendorRows.data?.find((v) => v.id === activeId);
   const ratingAvg = row?.ratingAvg ?? 0;
   const ratingCount = row?.ratingCount ?? 0;
 
   return (
     <View style={{ gap: space(4) }}>
-      <BusinessSwitcher />
+      {isPlanner ? (
+        <>
+          <PlannerAgencyCard listing={planner.data ?? null} loading={planner.isLoading} />
+          <PlannerBook />
+        </>
+      ) : (
+        <BusinessSwitcher />
+      )}
 
-      {active ? (
+      {!isPlanner && active ? (
         <Card>
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space(2) }}>
             <SectionTitle style={{ flex: 1 }} numberOfLines={2}>
@@ -253,7 +279,9 @@ export function ProviderHome() {
       {all > 0 && (
         <Card>
           <SectionTitle>Booking status</SectionTitle>
-          {Object.entries(BOOKING_STATUS_LABEL)
+          {/* The seller's wording: the buyer's labels told a provider their own
+              queue was "Request sent" and "Quotation received" (EZ1-I259). */}
+          {Object.entries(SELLER_STATUS_LABEL)
             .filter(([status]) => (c[status] ?? 0) > 0)
             .map(([status, label]) => (
               <Pressable
@@ -380,7 +408,7 @@ function BookingList({
           <Pressable
             key={booking.id}
             accessibilityRole="button"
-            accessibilityLabel={`${booking.clientName ?? 'Customer'}, open this booking`}
+            accessibilityLabel={`${booking.clientName ?? booking.clientEmail ?? 'Customer'}, open this booking`}
             onPress={() => onOpen(booking.id)}
             style={({ pressed }) => [
               {
@@ -395,14 +423,14 @@ function BookingList({
           >
             <View style={{ flex: 1, gap: space(0.5) }}>
               <Body numberOfLines={1}>
-                {booking.clientName ?? 'Customer'}
+                {booking.clientName ?? booking.clientEmail ?? 'Customer'}
                 {booking.serviceName ? ` · ${booking.serviceName}` : ''}
               </Body>
               <Caption tone="faint" numberOfLines={1}>
                 {[booking.eventName, [booking.eventVenue, booking.eventCity].filter(Boolean).join(', ')]
                   .filter(Boolean)
                   .join(' · ') ||
-                  BOOKING_STATUS_LABEL[booking.status] ||
+                  SELLER_STATUS_LABEL[booking.status] ||
                   booking.status}
               </Caption>
             </View>

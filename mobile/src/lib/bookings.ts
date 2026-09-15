@@ -298,6 +298,10 @@ export const PAYMENT_LABEL: Record<string, string> = {
   pending_payout: 'Owed to you',
   released: 'Paid out',
   refunded: 'Refunded',
+  // A case settled part of it, some released and some returned. The web
+  // ledger's wording, so the card and Accounts say the same thing.
+  partially_settled: 'Part settled',
+  failed: 'Failed',
 };
 
 export const PAYMENT_TONE: Record<string, Tone> = {
@@ -307,6 +311,8 @@ export const PAYMENT_TONE: Record<string, Tone> = {
   pending_payout: 'caution',
   released: 'positive',
   refunded: 'critical',
+  partially_settled: 'brand',
+  failed: 'critical',
 };
 
 /**

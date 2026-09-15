@@ -53,6 +53,8 @@ export interface SupportCase {
   description: string;
   status: CaseStatus;
   assignedToUserId: string | null;
+  /** The assigned officer's name, when the server names them. */
+  assignedToName?: string | null;
   findings: string | null;
   settlementOutcome: string | null;
   settlementNotes?: string | null;
@@ -74,6 +76,9 @@ export interface SupportCase {
     currency: string;
     buyerName: string | null;
     providerName: string | null;
+    /** What was booked and for when, when the server returns them. */
+    serviceName?: string | null;
+    eventDate?: string | null;
   } | null;
   payments?:
     | {

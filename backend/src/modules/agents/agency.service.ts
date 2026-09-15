@@ -138,6 +138,16 @@ export class AgencyService {
     agency.rejectionReason = null;
     const saved = await this.agencies.save(agency);
 
+    // The request raised when the agency submitted its details is decided too,
+    // or it stays in the officer queue and the SLA sweep later rejects an
+    // approved agency.
+    await this.verification.closeOnAdminApproval(
+      actor,
+      ApplicantType.AGENT,
+      agency.ownerUserId,
+      agency.id,
+    );
+
     await this.audit.record({
       action: AuditAction.AGENT_APPROVED,
       actor,

@@ -85,6 +85,20 @@ export class BookingChatService {
       };
     }
 
+    // The other half of a match-fixed couple may read the booking their partner
+    // placed (EZ1-I160), but the thread is between the two parties to it: a
+    // message sent from here would reach the partner, not the provider.
+    const isParty = actor.userId === buyerUserId || actor.userId === sellerUserId;
+    if (!isParty && actor.role !== UserRole.ADMIN) {
+      return {
+        bookingId,
+        canSend: false,
+        open: true,
+        note: 'Your partner booked this. Their conversation with the provider is here to read.',
+        withUserId,
+      };
+    }
+
     return { bookingId, canSend: true, open: true, note: 'Open.', withUserId };
   }
 

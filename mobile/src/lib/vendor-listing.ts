@@ -43,10 +43,12 @@ export interface VendorListing {
   correctionFields?: string[] | null;
 }
 
-export function useMyListing() {
+/** `enabled` is false for a planner, whom this endpoint refuses. */
+export function useMyListing(enabled = true) {
   return useQuery<VendorListing[]>({
     queryKey: ['my-listing'],
     queryFn: async () => (await api.get('/vendors/me')).data,
+    enabled,
     // A provider who has not created a listing yet gets a 404; that is a normal
     // first-run state, not an error worth retrying.
     retry: false,
@@ -54,8 +56,8 @@ export function useMyListing() {
 }
 
 /** The one this screen is about, or undefined before the switcher has settled. */
-export function useActiveListing(activeId: string | null) {
-  const query = useMyListing();
+export function useActiveListing(activeId: string | null, enabled = true) {
+  const query = useMyListing(enabled);
   return {
     ...query,
     listing: (query.data ?? []).find((l) => l.id === activeId),

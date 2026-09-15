@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { formatDate } from '../lib/dates';
-import { BOOKING_STATUS_LABEL } from '../lib/permissions';
+import { bookingStatusLabel, formatMoney, humanize, paymentStatusLabel } from '../lib/labels';
 
 export interface PlacedBooking {
   bookingId: string;
@@ -16,6 +16,8 @@ export interface PlacedBooking {
   paymentStatus: string | null;
   amount: string;
   currency: string;
+  /** The newest offer, while the vendor's price is not yet agreed. */
+  quotation?: { amount: string; currency?: string; stage?: string } | null;
   eventDate: string | null;
   venue: string | null;
   city: string | null;
@@ -54,7 +56,7 @@ export function PlacedBookingFacts({ booking: b }: { booking: PlacedBooking }) {
         <span className="font-normal text-gray-500"> · for {b.clientName}</span>
       </p>
       <p className="text-xs text-gray-600">
-        <span className="capitalize">{b.category.replace(/_/g, ' ')}</span>
+        <span>{humanize(b.category)}</span>
         {[b.service, b.package].filter(Boolean).map((part) => ` · ${part}`).join('')}
       </p>
       <p className="text-xs text-gray-600">
@@ -73,11 +75,15 @@ export function PlacedBookingFacts({ booking: b }: { booking: PlacedBooking }) {
       <p className="text-xs text-gray-500">
         {Number(b.amount) > 0
           ? money(b.amount, b.currency)
-          : b.status === 'quotation_sent'
-            ? 'Quotation with the couple'
-            : 'Awaiting a quotation'}
-        {` · ${BOOKING_STATUS_LABEL[b.status] ?? b.status.replace(/_/g, ' ')}`}
-        {b.paymentStatus ? ` · ${b.paymentStatus.replace(/_/g, ' ')}` : ''}
+          : b.quotation && Number(b.quotation.amount) > 0
+            ? `Quoted ${formatMoney(b.quotation.amount, b.quotation.currency ?? b.currency)}`
+            : b.status === 'quotation_sent'
+              ? 'Quotation with the couple'
+              : 'Awaiting a quotation'}
+        {` · ${bookingStatusLabel(b.status)}`}
+        {/* Where the couple's money is, in the same neutral words the
+            administrator reads — the planner is watching, not paying. */}
+        {b.paymentStatus ? ` · ${paymentStatusLabel(b.paymentStatus, 'admin')}` : ''}
         {` · asked ${formatDate(b.createdAt)}`}
       </p>
     </div>

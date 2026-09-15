@@ -4,7 +4,22 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CaretLeft, CaretDown } from '@phosphor-icons/react';
 import { api, apiMessage } from '../../lib/api';
 import { formatDate } from '../../lib/dates';
-import { BOOKING_STATUS_LABEL } from '../../lib/permissions';
+import {
+  BOOKING_STATUS_LABEL,
+  CASE_STATUS_LABEL,
+  VERIFICATION_LABEL,
+  type ProfileLifecycle,
+  LIFECYCLE_LABEL,
+} from '../../lib/permissions';
+import {
+  BUSINESS_STATUS_LABEL,
+  bookingAmountLabel,
+  humanize,
+  labelFrom,
+  milestoneLabel,
+  paymentStatusLabel,
+  roleLabel,
+} from '../../lib/labels';
 import { EmptyState, Loading } from '../../components/ui/Feedback';
 
 /**
@@ -60,6 +75,8 @@ interface BookingRow {
   currency: string;
   eventDate: string | null;
   createdAt: string;
+  /** The newest offer on a request with no agreed amount yet. */
+  quotation?: { amount: string; currency?: string; stage?: string } | null;
 }
 
 interface AccountDetail {
@@ -234,7 +251,7 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
           </Row>
           <Row label="Email">{user.email}</Row>
           <Row label="Mobile">{user.phone ?? '—'}</Row>
-          <Row label="Role">{user.role.replace(/_/g, ' ')}</Row>
+          <Row label="Role">{roleLabel(user.role)}</Row>
           <Row label="Registered">{formatDate(user.createdAt)}</Row>
           {user.managedByAgentId && (
             <Link className="btn-outline btn-sm mt-2" to={`/admin/agents/${user.managedByAgentId}`}>
@@ -283,7 +300,7 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
               <span className="min-w-0">
                 <span className="block truncate text-sm font-medium text-gray-900">{c.email}</span>
                 <span className="text-xs text-gray-500">
-                  {c.role.replace(/_/g, ' ')} · joined {formatDate(c.createdAt)}
+                  {roleLabel(c.role)} · joined {formatDate(c.createdAt)}
                 </span>
               </span>
               <span className={`pill ${c.isActive ? 'bg-positive-bg text-positive-fg' : 'bg-critical-bg text-critical-fg'}`}>
@@ -307,7 +324,7 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
             >
               <span className="truncate text-sm font-medium text-gray-800">{p.displayName}</span>
               <span className="text-xs text-gray-500">
-                {p.lifecycle}
+                {LIFECYCLE_LABEL[p.lifecycle as ProfileLifecycle] ?? humanize(p.lifecycle)}
                 {p.city ? ` · ${p.city}` : ''}
               </span>
             </Link>
@@ -328,9 +345,9 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
             >
               <span className="min-w-0">
                 <span className="block truncate text-sm font-medium text-gray-900">{b.name}</span>
-                <span className="text-xs text-gray-500">{b.category}</span>
+                <span className="text-xs text-gray-500">{humanize(b.category)}</span>
               </span>
-              <span className="pill bg-gray-100 text-gray-600">{b.status.replace(/_/g, ' ')}</span>
+              <span className="pill bg-gray-100 text-gray-600">{labelFrom(BUSINESS_STATUS_LABEL, b.status)}</span>
             </Link>
           )}
         />
@@ -404,13 +421,13 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
                   {b.serviceName ? ` · ${b.serviceName}` : ''}
                 </span>
                 <span className="text-xs text-gray-500">
-                  {b.eventDate ?? formatDate(b.createdAt)} · #{b.id.slice(0, 8)}
+                  {formatDate(b.eventDate ?? b.createdAt)} · #{b.id.slice(0, 8)}
                 </span>
               </span>
               <span className="flex items-center gap-2">
+                {/* The latest quotation, or "Not yet priced" — never ₹0. */}
                 <span className="text-sm font-medium tabular-nums text-gray-900">
-                  {b.currency === 'INR' ? '₹' : `${b.currency} `}
-                  {Number(b.amount).toLocaleString('en-IN')}
+                  {bookingAmountLabel(b)}
                 </span>
                 <span className="pill bg-brand-soft text-brand-strong">
                   {BOOKING_STATUS_LABEL[b.status] ?? b.status}
@@ -434,11 +451,10 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
             >
               <span className="min-w-0">
                 <span className="block text-sm font-medium tabular-nums text-gray-900">
-                  {b.currency === 'INR' ? '₹' : `${b.currency} `}
-                  {Number(b.amount).toLocaleString('en-IN')}
+                  {bookingAmountLabel(b)}
                 </span>
                 <span className="text-xs text-gray-500">
-                  {b.eventDate ?? formatDate(b.createdAt)} · #{b.id.slice(0, 8)}
+                  {formatDate(b.eventDate ?? b.createdAt)} · #{b.id.slice(0, 8)}
                 </span>
               </span>
               <span className="pill bg-brand-soft text-brand-strong">
@@ -457,9 +473,9 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
           render={(v) => (
             <div key={v.id} className="flex items-center justify-between gap-3 py-2">
               <span className="text-sm text-gray-800">
-                {v.applicantType} · #{v.id.slice(0, 8)}
+                {humanize(v.applicantType)} · #{v.id.slice(0, 8)}
               </span>
-              <span className="pill bg-gray-100 text-gray-600">{v.status.replace(/_/g, ' ')}</span>
+              <span className="pill bg-gray-100 text-gray-600">{labelFrom(VERIFICATION_LABEL, v.status)}</span>
             </div>
           )}
         />
@@ -493,9 +509,9 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
             render={(d) => (
               <div key={d.id} className="flex items-center justify-between gap-3 py-2 text-sm">
                 <span className="text-gray-700">
-                  {d.applicantType} · {d.decidedAt ? formatDate(d.decidedAt) : formatDate(d.createdAt)}
+                  {humanize(d.applicantType)} · {d.decidedAt ? formatDate(d.decidedAt) : formatDate(d.createdAt)}
                 </span>
-                <span className="pill bg-gray-100 text-gray-600">{d.status.replace(/_/g, ' ')}</span>
+                <span className="pill bg-gray-100 text-gray-600">{labelFrom(VERIFICATION_LABEL, d.status)}</span>
               </div>
             )}
           />
@@ -512,7 +528,7 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
               render={(c) => (
                 <div key={c.id} className="flex items-center justify-between gap-3 py-2">
                   <span className="truncate text-sm text-gray-800">{c.title}</span>
-                  <span className="pill bg-gray-100 text-gray-600">{c.status.replace(/_/g, ' ')}</span>
+                  <span className="pill bg-gray-100 text-gray-600">{labelFrom(CASE_STATUS_LABEL, c.status)}</span>
                 </div>
               )}
             />
@@ -525,7 +541,7 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
               render={(c) => (
                 <div key={c.id} className="flex items-center justify-between gap-3 py-2">
                   <span className="truncate text-sm text-gray-800">{c.title}</span>
-                  <span className="pill bg-gray-100 text-gray-600">{c.status.replace(/_/g, ' ')}</span>
+                  <span className="pill bg-gray-100 text-gray-600">{labelFrom(CASE_STATUS_LABEL, c.status)}</span>
                 </div>
               )}
             />
@@ -541,11 +557,11 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
           render={(p) => (
             <div key={p.id} className="flex items-center justify-between gap-3 py-2 text-sm">
               <span className="text-gray-600">
-                {formatDate(p.createdAt)} · <span className="capitalize">{p.milestone.replace(/_/g, ' ')}</span>
+                {formatDate(p.createdAt)} · <span>{milestoneLabel(p.milestone)}</span>
               </span>
               <span className="flex items-center gap-3">
                 <span className="font-medium tabular-nums text-gray-900">{money(p.amount)}</span>
-                <span className="pill bg-gray-100 text-gray-600">{p.status.replace(/_/g, ' ')}</span>
+                <span className="pill bg-gray-100 text-gray-600">{paymentStatusLabel(p.status, 'admin')}</span>
               </span>
             </div>
           )}

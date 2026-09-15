@@ -4,6 +4,14 @@ import { useSearchParams } from 'react-router-dom';
 import { api, apiMessage } from '../lib/api';
 import { useAuth } from '../store/auth';
 import { BOOKING_STATUS_LABEL, MILESTONE_LABEL, Permission, can, canAny } from '../lib/permissions';
+import { formatDate, formatDateTime } from '../lib/dates';
+import {
+  CANCELLED_BY_LABEL,
+  labelFrom,
+  partialListNote,
+  paymentStatusLabel,
+  quotationStatusLabel,
+} from '../lib/labels';
 import ProviderBookings from '../components/ProviderBookings';
 import PlacedForClients from '../components/PlacedForClients';
 import BookingChat from '../components/BookingChat';
@@ -228,10 +236,29 @@ export default function Bookings() {
 
   // Every booking is fetched once and filtered on the client (EZ1-I141): that is
   // what lets the status tabs carry live counts and switch without a round-trip.
+  //
+  // The whole page the server allows, not its default twenty: the tabs were
+  // counted from the first twenty rows and disagreed with the dashboard, which
+  // counts every booking.
   const { data, isLoading } = useQuery({
     queryKey: ['bookings'],
-    queryFn: async () => (await api.get('/bookings')).data,
+    queryFn: async () => (await api.get('/bookings', { params: { limit: 100 } })).data,
     enabled: canBuy,
+  });
+
+  // The dashboard's own tally, so "All", "Completed" and "Cancelled" read the
+  // same number here as on the tiles that link to them.
+  const { data: serverCounts } = useQuery({
+    queryKey: ['my-booking-counts'],
+    queryFn: async () =>
+      (await api.get('/bookings/counts')).data as {
+        all: number;
+        active: number;
+        cancelled: number;
+        completed: number;
+      },
+    enabled: canBuy,
+    retry: false,
   });
 
   async function run(fn: () => Promise<unknown>) {
@@ -291,7 +318,20 @@ export default function Bookings() {
     return def ? def.statuses.includes(b.status) : b.status === tab;
   };
   const bookings: Booking[] = allBookings.filter((b) => matchesTab(b, status));
-  const countFor = (tab: string) => allBookings.filter((b) => matchesTab(b, tab)).length;
+  // The tabs the dashboard also counts take the server's figure; the finer
+  // buckets are counted from the rows, which is every booking up to a hundred.
+  const countFor = (tab: string) => {
+    if (serverCounts) {
+      if (tab === '') return serverCounts.all;
+      if (tab === 'completed') return serverCounts.completed;
+      if (tab === 'cancelled') return serverCounts.cancelled;
+    }
+    return allBookings.filter((b) => matchesTab(b, tab)).length;
+  };
+  const partialNote = partialListNote(
+    allBookings.length,
+    data?.meta?.total ?? serverCounts?.all,
+  );
 
   return (
     <div className="space-y-6">
@@ -334,6 +374,7 @@ export default function Bookings() {
 
       {error && <p className="alert-critical">{error}</p>}
       {isLoading && <Loading rows={3} />}
+      {partialNote && <p className="text-xs text-gray-500">{partialNote}.</p>}
 
       <div className="space-y-3">
         {!isLoading && bookings.length === 0 && (
@@ -409,7 +450,9 @@ export default function Bookings() {
                 <p className="text-base font-semibold text-gray-900">
                   {priced ? `${b.currency} ${b.amount}` : 'Not yet priced'}
                 </p>
-                {b.eventDate && <p className="mt-0.5 text-xs text-gray-500">{b.eventDate}</p>}
+                {b.eventDate && (
+                  <p className="mt-0.5 text-xs text-gray-500">{formatDate(b.eventDate)}</p>
+                )}
               </div>
             </div>
 
@@ -421,7 +464,7 @@ export default function Bookings() {
                 </span>
                 {b.paymentStatus && (
                   <span className="rounded-full bg-brand-soft px-2 py-0.5 text-xs text-brand-strong">
-                    {b.paymentStatus.replace(/_/g, ' ')}
+                    {paymentStatusLabel(b.paymentStatus, 'buyer')}
                   </span>
                 )}
               </div>
@@ -921,8 +964,10 @@ function BookingDetail({
           <ol className="mt-1 space-y-1 border-l-2 border-gray-200 pl-3">
             {timeline.map((e, i) => (
               <li key={i} className="text-xs text-gray-600">
-                <span className="text-gray-400">{new Date(e.at).toLocaleString()} · </span>
-                <span className="font-medium capitalize text-gray-800">{e.label}</span>
+                <span className="text-gray-400">{formatDateTime(e.at)} · </span>
+                {/* The server writes these as sentences; capitalising every word
+                    turned "released to the provider" into a title. */}
+                <span className="font-medium text-gray-800">{e.label}</span>
                 {e.detail ? ` — ${e.detail}` : ''}
               </li>
             ))}
@@ -936,12 +981,16 @@ function BookingDetail({
           <p className="font-medium text-red-900">Cancelled</p>
           <p className="mt-1 text-red-900">
             {booking.cancelledByName || booking.cancelledByRole
-              ? `Cancelled by ${[booking.cancelledByName, booking.cancelledByRole && `(${booking.cancelledByRole})`]
+              ? `Cancelled by ${[
+                  booking.cancelledByName,
+                  booking.cancelledByRole &&
+                    `(${labelFrom(CANCELLED_BY_LABEL, booking.cancelledByRole)})`,
+                ]
                   .filter(Boolean)
                   .join(' ')}`
               : 'This booking was cancelled.'}
             {booking.cancelledAt
-              ? ` on ${new Date(booking.cancelledAt).toLocaleString()}`
+              ? ` on ${formatDateTime(booking.cancelledAt)}`
               : ''}
           </p>
           <p className="mt-1 text-red-900">
@@ -978,7 +1027,7 @@ function BookingDetail({
               <p className="font-medium">
                 {q.currency} {q.amount}
               </p>
-              <span className="text-xs capitalize text-gray-500">{q.status}</span>
+              <span className="text-xs text-gray-500">{quotationStatusLabel(q.status)}</span>
             </div>
             {q.lines.length > 0 && (
               <ul className="mt-1 text-sm text-gray-600">
@@ -1001,7 +1050,7 @@ function BookingDetail({
             )}
             {q.validUntil && (
               <p className="mt-1 text-xs text-gray-500">
-                Valid until {new Date(q.validUntil).toLocaleDateString()}
+                Valid until {formatDate(q.validUntil)}
               </p>
             )}
             {live?.id === q.id && canPay && (
@@ -1046,8 +1095,8 @@ function BookingDetail({
                   </p>
                 </div>
                 {m.status ? (
-                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs capitalize text-gray-700">
-                    {m.status.replace(/_/g, ' ')}
+                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
+                    {paymentStatusLabel(m.status, 'buyer')}
                   </span>
                 ) : canPay && dueNow === m.milestone ? (
                   <div className="flex flex-col items-end gap-2">

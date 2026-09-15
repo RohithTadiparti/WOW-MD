@@ -5,8 +5,10 @@ import { Image } from 'expo-image';
 import { FileText, SealCheck } from 'phosphor-react-native';
 
 import { api, apiMessage } from '@/lib/api';
+import { ageFrom, labelFor, stewardshipLine, type Stewardship } from '@/lib/labels';
 import { isChartImage } from '@/shared/horoscope';
 import { formatDate } from '@/shared/dates';
+import { FAMILY_TYPE_LABEL, MARITAL_LABEL, OCCUPATION_LABEL } from '@/shared/permissions';
 import { DetailGrid, DetailRow } from '@/components/chrome';
 import {
   Body,
@@ -45,7 +47,13 @@ interface ProfileView {
     profileCode: string | null;
     city: string | null;
     gender: string | null;
-    ageRange: string | null;
+    /** The age band. On the basic card; the full view carries the date instead. */
+    ageRange?: string | null;
+    dateOfBirth?: string | null;
+    /** Only once both sides have accepted. */
+    bio?: string | null;
+    /** Who answers for this person. Null when they manage it themselves. */
+    stewardship?: Stewardship | null;
     photos: string[];
     identityVerified: boolean;
   };
@@ -83,6 +91,10 @@ export default function MatchProfile() {
   }
 
   const { profile } = data;
+  // The basic card answers with an age band and the full view with the date of
+  // birth, so the age is worked out from whichever came back.
+  const age = profile.ageRange ?? ageFrom(profile.dateOfBirth);
+  const steward = stewardshipLine(profile.stewardship);
   const d = (data.details ?? {}) as Record<string, unknown>;
   const text = (key: string): string | null => {
     const value = d[key];
@@ -109,8 +121,11 @@ export default function MatchProfile() {
           {profile.identityVerified ? <SealCheck size={20} weight="fill" color="#1f8a5b" /> : null}
         </View>
         <PageSubtitle>
-          {[profile.ageRange, profile.city, profile.profileCode].filter(Boolean).join(' · ')}
+          {[age, profile.city, profile.profileCode].filter(Boolean).join(' · ')}
         </PageSubtitle>
+        {/* Who a family will actually be speaking to. A father answering for his
+            daughter is a different conversation from an agency listing. */}
+        {steward ? <Caption tone="muted">{steward}</Caption> : null}
       </View>
 
       {profile.photos.length > 0 ? (
@@ -127,17 +142,24 @@ export default function MatchProfile() {
         </View>
       ) : null}
 
+      {profile.bio?.trim() ? (
+        <Card>
+          <SectionTitle>In their words</SectionTitle>
+          <Body tone="muted">{profile.bio}</Body>
+        </Card>
+      ) : null}
+
       <Card>
         <SectionTitle>About</SectionTitle>
         <DetailGrid>
-          <DetailRow label="Age">{profile.ageRange ?? '—'}</DetailRow>
+          <DetailRow label="Age">{age ?? '—'}</DetailRow>
           <DetailRow label="City">{profile.city ?? '—'}</DetailRow>
           <DetailRow label="Religion">{text('religion') ?? '—'}</DetailRow>
           <DetailRow label="Caste">{text('caste') ?? '—'}</DetailRow>
           <DetailRow label="Mother tongue">{text('motherTongue') ?? '—'}</DetailRow>
           <DetailRow label="Education">{text('highestQualification') ?? '—'}</DetailRow>
           <DetailRow label="Occupation">
-            {text('occupationStatus')?.replace(/_/g, ' ') ?? '—'}
+            {labelFor(OCCUPATION_LABEL, d.occupationStatus) ?? '—'}
           </DetailRow>
           {typeof d.heightCm === 'number' ? (
             <DetailRow label="Height">{`${d.heightCm} cm`}</DetailRow>
@@ -173,7 +195,9 @@ export default function MatchProfile() {
               <DetailRow label="Mother">
                 {(bag('mother').name as string | undefined) || '—'}
               </DetailRow>
-              <DetailRow label="Family type">{text('familyType') ?? '—'}</DetailRow>
+              <DetailRow label="Family type">
+                {labelFor(FAMILY_TYPE_LABEL, d.familyType) ?? '—'}
+              </DetailRow>
             </DetailGrid>
             {data.siblings.length > 0 ? (
               <Caption tone="muted">
@@ -196,7 +220,7 @@ export default function MatchProfile() {
             <SectionTitle>Marital status</SectionTitle>
             <DetailGrid>
               <DetailRow label="Status">
-                {text('maritalStatus')?.replace(/_/g, ' ') ?? '—'}
+                {labelFor(MARITAL_LABEL, d.maritalStatus) ?? '—'}
               </DetailRow>
               {typeof bag('maritalHistory').marriageDate === 'string' ? (
                 <DetailRow label="Married on">

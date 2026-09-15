@@ -5,6 +5,13 @@ import { ArrowLeft } from '@phosphor-icons/react';
 import { api, apiMessage } from '../lib/api';
 import { formatDate } from '../lib/dates';
 import { BOOKING_STATUS_LABEL } from '../lib/permissions';
+import {
+  RSVP_STATUS_LABEL,
+  TASK_STATUS_LABEL,
+  bookingAmountLabel,
+  humanize,
+  labelFrom,
+} from '../lib/labels';
 import { Loading } from '../components/ui/Feedback';
 
 /**
@@ -42,6 +49,9 @@ interface Workspace {
     providerName: string;
     category: string | null;
     providerType: string;
+    currency?: string;
+    /** The newest offer on a booking with no agreed amount yet. */
+    quotation?: { amount: string; currency?: string; stage?: string } | null;
   }[];
   guests: {
     summary: {
@@ -179,12 +189,14 @@ export default function PlannerEventWorkspace() {
                 >
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-900">{v.providerName}</p>
-                    <p className="text-xs capitalize text-gray-500">
-                      {String(v.category ?? v.providerType).replace(/_/g, ' ')}
+                    <p className="text-xs text-gray-500">
+                      {humanize(v.category ?? v.providerType)}
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-medium">{money(v.amount)}</p>
+                    {/* The latest offer, or "Not yet priced" — never ₹0 for a
+                        request nobody has quoted. */}
+                    <p className="text-sm font-medium">{bookingAmountLabel(v)}</p>
                     <p className="text-xs text-gray-500">
                       {BOOKING_STATUS_LABEL[v.status] ?? v.status.replace(/_/g, ' ')}
                     </p>
@@ -210,12 +222,12 @@ export default function PlannerEventWorkspace() {
                   <div>
                     <p className="text-sm font-medium text-gray-900">{t.title}</p>
                     <p className="text-xs text-gray-500">
-                      {t.category}
+                      {humanize(t.category, 'General')}
                       {t.dueDate ? ` · due ${formatDate(t.dueDate)}` : ''}
                     </p>
                   </div>
-                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs capitalize text-gray-600">
-                    {t.status.replace(/_/g, ' ')}
+                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+                    {labelFrom(TASK_STATUS_LABEL, t.status)}
                   </span>
                 </div>
               ))}
@@ -248,8 +260,8 @@ export default function PlannerEventWorkspace() {
                     className="flex flex-wrap items-center justify-between gap-2 py-2"
                   >
                     <p className="text-sm font-medium text-gray-900">{g.name}</p>
-                    <p className="text-xs capitalize text-gray-500">
-                      {g.status.replace(/_/g, ' ')}
+                    <p className="text-xs text-gray-500">
+                      {labelFrom(RSVP_STATUS_LABEL, g.status)}
                       {g.attendingCount != null ? ` · ${g.attendingCount} coming` : ''}
                     </p>
                   </div>

@@ -1,5 +1,11 @@
 import { PaymentStatus, QuotationStatus } from '../../common/enums';
-import { paymentBreakup, quotationStage, summariseQuotations, QuotationLike } from './booking-summary';
+import {
+  escrowSummary,
+  paymentBreakup,
+  quotationStage,
+  summariseQuotations,
+  QuotationLike,
+} from './booking-summary';
 
 const quote = (
   status: QuotationStatus,
@@ -101,5 +107,44 @@ describe('payment breakup', () => {
       payment(PaymentStatus.HELD_IN_ESCROW, '12000.00', '1200.00', '10800.00'),
     ]);
     expect(breakup.pending).toBe('0.00');
+  });
+});
+
+describe('escrow summary', () => {
+  const payment = (status: PaymentStatus, amount: string, commission: string, payout: string) => ({
+    amount,
+    commissionAmount: commission,
+    payoutAmount: payout,
+    status,
+  });
+
+  it('counts disputed money as held, a partial settlement as paid out and a pending payout as earned', () => {
+    expect(
+      escrowSummary([
+        payment(PaymentStatus.HELD_IN_ESCROW, '30000.00', '3000.00', '27000.00'),
+        payment(PaymentStatus.DISPUTED, '10000.00', '1000.00', '9000.00'),
+        payment(PaymentStatus.RELEASED, '20000.00', '2000.00', '18000.00'),
+        payment(PaymentStatus.PARTIALLY_SETTLED, '5000.00', '500.00', '4500.00'),
+        payment(PaymentStatus.PENDING_PAYOUT, '7000.00', '700.00', '6300.00'),
+        payment(PaymentStatus.REFUNDED, '4000.00', '0.00', '0.00'),
+        payment(PaymentStatus.FAILED, '9000.00', '900.00', '8100.00'),
+      ]),
+    ).toEqual({
+      held: '40000.00',
+      released: '25000.00',
+      refunded: '4000.00',
+      commission: '3200.00',
+      payout: '22500.00',
+    });
+  });
+
+  it('is all zeroes for a booking with no payments', () => {
+    expect(escrowSummary([])).toEqual({
+      held: '0.00',
+      released: '0.00',
+      refunded: '0.00',
+      commission: '0.00',
+      payout: '0.00',
+    });
   });
 });

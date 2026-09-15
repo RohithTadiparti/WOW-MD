@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from './api';
+import { Permission, can } from './permissions';
 import type { MatchFixedState, OnboardingStage } from './permissions';
+import { usePermissions } from '../store/auth';
 
 /**
  * Why sending an interest is closed, or undefined when it is open.
@@ -38,17 +40,29 @@ export function matchmakingGate(status?: MatchStatus): string | undefined {
   return undefined;
 }
 
-/** The gate for a profile, fetched. `profileId` is required for an agent. */
-export function useMatchmakingGate(profileId?: string): {
+/**
+ * The gate for a profile, fetched. `profileId` is required for an agent, and
+ * `enabled` lets a screen skip the question for an account that never matches.
+ */
+export function useMatchmakingGate(
+  profileId?: string,
+  enabled = true,
+): {
   status?: MatchStatus;
   gate?: string;
 } {
+  const permissions = usePermissions();
+  // An agent always acts for a client, and the server refuses the question
+  // without one — so until a client is chosen there is nothing to ask, and
+  // asking anyway put a 400 on Network Pool and Shared With Me.
+  const needsProfile = can(permissions, Permission.AGENCY_MANAGE);
   const { data } = useQuery({
     queryKey: ['match-status', profileId ?? 'self'],
     queryFn: async () =>
       (await api.get('/matches/status', { params: profileId ? { profileId } : {} }))
         .data as MatchStatus,
     retry: false,
+    enabled: enabled && (!needsProfile || Boolean(profileId)),
   });
   return { status: data, gate: matchmakingGate(data) };
 }

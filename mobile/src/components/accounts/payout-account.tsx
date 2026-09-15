@@ -8,16 +8,18 @@ import { Alert, Body, Button, Caption, Card, Field, SectionTitle } from '@/compo
 import { space } from '@/theme';
 
 /**
- * Where a vendor's money leaves escrow to.
+ * Where a provider's money leaves escrow to.
  *
  * Lives on Accounts alongside the rest of the payment picture rather than
- * inside My Business, which is only about the shop window.
+ * inside My Business, which is only about the shop window. The caller names the
+ * endpoint: a vendor's account is set per business, a planner's on their one
+ * listing at `/wedding-planners/me/payout-account`.
  */
 export function PayoutAccount({
-  vendorId,
+  endpoint,
   current,
 }: {
-  vendorId: string;
+  endpoint: string;
   current: string | null;
 }) {
   const qc = useQueryClient();
@@ -34,9 +36,9 @@ export function PayoutAccount({
     setNotice('');
     setBusy(true);
     try {
-      await api.put(`/vendors/${vendorId}/payout-account`, { payoutAccountId: value.trim() });
+      await api.put(endpoint, { payoutAccountId: value.trim() });
       await Promise.all(
-        ['my-listing', 'earnings', 'payout-account', 'vendor-me'].map((key) =>
+        ['my-listing', 'earnings', 'payout-account', 'vendor-me', 'planner-me'].map((key) =>
           qc.invalidateQueries({ queryKey: [key] }),
         ),
       );

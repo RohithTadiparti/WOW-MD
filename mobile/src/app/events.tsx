@@ -4,7 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarBlank, MapPin, UsersThree } from 'phosphor-react-native';
 
 import { api, apiMessage } from '@/lib/api';
-import { shortDate } from '@/lib/format';
+import { humanise, shortDate } from '@/lib/format';
+import { EVENT_STATUS_LABEL, clockTime } from '@/lib/labels';
 import { todayIso } from '@/shared/dates';
 import { Badge, StatTile, TileGrid } from '@/components/chrome';
 import { DateField, TimeField } from '@/components/form';
@@ -62,7 +63,9 @@ export default function Events() {
 
   const { data, isPending, isFetching, refetch } = useQuery({
     queryKey: ['events'],
-    queryFn: async () => (await api.get('/events', { params: { limit: 50 } })).data,
+    // No paging parameters: the endpoint takes none, and refused `limit` with a
+    // 400, so this screen always said "No events yet".
+    queryFn: async () => (await api.get('/events')).data,
     retry: false,
   });
 
@@ -90,7 +93,8 @@ export default function Events() {
     onError: (err) => setError(apiMessage(err, 'That link could not be created.')),
   });
 
-  const rows: WeddingEvent[] = data?.data ?? data?.items ?? [];
+  // A plain array, not the paged envelope.
+  const rows: WeddingEvent[] = Array.isArray(data) ? data : (data?.data ?? []);
 
   return (
     <ListScreen
@@ -150,13 +154,13 @@ export default function Events() {
               {row.name}
             </SectionTitle>
             <Badge tone={row.status === 'cancelled' ? 'critical' : 'brand'}>
-              {row.status.replace(/_/g, ' ')}
+              {EVENT_STATUS_LABEL[row.status] ?? humanise(row.status)}
             </Badge>
           </View>
 
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(3) }}>
             <Fact icon={<CalendarBlank size={14} color={rgb(theme.ink[400])} />}>
-              {[shortDate(row.eventDate), row.startTime].filter(Boolean).join(' · ')}
+              {[shortDate(row.eventDate), clockTime(row.startTime)].filter(Boolean).join(' · ')}
             </Fact>
             {row.venue || row.city ? (
               <Fact icon={<MapPin size={14} color={rgb(theme.ink[400])} />}>

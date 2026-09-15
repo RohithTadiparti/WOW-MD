@@ -24,11 +24,18 @@ import {
   UpdateRsvpDto,
 } from './dto/event.dto';
 import { Booking } from '../bookings/entities/booking.entity';
+import { Quotation } from '../bookings/entities/quotation.entity';
 import { Vendor } from '../vendors/entities/vendor.entity';
+import { PlannerProfile } from '../wedding-planners/entities/planner-profile.entity';
+import { VendorService } from '../catalog/entities/vendor-service.entity';
+import { User } from '../auth/entities/user.entity';
+import { serviceNamesByIds } from '../catalog/service-names';
+import { summariseQuotations } from '../bookings/booking-summary';
 import {
   BookingStatus,
   EventStatus,
   NotificationType,
+  ProviderType,
   RsvpStatus,
   UserRole,
 } from '../../common/enums';
@@ -64,6 +71,12 @@ export class EventsService {
     @InjectRepository(Booking) private readonly bookings: Repository<Booking>,
     @InjectRepository(Vendor) private readonly vendors: Repository<Vendor>,
     @InjectRepository(PlanTask) private readonly tasks: Repository<PlanTask>,
+    // Read-only, to name a planner booked for a day, the service booked, the
+    // price quoted, and a client with no profile.
+    @InjectRepository(PlannerProfile) private readonly planners: Repository<PlannerProfile>,
+    @InjectRepository(VendorService) private readonly vendorServices: Repository<VendorService>,
+    @InjectRepository(Quotation) private readonly quotations: Repository<Quotation>,
+    @InjectRepository(User) private readonly users: Repository<User>,
     private readonly cfg: AppConfigService,
     private readonly mail: MailService,
     private readonly moderation: ModerationService,
@@ -331,20 +344,49 @@ export class EventsService {
     });
     if (bookings.length === 0) return [];
 
-    const vendors = await this.vendors.find({
-      where: { id: In(bookings.map((b) => b.providerId)) },
-    });
+    // A planner booked against the day is a provider too: reading vendors
+    // alone named every planner "Provider", with no category and no service.
+    const idsOf = (type: ProviderType) => [
+      ...new Set(bookings.filter((b) => b.providerType === type).map((b) => b.providerId)),
+    ];
+    const vendorIds = idsOf(ProviderType.VENDOR);
+    const plannerIds = idsOf(ProviderType.PLANNER);
+    const [vendors, planners, serviceNames, quotes] = await Promise.all([
+      vendorIds.length ? this.vendors.find({ where: { id: In(vendorIds) } }) : Promise.resolve([]),
+      plannerIds.length
+        ? this.planners.find({ where: { id: In(plannerIds) } })
+        : Promise.resolve([]),
+      serviceNamesByIds(this.vendorServices, bookings.map((b) => b.vendorServiceId)),
+      this.quotations.find({ where: { bookingId: In(bookings.map((b) => b.id)) } }),
+    ]);
     const byId = new Map(vendors.map((v) => [v.id, v]));
+    const plannerById = new Map(planners.map((p) => [p.id, p]));
 
-    return bookings.map((b) => ({
-      bookingId: b.id,
-      status: b.status,
-      amount: b.amount,
-      providerId: b.providerId,
-      providerType: b.providerType,
-      providerName: byId.get(b.providerId)?.name ?? 'Provider',
-      category: byId.get(b.providerId)?.category ?? null,
-    }));
+    return bookings.map((b) => {
+      const isPlanner = b.providerType === ProviderType.PLANNER;
+      // The newest quotation and where it stands. `amount` stays the agreed
+      // total, which is 0.00 until a quotation is accepted.
+      const quotation = summariseQuotations(quotes.filter((q) => q.bookingId === b.id));
+      return {
+        bookingId: b.id,
+        status: b.status,
+        amount: b.amount,
+        currency: b.currency,
+        quotation,
+        quotedAmount: quotation?.amount ?? null,
+        providerId: b.providerId,
+        providerType: b.providerType,
+        providerName:
+          (isPlanner ? plannerById.get(b.providerId)?.agencyName : byId.get(b.providerId)?.name) ??
+          'Provider',
+        category: isPlanner ? 'Wedding planner' : (byId.get(b.providerId)?.category ?? null),
+        serviceName: b.vendorServiceId
+          ? (serviceNames.get(b.vendorServiceId) ?? null)
+          : isPlanner
+            ? 'Wedding planning'
+            : null,
+      };
+    });
   }
 
   /**
@@ -377,6 +419,12 @@ export class EventsService {
     const committed = vendors
       .filter((v) => v.status !== BookingStatus.CANCELLED)
       .reduce((n, v) => n + Number(v.amount ?? 0), 0);
+    // What is quoted but not yet agreed: live bookings whose total is still
+    // 0.00 while a quotation holds a price. Kept apart from `committed`, which
+    // stays what has actually been agreed.
+    const quoted = vendors
+      .filter((v) => v.status !== BookingStatus.CANCELLED && !Number(v.amount ?? 0))
+      .reduce((n, v) => n + Number(v.quotedAmount ?? 0), 0);
     const budgeted = Number(event.budget ?? 0);
 
     const attending = invites.filter((i) => i.status === RsvpStatus.ATTENDING);
@@ -429,6 +477,7 @@ export class EventsService {
       budget: {
         budgeted: budgeted.toFixed(2),
         committed: committed.toFixed(2),
+        quoted: quoted.toFixed(2),
         remaining: (budgeted - committed).toFixed(2),
         overBudget: committed > budgeted && budgeted > 0,
       },
@@ -477,12 +526,17 @@ export class EventsService {
     if (plans.length === 0) return [];
 
     const hostIds = [...new Set(plans.map((p) => p.userId))];
-    const profiles = await this.profiles.find({ where: { userId: In(hostIds) } });
+    const [profiles, users] = await Promise.all([
+      this.profiles.find({ where: { userId: In(hostIds) } }),
+      this.users.find({ where: { id: In(hostIds) }, select: ['id', 'email'] }),
+    ]);
     const nameByUser = new Map(profiles.map((p) => [p.userId as string, p.displayName]));
+    const emailByUser = new Map(users.map((u) => [u.id, u.email]));
 
     return hostIds.map((userId) => ({
       userId,
-      name: nameByUser.get(userId) ?? 'A client',
+      // A couple with no profile yet is still somebody the planner can name.
+      name: nameByUser.get(userId) ?? emailByUser.get(userId) ?? 'A client',
     }));
   }
 

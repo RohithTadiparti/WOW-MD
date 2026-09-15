@@ -27,6 +27,27 @@ export function isCollected(status: PaymentStatus): boolean {
 }
 
 /**
+ * How far a booking's money has got, for reporting one status across several
+ * instalments: the furthest along wins.
+ *
+ * A failed charge ranks lowest, below one merely begun, so it never hides a
+ * payment that did go through. A partial settlement is a dispute that has
+ * ended with money moving both ways, so it sits past a plain release. Those two
+ * were missing, which reported a booking with a settled dispute by whichever
+ * earlier instalment happened to be ranked.
+ */
+export const PAYMENT_STATUS_RANK: Record<string, number> = {
+  [PaymentStatus.FAILED]: 1,
+  [PaymentStatus.INITIATED]: 2,
+  [PaymentStatus.HELD_IN_ESCROW]: 3,
+  [PaymentStatus.DISPUTED]: 4,
+  [PaymentStatus.PENDING_PAYOUT]: 5,
+  [PaymentStatus.RELEASED]: 6,
+  [PaymentStatus.PARTIALLY_SETTLED]: 7,
+  [PaymentStatus.REFUNDED]: 8,
+};
+
+/**
  * What has actually been collected against each booking, keyed by booking id.
  *
  * Used to put "paid so far" on a provider's queue without asking the instalment

@@ -1,11 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
-import { FlatList, KeyboardAvoidingView, Platform, Pressable, TextInput, View } from 'react-native';
+import {
+  FlatList,
+  KeyboardAvoidingView,
+  Linking,
+  Platform,
+  Pressable,
+  TextInput,
+  View,
+} from 'react-native';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { PaperPlaneRight } from 'phosphor-react-native';
+import { Image } from 'expo-image';
+import { PaperPlaneRight, Paperclip } from 'phosphor-react-native';
 
 import { api, apiMessage } from '@/lib/api';
 import { dateTime } from '@/lib/format';
+import { isChartImage } from '@/shared/horoscope';
+import { documentName, reachable } from '@/components/uploader';
 import { Alert, Body, Caption, Loading } from '@/components/ui';
 import { radius, rgb, space, useTheme } from '@/theme';
 
@@ -196,12 +207,16 @@ function Bubble({ message, mine }: { message: Message; mine: boolean }) {
           borderRadius: radius.md,
           paddingHorizontal: space(3),
           paddingVertical: space(2),
+          gap: space(1.5),
           backgroundColor: rgb(mine ? theme.brand : theme.surface),
           borderWidth: mine ? 0 : 1,
           borderColor: rgb(theme.border),
         }}
       >
-        <Body tone={mine ? 'onBrand' : 'default'}>{message.body}</Body>
+        {message.mediaUrl ? <Attachment url={message.mediaUrl} mine={mine} /> : null}
+        {message.body?.trim() ? (
+          <Body tone={mine ? 'onBrand' : 'default'}>{message.body}</Body>
+        ) : null}
       </View>
       <Caption tone="faint" style={{ marginTop: space(0.5) }}>
         {dateTime(message.createdAt)}
@@ -210,5 +225,58 @@ function Bubble({ message, mine }: { message: Message; mine: boolean }) {
         {mine ? (message.readAt ? ' · read' : ' · sent') : ''}
       </Caption>
     </View>
+  );
+}
+
+/**
+ * A photograph or a file sent in the thread.
+ *
+ * A photograph is drawn; anything else is a row the phone opens, because an
+ * image view pointed at a PDF is a broken-image icon. Before this a message
+ * that was only an attachment rendered as an empty bubble, which reads as a
+ * message that failed to arrive.
+ */
+function Attachment({ url, mine }: { url: string; mine: boolean }) {
+  const theme = useTheme();
+  const uri = reachable(url);
+
+  if (isChartImage(url)) {
+    return (
+      <Pressable
+        accessibilityRole="imagebutton"
+        accessibilityLabel="Open the photograph"
+        onPress={() => void Linking.openURL(uri)}
+      >
+        <Image
+          source={{ uri }}
+          style={{
+            width: 200,
+            height: 200,
+            borderRadius: radius.sm,
+            backgroundColor: rgb(theme.surfaceSunken),
+          }}
+          contentFit="cover"
+          transition={150}
+        />
+      </Pressable>
+    );
+  }
+
+  return (
+    <Pressable
+      accessibilityRole="link"
+      accessibilityLabel={`Open ${documentName(url)}`}
+      onPress={() => void Linking.openURL(uri)}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: space(1.5) }}
+    >
+      <Paperclip size={16} color={rgb(mine ? theme.brandFg : theme.ink[600])} />
+      <Body
+        tone={mine ? 'onBrand' : 'default'}
+        numberOfLines={1}
+        style={{ flexShrink: 1, textDecorationLine: 'underline' }}
+      >
+        {documentName(url)}
+      </Body>
+    </Pressable>
   );
 }

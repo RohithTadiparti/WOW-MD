@@ -5,6 +5,8 @@ import { ProposalNote } from './entities/proposal-note.entity';
 import { Interest } from '../matchmaking/entities/interest.entity';
 import { Profile } from '../users/entities/profile.entity';
 import { User } from '../auth/entities/user.entity';
+import { AgentProfile } from '../agents/entities/agent-profile.entity';
+import { displayNamesByUserIds } from '../users/display-names';
 import { PostProposalNoteDto } from './dto/sharing.dto';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { InterestStatus, UserRole } from '../../common/enums';
@@ -55,6 +57,8 @@ export class ProposalsService {
     @InjectRepository(Interest) private readonly interests: Repository<Interest>,
     @InjectRepository(Profile) private readonly profiles: Repository<Profile>,
     @InjectRepository(User) private readonly users: Repository<User>,
+    // Read-only: an agency steward is named by its agency, having no profile.
+    @InjectRepository(AgentProfile) private readonly agencies: Repository<AgentProfile>,
     private readonly chat: ChatService,
   ) {}
 
@@ -94,13 +98,16 @@ export class ProposalsService {
     });
 
     // Who is handling each side, so the other agent knows who they are talking
-    // to rather than seeing a bare uuid.
+    // to rather than seeing a bare uuid. An agency has no profile of its own, so
+    // it is named by its agency name, and failing that by its email — every
+    // agency used to read "An agent".
     const stewardIds = [from.managedByUserId, to.managedByUserId].filter(Boolean) as string[];
-    const stewards = stewardIds.length
-      ? await this.profiles.find({ where: { userId: In(stewardIds) } })
-      : [];
+    const stewards = await displayNamesByUserIds(
+      { users: this.users, profiles: this.profiles, agencies: this.agencies },
+      stewardIds,
+    );
     const stewardName = (userId: string | null) =>
-      userId ? (stewards.find((s) => s.userId === userId)?.displayName ?? 'An agent') : null;
+      userId ? (stewards.get(userId) ?? 'An agent') : null;
 
     const mineIds = new Set(mine.map((p) => p.id));
     // Both sides are already talking, so neither is hiding photos from the other.

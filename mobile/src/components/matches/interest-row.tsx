@@ -2,6 +2,7 @@ import { Pressable, View } from 'react-native';
 import { Image } from 'expo-image';
 import { SealCheck } from 'phosphor-react-native';
 
+import { GENDER_LABEL, labelFor } from '@/lib/labels';
 import { formatDate } from '@/shared/dates';
 import { Badge, type Tone } from '@/components/chrome';
 import { Button, Caption, Card, SectionTitle } from '@/components/ui';
@@ -67,7 +68,9 @@ export function InterestRow({
   const theme = useTheme();
   const { counterpart: them, actions } = interest;
   const photo = them.photos?.[0] ?? them.photoUrl ?? null;
-  const facts = [them.ageRange, them.city, them.gender].filter(Boolean).join(' · ');
+  const facts = [them.ageRange, them.city, labelFor(GENDER_LABEL, them.gender)]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
     <Card>

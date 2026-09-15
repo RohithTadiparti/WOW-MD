@@ -10,6 +10,9 @@ import { Booking } from '../bookings/entities/booking.entity';
 import { Payment } from '../bookings/entities/payment.entity';
 import { PlannerProfile } from '../wedding-planners/entities/planner-profile.entity';
 import { Vendor } from '../vendors/entities/vendor.entity';
+import { MatchmakingService } from '../matchmaking/matchmaking.service';
+import { loadWeddingFacts } from '../bookings/wedding-facts';
+import { weddingContextOf } from '../bookings/booking-venue';
 import {
   BookingStatus,
   EventStatus,
@@ -44,7 +47,23 @@ export class WeddingDashboardService {
     @InjectRepository(Payment) private readonly payments: Repository<Payment>,
     @InjectRepository(PlannerProfile)
     private readonly plannerProfiles: Repository<PlannerProfile>,
+    // A match-fixed couple share one wedding (EZ1-I160), so the partner's
+    // bookings are the wedding's bookings too.
+    private readonly matchmaking: MatchmakingService,
   ) {}
+
+  /**
+   * Each account's match-fixed partner, for the accounts that have one.
+   *
+   * Shared with PlannerClientsService so the dashboard and My Clients agree on
+   * whose bookings make up a wedding.
+   */
+  async fixedPartners(userIds: string[]): Promise<Map<string, string>> {
+    const pairs = await Promise.all(
+      userIds.map(async (id) => [id, await this.matchmaking.fixedPartnerUserId(id)] as const),
+    );
+    return new Map(pairs.filter((pair): pair is readonly [string, string] => Boolean(pair[1])));
+  }
 
   /**
    * A planner's whole book on one row of numbers, keyed to the same engagement
@@ -76,15 +95,24 @@ export class WeddingDashboardService {
 
     const hostIds = [...new Set(plans.map((p) => p.userId))];
     const planIds = plans.map((p) => p.id);
-    const [tasks, bookings, profiles] = await Promise.all([
+    const partners = await this.fixedPartners(hostIds);
+    const accounts = [...new Set([...hostIds, ...partners.values()])];
+    const [tasks, bookings, profiles, facts] = await Promise.all([
       this.tasks.find({ where: { planId: In(planIds) } }),
-      this.bookings.find({ where: { userId: In(hostIds) } }),
+      this.bookings.find({ where: { userId: In(accounts) } }),
       this.plannerProfiles.find({ where: { ownerUserId: plannerUserId }, select: ['id'] }),
+      loadWeddingFacts(
+        { plans: this.plans, events: this.events, bookings: this.bookings, vendors: this.vendors },
+        hostIds,
+        partners,
+      ),
     ]);
 
     // Lifecycle mirrors PlannerClientsService.lifecycle exactly: a wedding is
     // completed once its date has passed, active once any of its tasks has been
     // started, and upcoming until then. Held identical so the two screens agree.
+    // The date is the one My Clients shows: the plan's, else the earliest
+    // function's, else the earliest vendor booking's.
     const now = new Date();
     const startedPlans = new Set(
       tasks.filter((t) => t.status !== TaskStatus.PENDING).map((t) => t.planId),
@@ -93,7 +121,9 @@ export class WeddingDashboardService {
     let active = 0;
     let upcoming = 0;
     for (const plan of plans) {
-      if (plan.weddingDate && new Date(plan.weddingDate) < now) {
+      const wedding = facts.get(plan.userId);
+      const weddingDate = plan.weddingDate ?? (wedding ? weddingContextOf(wedding).date : null);
+      if (weddingDate && new Date(weddingDate) < now) {
         completedPlans.add(plan.id);
       } else if (startedPlans.has(plan.id)) {
         active += 1;
@@ -237,7 +267,12 @@ export class WeddingDashboardService {
    * the buyer's hoped-for budget would make the total a wish.
    */
   private async budget(userId: string, events: WeddingEvent[]) {
-    const bookings = await this.bookings.find({ where: { userId } });
+    // Whichever of a match-fixed couple booked a vendor, it is the wedding's
+    // commitment (EZ1-I160).
+    const partner = await this.matchmaking.fixedPartnerUserId(userId);
+    const bookings = await this.bookings.find({
+      where: { userId: partner ? In([userId, partner]) : userId },
+    });
     const live = bookings.filter((b) => b.status !== BookingStatus.CANCELLED);
 
     const vendorIds = live

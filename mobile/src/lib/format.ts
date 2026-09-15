@@ -22,6 +22,16 @@ export function rupeesExact(value: string | number | null | undefined): string {
   return `₹${Number(value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 }
 
+/**
+ * `₹12,34,567.00`, or `USD 1,234.00`: the ledger's precision in the record's
+ * own currency. A payment carries its currency, and printing every one of them
+ * with a rupee sign is a claim about money the record does not make.
+ */
+export function moneyExact(value: string | number | null | undefined, currency = 'INR'): string {
+  if (currency === 'INR') return rupeesExact(value);
+  return `${currency} ${Number(value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+}
+
 /** An amount in whatever currency the record carries, for quotations and cases. */
 export function money(value: string | number | null | undefined, currency = 'INR'): string {
   if (currency === 'INR') return rupees(value);

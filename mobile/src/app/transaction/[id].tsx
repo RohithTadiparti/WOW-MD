@@ -4,7 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { CaretRight } from 'phosphor-react-native';
 
 import { api, apiMessage } from '@/lib/api';
-import { dateTime, rupeesExact, shortDate } from '@/lib/format';
+import { dateTime, moneyExact, shortDate } from '@/lib/format';
+import { clockTime } from '@/lib/labels';
 import { BOOKING_STATUS_LABEL, MILESTONE_LABEL } from '@/shared/permissions';
 import { Badge, DetailGrid, DetailRow, Divider, StatTile, TileGrid, type Tone } from '@/components/chrome';
 import {
@@ -65,6 +66,11 @@ interface TransactionDetail {
     currency: string;
     eventDate: string | null;
     createdAt: string;
+    /** What the booking says about the day — from its event, its form or the wedding. */
+    eventName?: string | null;
+    venue?: string | null;
+    city?: string | null;
+    guests?: number | null;
   };
   customer: { id: string; name: string | null; email: string; phone: string | null; city: string | null } | null;
   service: { id: string | null; name: string | null; offering: string | null; quantity: number | null; total: string };
@@ -132,6 +138,19 @@ export default function Transaction() {
   }
 
   const { payment, booking, customer, service, event, payments, summary } = data;
+  // Money in the payment's own currency. Every figure was printed in rupees
+  // whatever the record said.
+  const ccy = payment.currency || booking.currency || 'INR';
+  const cash = (value: string | number | null | undefined, currency = ccy) =>
+    moneyExact(value, currency);
+  // The event the booking hangs off, or what the booking says about the day
+  // when it is not linked to one.
+  const eventName = event?.name ?? booking.eventName ?? null;
+  const venue = event?.venue ?? booking.venue ?? null;
+  const city = event?.city ?? booking.city ?? null;
+  const guests = booking.guests ?? null;
+  const eventDate = event?.eventDate ?? booking.eventDate ?? null;
+  const starts = clockTime(event?.startTime);
   const instalment = (milestone: string) =>
     payments.find((row) => row.milestone === milestone)?.amount ?? null;
 
@@ -166,11 +185,11 @@ export default function Transaction() {
           <DetailRow label="Instalment">
             {MILESTONE_LABEL[payment.milestone] ?? payment.milestone}
           </DetailRow>
-          <DetailRow label="Charged">{rupeesExact(payment.amount)}</DetailRow>
+          <DetailRow label="Charged">{cash(payment.amount)}</DetailRow>
           <DetailRow label="Platform commission">
-            −{rupeesExact(payment.commissionAmount)}
+            −{cash(payment.commissionAmount)}
           </DetailRow>
-          <DetailRow label="Your share">{rupeesExact(payment.payoutAmount)}</DetailRow>
+          <DetailRow label="Your share">{cash(payment.payoutAmount)}</DetailRow>
           <DetailRow label="Method">{payment.method.replace(/_/g, ' ')}</DetailRow>
           <DetailRow label="Paid at">{dateTime(payment.createdAt)}</DetailRow>
           <DetailRow label="Last updated">{dateTime(payment.updatedAt)}</DetailRow>
@@ -184,7 +203,7 @@ export default function Transaction() {
           <DetailRow label="Booking status">
             {BOOKING_STATUS_LABEL[booking.status] ?? booking.status.replace(/_/g, ' ')}
           </DetailRow>
-          <DetailRow label="Booking total">{rupeesExact(booking.amount)}</DetailRow>
+          <DetailRow label="Booking total">{cash(booking.amount)}</DetailRow>
           <DetailRow label="Booked on">{shortDate(booking.createdAt)}</DetailRow>
           {booking.eventDate ? (
             <DetailRow label="Event date">{shortDate(booking.eventDate)}</DetailRow>
@@ -215,19 +234,18 @@ export default function Transaction() {
       <Card>
         <SectionTitle>Service</SectionTitle>
         <DetailGrid>
-          <DetailRow label="Service">{service.name ?? '—'}</DetailRow>
-          <DetailRow label="Package">{service.offering ?? '—'}</DetailRow>
+          <DetailRow label="Service">{service.name ?? 'No service chosen'}</DetailRow>
+          <DetailRow label="Package">{service.offering ?? 'No package'}</DetailRow>
           {service.quantity ? (
             <DetailRow label="Quantity">{String(service.quantity)}</DetailRow>
           ) : null}
-          {event ? (
-            <>
-              <DetailRow label="Event">{event.name}</DetailRow>
-              {event.venue ? <DetailRow label="Venue">{event.venue}</DetailRow> : null}
-              {event.city ? <DetailRow label="City">{event.city}</DetailRow> : null}
-              {event.startTime ? <DetailRow label="Starts">{event.startTime}</DetailRow> : null}
-            </>
-          ) : null}
+          <DetailRow label="Booking total">{cash(service.total)}</DetailRow>
+          {eventName ? <DetailRow label="Event">{eventName}</DetailRow> : null}
+          {venue ? <DetailRow label="Venue">{venue}</DetailRow> : null}
+          {city ? <DetailRow label="City">{city}</DetailRow> : null}
+          {guests ? <DetailRow label="Guests">{String(guests)}</DetailRow> : null}
+          {eventDate ? <DetailRow label="Event date">{shortDate(eventDate)}</DetailRow> : null}
+          {starts ? <DetailRow label="Starts">{starts}</DetailRow> : null}
         </DetailGrid>
       </Card>
 
@@ -236,14 +254,15 @@ export default function Transaction() {
       <Card>
         <SectionTitle>Instalments</SectionTitle>
         <TileGrid>
-          <StatTile label="Booking total" value={rupeesExact(summary.total)} />
-          <StatTile label="Advance" value={rupeesExact(instalment('advance'))} />
-          <StatTile label="Second" value={rupeesExact(instalment('second'))} />
-          <StatTile label="Balance" value={rupeesExact(instalment('final'))} />
-          <StatTile label="Held in escrow" value={rupeesExact(summary.held)} tone="caution" />
-          <StatTile label="Released" value={rupeesExact(summary.released)} tone="positive" />
-          <StatTile label="Refunded" value={rupeesExact(summary.refunded)} />
-          <StatTile label="Commission" value={rupeesExact(summary.commission)} />
+          <StatTile label="Booking total" value={cash(summary.total)} />
+          <StatTile label="Advance" value={cash(instalment('advance'))} />
+          <StatTile label="Second" value={cash(instalment('second'))} />
+          <StatTile label="Balance" value={cash(instalment('final'))} />
+          <StatTile label="Held in escrow" value={cash(summary.held)} tone="caution" />
+          <StatTile label="Released" value={cash(summary.released)} tone="positive" />
+          <StatTile label="Your payout" value={cash(summary.payout)} tone="positive" />
+          <StatTile label="Refunded" value={cash(summary.refunded)} />
+          <StatTile label="Commission" value={cash(summary.commission)} />
         </TileGrid>
       </Card>
 
@@ -265,7 +284,11 @@ export default function Transaction() {
                 </Badge>
               </View>
               <Caption tone="faint">
-                {[dateTime(row.createdAt), rupeesExact(row.amount)].join(' · ')}
+                {[
+                  dateTime(row.createdAt),
+                  cash(row.amount, row.currency),
+                  `your share ${cash(row.payoutAmount, row.currency)}`,
+                ].join(' · ')}
               </Caption>
             </View>
           ))
@@ -310,11 +333,12 @@ export default function Transaction() {
 /** Booking → Payment → Instalment → Commission → Your payout, with the figures. */
 function Chain({ payment }: { payment: Payment }) {
   const theme = useTheme();
+  const cash = (value: string) => moneyExact(value, payment.currency);
   const steps = [
-    { label: 'Charged', value: rupeesExact(payment.amount) },
+    { label: 'Charged', value: cash(payment.amount) },
     { label: MILESTONE_LABEL[payment.milestone] ?? payment.milestone, value: null },
-    { label: 'Commission', value: `−${rupeesExact(payment.commissionAmount)}` },
-    { label: 'Your payout', value: rupeesExact(payment.payoutAmount) },
+    { label: 'Commission', value: `−${cash(payment.commissionAmount)}` },
+    { label: 'Your payout', value: cash(payment.payoutAmount) },
   ];
 
   return (

@@ -52,6 +52,17 @@ const BLOCKING = [
   VerificationStatus.ADDITIONAL_REVIEW,
 ];
 
+/** A request in any of these is still waiting on somebody. */
+const OPEN_STATUSES = [
+  VerificationStatus.NEW,
+  VerificationStatus.ASSIGNED,
+  VerificationStatus.IN_PROGRESS,
+  VerificationStatus.SUBMITTED,
+  VerificationStatus.ADMIN_REVIEW,
+  VerificationStatus.ADDITIONAL_REVIEW,
+  VerificationStatus.ISSUE,
+];
+
 /**
  * Field verification for Agents and Vendors.
  *
@@ -128,18 +139,8 @@ export class VerificationService {
     // different business.
     //
     // That was defensible while one account meant one business. It is not now.
-    const openStatuses = [
-      VerificationStatus.NEW,
-      VerificationStatus.ASSIGNED,
-      VerificationStatus.IN_PROGRESS,
-      VerificationStatus.SUBMITTED,
-      VerificationStatus.ADMIN_REVIEW,
-      VerificationStatus.ADDITIONAL_REVIEW,
-      VerificationStatus.ISSUE,
-    ];
-
     const open = await this.requests.findOne({
-      where: openStatuses.map((status) =>
+      where: OPEN_STATUSES.map((status) =>
         // A null subject is the applicant themselves — an agency, which has
         // exactly one. Matching on null there keeps that path idempotent.
         subjectId
@@ -197,6 +198,61 @@ export class VerificationService {
       .catch(() => undefined);
 
     return request;
+  }
+
+  /**
+   * Closes the open request behind an applicant an administrator has approved
+   * directly.
+   *
+   * Approving a planner or an agency through the admin routes flipped the
+   * listing but left the request raised when it was saved sitting at `new` in
+   * the officer queue — an officer could be sent to verify an account already
+   * live, and the SLA sweep would later reject an approved applicant. The
+   * request is decided as approved with the administrator as the decider, so
+   * the queue, the audit trail and the listing all say the same thing. The
+   * account is not marked as met in person: nobody visited.
+   */
+  async closeOnAdminApproval(
+    actor: AuthUser,
+    applicantType: ApplicantType,
+    applicantUserId: string,
+    subjectId: string,
+  ): Promise<number> {
+    const open = await this.requests.find({
+      where: [
+        { applicantType, applicantUserId, subjectId, status: In(OPEN_STATUSES) },
+        // An agency's older requests were raised with no subject: the agency is
+        // the applicant itself.
+        { applicantType, applicantUserId, subjectId: IsNull(), status: In(OPEN_STATUSES) },
+      ],
+    });
+
+    const now = new Date();
+    for (const request of open) {
+      request.status = VerificationStatus.APPROVED;
+      request.remarks = 'Approved by an administrator';
+      request.decidedAt = now;
+      request.decidedByUserId = actor.userId;
+      request.reviewedByUserId = actor.userId;
+      request.history = [
+        ...request.history,
+        {
+          at: now.toISOString(),
+          byUserId: actor.userId,
+          status: VerificationStatus.APPROVED,
+          remarks: 'Approved by an administrator',
+        },
+      ];
+      await this.requests.save(request);
+      await this.audit.record({
+        action: AuditAction.VERIFICATION_APPROVED,
+        actor,
+        resourceType: 'verification_request',
+        resourceId: request.id,
+        metadata: { status: VerificationStatus.APPROVED, applicantType, via: 'admin_approval' },
+      });
+    }
+    return open.length;
   }
 
   // ------------------------------------------------------------ admin side
@@ -730,29 +786,49 @@ export class VerificationService {
   private async withIdentity(rows: VerificationRequest[]): Promise<VerificationRequest[]> {
     if (rows.length === 0) return rows;
     const userIds = [...new Set(rows.map((r) => r.applicantUserId))];
+    const subjectIds = [...new Set(rows.map((r) => r.subjectId).filter(Boolean))] as string[];
+    // The business the request is about, by its own id where the request names
+    // one, as well as every business the applicant owns.
+    const ownedOrNamed = () =>
+      subjectIds.length
+        ? [{ ownerUserId: In(userIds) }, { id: In(subjectIds) }]
+        : [{ ownerUserId: In(userIds) }];
 
     const [users, agencies, planners, vendors] = await Promise.all([
       this.users.find({ where: { id: In(userIds) }, select: ['id', 'email', 'phone'] }),
-      this.agencies.find({ where: { ownerUserId: In(userIds) } }),
-      this.planners.find({ where: { ownerUserId: In(userIds) } }),
-      this.vendors.find({ where: { ownerUserId: In(userIds) } }),
+      this.agencies.find({ where: ownedOrNamed() }),
+      this.planners.find({ where: ownedOrNamed() }),
+      this.vendors.find({ where: ownedOrNamed() }),
     ]);
 
     const byUser = new Map(users.map((u) => [u.id, u]));
-    const agencyBy = new Map(agencies.map((a) => [a.ownerUserId, a.agencyName]));
-    const plannerBy = new Map(planners.map((a) => [a.ownerUserId, a.agencyName]));
-    const vendorBy = new Map(vendors.map((v) => [v.ownerUserId, v.name]));
+    const named = <T extends { id: string; ownerUserId: string }>(
+      list: T[],
+      name: (row: T) => string,
+    ) => ({
+      byId: new Map(list.map((row) => [row.id, name(row)])),
+      byOwner: new Map(list.map((row) => [row.ownerUserId, name(row)])),
+    });
+    const agencyBy = named(agencies, (a) => a.agencyName);
+    const plannerBy = named(planners, (p) => p.agencyName);
+    const vendorBy = named(vendors, (v) => v.name);
 
     for (const row of rows) {
       const user = byUser.get(row.applicantUserId);
       row.applicantEmail = user?.email ?? null;
       row.applicantPhone = user?.phone ?? null;
-      row.subjectName =
-        (row.applicantType === ApplicantType.AGENT
-          ? agencyBy.get(row.applicantUserId)
+      // The request's own subject first: an owner with two businesses would
+      // otherwise see whichever of them was keyed last on both rows.
+      const source =
+        row.applicantType === ApplicantType.AGENT
+          ? agencyBy
           : row.applicantType === ApplicantType.PLANNER
-            ? plannerBy.get(row.applicantUserId)
-            : vendorBy.get(row.applicantUserId)) ?? null;
+            ? plannerBy
+            : vendorBy;
+      row.subjectName =
+        (row.subjectId ? source.byId.get(row.subjectId) : undefined) ??
+        source.byOwner.get(row.applicantUserId) ??
+        null;
     }
     return rows;
   }

@@ -104,7 +104,9 @@ export default function Availability() {
     !can(permissions, Permission.VENDOR_LISTING_MANAGE);
 
   const { activeId, businesses } = useBusinesses();
-  const { listing: vendorListing } = useActiveListing(activeId);
+  // Not asked for a planner: /vendors/me refuses them, and the planner's
+  // listing is read below.
+  const { listing: vendorListing } = useActiveListing(activeId, !isPlanner);
 
   const { data: plannerListing } = useQuery({
     queryKey: ['my-planner-listing'],
@@ -165,11 +167,12 @@ export default function Availability() {
   });
 
   // The services a window can be published against. A vendor who has not
-  // adopted the catalog simply has none, and publishes without one.
+  // adopted the catalog simply has none, and publishes without one. A planner
+  // has no catalog services, and this vendor path answers their id with a 404.
   const { data: services = [] } = useQuery<ServiceOption[]>({
     queryKey: ['vendor-services', vendorId],
     queryFn: async () => (await api.get(`/vendors/${vendorId}/services`)).data,
-    enabled: Boolean(vendorId),
+    enabled: Boolean(vendorId) && !isPlanner,
     retry: false,
   });
 

@@ -30,7 +30,7 @@ export default function NetworkPool() {
   const { gate } = useMatchmakingGate(actingProfileId || undefined);
   const [message, setMessage] = useState('');
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['pool', city, gender, q],
     queryFn: async () =>
       (
@@ -110,7 +110,14 @@ export default function NetworkPool() {
       </div>
 
       {isLoading && <Loading rows={3} />}
-      {!isLoading && profiles.length === 0 && (
+      {/* The server's reason, when it refuses — an agency still awaiting
+          approval read an empty pool as "nothing matches", with no hint why. */}
+      {error && (
+        <p className="card text-sm text-gray-600">
+          {apiMessage(error, 'The network pool could not be loaded.')}
+        </p>
+      )}
+      {!isLoading && !error && profiles.length === 0 && (
         <p className="card text-sm text-gray-500">
           Nothing in the pool matches that search yet.
         </p>
@@ -121,7 +128,12 @@ export default function NetworkPool() {
           <div key={p.id} className="group/tile card flex flex-col transition-[border-color,box-shadow] duration-200 hover:border-gray-300 hover:shadow-card">
             <h2 className="section-title">{p.displayName}</h2>
             <p className="text-sm text-gray-500">
-              {[p.gender, p.city].filter(Boolean).join(' · ')}
+              {[
+                p.gender ? ({ female: 'Bride', male: 'Groom' } as Record<string, string>)[p.gender.toLowerCase()] ?? p.gender : null,
+                p.city,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
             </p>
             {p.photos?.[0] ? (
               <img src={p.photos[0]} alt="" className="mt-2 h-40 w-full rounded-sm object-cover" />

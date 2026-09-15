@@ -62,6 +62,7 @@ export default function Case() {
   const qc = useQueryClient();
   const { id } = useLocalSearchParams<{ id: string }>();
   const permissions = useAuth((s) => s.user?.permissions ?? []);
+  const myId = useAuth((s) => s.user?.id ?? null);
   const canAllocate = can(permissions, Permission.VERIFICATION_ALLOCATE);
 
   const [error, setError] = useState('');
@@ -72,9 +73,16 @@ export default function Case() {
   const [ask, setAsk] = useState<Ask>(null);
   const [seeded, setSeeded] = useState(false);
 
-  const { data, isPending } = useQuery({
-    queryKey: ['verification-cases'],
-    queryFn: async () => (await api.get('/verification/cases')).data,
+  // The case itself, by id. Searching the first page of the queue for it told
+  // anybody whose case had fallen past that page that it was no longer theirs.
+  const {
+    data: item,
+    isPending,
+    error: loadError,
+  } = useQuery({
+    queryKey: ['verification-case', id],
+    queryFn: async () => (await api.get(`/verification/cases/${id}`)).data as SupportCase,
+    enabled: Boolean(id),
     retry: false,
     refetchInterval: 20_000,
   });
@@ -85,10 +93,6 @@ export default function Case() {
     retry: false,
     enabled: canAllocate,
   });
-
-  const item: SupportCase | undefined = (data?.data ?? []).find(
-    (row: SupportCase) => row.id === id,
-  );
 
   // Seed the findings box from whatever is already on the record, once, then
   // leave the officer's typing alone — this list polls every twenty seconds,
@@ -106,6 +110,7 @@ export default function Case() {
     try {
       await fn();
       if (done) setNotice(done);
+      void qc.invalidateQueries({ queryKey: ['verification-case', id] });
       void qc.invalidateQueries({ queryKey: ['verification-cases'] });
       void qc.invalidateQueries({ queryKey: ['verification-metrics'] });
     } catch (err) {
@@ -124,8 +129,8 @@ export default function Case() {
   if (!item) {
     return (
       <Screen>
-        <EmptyState title="That case is no longer in your queue">
-          It may have been reallocated or closed by somebody else.
+        <EmptyState title="That case could not be opened">
+          {apiMessage(loadError, 'It may have been reallocated or closed by somebody else.')}
         </EmptyState>
       </Screen>
     );
@@ -181,7 +186,13 @@ export default function Case() {
           </Badge>
           {item.assignedToUserId ? (
             <Badge>
-              {officers.find((o) => o.id === item.assignedToUserId)?.name ?? 'Assigned'}
+              {/* The officer list is only fetched for an allocator, so an
+                  officer reading their own case is told it is theirs. */}
+              {item.assignedToUserId === myId
+                ? 'You'
+                : (officers.find((o) => o.id === item.assignedToUserId)?.name ??
+                  item.assignedToName ??
+                  'Assigned to an officer')}
             </Badge>
           ) : null}
         </View>

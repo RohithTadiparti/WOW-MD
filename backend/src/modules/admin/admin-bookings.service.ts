@@ -5,7 +5,9 @@ import { User } from '../auth/entities/user.entity';
 import { Vendor } from '../vendors/entities/vendor.entity';
 import { Booking } from '../bookings/entities/booking.entity';
 import { Payment } from '../bookings/entities/payment.entity';
+import { Quotation } from '../bookings/entities/quotation.entity';
 import { WeddingEvent } from '../events/entities/event.entity';
+import { WeddingPlan } from '../planner/entities/wedding-plan.entity';
 import { Profile } from '../users/entities/profile.entity';
 import { PlannerProfile } from '../wedding-planners/entities/planner-profile.entity';
 import { VendorService } from '../catalog/entities/vendor-service.entity';
@@ -13,6 +15,10 @@ import { SupportCase } from '../verification/entities/support-case.entity';
 import { AdminBookingQueryDto, AdminTransactionQueryDto } from './dto/console.dto';
 import { PaymentStatus, ProviderType } from '../../common/enums';
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
+import { serviceNamesByIds } from '../catalog/service-names';
+import { QuotationSummary, escrowSummary, summariseQuotations } from '../bookings/booking-summary';
+import { WeddingFacts, bookingContextOf } from '../bookings/booking-venue';
+import { loadWeddingFacts } from '../bookings/wedding-facts';
 
 /** The names hung on a booking row so a list answers who/whom/what (EZ1-I173). */
 export interface AdminBookingParties {
@@ -20,6 +26,11 @@ export interface AdminBookingParties {
   providerName: string | null;
   serviceName: string | null;
   amountPaid: string;
+  /**
+   * The newest quotation on the booking. `amount` stays the agreed total, which
+   * is 0.00 until a quotation is accepted; this is the price on the table.
+   */
+  quotation: QuotationSummary | null;
 }
 
 /**
@@ -41,7 +52,19 @@ export class AdminBookingsService {
     @InjectRepository(PlannerProfile) private readonly planners: Repository<PlannerProfile>,
     @InjectRepository(VendorService) private readonly vendorServices: Repository<VendorService>,
     @InjectRepository(SupportCase) private readonly cases: Repository<SupportCase>,
+    // Read-only: the price on the table while a booking's total is still 0.00.
+    @InjectRepository(Quotation) private readonly quotations: Repository<Quotation>,
+    // Read-only: a planner booking's date and place come from the wedding.
+    @InjectRepository(WeddingPlan) private readonly plans: Repository<WeddingPlan>,
   ) {}
+
+  /** The wedding facts behind planner bookings, for their date and place. */
+  private weddingFacts(userIds: string[]): Promise<Map<string, WeddingFacts>> {
+    return loadWeddingFacts(
+      { plans: this.plans, events: this.events, bookings: this.bookings, vendors: this.vendors },
+      userIds,
+    );
+  }
 
   /**
    * One booking, with everybody and everything attached to it.
@@ -55,23 +78,33 @@ export class AdminBookingsService {
     const booking = await this.bookings.findOne({ where: { id: bookingId } });
     if (!booking) throw new NotFoundException('Booking not found');
 
-    const [client, payments, cases, vendor, planner, service] = await Promise.all([
-      this.users.findOne({
-        where: { id: booking.userId },
-        select: ['id', 'email', 'phone', 'role', 'managedByAgentId'],
-      }),
-      this.payments.find({ where: { bookingId }, order: { createdAt: 'ASC' } }),
-      this.cases.find({ where: { subjectId: bookingId }, order: { createdAt: 'DESC' } }),
-      booking.providerType === ProviderType.VENDOR
-        ? this.vendors.findOne({ where: { id: booking.providerId } })
-        : Promise.resolve(null),
-      booking.providerType === ProviderType.PLANNER
-        ? this.planners.findOne({ where: { id: booking.providerId } })
-        : Promise.resolve(null),
-      booking.vendorServiceId
-        ? this.vendorServices.findOne({ where: { id: booking.vendorServiceId } })
-        : Promise.resolve(null),
-    ]);
+    const [client, payments, cases, vendor, planner, service, serviceNames, quotes, clientProfile, event, weddings] =
+      await Promise.all([
+        this.users.findOne({
+          where: { id: booking.userId },
+          select: ['id', 'email', 'phone', 'role', 'managedByAgentId'],
+        }),
+        this.payments.find({ where: { bookingId }, order: { createdAt: 'ASC' } }),
+        this.cases.find({ where: { subjectId: bookingId }, order: { createdAt: 'DESC' } }),
+        booking.providerType === ProviderType.VENDOR
+          ? this.vendors.findOne({ where: { id: booking.providerId } })
+          : Promise.resolve(null),
+        booking.providerType === ProviderType.PLANNER
+          ? this.planners.findOne({ where: { id: booking.providerId } })
+          : Promise.resolve(null),
+        booking.vendorServiceId
+          ? this.vendorServices.findOne({ where: { id: booking.vendorServiceId } })
+          : Promise.resolve(null),
+        serviceNamesByIds(this.vendorServices, [booking.vendorServiceId]),
+        this.quotations.find({ where: { bookingId } }),
+        this.profiles.findOne({ where: { userId: booking.userId } }),
+        booking.eventId
+          ? this.events.findOne({ where: { id: booking.eventId } })
+          : Promise.resolve(null),
+        booking.providerType === ProviderType.PLANNER
+          ? this.weddingFacts([booking.userId])
+          : Promise.resolve(new Map<string, WeddingFacts>()),
+      ]);
 
     const agent = client?.managedByAgentId
       ? await this.users.findOne({
@@ -80,9 +113,30 @@ export class AdminBookingsService {
         })
       : null;
 
+    // When, where and for how many — the same derivation the booking lists
+    // use, so an administrator reads the date the couple and vendor read.
+    const context = bookingContextOf(
+      {
+        eventDate: booking.eventDate,
+        serviceAnswers: booking.serviceAnswers,
+        providerName: vendor?.name,
+        providerCity: vendor?.city,
+        providerIsVenue: Boolean(vendor?.categories?.includes('venue')),
+      },
+      event,
+      weddings.get(booking.userId),
+    );
+    const serviceName = booking.vendorServiceId
+      ? (serviceNames.get(booking.vendorServiceId) ?? null)
+      : booking.providerType === ProviderType.PLANNER
+        ? 'Wedding planning'
+        : null;
+
     return {
       booking,
       client,
+      /** The customer's profile name, else their email. */
+      customerName: clientProfile?.displayName ?? client?.email ?? null,
       // The agency behind the client, when there is one: an administrator
       // asking why a booking was made often has to ask who made it.
       agent,
@@ -105,7 +159,18 @@ export class AdminBookingsService {
               type: booking.providerType,
             }
           : { id: booking.providerId, type: booking.providerType },
-      service: service ? { id: service.id, name: service.displayName } : null,
+      // The vendor's wording when they gave one, the catalogue's otherwise.
+      service: service ? { id: service.id, name: serviceName } : null,
+      serviceName,
+      /** Derived when, where and for how many (linked function → booking form → wedding). */
+      context: {
+        eventName: context.eventName,
+        eventDate: context.eventDate,
+        venue: context.venue,
+        city: context.city,
+        guests: context.guests,
+      },
+      quotation: summariseQuotations(quotes),
       payments,
       disputes: cases,
     };
@@ -168,27 +233,37 @@ export class AdminBookingsService {
         rows.filter((b) => b.providerType === ProviderType.PLANNER).map((b) => b.providerId),
       ),
     ];
-    const serviceIds = [...new Set(rows.map((b) => b.vendorServiceId).filter(Boolean))] as string[];
     const bookingIds = rows.map((b) => b.id);
 
-    const [profiles, vendors, planners, services, payments] = await Promise.all([
+    const [profiles, buyers, vendors, planners, serviceName, payments, quotes] = await Promise.all([
       buyerIds.length
         ? this.profiles.find({ where: { userId: In(buyerIds) } })
+        : Promise.resolve([]),
+      buyerIds.length
+        ? this.users.find({ where: { id: In(buyerIds) }, select: ['id', 'email'] })
         : Promise.resolve([]),
       vendorIds.length ? this.vendors.find({ where: { id: In(vendorIds) } }) : Promise.resolve([]),
       plannerIds.length
         ? this.planners.find({ where: { id: In(plannerIds) } })
         : Promise.resolve([]),
-      serviceIds.length
-        ? this.vendorServices.find({ where: { id: In(serviceIds) } })
-        : Promise.resolve([]),
+      // The vendor's own wording when they gave one, the catalogue's otherwise:
+      // `displayName` alone is empty on every ordinary catalogue service.
+      serviceNamesByIds(this.vendorServices, rows.map((b) => b.vendorServiceId)),
       this.payments.find({ where: { bookingId: In(bookingIds) } }),
+      this.quotations.find({ where: { bookingId: In(bookingIds) } }),
     ]);
 
-    const buyerName = new Map(profiles.map((p) => [p.userId as string, p.displayName]));
+    // A buyer with no profile yet is still somebody: their email names them.
+    const buyerName = new Map<string, string>();
+    for (const u of buyers) if (u.email) buyerName.set(u.id, u.email);
+    for (const p of profiles) if (p.userId && p.displayName) buyerName.set(p.userId, p.displayName);
     const vendorName = new Map(vendors.map((v) => [v.id, v.name]));
     const plannerName = new Map(planners.map((p) => [p.id, p.agencyName]));
-    const serviceName = new Map(services.map((s) => [s.id, s.displayName]));
+
+    const quotesByBooking = new Map<string, Quotation[]>();
+    for (const quote of quotes) {
+      quotesByBooking.set(quote.bookingId, [...(quotesByBooking.get(quote.bookingId) ?? []), quote]);
+    }
 
     // Money captured so far, per booking. INITIATED has not been taken and
     // REFUNDED has gone back, so neither counts as paid.
@@ -205,8 +280,15 @@ export class AdminBookingsService {
         b.providerType === ProviderType.VENDOR
           ? (vendorName.get(b.providerId) ?? null)
           : (plannerName.get(b.providerId) ?? null),
-      serviceName: b.vendorServiceId ? (serviceName.get(b.vendorServiceId) ?? null) : null,
+      // A planner is booked for the wedding as a whole, with no catalogue
+      // service behind it.
+      serviceName: b.vendorServiceId
+        ? (serviceName.get(b.vendorServiceId) ?? null)
+        : b.providerType === ProviderType.PLANNER
+          ? 'Wedding planning'
+          : null,
       amountPaid: (paidByBooking.get(b.id) ?? 0).toFixed(2),
+      quotation: summariseQuotations(quotesByBooking.get(b.id) ?? []),
     }));
   }
 
@@ -244,17 +326,32 @@ export class AdminBookingsService {
     });
     const bookingById = new Map(bookings.map((b) => [b.id, b]));
     const buyerIds = [...new Set(bookings.map((b) => b.userId))];
-    const vendorIds = [
-      ...new Set(bookings.filter((b) => b.providerType === 'vendor').map((b) => b.providerId)),
+    const idsOf = (type: ProviderType) => [
+      ...new Set(bookings.filter((b) => b.providerType === type).map((b) => b.providerId)),
     ];
-    const [profiles, vendors] = await Promise.all([
+    const vendorIds = idsOf(ProviderType.VENDOR);
+    const plannerIds = idsOf(ProviderType.PLANNER);
+    const [profiles, buyers, vendors, planners] = await Promise.all([
       buyerIds.length
         ? this.profiles.find({ where: { userId: In(buyerIds) } })
         : Promise.resolve([]),
+      buyerIds.length
+        ? this.users.find({ where: { id: In(buyerIds) }, select: ['id', 'email'] })
+        : Promise.resolve([]),
       vendorIds.length ? this.vendors.find({ where: { id: In(vendorIds) } }) : Promise.resolve([]),
+      // A planner's bookings are paid for too; only vendors were named, so
+      // every planner payment read as coming from nobody.
+      plannerIds.length
+        ? this.planners.find({ where: { id: In(plannerIds) } })
+        : Promise.resolve([]),
     ]);
-    const buyerName = new Map(profiles.map((p) => [p.userId as string, p.displayName]));
-    const vendorName = new Map(vendors.map((v) => [v.id, v.name]));
+    const buyerName = new Map<string, string>();
+    for (const u of buyers) if (u.email) buyerName.set(u.id, u.email);
+    for (const p of profiles) if (p.userId && p.displayName) buyerName.set(p.userId, p.displayName);
+    const providerName = new Map<string, string>([
+      ...vendors.map((v) => [v.id, v.name] as [string, string]),
+      ...planners.map((p) => [p.id, p.agencyName] as [string, string]),
+    ]);
 
     const data = rows.map((p) => {
       const b = bookingById.get(p.bookingId);
@@ -269,7 +366,7 @@ export class AdminBookingsService {
         currency: p.currency,
         createdAt: p.createdAt,
         buyerName: b ? (buyerName.get(b.userId) ?? null) : null,
-        providerName: b?.providerType === 'vendor' ? (vendorName.get(b.providerId) ?? null) : null,
+        providerName: b ? (providerName.get(b.providerId) ?? null) : null,
         providerType: b?.providerType ?? null,
       };
     });
@@ -315,18 +412,31 @@ export class AdminBookingsService {
         : Promise.resolve(null),
     ]);
 
-    const clientProfile = booking
-      ? await this.profiles.findOne({ where: { userId: booking.userId } })
-      : null;
+    const [clientProfile, serviceNames, weddings] = booking
+      ? await Promise.all([
+          this.profiles.findOne({ where: { userId: booking.userId } }),
+          serviceNamesByIds(this.vendorServices, [booking.vendorServiceId]),
+          booking.providerType === ProviderType.PLANNER
+            ? this.weddingFacts([booking.userId])
+            : Promise.resolve(new Map<string, WeddingFacts>()),
+        ])
+      : [null, new Map<string, string>(), new Map<string, WeddingFacts>()];
 
-    // The escrow position across the whole booking, summed the same way the
-    // dashboard's cards are: held/released count `amount`, the provider's share
-    // and commission come off the released rows, refunded counts `amount`.
-    const sum = (predicate: (p: Payment) => boolean, column: keyof Payment) =>
-      siblings
-        .filter(predicate)
-        .reduce((t, p) => t + Number((p[column] as string) ?? 0), 0)
-        .toFixed(2);
+    // When and where, from the function when it says and from the booking form,
+    // the booked venue or the wedding when it does not.
+    const context = booking
+      ? bookingContextOf(
+          {
+            eventDate: booking.eventDate,
+            serviceAnswers: booking.serviceAnswers,
+            providerName: vendor?.name,
+            providerCity: vendor?.city,
+            providerIsVenue: Boolean(vendor?.categories?.includes('venue')),
+          },
+          event,
+          weddings.get(booking.userId),
+        )
+      : null;
 
     return {
       payment,
@@ -336,14 +446,23 @@ export class AdminBookingsService {
             status: booking.status,
             amount: booking.amount,
             currency: booking.currency,
-            eventDate: booking.eventDate,
+            eventDate: context?.eventDate ?? null,
+            eventName: context?.eventName ?? null,
+            venue: context?.venue ?? null,
+            city: context?.city ?? null,
+            guests: context?.guests ?? null,
+            serviceName: booking.vendorServiceId
+              ? (serviceNames.get(booking.vendorServiceId) ?? null)
+              : booking.providerType === ProviderType.PLANNER
+                ? 'Wedding planning'
+                : null,
             createdAt: booking.createdAt,
           }
         : null,
       customer: client
         ? {
             id: client.id,
-            name: clientProfile?.displayName ?? null,
+            name: clientProfile?.displayName ?? client.email ?? null,
             email: client.email,
             phone: client.phone,
             role: client.role,
@@ -368,14 +487,16 @@ export class AdminBookingsService {
           : booking
             ? { id: booking.providerId, type: booking.providerType }
             : null,
-      service: service ? { id: service.id, name: service.displayName } : null,
+      service: service
+        ? { id: service.id, name: serviceNames.get(service.id) ?? service.displayName }
+        : null,
       event: event
         ? {
             id: event.id,
             name: event.name,
-            venue: event.venue ?? null,
-            city: event.city,
-            eventDate: event.eventDate,
+            venue: context?.venue ?? null,
+            city: context?.city ?? null,
+            eventDate: context?.eventDate ?? null,
             startTime: event.startTime,
           }
         : null,
@@ -383,13 +504,11 @@ export class AdminBookingsService {
       // (advance/second/final) and the payment history/timeline are both read
       // off this list on the client.
       payments: siblings,
+      // The same status groups as the provider's own view of this payment, so
+      // the two screens cannot disagree about where the money sits.
       summary: {
         total: booking?.amount ?? payment.amount,
-        held: sum((p) => p.status === PaymentStatus.HELD_IN_ESCROW, 'amount'),
-        released: sum((p) => p.status === PaymentStatus.RELEASED, 'amount'),
-        refunded: sum((p) => p.status === PaymentStatus.REFUNDED, 'amount'),
-        commission: sum((p) => p.status === PaymentStatus.RELEASED, 'commissionAmount'),
-        payout: sum((p) => p.status === PaymentStatus.RELEASED, 'payoutAmount'),
+        ...escrowSummary(siblings),
       },
     };
   }

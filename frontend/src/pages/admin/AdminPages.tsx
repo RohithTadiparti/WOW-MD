@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiMessage } from '../../lib/api';
 import { MOBILE_10_PATTERN } from '../../lib/permissions';
+import { milestoneLabel, paymentStatusLabel } from '../../lib/labels';
 import {
   AllBookings,
   Businesses,
@@ -969,11 +970,13 @@ export function AdminPayments() {
           <h2 className="section-title">Transactions</h2>
           <select className="input w-48" value={status} onChange={(e) => setStatus(e.target.value)}>
             <option value="">Any status</option>
-            <option value="held_in_escrow">In escrow</option>
-            <option value="released">Released</option>
-            <option value="disputed">Disputed</option>
-            <option value="refunded">Refunded</option>
-            <option value="pending_payout">Pending payout</option>
+            {['held_in_escrow', 'released', 'disputed', 'refunded', 'pending_payout', 'partially_settled', 'failed'].map(
+              (value) => (
+                <option key={value} value={value}>
+                  {paymentStatusLabel(value, 'admin')}
+                </option>
+              ),
+            )}
           </select>
         </div>
         {isLoading && <Loading rows={4} />}
@@ -1004,7 +1007,7 @@ export function AdminPayments() {
                   <td className="py-2">
                     {t.providerName ?? (t.providerType === 'planner' ? 'Wedding planner' : '—')}
                   </td>
-                  <td className="py-2 capitalize">{t.milestone.replace(/_/g, ' ')}</td>
+                  <td className="py-2">{milestoneLabel(t.milestone)}</td>
                   <td className="py-2 text-right">{money(t.amount)}</td>
                   <td className="py-2 text-right text-gray-600">{money(t.payoutAmount)}</td>
                   <td className="py-2">
@@ -1013,7 +1016,7 @@ export function AdminPayments() {
                         TXN_STATUS_STYLE[t.status] ?? 'bg-gray-100 text-gray-600'
                       }`}
                     >
-                      {t.status.replace(/_/g, ' ')}
+                      {paymentStatusLabel(t.status, 'admin')}
                     </span>
                   </td>
                 </tr>

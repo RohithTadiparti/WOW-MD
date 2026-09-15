@@ -27,6 +27,11 @@ interface Client {
   email: string | null;
   phone: string | null;
   weddingDate: string | null;
+  /**
+   * The wedding's date worked out from its functions when the plan itself has
+   * none — the same date the client's countdown counts to.
+   */
+  derivedWeddingDate?: string | null;
   location: string | null;
   events: number;
   nextEvent: { id: string; name: string; date: string | null } | null;
@@ -230,7 +235,10 @@ export default function PlannerClients() {
             )}
 
             <dl className="mt-3 space-y-1 text-sm">
-              <Row label="Wedding" value={c.weddingDate ? formatDate(c.weddingDate) : 'Not set'} />
+              <Row
+                label="Wedding"
+                value={formatDate(c.weddingDate ?? c.derivedWeddingDate, 'Not set')}
+              />
               <Row label="Where" value={c.location ?? '-'} />
               <Row label="Events" value={String(c.events)} />
               <Row label="Tasks done" value={`${c.tasks.done} of ${c.tasks.total}`} />

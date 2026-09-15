@@ -110,3 +110,94 @@ export function guestsOf(answers?: Record<string, unknown> | null): number | nul
   const value = Number(answers?.guest_count);
   return Number.isFinite(value) && value > 0 ? value : null;
 }
+
+/** The linked wedding function, as far as a booking's context needs it. */
+export interface LinkedEvent {
+  name: string;
+  eventDate: string | null;
+  venue: string | null;
+  city: string | null;
+  expectedGuests: number | null;
+}
+
+export interface ContextBooking {
+  eventDate?: string | null;
+  serviceAnswers?: Record<string, unknown> | null;
+  providerName?: string | null;
+  providerCity?: string | null;
+  providerIsVenue?: boolean;
+}
+
+/**
+ * What a booking is for, where and when, read from every place that says so.
+ *
+ * Each fact is taken field by field from the strongest source that has it: the
+ * linked function, then the booking's own column and form answers (and the
+ * venue business itself), then — for a planner, who is booked for the whole
+ * wedding — the wedding. Reading only the linked function made a function with
+ * no date or venue wipe out the date and place the booking form carried, so a
+ * booking for a dated day still read "Date not set". Pass `wedding` only for a
+ * planner booking.
+ */
+export function bookingContextOf(
+  booking: ContextBooking,
+  event?: LinkedEvent | null,
+  wedding?: WeddingFacts | null,
+  /**
+   * A planner is booked for the whole wedding, so any of its facts will do.
+   * A vendor is booked for a day, so only what the couple has on that same day
+   * describes it. Defaults to the whole wedding for callers that pass `wedding`
+   * only for planner bookings.
+   */
+  opts: { wholeWedding?: boolean } = {},
+): {
+  eventName: string | null;
+  eventDate: string | null;
+  venue: string | null;
+  city: string | null;
+  guests: number | null;
+} {
+  const place = venueOf({
+    answers: booking.serviceAnswers,
+    providerName: booking.providerName,
+    providerCity: booking.providerCity,
+    providerIsVenue: booking.providerIsVenue,
+  });
+  const wholeWedding = opts.wholeWedding ?? true;
+  const context = wedding && wholeWedding ? weddingContextOf(wedding) : null;
+  const eventDate =
+    event?.eventDate || booking.eventDate || dateOf(booking.serviceAnswers) || context?.date || null;
+  // A DJ or a photographer booked for the 12th, with nothing on its own form
+  // about where: the venue the couple booked for the 12th, or their function
+  // on that day, is where it is — and "Venue not given" was wrong.
+  const sameDay = wedding && !wholeWedding && eventDate ? sameDayOf(wedding, eventDate) : null;
+  return {
+    eventName: event?.name || context?.eventNames || sameDay?.eventName || null,
+    eventDate,
+    venue: event?.venue || place.venue || context?.venue || sameDay?.venue || null,
+    city: event?.city || place.city || context?.city || sameDay?.city || null,
+    guests:
+      event?.expectedGuests ||
+      guestsOf(booking.serviceAnswers) ||
+      context?.guests ||
+      sameDay?.guests ||
+      null,
+  };
+}
+
+/** What the couple has on one day: the venue booked for it, and the function held on it. */
+export function sameDayOf(
+  facts: WeddingFacts,
+  date: string,
+): { eventName: string | null; venue: string | null; city: string | null; guests: number | null } {
+  const venue = facts.vendorBookings.find(
+    (b) => b.isVenue && b.eventDate === date && (b.venue || b.city),
+  );
+  const fn = facts.events.find((e) => e.eventDate === date);
+  return {
+    eventName: fn?.name ?? null,
+    venue: venue?.venue ?? fn?.venue ?? null,
+    city: venue?.city ?? fn?.city ?? null,
+    guests: fn?.expectedGuests ?? null,
+  };
+}

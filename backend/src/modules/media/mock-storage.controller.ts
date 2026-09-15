@@ -131,6 +131,12 @@ export class MockStorageController {
 
     const extension = target.split('.').pop()?.toLowerCase() ?? '';
     res.setHeader('Content-Type', CONTENT_TYPES[extension] ?? 'application/octet-stream');
+    // Helmet sends `same-origin` for everything, which is right for the API and
+    // wrong for a stand-in for a CDN: a photo uploaded through one origin (the
+    // API port, a phone on the LAN) was refused as an <img> on another (the web
+    // app), and every seeded portfolio showed as a broken image. Real S3 or a
+    // CDN serves these cross-origin, so the mock does too.
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     createReadStream(target).pipe(res);
   }
 }

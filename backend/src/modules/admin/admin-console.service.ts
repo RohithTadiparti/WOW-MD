@@ -18,6 +18,7 @@ import {
 import { DirectoryQueryDto } from './dto/console.dto';
 import { CaseStatus, UserRole, VerificationStatus } from '../../common/enums';
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
+import { serviceNamesByIds } from '../catalog/service-names';
 import { AdminBookingsService } from './admin-bookings.service';
 
 /**
@@ -90,7 +91,11 @@ export class AdminConsoleService {
       offeringsByService.set(o.vendorServiceId, list);
     }
 
-    const bookings = await this.adminBookings.attachParties(receivedRaw);
+    const [bookings, serviceNames] = await Promise.all([
+      this.adminBookings.attachParties(receivedRaw),
+      // `displayName` is only the vendor's override; the catalogue names the rest.
+      serviceNamesByIds(this.vendorServices, serviceIds),
+    ]);
 
     return {
       business: {
@@ -130,6 +135,7 @@ export class AdminConsoleService {
       services: services.map((s) => ({
         id: s.id,
         displayName: s.displayName,
+        name: serviceNames.get(s.id) ?? null,
         description: s.description,
         concurrentCapacity: s.concurrentCapacity,
         active: s.active,
@@ -373,7 +379,8 @@ export class AdminConsoleService {
       return {
         id: u.id,
         email: u.email,
-        name: profileFor.get(u.id)?.displayName ?? null,
+        // Officers rarely have a profile; the email still says who they are.
+        name: profileFor.get(u.id)?.displayName ?? u.email,
         city: profileFor.get(u.id)?.city ?? null,
         isActive: u.isActive,
         // Real leave state from EZ1-I210: an officer with no row has never set

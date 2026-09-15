@@ -13,11 +13,13 @@ import {
   Lock,
   SignOut,
   Star,
+  Storefront,
   UserCircle,
   type IconProps,
 } from 'phosphor-react-native';
 
 import { signOut } from '@/lib/api';
+import { isPlannerAccount } from '@/lib/planner-listing';
 import { Permission, ROLE_LABEL, can, canAny } from '@/shared/permissions';
 import {
   Body,
@@ -54,6 +56,9 @@ export default function More() {
   const permissions = user?.permissions ?? [];
 
   const isVendor = can(permissions, Permission.VENDOR_LISTING_MANAGE);
+  // A planner's listing is one form, not the vendor's guided set-up, so it has
+  // no tab of its own and lives here (EZ1-I39).
+  const isPlanner = isPlannerAccount(permissions);
   const isProvider = canAny(permissions, [
     Permission.VENDOR_LISTING_MANAGE,
     Permission.PLANNER_LISTING_MANAGE,
@@ -84,14 +89,21 @@ export default function More() {
               to="/chat"
             />
           ) : null}
-          {canAny(permissions, [Permission.EVENT_MANAGE_OWN]) ? (
-            <Row
-              icon={CalendarBlank}
-              label="Events"
-              hint="The days of the wedding, and the invitations to them"
-              to="/events"
-            />
-          ) : null}
+        </Group>
+      ) : null}
+
+      {/* The wedding's own days, on the one capability the web sidebar gates
+          Events on. It sat inside the matchmaking group, so an account holding
+          events without browsing matches never saw it. An administrator holds
+          every permission and is kept off it the way the web keeps them off. */}
+      {can(permissions, Permission.EVENT_MANAGE_OWN) && user?.role !== 'admin' ? (
+        <Group title="Wedding">
+          <Row
+            icon={CalendarBlank}
+            label="Events"
+            hint="The days of the wedding, and the invitations to them"
+            to="/events"
+          />
         </Group>
       ) : null}
 
@@ -102,7 +114,15 @@ export default function More() {
           hint="Your name, contact details and what we hold"
           to="/profile"
         />
-        {isVendor ? (
+        {isPlanner ? (
+          <Row
+            icon={Storefront}
+            label="My Listing"
+            hint="Your agency, packages and the cities you work in"
+            to="/business-details"
+          />
+        ) : null}
+        {isVendor || isPlanner ? (
           <Row
             icon={Star}
             label="My Reviews"

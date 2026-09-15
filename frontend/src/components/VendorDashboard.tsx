@@ -13,7 +13,7 @@ import {
 import { api } from '../lib/api';
 import { useAuth } from '../store/auth';
 import { useBusinesses } from '../store/business';
-import { BOOKING_STATUS_LABEL } from '../lib/permissions';
+import { SELLER_STATUS_LABEL, humanize, partialListNote } from '../lib/labels';
 import { formatShortDate, daysAway } from '../lib/dates';
 import { Loading } from './ui/Feedback';
 import GetStarted from './GetStarted';
@@ -285,7 +285,16 @@ export default function VendorDashboard() {
           <Loading rows={3} />
         </div>
       ) : (
-        <BookingsOverviewChart bookings={bookings} />
+        <>
+          <BookingsOverviewChart bookings={bookings} />
+          {/* The cards above count every booking; the chart and lists below are
+              drawn from the newest hundred, and say so when that is fewer. */}
+          {partialListNote(bookings.length, all) && (
+            <p className="-mt-4 text-xs text-gray-500">
+              {partialListNote(bookings.length, all)} bookings in the chart and lists below.
+            </p>
+          )}
+        </>
       )}
 
       {/* Status breakdown — the whole queue by state, each row into that tab. */}
@@ -297,7 +306,7 @@ export default function VendorDashboard() {
           <p className="text-sm text-gray-400">No bookings against your listings yet.</p>
         ) : (
           <div className="space-y-2">
-            {Object.entries(BOOKING_STATUS_LABEL)
+            {Object.entries(SELLER_STATUS_LABEL)
               .filter(([status]) => (c[status] ?? 0) > 0)
               .map(([status, label]) => (
                 <div key={status} className="flex items-center gap-3">
@@ -352,13 +361,13 @@ export default function VendorDashboard() {
               <li key={b.id} className="flex items-center justify-between gap-3 py-2">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-gray-900">
-                    {b.clientName ?? 'Customer'}
+                    {b.clientName ?? b.clientEmail ?? 'Customer'}
                     {b.serviceName && <span className="font-normal text-gray-500"> · {b.serviceName}</span>}
                   </p>
                   <p className="truncate text-xs text-gray-500">
                     {[b.eventName, [b.eventVenue, b.eventCity].filter(Boolean).join(', ') || null]
                       .filter(Boolean)
-                      .join(' · ') || BOOKING_STATUS_LABEL[b.status] || b.status}
+                      .join(' · ') || SELLER_STATUS_LABEL[b.status] || humanize(b.status)}
                   </p>
                 </div>
                 <span className="shrink-0 text-xs text-gray-500">{formatShortDate(b.eventDate)}</span>
