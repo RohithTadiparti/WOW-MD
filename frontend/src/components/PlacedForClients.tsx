@@ -4,7 +4,7 @@ import { api } from '../lib/api';
 import { formatDate } from '../lib/dates';
 import { BOOKING_STATUS_LABEL } from '../lib/permissions';
 
-interface PlacedBooking {
+export interface PlacedBooking {
   bookingId: string;
   clientUserId: string;
   clientName: string;
@@ -28,13 +28,18 @@ interface PlacedBooking {
  * had just booked a vendor could not see which one. Each row opens the client,
  * where the booking is followed.
  */
-export default function PlacedForClients() {
-  const { data, isPending, isError } = useQuery({
+export function usePlacedForClients(enabled = true) {
+  return useQuery({
     queryKey: ['planner-bookings-placed'],
     queryFn: async () => (await api.get('/planner/bookings-placed')).data as PlacedBooking[],
+    enabled,
     retry: false,
     refetchInterval: 30_000,
   });
+}
+
+export default function PlacedForClients() {
+  const { data, isPending, isError } = usePlacedForClients();
 
   if (isPending) return null;
 

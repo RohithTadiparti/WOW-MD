@@ -11,6 +11,10 @@ import type { Tone } from '@/components/chrome';
 
 export interface IncomingBooking {
   id: string;
+  /** The customer the booking is for. */
+  userId?: string;
+  /** The listing that was booked. */
+  providerName?: string | null;
   status: string;
   amount: string;
   currency: string;

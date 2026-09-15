@@ -10,7 +10,8 @@ import {
   isRequestOnDate,
   type IncomingBooking,
 } from '@/lib/bookings';
-import { Permission, canAny } from '@/shared/permissions';
+import { Permission, can, canAny } from '@/shared/permissions';
+import { PlacedForClients } from '@/components/bookings/placed-for-clients';
 import { FilterChips } from '@/components/chrome';
 import { SelectField } from '@/components/form';
 import { BookingCard } from '@/components/bookings/booking-card';
@@ -46,6 +47,9 @@ export default function Bookings() {
     Permission.VENDOR_LISTING_MANAGE,
     Permission.PLANNER_LISTING_MANAGE,
   ]);
+  // A planner also books vendors for their couples. Those bookings are the
+  // couples', so they never reach this queue and are listed above it instead.
+  const canRequestForClient = can(permissions, Permission.BOOKING_REQUEST_FOR_CLIENT);
 
   const [tab, setTab] = useState<string | null>('all');
   const [search, setSearch] = useState('');
@@ -213,6 +217,8 @@ export default function Bookings() {
           <BusinessSwitcher />
 
           {error ? <Alert tone="critical">{error}</Alert> : null}
+
+          {canRequestForClient ? <PlacedForClients /> : null}
 
           {/* Null is not offered here: "All" is already the unfiltered view,
               so a chip that clears the filter would be a second All. */}
