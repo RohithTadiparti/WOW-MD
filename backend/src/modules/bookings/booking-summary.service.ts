@@ -60,6 +60,11 @@ export class BookingSummaryService {
         budget: booking.expectedBudget,
         /** The quotation the booking was struck on. */
         quoted: accepted?.amount ?? null,
+        /**
+         * Priced without a quotation: a listed price the customer booked at.
+         * The amount is still agreed, so "Not agreed yet" would be untrue.
+         */
+        listedPrice: !accepted && hasPrice,
         /** The agreed price before add-ons. */
         base: booking.baseAmount ?? accepted?.amount ?? (hasPrice ? booking.amount : null),
         addonsTotal: (addonsMinor / 100).toFixed(2),

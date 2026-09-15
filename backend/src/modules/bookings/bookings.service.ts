@@ -8,7 +8,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, In, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Not, Repository } from 'typeorm';
 import { Booking } from './entities/booking.entity';
 import { Payment } from './entities/payment.entity';
 import { Quotation } from './entities/quotation.entity';
@@ -39,7 +39,7 @@ import { OutboxService } from '../../platform/events/outbox.service';
 import { PAYMENT_PROVIDER, PaymentProvider, PayoutDestination } from './payment.provider';
 import { collectedByBooking, isCollected } from './payment-totals';
 import { summariseQuotations } from './booking-summary';
-import { dateOf, guestsOf, venueOf } from './booking-venue';
+import { WeddingFacts, dateOf, guestsOf, venueOf, weddingContextOf } from './booking-venue';
 import { serviceNamesByIds } from '../catalog/service-names';
 import { SupportCasesService } from '../verification/support-cases.service';
 import { MatchmakingService } from '../matchmaking/matchmaking.service';
@@ -1753,6 +1753,15 @@ export class BookingsService {
     const nameByUser = new Map(profiles.map((p) => [p.userId as string, p.displayName]));
     const profileByUser = new Map(profiles.map((p) => [p.userId as string, p]));
     const byEvent = new Map(events.map((e) => [e.id, e]));
+    // A planner is booked for the whole wedding, not one function, so the
+    // when and where of those bookings come from the wedding itself.
+    const weddingByClient = await this.weddingFactsFor([
+      ...new Set(
+        rows
+          .filter((b) => b.providerType === ProviderType.PLANNER && !b.eventId)
+          .map((b) => b.userId),
+      ),
+    ]);
 
     const quotationsByBooking = new Map<string, Quotation[]>();
     for (const quotation of quotationRows) {
@@ -1820,6 +1829,19 @@ export class BookingsService {
       booking.eventVenue = place.venue;
       booking.eventCity = place.city;
       booking.expectedGuests = event?.expectedGuests ?? guestsOf(booking.serviceAnswers);
+      // A planner's booking reads the couple's plan, their functions and the
+      // venue already booked for them, rather than saying "not set" over them.
+      const wedding =
+        !event && booking.providerType === ProviderType.PLANNER
+          ? weddingByClient.get(booking.userId)
+          : undefined;
+      const context = wedding ? weddingContextOf(wedding) : null;
+      if (context) {
+        booking.eventName = context.eventNames;
+        booking.eventVenue = booking.eventVenue ?? context.venue;
+        booking.eventCity = booking.eventCity ?? context.city;
+        booking.expectedGuests = booking.expectedGuests ?? context.guests;
+      }
       // When the booking is tied to a wedding function, that function's own date
       // is the single source of truth — the same date the Events page and the
       // planner's wedding brief show — so a couple moving the day is reflected
@@ -1833,9 +1855,12 @@ export class BookingsService {
         REQUEST_STATUSES.includes(booking.status);
       if (event) booking.eventDate = event.eventDate ?? null;
       else if (!booking.eventDate) booking.eventDate = dateOf(booking.serviceAnswers);
+      if (!booking.eventDate && context) booking.eventDate = context.date;
       booking.serviceName = booking.vendorServiceId
         ? (serviceNames.get(booking.vendorServiceId) ?? null)
-        : null;
+        : booking.providerType === ProviderType.PLANNER
+          ? 'Wedding planning'
+          : null;
       booking.quotation = summariseQuotations(quotationsByBooking.get(booking.id) ?? []);
       booking.collectedMilestones = milestonesByBooking.get(booking.id) ?? [];
       booking.offeringName = booking.offeringId
@@ -1858,6 +1883,68 @@ export class BookingsService {
       }
     }
     return rows;
+  }
+
+  /**
+   * What each couple's wedding already says about when and where it is: their
+   * plan's date, their functions, and the vendors they have booked with the
+   * place each is held. Three queries for every couple on the page, and none
+   * when no planner booking needs them.
+   */
+  private async weddingFactsFor(userIds: string[]): Promise<Map<string, WeddingFacts>> {
+    const facts = new Map<string, WeddingFacts>();
+    if (userIds.length === 0) return facts;
+
+    const [plans, functions, vendorBookings] = await Promise.all([
+      this.weddingPlans.find({ where: { userId: In(userIds) } }),
+      this.events.find({ where: { userId: In(userIds) } }),
+      this.bookings.find({
+        where: {
+          userId: In(userIds),
+          providerType: ProviderType.VENDOR,
+          status: Not(BookingStatus.CANCELLED),
+        },
+      }),
+    ]);
+    const vendorIds = [...new Set(vendorBookings.map((b) => b.providerId))];
+    const vendors = vendorIds.length
+      ? await this.vendors.find({ where: { id: In(vendorIds) } })
+      : [];
+    const vendorById = new Map(vendors.map((v) => [v.id, v]));
+
+    for (const userId of userIds) {
+      facts.set(userId, {
+        weddingDate: plans.find((p) => p.userId === userId && p.weddingDate)?.weddingDate ?? null,
+        events: functions
+          .filter((e) => e.userId === userId)
+          .map((e) => ({
+            name: e.name,
+            eventDate: e.eventDate ?? null,
+            venue: e.venue ?? null,
+            city: e.city ?? null,
+            expectedGuests: e.expectedGuests ?? null,
+          })),
+        vendorBookings: vendorBookings
+          .filter((b) => b.userId === userId)
+          .map((b) => {
+            const vendor = vendorById.get(b.providerId);
+            const isVenue = Boolean(vendor?.categories?.includes('venue'));
+            const place = venueOf({
+              answers: b.serviceAnswers,
+              providerName: vendor?.name,
+              providerCity: vendor?.city,
+              providerIsVenue: isVenue,
+            });
+            return {
+              eventDate: b.eventDate ?? dateOf(b.serviceAnswers),
+              venue: place.venue,
+              city: place.city,
+              isVenue,
+            };
+          }),
+      });
+    }
+    return facts;
   }
 
   /**
