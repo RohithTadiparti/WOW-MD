@@ -8,6 +8,7 @@ import { HeartBackdrop } from '@/components/heart-field';
 import { api, apiMessage } from '@/lib/api';
 import { useMatchmakingGate } from '@/lib/matchmaking';
 import { ActingClientPicker, useActingClient } from '@/components/matches/acting-client';
+import { FilterChips } from '@/components/chrome';
 import {
   Alert,
   Body,
@@ -54,6 +55,25 @@ type InteractionState =
   | 'declined_by_you'
   | 'declined_by_them';
 
+/**
+ * The web page's four tiles, as chips: each is a count and the filter that
+ * shows those rows. The server counts them over the same list it pages, so a
+ * chip's number is how many cards it opens.
+ */
+type MatchView = 'all' | 'active' | 'high' | 'shortlisted';
+interface MatchViewCounts {
+  total: number;
+  activeToday: number;
+  highCompatibility: number;
+  shortlisted: number;
+}
+const VIEW_CHIPS: { key: MatchView; label: string; count: keyof MatchViewCounts }[] = [
+  { key: 'all', label: 'All matches', count: 'total' },
+  { key: 'active', label: 'Active today', count: 'activeToday' },
+  { key: 'high', label: 'High compatibility', count: 'highCompatibility' },
+  { key: 'shortlisted', label: 'Shortlisted', count: 'shortlisted' },
+];
+
 interface Suggestion {
   profile: PublicProfile;
   score: number;
@@ -72,6 +92,7 @@ interface Suggestion {
 export default function Matches() {
   const router = useRouter();
   const [error, setError] = useState('');
+  const [view, setView] = useState<MatchView>('all');
   const qc = useQueryClient();
   const acting = useActingClient();
   const clientParam = acting.profileId ? { profileId: acting.profileId } : {};
@@ -80,9 +101,16 @@ export default function Matches() {
   const { status, gate, settled } = useMatchmakingGate(acting.profileId, acting.ready);
 
   const { data, isLoading, error: loadError } = useQuery({
-    queryKey: ['suggestions', acting.profileId],
+    queryKey: ['suggestions', acting.profileId, view],
     queryFn: async () =>
-      (await api.get('/matches/suggestions', { params: { limit: 20, ...clientParam } })).data,
+      (
+        await api.get('/matches/suggestions', {
+          params: { limit: 20, ...clientParam, ...(view !== 'all' ? { view } : {}) },
+        })
+      ).data,
+    // The previous list stays up while another chip's loads, rather than the
+    // whole screen dropping back to a skeleton on every press.
+    placeholderData: (previous) => previous,
     enabled: acting.ready && settled && !gate,
     retry: false,
   });
@@ -106,6 +134,7 @@ export default function Matches() {
    * (council round 2). The web client has always read it as `data?.data`.
    */
   const suggestions: Suggestion[] = data?.data ?? [];
+  const counts = data?.counts as MatchViewCounts | undefined;
 
   if (isLoading || (acting.ready && !settled)) {
     return (
@@ -126,6 +155,18 @@ export default function Matches() {
           <View style={{ gap: space(3), marginBottom: space(1) }}>
             <Header />
             <ActingClientPicker acting={acting} />
+            {acting.ready && !gate ? (
+              <FilterChips
+                options={VIEW_CHIPS.map((c) => ({
+                  key: c.key,
+                  label: c.label,
+                  count: counts?.[c.count],
+                }))}
+                value={view}
+                // Pressing the chosen chip again goes back to everything.
+                onChange={(key) => setView((key as MatchView | null) ?? 'all')}
+              />
+            ) : null}
             {error ? <Alert tone="critical">{error}</Alert> : null}
             {loadError ? (
               <Alert tone="critical">{apiMessage(loadError, 'Matches could not be loaded.')}</Alert>
@@ -140,6 +181,10 @@ export default function Matches() {
           ) : gate ? (
             <EmptyState title={status?.profileCompleted ? 'Matchmaking is closed' : 'Finish the profile first'}>
               {gate}
+            </EmptyState>
+          ) : view !== 'all' ? (
+            <EmptyState title="Nobody here right now">
+              No profiles under {VIEW_CHIPS.find((c) => c.key === view)?.label} at the moment.
             </EmptyState>
           ) : (
             <EmptyState title="No matches to show yet">

@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api, apiMessage } from '@/lib/api';
@@ -63,6 +63,12 @@ export default function Interests() {
   const [confirm, setConfirm] = useState<{ row: Interest; kind: 'withdraw' | 'block' } | null>(null);
 
   const acting = useActingClient();
+  // Opened from "interest in your client": act for that client straight away.
+  const { client } = useLocalSearchParams<{ client?: string }>();
+  const { setProfileId } = acting;
+  useEffect(() => {
+    if (client) setProfileId(client);
+  }, [client, setProfileId]);
   const { data, isPending, isFetching, refetch } = useQuery({
     queryKey: ['interest-board', acting.profileId],
     queryFn: async () =>

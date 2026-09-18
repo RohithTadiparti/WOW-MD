@@ -49,6 +49,13 @@ export const NOTIFICATION_TARGET: Record<NotificationType, NotificationTarget> =
     action: 'respond',
     idKey: 'counterpartProfileId',
   },
+  // The agency's own client is what the interest is about, so that is the id
+  // it carries; the interest itself is read on the agency's Interests board.
+  [NotificationType.MATCH_INTEREST_FOR_CLIENT]: {
+    module: 'matches',
+    action: 'view',
+    idKey: 'subjectProfileId',
+  },
   [NotificationType.MATCH_ACCEPTED]: {
     module: 'matches',
     action: 'view',
