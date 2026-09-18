@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ProfileSilhouette } from './ProfileSilhouette';
 
 export interface Biodata {
   id: string;
@@ -98,6 +99,11 @@ export default function BiodataCard({
           </span>
         )}
       </header>
+
+      {/* No photograph: the groom or bride silhouette holds the slot. */}
+      {profile.photos.length === 0 && (
+        <ProfileSilhouette gender={profile.gender} className="mt-3 h-32 w-28 rounded-sm" />
+      )}
 
       {profile.photos.length > 0 && (
         <div className="mt-3 flex gap-2 overflow-x-auto">

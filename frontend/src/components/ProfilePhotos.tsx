@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiMessage } from '../lib/api';
 import PhotoUploader from './PhotoUploader';
 import { Loading } from './ui/Feedback';
+import { ProfileSilhouette } from './ProfileSilhouette';
 
 interface PhotoState {
   photos: string[];
@@ -25,9 +26,12 @@ interface PhotoState {
 export default function ProfilePhotos({
   profileId,
   readOnly = false,
+  gender,
 }: {
   profileId: string;
   readOnly?: boolean;
+  /** Picks the groom or bride silhouette that holds the empty slot. */
+  gender?: string | null;
 }) {
   const qc = useQueryClient();
   const [error, setError] = useState('');
@@ -126,7 +130,10 @@ export default function ProfilePhotos({
         ))}
 
         {photos.length === 0 && !isLoading && (
-          <p className="text-sm text-gray-400">No photographs yet.</p>
+          <figure className="w-32">
+            <ProfileSilhouette gender={gender} className="h-32 w-32 rounded-sm ring-1 ring-gray-200" />
+            <figcaption className="mt-1 text-center text-xs text-gray-400">No photographs yet</figcaption>
+          </figure>
         )}
       </div>
 

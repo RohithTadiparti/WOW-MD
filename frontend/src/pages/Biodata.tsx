@@ -268,6 +268,7 @@ export default function Biodata() {
           onEdit={() => setOpen('personal')}
           onPhotos={() => setOpen('photos')}
           onView={() => setOpen('saved')}
+          gender={me?.gender ?? data?.gender}
         />
       )}
 
@@ -282,7 +283,7 @@ export default function Biodata() {
 
       <Accordion title="Photographs" name="photos" open={open} setOpen={setOpen}>
         {targetId ? (
-          <ProfilePhotos profileId={targetId} />
+          <ProfilePhotos profileId={targetId} gender={me?.gender ?? data?.gender} />
         ) : (
           <p className="text-sm text-gray-400">Pick a profile first.</p>
         )}

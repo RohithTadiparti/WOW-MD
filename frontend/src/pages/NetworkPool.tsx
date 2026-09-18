@@ -4,6 +4,7 @@ import { api, apiMessage } from '../lib/api';
 import { useMatchmakingGate } from '../lib/matchmaking-gate';
 import ProfileSelector from '../components/ProfileSelector';
 import { Loading } from '../components/ui/Feedback';
+import { PersonPhoto } from '../components/ProfileSilhouette';
 
 interface PoolProfile {
   id: string;
@@ -135,13 +136,11 @@ export default function NetworkPool() {
                 .filter(Boolean)
                 .join(' · ')}
             </p>
-            {p.photos?.[0] ? (
-              <img src={p.photos[0]} alt="" className="mt-2 h-40 w-full rounded-sm object-cover" />
-            ) : (
-              <div className="mt-2 grid h-40 place-items-center rounded-sm bg-gradient-to-br from-brand/[0.07] to-surface-sunken text-xs text-gray-400">
-                No photograph yet
-              </div>
-            )}
+            <PersonPhoto
+              url={p.photos?.[0]}
+              gender={p.gender}
+              className="mt-2 h-40 w-full rounded-sm object-cover"
+            />
             {p.bio && <p className="mt-2 flex-1 text-sm text-gray-600">{p.bio}</p>}
             <button
               className="btn-outline btn-sm mt-4 w-full transition-colors group-hover/tile:border-brand group-hover/tile:text-brand-strong"
