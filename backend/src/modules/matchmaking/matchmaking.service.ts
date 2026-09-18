@@ -15,6 +15,7 @@ import { RedisService } from '../../platform/redis/redis.service';
 import { OutboxService } from '../../platform/events/outbox.service';
 import { Neo4jService } from '../../platform/neo4j/neo4j.service';
 import {
+  InterestScreening,
   InterestStatus,
   MatchFixedState,
   ProfileClaimStatus,
@@ -38,6 +39,7 @@ import { AgentProfile } from '../agents/entities/agent-profile.entity';
 import { SuggestionsQueryDto } from './dto/matchmaking.dto';
 import { genderWhere, matchGender, soughtGender } from './match-gender';
 import { MatchViewCounts, inView, viewCounts } from './suggestion-views';
+import { heldFromClient, screeningAgentFor, visibleTo } from './interest-screening.service';
 
 /**
  * Where the viewer already stands with a candidate.
@@ -77,6 +79,8 @@ export interface InterestView {
   /** The other side of the interest, in public form. */
   counterpart: PublicProfileView;
   direction: 'incoming' | 'outgoing';
+  /** Where it stands with the receiving side's agency; null if never held. */
+  screening: InterestScreening | null;
 }
 
 /** An accepted match, with everything the Confirmed Matches card has to state. */
@@ -530,6 +534,9 @@ export class MatchmakingService {
     for (const row of rows) {
       const other = row.fromProfileId === profileId ? row.toProfileId : row.fromProfileId;
       const outgoing = row.fromProfileId === profileId;
+      // One still with this profile's agency, or turned down by it, has not
+      // reached the client — and the cache is shared with them.
+      if (!outgoing && heldFromClient(row)) continue;
       let value: InteractionState;
       switch (row.status) {
         case InterestStatus.ACCEPTED:
@@ -997,6 +1004,10 @@ export class MatchmakingService {
     const existing = await this.interests.findOne({
       where: { fromProfileId: from.id, toProfileId },
     });
+    // An agency's client hears about it only once the agency lets it through.
+    const screening = (await screeningAgentFor(this.users, target, actor.userId))
+      ? InterestScreening.WITH_AGENCY
+      : null;
     // An interest that is still live (pending or accepted) needs nothing done —
     // and, crucially, no cache-busting or re-notification either.
     if (
@@ -1021,6 +1032,7 @@ export class MatchmakingService {
       existing.endedByUserId = null;
       existing.endedReason = null;
       existing.sentByUserId = actor.userId;
+      existing.screening = screening;
       interest = await this.interests.save(existing);
     } else {
       interest = await this.interests.save(
@@ -1029,6 +1041,7 @@ export class MatchmakingService {
           toProfileId,
           sentByUserId: actor.userId,
           status: InterestStatus.PENDING,
+          screening,
         }),
       );
     }
@@ -1040,6 +1053,8 @@ export class MatchmakingService {
         fromProfileId: from.id,
         toProfileId,
         sentByUserId: actor.userId,
+        // Tells the notifier to ask the agency rather than tell the client.
+        screening,
       },
     });
     await this.neo4j.recordInterest(from.id, toProfileId, 'INTERESTED');
@@ -1072,6 +1087,17 @@ export class MatchmakingService {
     // Throws unless the caller controls the recipient profile. Called for that
     // refusal alone — nothing here needs the profile it resolves.
     await this.resolveSubject(actor, interest.toProfileId);
+
+    // Nobody answers an interest the agency has not passed on — not the client,
+    // who has not been told of it, and not the agent, whose answers are Forward
+    // and Decline (InterestScreeningService).
+    if (heldFromClient(interest)) {
+      throw new ForbiddenException(
+        interest.screening === InterestScreening.WITH_AGENCY
+          ? 'This interest is still with the agency. It can be answered once they forward it.'
+          : 'The agency has already declined this interest.',
+      );
+    }
 
     // Declining is always available. Requiring a verified document before
     // somebody may say no would trap them in a conversation they have already
@@ -1278,6 +1304,9 @@ export class MatchmakingService {
       counts.all += 1;
       counts[sentByClient ? 'sent' : 'received'] += 1;
       counts[row.status] = (counts[row.status] ?? 0) + 1;
+      const awaitingReview =
+        row.screening === InterestScreening.WITH_AGENCY && row.status === InterestStatus.PENDING;
+      if (awaitingReview) counts.with_agency = (counts.with_agency ?? 0) + 1;
 
       return [
         {
@@ -1288,6 +1317,9 @@ export class MatchmakingService {
           direction: sentByClient ? ('sent' as const) : ('received' as const),
           bothClients,
           clientProfileId: client.id,
+          screening: row.screening ?? null,
+          // Held for this agency: its answers are Forward and Decline.
+          awaitingReview,
           from: view(from),
           to: view(to),
         },
@@ -1304,10 +1336,15 @@ export class MatchmakingService {
   async interestBoard(actor: AuthUser, profileId?: string) {
     const me = await this.resolveSubject(actor, profileId);
 
-    const rows = await this.interests.find({
-      where: [{ fromProfileId: me.id }, { toProfileId: me.id }],
-      order: { updatedAt: 'DESC' },
-    });
+    // What is still with an agency is left out unless the agency is reading.
+    const rows = visibleTo(
+      actor,
+      me,
+      await this.interests.find({
+        where: [{ fromProfileId: me.id }, { toProfileId: me.id }],
+        order: { updatedAt: 'DESC' },
+      }),
+    );
 
     // Decorated in two passes, because an accepted interest is allowed to show
     // more of the counterpart than a pending one. Doing it in one pass would
@@ -1340,6 +1377,8 @@ export class MatchmakingService {
       const row = byId.get(view.id)!;
       const incoming = view.direction === 'incoming';
       const pending = st === InterestStatus.PENDING;
+      // Only the agency ever sees a held row here; it answers it differently.
+      const review = incoming && pending && row.screening === InterestScreening.WITH_AGENCY;
 
       /*
        * Who said yes.
@@ -1370,8 +1409,10 @@ export class MatchmakingService {
           // refuses it. Declining stays open so the queue can still be
           // cleared, and unsending stays open so a request this profile sent
           // before settling can be taken back.
-          accept: incoming && pending && !matchmakingClosed,
-          decline: incoming && pending,
+          accept: incoming && pending && !review && !matchmakingClosed,
+          decline: incoming && pending && !review,
+          forward: review,
+          agencyDecline: review,
           unsend: !incoming && pending,
           // Offered wherever there is somebody to block: a request you have not
           // answered, and a match you have. Those are the two places people
@@ -1424,7 +1465,7 @@ export class MatchmakingService {
       where: { toProfileId: me.id, status: InterestStatus.PENDING },
       order: { createdAt: 'DESC' },
     });
-    return this.decorate(me.id, rows, false);
+    return this.decorate(me.id, visibleTo(actor, me, rows), false);
   }
 
   /** Interests this profile has sent and is waiting on. */
@@ -1461,6 +1502,7 @@ export class MatchmakingService {
           createdAt: r.createdAt,
           counterpart: toPublicProfile(other, { matched }),
           direction: r.toProfileId === myProfileId ? ('incoming' as const) : ('outgoing' as const),
+          screening: r.screening ?? null,
         },
       ];
     });

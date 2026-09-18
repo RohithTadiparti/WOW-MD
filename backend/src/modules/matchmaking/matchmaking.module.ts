@@ -12,6 +12,7 @@ import { MatchmakingController } from './matchmaking.controller';
 import { InvitationsModule } from '../invitations/invitations.module';
 import { CompatibilityEngine } from './compatibility.engine';
 import { MatchLifecycleService } from './match-lifecycle.service';
+import { InterestScreeningService } from './interest-screening.service';
 import { VerificationModule } from '../verification/verification.module';
 import { AgentsModule } from '../agents/agents.module';
 
@@ -31,7 +32,12 @@ import { AgentsModule } from '../agents/agents.module';
     InvitationsModule,
     forwardRef(() => AgentsModule),
   ],
-  providers: [MatchmakingService, CompatibilityEngine, MatchLifecycleService],
+  providers: [
+    MatchmakingService,
+    CompatibilityEngine,
+    MatchLifecycleService,
+    InterestScreeningService,
+  ],
   controllers: [MatchmakingController],
   exports: [MatchmakingService, MatchLifecycleService, TypeOrmModule],
 })

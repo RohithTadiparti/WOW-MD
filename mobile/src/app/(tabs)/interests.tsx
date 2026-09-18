@@ -163,7 +163,9 @@ export default function Interests() {
                 setConfirm({ row, kind: path });
                 return;
               }
-              act.mutate({ id: row.id, path });
+              // The server's route for declining is `reject`; the row's own
+              // word for it is `decline`, which no route answers.
+              act.mutate({ id: row.id, path: path === 'decline' ? 'reject' : path });
             }}
           />
         )}

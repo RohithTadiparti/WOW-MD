@@ -92,6 +92,28 @@ export enum InterestStatus {
   BLOCKED = 'blocked',
 }
 
+/**
+ * Where an interest stands with the agency that runs the receiving profile.
+ *
+ * A client an agency manages hears about an interest only once the agency has
+ * let it through: it is held for the agent first, and forwarded or declined
+ * from there. Kept apart from `InterestStatus` rather than added to it, because
+ * a held interest *is* pending as far as its sender is concerned — they can
+ * still take it back, and it still blocks a duplicate — and every rule already
+ * written against PENDING keeps meaning what it says.
+ *
+ * Null on an interest that was never held: one to a profile no agency runs,
+ * one the agency sent itself, and every interest written before this existed.
+ */
+export enum InterestScreening {
+  /** Waiting on the agent. The client and their family have not been told. */
+  WITH_AGENCY = 'with_agency',
+  /** Let through by the agent. From here on it is an ordinary interest. */
+  FORWARDED = 'forwarded',
+  /** Turned down by the agent. The client never sees it. */
+  DECLINED = 'declined_by_agency',
+}
+
 export enum VendorCategory {
   VENUE = 'venue',
   CATERING = 'catering',
@@ -120,12 +142,19 @@ export enum NotificationType {
   /**
    * Somebody has sent an interest to a profile an agency manages.
    *
-   * For the managing agent, when the profile's owner is the one told about the
-   * interest itself: a client who has claimed their profile hears about it on
-   * their own account, and until now the agency running their matchmaking heard
-   * nothing.
+   * For the managing agent, and it is a request to review: the interest is held
+   * for the agency (InterestScreening.WITH_AGENCY), and the client and their
+   * family are told only if the agent forwards it.
    */
   MATCH_INTEREST_FOR_CLIENT = 'match_interest_for_client',
+  /**
+   * The agency running the other profile has turned an interest down.
+   *
+   * For the side that sent it. An ordinary decline tells nobody, but a family
+   * whose interest never reached the person it was for is owed a word that it
+   * was the agency who answered.
+   */
+  MATCH_DECLINED_BY_AGENCY = 'match_declined_by_agency',
   NEW_MESSAGE = 'new_message',
   /**
    * Two of an agency's clients have started talking, or have started a call.

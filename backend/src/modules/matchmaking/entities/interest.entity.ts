@@ -7,7 +7,7 @@ import {
   Unique,
   UpdateDateColumn,
 } from 'typeorm';
-import { InterestStatus, MatchFixedState } from '../../../common/enums';
+import { InterestScreening, InterestStatus, MatchFixedState } from '../../../common/enums';
 
 /**
  * An expression of interest between two *profiles*.
@@ -42,6 +42,16 @@ export class Interest {
   @Index()
   @Column({ type: 'enum', enum: InterestStatus, default: InterestStatus.PENDING })
   status: InterestStatus;
+
+  /**
+   * Whether the agency running the receiving profile has let this through.
+   *
+   * Null when it was never held (see InterestScreening). While it is
+   * WITH_AGENCY, or once the agency has DECLINED it, the interest exists for
+   * its sender and for the agency only — the client's own lists leave it out.
+   */
+  @Column({ type: 'enum', enum: InterestScreening, nullable: true })
+  screening: InterestScreening | null;
 
   /**
    * Fixing a match takes two confirmations, one from each side, because it is

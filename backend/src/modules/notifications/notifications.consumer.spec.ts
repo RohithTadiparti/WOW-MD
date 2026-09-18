@@ -2,17 +2,17 @@ import { NotificationsConsumer } from './notifications.consumer';
 import { NotificationsService } from './notifications.service';
 import { EventBus } from '../../platform/events/event-bus.service';
 import { Profile } from '../users/entities/profile.entity';
-import { NotificationType, UserRole } from '../../common/enums';
+import { InterestScreening, NotificationType, UserRole } from '../../common/enums';
 
 type Handler = (e: { payload: Record<string, unknown> }) => void;
 
 /**
  * An interest sent to a profile an agency manages.
  *
- * The owner of the profile is told, as before. What this pins down is the
- * second notification, to the agency, and the three times it must not go: when
- * the agency is already the one told, when the agency sent the interest, and
- * when whoever manages the profile is not an agency.
+ * Such an interest is held for the agency (InterestScreening.WITH_AGENCY): the
+ * agency is asked to review it and the client is told nothing. What this pins
+ * down is who hears what at each step — sent, forwarded, declined — and that an
+ * interest nobody held is announced exactly as it always was.
  */
 describe('NotificationsConsumer interest to a managed profile', () => {
   const handlers = new Map<string, Handler>();
@@ -25,7 +25,9 @@ describe('NotificationsConsumer interest to a managed profile', () => {
   let stewardRole: UserRole;
   const profilesRepo = {
     find: jest.fn(async () => profiles),
-    findOne: jest.fn(async () => null),
+    findOne: jest.fn(async (opts: { where: { id: string } }) =>
+      profiles.find((p) => p.id === opts.where.id) ?? null,
+    ),
   };
   const usersRepo = { findOne: jest.fn(async () => ({ id: 'agent-1', role: stewardRole })) };
   const unused = { find: jest.fn(async () => []), findOne: jest.fn(async () => null) };
@@ -41,16 +43,18 @@ describe('NotificationsConsumer interest to a managed profile', () => {
       ...over,
     }) as Profile;
 
-  /** Fire the event and let the fire-and-forget handlers finish. */
-  const send = async (sentByUserId = 'suitor-user') => {
-    handlers.get('match.interest_sent')?.({
-      payload: { interestId: 'i1', fromProfileId: 'from', toProfileId: 'to', sentByUserId },
+  /** Fire an event and let the fire-and-forget handlers finish. */
+  const fire = async (event: string, payload: Record<string, unknown>) => {
+    handlers.get(event)?.({
+      payload: { interestId: 'i1', fromProfileId: 'from', toProfileId: 'to', ...payload },
     });
     await new Promise((resolve) => setImmediate(resolve));
   };
-  const agentCalls = () =>
+  const send = (screening: InterestScreening | null, sentByUserId = 'suitor-user') =>
+    fire('match.interest_sent', { sentByUserId, screening });
+  const callsOf = (type: NotificationType) =>
     notifications.create.mock.calls.filter(
-      (call) => (call as unknown[])[1] === NotificationType.MATCH_INTEREST_FOR_CLIENT,
+      (call) => (call as unknown[])[1] === type,
     ) as unknown as [string, NotificationType, Record<string, unknown>][];
 
   beforeEach(() => {
@@ -72,53 +76,84 @@ describe('NotificationsConsumer interest to a managed profile', () => {
     consumer.onModuleInit();
   });
 
-  it('tells the agency, naming the interested profile and its client', async () => {
+  it('asks only the agency about a held interest, naming the interested profile and its client', async () => {
     profiles = [suitor as unknown as Profile, client()];
-    await send();
+    await send(InterestScreening.WITH_AGENCY);
 
-    // The client hears about it on their own account, as their own profile…
-    expect(notifications.create).toHaveBeenCalledWith(
-      'client-user',
-      NotificationType.MATCH_INTEREST,
-      expect.objectContaining({ forManagedProfile: false }),
-    );
-    // …and the agency running their matchmaking is told as well.
-    const calls = agentCalls();
-    expect(calls).toHaveLength(1);
-    const [recipient, , payload] = calls[0];
+    // The client has not been told: the agency has not let it through yet.
+    expect(callsOf(NotificationType.MATCH_INTEREST)).toHaveLength(0);
+    expect(notifications.create).toHaveBeenCalledTimes(1);
+    const [[recipient, , payload]] = callsOf(NotificationType.MATCH_INTEREST_FOR_CLIENT);
     expect(recipient).toBe('agent-1');
     expect(payload).toMatchObject({
       counterpartProfileId: 'from',
       counterpartName: 'Vamsi',
+      counterpartCity: 'Vizag',
       subjectProfileId: 'to',
       subjectName: 'Harika',
     });
   });
 
-  it('does not tell the agency twice about a profile nobody has claimed', async () => {
+  it('asks the agency to review one for a profile nobody has claimed, and nothing else', async () => {
     profiles = [suitor as unknown as Profile, client({ userId: null })];
-    await send();
+    await send(InterestScreening.WITH_AGENCY);
 
-    expect(agentCalls()).toHaveLength(0);
-    // The ordinary interest notification already went to the agency, marked as
-    // being about its client so the line names Harika rather than "your profile".
+    expect(callsOf(NotificationType.MATCH_INTEREST)).toHaveLength(0);
+    expect(callsOf(NotificationType.MATCH_INTEREST_FOR_CLIENT)).toHaveLength(1);
+  });
+
+  it('announces an interest nobody held to the client as it always did', async () => {
+    // The agency sent this one itself, so there was nothing to review.
+    profiles = [suitor as unknown as Profile, client()];
+    await send(null, 'agent-1');
+
+    expect(callsOf(NotificationType.MATCH_INTEREST_FOR_CLIENT)).toHaveLength(0);
     expect(notifications.create).toHaveBeenCalledWith(
-      'agent-1',
+      'client-user',
       NotificationType.MATCH_INTEREST,
-      expect.objectContaining({ forManagedProfile: true, subjectName: 'Harika' }),
+      expect.objectContaining({ forManagedProfile: false, counterpartName: 'Vamsi' }),
     );
   });
 
-  it('does not tell the agency about an interest it sent itself', async () => {
-    profiles = [suitor as unknown as Profile, client()];
-    await send('agent-1');
-    expect(agentCalls()).toHaveLength(0);
+  it('leaves a profile a family member runs exactly as it was', async () => {
+    stewardRole = UserRole.FAMILY;
+    profiles = [suitor as unknown as Profile, client({ managedByUserId: 'mother-1' })];
+    await send(null);
+
+    expect(callsOf(NotificationType.MATCH_INTEREST_FOR_CLIENT)).toHaveLength(0);
+    expect(callsOf(NotificationType.MATCH_INTEREST).map(([to]) => to)).toEqual(['client-user']);
   });
 
-  it('is for agencies only', async () => {
+  it('asks nobody to review when whoever manages the profile is not an agency', async () => {
     stewardRole = UserRole.FAMILY;
     profiles = [suitor as unknown as Profile, client()];
-    await send();
-    expect(agentCalls()).toHaveLength(0);
+    await send(InterestScreening.WITH_AGENCY);
+    expect(callsOf(NotificationType.MATCH_INTEREST_FOR_CLIENT)).toHaveLength(0);
+  });
+
+  it('tells the client once the agency forwards it', async () => {
+    profiles = [suitor as unknown as Profile, client()];
+    await fire('match.interest_forwarded', { forwardedByUserId: 'agent-1' });
+
+    const calls = callsOf(NotificationType.MATCH_INTEREST);
+    expect(calls).toHaveLength(1);
+    expect(calls[0][0]).toBe('client-user');
+    expect(calls[0][2]).toMatchObject({ counterpartName: 'Vamsi', forManagedProfile: false });
+  });
+
+  it('tells nobody on forwarding a profile only the agency reads', async () => {
+    profiles = [suitor as unknown as Profile, client({ userId: null })];
+    await fire('match.interest_forwarded', { forwardedByUserId: 'agent-1' });
+    expect(notifications.create).not.toHaveBeenCalled();
+  });
+
+  it('tells the sender, and only the sender, when the agency declines', async () => {
+    profiles = [suitor as unknown as Profile, client()];
+    await fire('match.interest_declined_by_agency', { declinedByUserId: 'agent-1' });
+
+    expect(notifications.create).toHaveBeenCalledTimes(1);
+    const [[recipient, , payload]] = callsOf(NotificationType.MATCH_DECLINED_BY_AGENCY);
+    expect(recipient).toBe('suitor-user');
+    expect(payload).toMatchObject({ counterpartProfileId: 'to', counterpartName: 'Harika' });
   });
 });

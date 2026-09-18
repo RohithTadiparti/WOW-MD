@@ -33,7 +33,20 @@ export interface Interest {
     profileCode?: string | null;
     verified?: boolean;
   };
-  actions: { accept: boolean; decline: boolean; unsend: boolean; block: boolean };
+  /**
+   * Where it stands with the receiving side's agency: 'with_agency' until the
+   * agency forwards or declines it. Null when it was never held.
+   */
+  screening?: 'with_agency' | 'forwarded' | 'declined_by_agency' | null;
+  actions: {
+    accept: boolean;
+    decline: boolean;
+    unsend: boolean;
+    block: boolean;
+    /** The agency's answers to an interest held for it. */
+    forward?: boolean;
+    agencyDecline?: boolean;
+  };
   acceptedBy: { displayName: string; mine: boolean } | null;
 }
 
@@ -55,6 +68,30 @@ const STATUS_TONE: Record<string, Tone> = {
   blocked: 'critical',
 };
 
+/** The badge, which for a held interest says who it is waiting on. */
+function statusOf(interest: Interest): { label: string; tone: Tone } {
+  if (interest.status === 'pending' && interest.screening === 'with_agency') {
+    return interest.direction === 'incoming'
+      ? { label: 'Awaiting your review', tone: 'brand' }
+      : { label: 'With their agency', tone: 'caution' };
+  }
+  if (interest.screening === 'declined_by_agency' && interest.direction === 'outgoing') {
+    return { label: 'Declined by their agency', tone: 'neutral' };
+  }
+  return {
+    label: STATUS_LABEL[interest.status] ?? interest.status,
+    tone: STATUS_TONE[interest.status] ?? 'neutral',
+  };
+}
+
+export type InterestAction =
+  | 'accept'
+  | 'decline'
+  | 'withdraw'
+  | 'block'
+  | 'agency/forward'
+  | 'agency/decline';
+
 export function InterestRow({
   interest,
   busy,
@@ -63,11 +100,12 @@ export function InterestRow({
 }: {
   interest: Interest;
   busy: boolean;
-  onAct: (path: 'accept' | 'decline' | 'withdraw' | 'block') => void;
+  onAct: (path: InterestAction) => void;
   onOpenProfile: () => void;
 }) {
   const theme = useTheme();
   const { counterpart: them, actions } = interest;
+  const status = statusOf(interest);
   const photo = them.photos?.[0] ?? them.photoUrl ?? null;
   const facts = [them.ageRange, them.city, labelFor(GENDER_LABEL, them.gender)]
     .filter(Boolean)
@@ -118,9 +156,7 @@ export function InterestRow({
       </Pressable>
 
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space(1.5) }}>
-        <Badge tone={STATUS_TONE[interest.status] ?? 'neutral'}>
-          {STATUS_LABEL[interest.status] ?? interest.status}
-        </Badge>
+        <Badge tone={status.tone}>{status.label}</Badge>
         <Badge>{interest.direction === 'incoming' ? 'They asked' : 'You asked'}</Badge>
         <Caption tone="faint">{formatDate(interest.createdAt)}</Caption>
       </View>
@@ -133,6 +169,28 @@ export function InterestRow({
             ? 'You accepted this.'
             : `${interest.acceptedBy.displayName} accepted this.`}
         </Caption>
+      ) : null}
+
+      {/* Held for the agency: the client has not been told. Forwarding is what
+          tells them; declining means they never hear of it. */}
+      {actions.forward || actions.agencyDecline ? (
+        <View style={{ gap: space(2) }}>
+          {actions.forward ? (
+            <Button
+              label="Forward to client"
+              disabled={busy}
+              onPress={() => onAct('agency/forward')}
+            />
+          ) : null}
+          {actions.agencyDecline ? (
+            <Button
+              label="Decline"
+              variant="outline"
+              disabled={busy}
+              onPress={() => onAct('agency/decline')}
+            />
+          ) : null}
+        </View>
       ) : null}
 
       {actions.accept || actions.decline || actions.unsend || actions.block ? (
