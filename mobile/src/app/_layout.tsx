@@ -3,12 +3,14 @@ import { View } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
+import { useFonts } from 'expo-font';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { bootstrapSession } from '@/lib/api';
 import { useAuth } from '@/store/auth';
 import { rgb, useHydrateTheme, useTheme } from '@/theme';
+import { FONT_ASSETS, typeface } from '@/theme/fonts';
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -81,12 +83,15 @@ export default function RootLayout() {
   const themeReady = useHydrateTheme();
   const authReady = useAuth((s) => s.ready);
   const [booted, setBooted] = useState(false);
+  // A font that fails to load falls back to the system face rather than
+  // holding the app on its splash screen.
+  const [fontsLoaded, fontError] = useFonts(FONT_ASSETS);
 
   useEffect(() => {
     void bootstrapSession().finally(() => setBooted(true));
   }, []);
 
-  const ready = themeReady && booted && authReady;
+  const ready = themeReady && booted && authReady && (fontsLoaded || Boolean(fontError));
 
   useEffect(() => {
     // Held until the theme is known as well as the session: hiding the splash
@@ -121,7 +126,11 @@ function Routes() {
         // screen does not push the chevron off the iOS bar.
         headerStyle: { backgroundColor: rgb(theme.surface) },
         headerTintColor: rgb(theme.brandStrong),
-        headerTitleStyle: { color: rgb(theme.ink[900]), fontSize: 17, fontWeight: '600' },
+        headerTitleStyle: typeface({ color: rgb(theme.ink[900]), fontSize: 17, fontWeight: '600' }) as {
+          color: string;
+          fontSize: number;
+          fontFamily: string;
+        },
         headerBackTitle: '',
         headerShadowVisible: false,
       }}

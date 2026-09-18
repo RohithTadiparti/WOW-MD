@@ -54,7 +54,7 @@ async function bootstrap() {
 
   if (cfg.runtime.swaggerEnabled) {
     const swaggerCfg = new DocumentBuilder()
-      .setTitle('WOW - World of Weddings API')
+      .setTitle('WOW - World of Weddingz API')
       .setDescription('API documentation for the WOW platform')
       .setVersion('1.0')
       .addBearerAuth()

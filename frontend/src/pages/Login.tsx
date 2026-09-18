@@ -8,6 +8,7 @@ import { useAuth } from '../store/auth';
 import SupportContact from '../components/SupportContact';
 import PasswordField from '../components/PasswordField';
 import OtpSignIn from '../components/OtpSignIn';
+import HeartField from '../components/HeartField';
 
 export default function Login() {
   const nav = useNavigate();
@@ -81,7 +82,7 @@ export default function Login() {
           className="w-full max-w-[22rem]"
         >
           <Link to="/" className="mb-10 block font-serif text-[1.35rem] uppercase tracking-[0.2em] text-brand">
-            World of Weddings
+            World of Weddingz
           </Link>
 
           <h1 className="font-serif text-[2.75rem] font-light leading-[1.05] text-brand">Welcome back</h1>
@@ -213,35 +214,20 @@ export default function Login() {
       </div>
 
       {/*
-        The right half. A real photograph rather than a gradient: this is a
-        product about weddings, and a page that shows none is a page that could
-        be selling anything.
+        The right half, in the matrimony home template's manner: the ivory
+        ground under its field of gold hearts, a gold rule, and one line in
+        the serif. It replaces a blurred stock photograph that was only ever a
+        placeholder for a brand image nobody had.
       */}
-      <div className="relative hidden overflow-hidden bg-scrim lg:block">
-        {/*
-          TODO: this slot wants a real brand photograph, 1400x1800 portrait.
-
-          Picsum's seed is stable but says nothing about what is *in* the
-          picture, and a stock photograph of a stranger's wedding would be
-          worse than none. So it is blurred past recognition and used as a
-          ground: a field of tone behind the statement rather than a subject
-          competing with it. Swap in the real asset and drop the blur.
-        */}
-        <img
-          src="https://picsum.photos/seed/wow-atmosphere-01/1400/1800?grayscale&blur=10"
-          alt=""
-          aria-hidden
-          className="absolute inset-0 h-full w-full scale-110 object-cover opacity-30"
-        />
-        <div className="absolute inset-0 bg-gradient-to-tr from-brand/25 via-transparent to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-t from-scrim via-scrim/75 to-scrim/30" />
-        <div className="absolute inset-x-0 bottom-0 p-12">
-          <p className="max-w-[24ch] font-serif text-[2.25rem] font-light italic leading-[1.3] text-white">
+      <div className="relative isolate hidden overflow-hidden border-l border-gray-200 bg-canvas lg:flex lg:items-end">
+        <HeartField />
+        <div className="p-12 xl:p-16">
+          <span aria-hidden className="mb-7 block h-px w-16 bg-gold" />
+          <p className="plate max-w-[20ch] font-serif text-[2.75rem] font-light italic leading-[1.2] text-brand">
             Every family deserves to know who they are talking to.
           </p>
-          <p className="mt-3 max-w-[42ch] text-sm leading-relaxed text-white/70">
-            Identity verified in person. Contact details never leave the platform until both
-            sides agree.
+          <p className="plate mt-6 max-w-[40ch] text-[0.9375rem] leading-relaxed text-gray-700">
+            A conversation opens only once both families agree to it.
           </p>
         </div>
       </div>

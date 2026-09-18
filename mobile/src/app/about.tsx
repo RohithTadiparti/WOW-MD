@@ -25,7 +25,7 @@ export default function About() {
   return (
     <Screen>
       <PageSubtitle>
-        World of Weddings — matchmaking, the vendors a wedding is made of, and the people who check
+        World of Weddingz — matchmaking, the vendors a wedding is made of, and the people who check
         that everybody here is who they say they are.
       </PageSubtitle>
 
@@ -55,7 +55,7 @@ export default function About() {
         </Body>
       </Card>
 
-      <Caption tone="faint">© {new Date().getFullYear()} World of Weddings</Caption>
+      <Caption tone="faint">© {new Date().getFullYear()} World of Weddingz</Caption>
     </Screen>
   );
 }

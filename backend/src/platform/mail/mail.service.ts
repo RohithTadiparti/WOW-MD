@@ -45,13 +45,13 @@ export class MailService {
       await this.provider.send({
         to,
         subject,
-        text: `${heading}\n\n${body}${textCta}\n— WOW, World of Weddings`,
+        text: `${heading}\n\n${body}${textCta}\n— WOW, World of Weddingz`,
         html: `<div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;color:#111827">
                  <h1 style="color:#be185d;font-size:20px">${this.esc(heading)}</h1>
                  <p style="line-height:1.6">${this.esc(body).replace(/\n/g, '<br>')}</p>
                  ${htmlCta}
                  <hr style="border:0;border-top:1px solid #e5e7eb;margin:24px 0">
-                 <p style="color:#6b7280;font-size:12px">WOW, World of Weddings</p>
+                 <p style="color:#6b7280;font-size:12px">WOW, World of Weddingz</p>
                </div>`,
       });
     } catch {
@@ -75,7 +75,7 @@ export class MailService {
       params.to,
       'You have been invited to WOW',
       `Hello ${params.inviteeName},`,
-      `${params.stewardName} has prepared a marriage profile for you on WOW, World of Weddings.\n` +
+      `${params.stewardName} has prepared a marriage profile for you on WOW, World of Weddingz.\n` +
         `Accept the invitation to verify your email, choose your own password and take ownership of the profile. ` +
         `Until you do, only ${params.stewardName} can act on it.\n\n` +
         `This invitation expires in ${days} day(s).`,

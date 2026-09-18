@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { CaretLeft, CaretRight } from 'phosphor-react-native';
 
 import { Caption, SectionTitle } from '@/components/ui';
 import { radius, rgb, space, useTheme, type Theme } from '@/theme';
+import { Txt } from '@/theme/fonts';
 
 /**
  * The month grid.
@@ -130,9 +131,9 @@ export function MonthCalendar({
       <View style={{ flexDirection: 'row' }}>
         {WEEKDAYS.map((day, i) => (
           <View key={i} style={{ flex: 1, alignItems: 'center' }}>
-            <Text style={{ fontSize: 11, fontWeight: '600', color: rgb(theme.ink[400]) }}>
+            <Txt style={{ fontSize: 11, fontWeight: '600', color: rgb(theme.ink[400]) }}>
               {day}
-            </Text>
+            </Txt>
           </View>
         ))}
       </View>
@@ -174,7 +175,7 @@ export function MonthCalendar({
                   pressed && { opacity: 0.6 },
                 ]}
               >
-                <Text
+                <Txt
                   style={{
                     fontSize: 14,
                     fontWeight: isSelected ? '700' : '500',
@@ -183,7 +184,7 @@ export function MonthCalendar({
                   }}
                 >
                   {Number(cell.slice(8, 10))}
-                </Text>
+                </Txt>
               </Pressable>
             </View>
           );
