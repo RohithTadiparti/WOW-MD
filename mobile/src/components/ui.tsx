@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { radius, rgb, rgba, space, useTheme, type Theme } from '@/theme';
 import { Txt, typeface } from '@/theme/fonts';
+import { HeartBackdrop } from '@/components/heart-field';
 
 /**
  * The primitives, matching the component layer in the web app's index.css.
@@ -63,7 +64,15 @@ export function PageTitle({ children, style }: TxtProps) {
     <Txt
       serif
       style={[
-        { fontSize: 32, lineHeight: 36, fontWeight: '400', color: rgb(theme.brand) },
+        {
+          fontSize: 32,
+          lineHeight: 36,
+          fontWeight: '400',
+          color: rgb(theme.brand),
+          // A plate of the ground, so the heart field never runs behind it.
+          alignSelf: 'flex-start',
+          backgroundColor: rgb(theme.canvas),
+        },
         style,
       ]}
     >
@@ -77,7 +86,18 @@ export function PageTitle({ children, style }: TxtProps) {
 export function PageSubtitle({ children, style }: TxtProps) {
   const theme = useTheme();
   return (
-    <Txt style={[{ fontSize: 15, lineHeight: 22, color: rgb(theme.ink[500]) }, style]}>
+    <Txt
+      style={[
+        {
+          fontSize: 15,
+          lineHeight: 22,
+          color: rgb(theme.ink[500]),
+          alignSelf: 'flex-start',
+          backgroundColor: rgb(theme.canvas),
+        },
+        style,
+      ]}
+    >
       {children}
     </Txt>
   );
@@ -148,16 +168,25 @@ export function Eyebrow({ children, style }: TxtProps) {
 export function Screen({ children, scroll = true }: { children: ReactNode; scroll?: boolean }) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const style = { flex: 1, backgroundColor: rgb(theme.canvas) };
+  const style = { flex: 1 };
   // The bottom pad clears the tab bar's own inset; without it the last card in
   // a list sits under the bar and looks like the list was cut off.
   const content = { padding: space(4), paddingBottom: insets.bottom + space(6), gap: space(4) };
 
-  if (!scroll) return <View style={[style, content]}>{children}</View>;
+  // On the template's ground: ivory under its field of gold hearts.
+  if (!scroll) {
+    return (
+      <HeartBackdrop>
+        <View style={[style, content]}>{children}</View>
+      </HeartBackdrop>
+    );
+  }
   return (
-    <ScrollView style={style} contentContainerStyle={content} keyboardShouldPersistTaps="handled">
-      {children}
-    </ScrollView>
+    <HeartBackdrop>
+      <ScrollView style={style} contentContainerStyle={content} keyboardShouldPersistTaps="handled">
+        {children}
+      </ScrollView>
+    </HeartBackdrop>
   );
 }
 

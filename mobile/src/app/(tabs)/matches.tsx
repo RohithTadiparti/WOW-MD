@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle } from 'phosphor-react-native';
 
+import { HeartBackdrop } from '@/components/heart-field';
 import { api, apiMessage } from '@/lib/api';
 import { useMatchmakingGate } from '@/lib/matchmaking';
 import { ActingClientPicker, useActingClient } from '@/components/matches/acting-client';
@@ -108,54 +109,56 @@ export default function Matches() {
 
   if (isLoading || (acting.ready && !settled)) {
     return (
-      <View style={{ flex: 1, padding: space(4), gap: space(4) }}>
+      <HeartBackdrop style={{ padding: space(4), gap: space(4) }}>
         <Header />
         <Loading rows={3} />
-      </View>
+      </HeartBackdrop>
     );
   }
 
   return (
-    <FlatList
-      data={suggestions}
-      keyExtractor={(s) => s.profile.id}
-      contentContainerStyle={{ padding: space(4), gap: space(3), paddingBottom: space(12) }}
-      ListHeaderComponent={
-        <View style={{ gap: space(3), marginBottom: space(1) }}>
-          <Header />
-          <ActingClientPicker acting={acting} />
-          {error ? <Alert tone="critical">{error}</Alert> : null}
-          {loadError ? (
-            <Alert tone="critical">{apiMessage(loadError, 'Matches could not be loaded.')}</Alert>
-          ) : null}
-        </View>
-      }
-      ListEmptyComponent={
-        loadError ? null : !acting.ready ? (
-          <EmptyState title="Choose a client">
-            Pick which client you are browsing for, and the matches suggested for them appear here.
-          </EmptyState>
-        ) : gate ? (
-          <EmptyState title={status?.profileCompleted ? 'Matchmaking is closed' : 'Finish the profile first'}>
-            {gate}
-          </EmptyState>
-        ) : (
-          <EmptyState title="No matches to show yet">
-            As more profiles are completed and verified, the ones worth your attention appear here.
-          </EmptyState>
-        )
-      }
-      renderItem={({ item }) => (
-        <MatchCard
-          suggestion={item}
-          onSendInterest={() => sendInterest.mutate(item.profile.id)}
-          onOpenProfile={() =>
-            router.push({ pathname: '/match/[id]', params: { id: item.profile.id } })
-          }
-          busy={sendInterest.isPending && sendInterest.variables === item.profile.id}
-        />
-      )}
-    />
+    <HeartBackdrop>
+      <FlatList
+        data={suggestions}
+        keyExtractor={(s) => s.profile.id}
+        contentContainerStyle={{ padding: space(4), gap: space(3), paddingBottom: space(12) }}
+        ListHeaderComponent={
+          <View style={{ gap: space(3), marginBottom: space(1) }}>
+            <Header />
+            <ActingClientPicker acting={acting} />
+            {error ? <Alert tone="critical">{error}</Alert> : null}
+            {loadError ? (
+              <Alert tone="critical">{apiMessage(loadError, 'Matches could not be loaded.')}</Alert>
+            ) : null}
+          </View>
+        }
+        ListEmptyComponent={
+          loadError ? null : !acting.ready ? (
+            <EmptyState title="Choose a client">
+              Pick which client you are browsing for, and the matches suggested for them appear here.
+            </EmptyState>
+          ) : gate ? (
+            <EmptyState title={status?.profileCompleted ? 'Matchmaking is closed' : 'Finish the profile first'}>
+              {gate}
+            </EmptyState>
+          ) : (
+            <EmptyState title="No matches to show yet">
+              As more profiles are completed and verified, the ones worth your attention appear here.
+            </EmptyState>
+          )
+        }
+        renderItem={({ item }) => (
+          <MatchCard
+            suggestion={item}
+            onSendInterest={() => sendInterest.mutate(item.profile.id)}
+            onOpenProfile={() =>
+              router.push({ pathname: '/match/[id]', params: { id: item.profile.id } })
+            }
+            busy={sendInterest.isPending && sendInterest.variables === item.profile.id}
+          />
+        )}
+      />
+    </HeartBackdrop>
   );
 }
 

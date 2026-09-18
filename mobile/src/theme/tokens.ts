@@ -113,6 +113,11 @@ export interface Theme {
   readonly criticalFg: Channels;
   readonly criticalBg: Channels;
 
+  /** Struck gold, for ornament only (the heart field), never for text. */
+  readonly gold: Channels;
+  readonly goldLit: Channels;
+  readonly goldDeep: Channels;
+
   readonly shadowColor: Channels;
   /**
    * The one colour that does not invert.
@@ -152,6 +157,10 @@ export const lightTheme: Theme = {
 
   // Tinted to the ground rather than pure black: a black shadow on a
   // ivory canvas reads as a hole punched in the page.
+  gold: [169, 131, 47],
+  goldLit: [217, 180, 95],
+  goldDeep: [122, 90, 28],
+
   shadowColor: [36, 16, 23],
   scrim: [14, 8, 11],
 };
@@ -180,6 +189,10 @@ export const darkTheme: Theme = {
   cautionBg: [54, 41, 18],
   criticalFg: [250, 160, 146],
   criticalBg: [64, 26, 22],
+
+  gold: [201, 164, 86],
+  goldLit: [232, 200, 128],
+  goldDeep: [150, 116, 48],
 
   shadowColor: [0, 0, 0],
   scrim: [14, 8, 11],

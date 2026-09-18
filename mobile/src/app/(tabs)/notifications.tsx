@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CaretRight } from 'phosphor-react-native';
 
+import { HeartBackdrop } from '@/components/heart-field';
 import { api } from '@/lib/api';
 import { routeFor } from '@/lib/notification-route';
 import { formatDate } from '@/shared/dates';
@@ -93,74 +94,76 @@ export default function Notifications() {
   }
 
   return (
-    <FlatList
-      data={items}
-      keyExtractor={(n) => n.id}
-      contentContainerStyle={{ padding: space(4), gap: space(2), paddingBottom: space(12) }}
-      ListHeaderComponent={header}
-      refreshControl={
-        // Pull to refresh, because a notification list is the one screen people
-        // pull on by reflex.
-        <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={rgb(theme.ink[400])} />
-      }
-      ListEmptyComponent={
-        <EmptyState title="Nothing to catch up on">
-          Interests, bookings and verification decisions all land here.
-        </EmptyState>
-      }
-      renderItem={({ item }) => {
-        const route = routeFor(item, { canVerify, canReadIncoming });
-        return (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`${TYPE_LABEL[item.type] ?? 'Update'}. ${describe(item)}`}
-          onPress={() => {
-            // Read first, then open: a row that navigates before it marks
-            // itself read comes back unread when the person returns.
-            if (!item.isRead) markRead.mutate(item.id);
-            if (route) router.push(route);
-          }}
-          style={({ pressed }) => [pressed && { opacity: 0.7 }]}
-        >
-          <Card style={{ gap: space(1.5) }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(2) }}>
-              {/*
-                A dot rather than bold text for the unread state. Bolding the
-                whole row makes a list of unread items look like a list of
-                headings, and the moment two are read the column goes ragged.
-              */}
-              {!item.isRead ? (
-                <View
-                  style={{
-                    width: 7,
-                    height: 7,
-                    borderRadius: radius.sm,
-                    backgroundColor: rgb(theme.brand),
-                  }}
-                />
-              ) : null}
-              <Caption tone={item.isRead ? 'faint' : 'brand'} style={{ flex: 1 }} numberOfLines={1}>
-                {TYPE_LABEL[item.type] ?? 'Update'}
-              </Caption>
-              <Caption tone="faint">{formatDate(item.createdAt)}</Caption>
-            </View>
-            <Body tone={item.isRead ? 'muted' : 'default'}>
-              {describe(item) || 'Something has changed on your account.'}
-            </Body>
-            {/* What pressing this does, said rather than implied — and nothing
-                at all on a row that has nowhere to go. */}
-            {route ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(1) }}>
-                <Caption tone="brand">
-                  {(item.targetAction && ACTION_LABEL[item.targetAction]) ?? 'Open'}
+    <HeartBackdrop>
+      <FlatList
+        data={items}
+        keyExtractor={(n) => n.id}
+        contentContainerStyle={{ padding: space(4), gap: space(2), paddingBottom: space(12) }}
+        ListHeaderComponent={header}
+        refreshControl={
+          // Pull to refresh, because a notification list is the one screen people
+          // pull on by reflex.
+          <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={rgb(theme.ink[400])} />
+        }
+        ListEmptyComponent={
+          <EmptyState title="Nothing to catch up on">
+            Interests, bookings and verification decisions all land here.
+          </EmptyState>
+        }
+        renderItem={({ item }) => {
+          const route = routeFor(item, { canVerify, canReadIncoming });
+          return (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${TYPE_LABEL[item.type] ?? 'Update'}. ${describe(item)}`}
+            onPress={() => {
+              // Read first, then open: a row that navigates before it marks
+              // itself read comes back unread when the person returns.
+              if (!item.isRead) markRead.mutate(item.id);
+              if (route) router.push(route);
+            }}
+            style={({ pressed }) => [pressed && { opacity: 0.7 }]}
+          >
+            <Card style={{ gap: space(1.5) }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(2) }}>
+                {/*
+                  A dot rather than bold text for the unread state. Bolding the
+                  whole row makes a list of unread items look like a list of
+                  headings, and the moment two are read the column goes ragged.
+                */}
+                {!item.isRead ? (
+                  <View
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: radius.sm,
+                      backgroundColor: rgb(theme.brand),
+                    }}
+                  />
+                ) : null}
+                <Caption tone={item.isRead ? 'faint' : 'brand'} style={{ flex: 1 }} numberOfLines={1}>
+                  {TYPE_LABEL[item.type] ?? 'Update'}
                 </Caption>
-                <CaretRight size={12} color={rgb(theme.brandStrong)} />
+                <Caption tone="faint">{formatDate(item.createdAt)}</Caption>
               </View>
-            ) : null}
-          </Card>
-        </Pressable>
-        );
-      }}
-    />
+              <Body tone={item.isRead ? 'muted' : 'default'}>
+                {describe(item) || 'Something has changed on your account.'}
+              </Body>
+              {/* What pressing this does, said rather than implied — and nothing
+                  at all on a row that has nowhere to go. */}
+              {route ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(1) }}>
+                  <Caption tone="brand">
+                    {(item.targetAction && ACTION_LABEL[item.targetAction]) ?? 'Open'}
+                  </Caption>
+                  <CaretRight size={12} color={rgb(theme.brandStrong)} />
+                </View>
+              ) : null}
+            </Card>
+          </Pressable>
+          );
+        }}
+      />
+    </HeartBackdrop>
   );
 }

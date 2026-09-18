@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
+import HeartField from './components/HeartField';
 import './index.css';
 import { initTheme } from './store/theme';
 
@@ -18,6 +19,8 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
+        {/* The template's gold hearts, behind every page. */}
+        <HeartField fixed />
         <App />
       </BrowserRouter>
     </QueryClientProvider>

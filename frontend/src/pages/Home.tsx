@@ -1,6 +1,5 @@
 import { FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import HeartField from '../components/HeartField';
 
 /**
  * The public home page, from the matrimony home design template.
@@ -35,9 +34,7 @@ export default function Home() {
   }
 
   return (
-    <div className="relative isolate min-h-[100dvh] overflow-hidden bg-canvas">
-      <HeartField />
-
+    <div className="relative isolate min-h-[100dvh] overflow-hidden">
       <div className="mx-auto flex min-h-[100dvh] w-full max-w-[70rem] flex-col px-5 sm:px-8">
         <header className="flex min-h-[6.25rem] flex-wrap items-center justify-between gap-x-10 gap-y-3 border-b border-gray-200 py-4">
           <Link
