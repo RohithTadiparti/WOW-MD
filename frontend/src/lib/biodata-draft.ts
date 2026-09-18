@@ -56,3 +56,51 @@ export async function submitDraft(
   if (ok) clear();
   return ok;
 }
+
+/*
+ * Whether anything in a form came from the person rather than from the seed.
+ *
+ * Only a touched draft is written to local storage. Without this the empty
+ * first render -- before the server's answer has arrived -- was itself saved
+ * as a "draft", and the seeding effect then preferred that empty draft over
+ * the real values when they landed. The result was a biodata that read as
+ * blank however many times it had been filled in: a family opening their
+ * daughter's personal details saw no date of birth even though the profile
+ * had carried one since it was created (EZ1-I236). Every section form goes
+ * through this one guard, so none of them can shadow what was loaded.
+ *
+ * A draft already in storage on arrival is a genuine unsaved edit from a
+ * previous visit, so it still wins -- which is the whole point of EZ1-I73.
+ */
+export interface DraftGuard {
+  /** The form has just (re)seeded; `fromStoredDraft` when it took a stored draft. */
+  seeded(fromStoredDraft: boolean): void;
+  /** Wraps a state setter so calling it counts as the person editing. */
+  edit<A extends unknown[]>(setter: (...args: A) => void): (...args: A) => void;
+  /** Writes the draft, but only once the person has edited something. */
+  persist(storageKey: string | undefined, value: Draft): void;
+  /** Drops the draft once the server has it; the next edit starts a new one. */
+  clear(storageKey?: string): void;
+}
+
+export function createDraftGuard(): DraftGuard {
+  let touched = false;
+  return {
+    seeded(fromStoredDraft) {
+      touched = fromStoredDraft;
+    },
+    edit(setter) {
+      return (...args) => {
+        touched = true;
+        setter(...args);
+      };
+    },
+    persist(storageKey, value) {
+      if (touched) saveDraft(storageKey, value);
+    },
+    clear(storageKey) {
+      touched = false;
+      clearDraft(storageKey);
+    },
+  };
+}
