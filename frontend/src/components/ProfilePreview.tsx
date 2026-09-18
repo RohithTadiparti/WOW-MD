@@ -5,6 +5,7 @@ import { isChartImage } from '../lib/horoscope';
 import { api, apiMessage } from '../lib/api';
 import { formatDate } from '../lib/dates';
 import { Loading } from './ui/Feedback';
+import { PersonPhoto } from './ProfileSilhouette';
 
 interface Viewable {
   profileId: string;
@@ -130,7 +131,7 @@ export default function ProfilePreview({
       <div className="my-8 w-full max-w-lg rounded-lg bg-surface p-6">
         {/*
           The identity, said once and clearly at the top: a lead photo (or an
-          initials avatar, never a broken image), the name, the profile code,
+          gendered silhouette, never a broken image), the name, the profile code,
           the age/height/city on one line, and the two badges families read
           first — identity and activity. The match score sits beside the name,
           the same figure the card carried in (EZ1-I190).
@@ -139,7 +140,7 @@ export default function ProfilePreview({
           <div className="flex min-w-0 gap-3">
             <ProfileImage
               url={data?.profile.photos[0]}
-              name={name}
+              gender={data?.profile.gender}
               className="h-16 w-16 shrink-0 rounded-md object-cover text-xl ring-1 ring-inset ring-gray-900/5"
             />
             <div className="min-w-0">
@@ -205,7 +206,7 @@ export default function ProfilePreview({
                   >
                     <ProfileImage
                       url={url}
-                      name={name}
+                      gender={data.profile.gender}
                       className="h-28 w-28 rounded-sm object-cover text-2xl ring-1 ring-gray-200"
                     />
                   </button>
@@ -409,7 +410,7 @@ export default function ProfilePreview({
           </button>
           <ProfileImage
             url={preview}
-            name={data?.profile.displayName ?? 'Profile'}
+            gender={data?.profile.gender}
             onClick={(e) => e.stopPropagation()}
             className="max-h-full max-w-full rounded-sm object-contain p-16 text-6xl"
           />
@@ -420,45 +421,18 @@ export default function ProfilePreview({
 }
 
 /**
- * A profile photo that never renders the browser's broken-image icon.
- *
- * A missing URL, or one that 404s, falls back to an initials avatar — the same
- * treatment a card gives an unfilled profile. `object-cover`/`object-contain`
- * and any sizing come from `className`, so one component serves the header
- * avatar, the gallery thumbs and the full-size overlay (EZ1-I190).
+ * A profile photo that never renders the browser's broken-image icon: a
+ * missing URL, or one that 404s, shows the groom or bride silhouette instead.
+ * Sizing comes from `className`, so one component serves the header avatar,
+ * the gallery thumbs and the full-size overlay (EZ1-I190).
  */
-function ProfileImage({
-  url,
-  name,
-  className,
-  onClick,
-}: {
+function ProfileImage(props: {
   url?: string | null;
-  name: string;
+  gender?: string | null;
   className: string;
   onClick?: (e: React.MouseEvent) => void;
 }) {
-  const [failed, setFailed] = useState(false);
-  if (!url || failed) {
-    return (
-      <span
-        onClick={onClick}
-        className={`flex items-center justify-center bg-surface-sunken font-medium text-gray-500 ${className}`}
-      >
-        {(name || '?').trim().slice(0, 1).toUpperCase()}
-      </span>
-    );
-  }
-  return (
-    <img
-      src={url}
-      alt=""
-      loading="lazy"
-      onClick={onClick}
-      onError={() => setFailed(true)}
-      className={className}
-    />
-  );
+  return <PersonPhoto {...props} />;
 }
 
 

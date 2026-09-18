@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { MARITAL_LABEL, MaritalStatus, OCCUPATION_LABEL, OccupationStatus } from '../lib/permissions';
 import { BookmarkSimple, CheckCircle } from '@phosphor-icons/react';
+import { ProfileSilhouette } from './ProfileSilhouette';
 
 /** Server-side privacy view: an age band, not a date of birth. */
 export interface PublicProfile {
@@ -157,7 +158,7 @@ export default function MatchCard({
   const card = p.card;
   const interaction = suggestion.interaction ?? 'none';
   const interactionLabel = INTERACTION_LABEL[interaction];
-  // A photo that 404s must fall back to the initials avatar rather than the
+  // A photo that 404s must fall back to the silhouette rather than the
   // browser's broken-image icon (EZ1-I190).
   const [photoFailed, setPhotoFailed] = useState(false);
   const hasPhoto = Boolean(p.photos?.[0]) && !photoFailed;
@@ -234,17 +235,12 @@ export default function MatchCard({
             onError={() => setPhotoFailed(true)}
           />
         ) : (
-          <span className="flex h-24 w-24 shrink-0 flex-col items-center justify-center gap-1 rounded-md bg-surface-sunken text-center text-[0.6875rem] leading-tight text-gray-400">
-            <span className="text-xl font-medium text-gray-500">
-              {(p.displayName ?? '?').slice(0, 1).toUpperCase()}
-            </span>
-            {/*
-              Said plainly rather than shown as a broken image. "No photo yet"
-              tells a family the biodata is unfinished; a photo that fails to
-              load falls back to the same initials without that claim.
-            */}
-            {!p.photos?.[0] && 'No photo yet'}
-          </span>
+          // Never a broken image: no photo, or one that fails to load, shows
+          // the groom or bride figure for this profile's gender.
+          <ProfileSilhouette
+            gender={p.gender}
+            className="h-24 w-24 shrink-0 rounded-md ring-1 ring-inset ring-gray-900/5"
+          />
         )}
 
         <div className="min-w-0 flex-1">

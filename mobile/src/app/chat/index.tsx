@@ -8,6 +8,7 @@ import { dateTime } from '@/lib/format';
 import { Badge } from '@/components/chrome';
 import { ListScreen } from '@/components/layout';
 import { Body, Caption, Card, PageSubtitle, PageTitle } from '@/components/ui';
+import { ProfileSilhouette } from '@/components/profile-silhouette';
 import { radius, rgb, space, useTheme } from '@/theme';
 
 /**
@@ -27,6 +28,9 @@ interface Conversation {
   withUserId: string;
   displayName: string;
   photoUrl: string | null;
+  /** Set when the other side is a matrimony profile rather than a business. */
+  profileId?: string | null;
+  gender?: string | null;
   lastMessage: string | null;
   lastMessageAt: string | null;
   lastMessageMine: boolean;
@@ -91,6 +95,13 @@ export default function Conversations() {
                   backgroundColor: rgb(theme.surfaceSunken),
                 }}
                 contentFit="cover"
+              />
+            ) : row.profileId ? (
+              // A person without a photo gets their groom or bride silhouette;
+              // a business keeps the plain disc.
+              <ProfileSilhouette
+                gender={row.gender}
+                style={{ width: 46, height: 46, borderRadius: 23 }}
               />
             ) : (
               <View

@@ -6,6 +6,7 @@ import { GENDER_LABEL, labelFor } from '@/lib/labels';
 import { formatDate } from '@/shared/dates';
 import { Badge, type Tone } from '@/components/chrome';
 import { Button, Caption, Card, SectionTitle } from '@/components/ui';
+import { ProfileSilhouette } from '@/components/profile-silhouette';
 import { radius, rgb, space, useTheme } from '@/theme';
 
 /**
@@ -97,13 +98,9 @@ export function InterestRow({
             contentFit="cover"
           />
         ) : (
-          <View
-            style={{
-              width: 52,
-              height: 52,
-              borderRadius: radius.md,
-              backgroundColor: rgb(theme.surfaceSunken),
-            }}
+          <ProfileSilhouette
+            gender={them.gender}
+            style={{ width: 52, height: 52, borderRadius: radius.md }}
           />
         )}
         <View style={{ flex: 1, gap: space(0.5) }}>
