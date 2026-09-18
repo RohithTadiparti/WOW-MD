@@ -2,6 +2,7 @@ import { FormEvent, ReactNode, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { api, apiMessage } from '../lib/api';
+import { Draft, clearDraft, loadDraft, saveDraft, submitDraft } from '../lib/biodata-draft';
 import { useAuth } from '../store/auth';
 import {
   ASSET_TYPE_LABEL,
@@ -133,7 +134,8 @@ export default function Biodata() {
   const siblings: Sibling[] = data?.siblings ?? [];
   const assets: Asset[] = data?.assets ?? [];
 
-  async function save(section: string, body: unknown) {
+  /** Resolves true once the server has accepted the section, false otherwise. */
+  async function save(section: string, body: unknown): Promise<boolean> {
     setError('');
     setNotice('');
     try {
@@ -165,8 +167,10 @@ export default function Biodata() {
       } else {
         setNotice('Saved. That is the last section.');
       }
+      return true;
     } catch (err) {
       setError(apiMessage(err, 'That section could not be saved.'));
+      return false;
     }
   }
 
@@ -487,46 +491,6 @@ function Field({
   );
 }
 
-type Draft = Record<string, unknown>;
-
-/*
- * Unsaved bio-data must survive leaving the page and coming back (EZ1-I73).
- *
- * Every section form seeds itself from the server copy on mount, so navigating
- * to Security and back re-seeded from the server and wiped anything typed but
- * not yet saved. These back the working values with sessionStorage, keyed per
- * profile and section, so a return restores the draft rather than the last save.
- * All three swallow their own errors: a private window or a storage quota must
- * degrade to the old behaviour, never throw.
- */
-function loadDraft(storageKey?: string): Draft | null {
-  if (!storageKey) return null;
-  try {
-    const raw = sessionStorage.getItem(storageKey);
-    return raw ? (JSON.parse(raw) as Draft) : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveDraft(storageKey: string | undefined, value: Draft): void {
-  if (!storageKey) return;
-  try {
-    sessionStorage.setItem(storageKey, JSON.stringify(value));
-  } catch {
-    /* private window / quota — the form still works, it just will not restore. */
-  }
-}
-
-function clearDraft(storageKey?: string): void {
-  if (!storageKey) return;
-  try {
-    sessionStorage.removeItem(storageKey);
-  } catch {
-    /* ignore */
-  }
-}
-
 function useDraft(initial: Draft, keys: string[], storageKey?: string) {
   const seed = (): Draft => {
     const next: Draft = {};
@@ -586,7 +550,7 @@ function PersonalForm({
 }: {
   initial: Draft;
   contact?: ContactBlock;
-  onSave: (b: Draft) => void;
+  onSave: (b: Draft) => Promise<boolean>;
   storageKey?: string;
   /** Family login only: the bride/groom's date of birth is entered here. */
   showDob?: boolean;
@@ -604,17 +568,21 @@ function PersonalForm({
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    // The draft is saved to the server now, so the local copy can go: the
-    // server is authoritative again until the next unsaved edit (EZ1-I73).
-    clear();
-    onSave({
-      ...draft,
-      heightCm: Number(draft.heightCm) || undefined,
-      alternateMobile: draft.alternateMobile || undefined,
-      // Only meaningful for a family login; blank otherwise, and the server
-      // ignores it for a self-registered individual (EZ1-I158).
-      dateOfBirth: draft.dateOfBirth || undefined,
-    });
+    // The local copy goes only once the server has the draft: until then it is
+    // the only copy, and a refused save must not lose it (EZ1-I73).
+    void submitDraft(
+      onSave({
+        ...draft,
+        heightCm: Number(draft.heightCm) || undefined,
+        // null, not undefined: an absent field is left alone by the server,
+        // so emptying the box has to be said explicitly.
+        alternateMobile: draft.alternateMobile || null,
+        // Only meaningful for a family login; blank otherwise, and the server
+        // ignores it for a self-registered individual (EZ1-I158).
+        dateOfBirth: draft.dateOfBirth || undefined,
+      }),
+      clear,
+    );
   }
 
   return (
@@ -734,7 +702,7 @@ function ReligionForm({
   storageKey,
 }: {
   initial: Draft;
-  onSave: (b: Draft) => void;
+  onSave: (b: Draft) => Promise<boolean>;
   storageKey?: string;
 }) {
   const { draft, put, clear } = useDraft(
@@ -760,8 +728,7 @@ function ReligionForm({
         // Denomination is deliberately not sent: the field is gone, and the
         // server treats it as optional, so an old value simply stops being
         // rewritten. Nothing is deleted from rows that already have one.
-        clear();
-        onSave(draft);
+        void submitDraft(onSave(draft), clear);
       }}
       className="space-y-3"
     >
@@ -829,7 +796,7 @@ function HoroscopeForm({
   storageKey,
 }: {
   initial: Draft;
-  onSave: (b: Draft) => void;
+  onSave: (b: Draft) => Promise<boolean>;
   storageKey?: string;
 }) {
   const chart = (initial?.horoscope ?? {}) as Draft;
@@ -878,7 +845,6 @@ function HoroscopeForm({
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        clearDraft(storageKey);
         /*
          * Where and when somebody was born is true either way.
          *
@@ -900,7 +866,7 @@ function HoroscopeForm({
             : {}),
         };
         const chartOnly = ['rashi', 'star', 'padam', 'gothram', 'kujaDosham'];
-        onSave(
+        const sent = onSave(
           available
             ? {
                 horoscopeAvailable: true,
@@ -911,6 +877,7 @@ function HoroscopeForm({
               }
             : { horoscopeAvailable: false, ...always },
         );
+        void submitDraft(sent, () => clearDraft(storageKey));
       }}
       className="space-y-3"
     >
@@ -1082,7 +1049,7 @@ function MaritalForm({
   storageKey,
 }: {
   initial: Draft;
-  onSave: (b: Draft) => void;
+  onSave: (b: Draft) => Promise<boolean>;
   storageKey?: string;
 }) {
   const history = (initial?.maritalHistory ?? {}) as Draft;
@@ -1126,7 +1093,6 @@ function MaritalForm({
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        clearDraft(storageKey);
         const body: Draft = { maritalStatus: status };
         if (status !== 'never_married') {
           if (values.marriageDate) body.marriageDate = values.marriageDate;
@@ -1138,7 +1104,7 @@ function MaritalForm({
           if (values.childrenLivingWith) body.childrenLivingWith = values.childrenLivingWith;
           if (values.reason) body.reason = values.reason;
         }
-        onSave(body);
+        void submitDraft(onSave(body), () => clearDraft(storageKey));
       }}
       className="space-y-3"
     >
@@ -1238,7 +1204,7 @@ function FamilyForm({
   initial: Draft;
   siblings: Sibling[];
   assets: Asset[];
-  onSave: (b: Draft) => void;
+  onSave: (b: Draft) => Promise<boolean>;
   onAddSibling: (b: Draft) => void;
   onRemoveSibling: (id: string) => void;
   onAddAsset: (b: Draft) => void;
@@ -1298,8 +1264,7 @@ function FamilyForm({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          clearDraft(storageKey);
-          onSave({
+          const sent = onSave({
             father: {
               name: values.fatherName,
               profession: values.fatherProfession || undefined,
@@ -1332,6 +1297,7 @@ function FamilyForm({
                 : Number(values.familyNetWorth),
             familyNetWorthVisible: Boolean(values.familyNetWorthVisible),
           });
+          void submitDraft(sent, () => clearDraft(storageKey));
         }}
         className="space-y-3"
       >
@@ -1696,7 +1662,7 @@ function EducationForm({
   storageKey,
 }: {
   initial: Draft;
-  onSave: (b: Draft) => void;
+  onSave: (b: Draft) => Promise<boolean>;
   storageKey?: string;
 }) {
   const employment = (initial?.employment ?? {}) as Draft;
@@ -1746,12 +1712,12 @@ function EducationForm({
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        clearDraft(storageKey);
         const body: Draft = {
           highestQualification: values.highestQualification,
           course: values.course,
-          institution: values.institution || undefined,
-          collegePlace: values.collegePlace || undefined,
+          // null clears; undefined would leave the stored value in place.
+          institution: values.institution || null,
+          collegePlace: values.collegePlace || null,
           occupationStatus: status,
           incomeVisible: Boolean(values.incomeVisible),
         };
@@ -1770,7 +1736,7 @@ function EducationForm({
             businessLocation: values.businessLocation || undefined,
           };
         }
-        onSave(body);
+        void submitDraft(onSave(body), () => clearDraft(storageKey));
       }}
       className="space-y-3"
     >
@@ -1905,7 +1871,7 @@ function PreferencesForm({
   storageKey,
 }: {
   initial: Draft;
-  onSave: (b: Draft) => void;
+  onSave: (b: Draft) => Promise<boolean>;
   storageKey?: string;
 }) {
   const prefs = (initial?.partnerPreferences ?? {}) as Draft;
@@ -1952,8 +1918,7 @@ function PreferencesForm({
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        clearDraft(storageKey);
-        onSave({
+        const sent = onSave({
           preferredAgeMin: Number(values.preferredAgeMin),
           preferredAgeMax: Number(values.preferredAgeMax),
           preferredHeightMinCm: Number(values.preferredHeightMinCm),
@@ -1979,6 +1944,7 @@ function PreferencesForm({
           preferredNriCountry:
             values.nriPreference === 'yes' ? values.preferredNriCountry || undefined : undefined,
         });
+        void submitDraft(sent, () => clearDraft(storageKey));
       }}
       className="space-y-3"
     >
