@@ -20,6 +20,7 @@ import { User } from '../auth/entities/user.entity';
 import { Permission, roleHasPermission } from '../../common/authz/permissions';
 import { PresenceService } from './presence.service';
 import { buildIceServers } from './ice-servers';
+import { StorageService } from '../../platform/storage/storage.service';
 
 /**
  * Real-time chat. Authenticated on the handshake via JWT. Runs behind the Redis
@@ -40,6 +41,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly cfg: AppConfigService,
     @InjectRepository(User) private readonly users: Repository<User>,
     private readonly presence: PresenceService,
+    private readonly storage: StorageService,
   ) {}
 
   async handleConnection(client: Socket) {
@@ -228,7 +230,19 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!senderId) return { error: 'unauthenticated' };
 
     try {
-      const message = await this.chat.persistMessage(senderId, dto.toUserId, dto.body, dto.mediaUrl);
+      /*
+       * Private storage, done by hand: the HTTP interceptor that turns signed
+       * links into stored references and back never sees a socket frame. The
+       * socket has no booking to consult, so it attaches only the sender's own
+       * uploads.
+       */
+      const mediaUrl = dto.mediaUrl ? this.storage.storedForm(dto.mediaUrl) : dto.mediaUrl;
+      const key = mediaUrl ? this.storage.keyOf(mediaUrl) : null;
+      if (key && !key.startsWith(`users/${senderId}/`)) {
+        return { error: 'That file is not yours to attach' };
+      }
+      const stored = await this.chat.persistMessage(senderId, dto.toUserId, dto.body, mediaUrl);
+      const message = await this.storage.signDeep(stored);
 
       // Deliver to recipient and echo to sender (any replica) via Redis adapter.
       this.server.to(`user:${dto.toUserId}`).emit('message:new', message);

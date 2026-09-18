@@ -1,4 +1,5 @@
-import { IsUrl, ValidationOptions } from 'class-validator';
+import { ValidateBy, ValidationOptions, buildMessage, isURL } from 'class-validator';
+import { isMediaRef } from '../../platform/storage/storage-keys';
 
 /**
  * A URL for something that was uploaded — a photograph, a document, evidence.
@@ -20,7 +21,23 @@ import { IsUrl, ValidationOptions } from 'class-validator';
  *
  * The protocol is still required. That is the part that matters: it is what
  * stops `javascript:` and a bare path being stored and later rendered.
+ *
+ * A `media://{key}` reference is accepted as well. On a private store that is
+ * what an upload is stored as: the API turns the signed link a client sends
+ * back into its reference before validation runs (MediaUrlInterceptor), and
+ * signs it again on the way out.
  */
 export function IsUploadedUrl(options?: ValidationOptions): PropertyDecorator {
-  return IsUrl({ require_protocol: true, require_tld: false }, options);
+  return ValidateBy(
+    {
+      name: 'isUploadedUrl',
+      validator: {
+        validate: (value: unknown) =>
+          typeof value === 'string' &&
+          (isMediaRef(value) || isURL(value, { require_protocol: true, require_tld: false })),
+        defaultMessage: buildMessage((each) => `${each}$property must be a URL address`, options),
+      },
+    },
+    options,
+  );
 }

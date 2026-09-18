@@ -4,11 +4,15 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { MediaService } from './media.service';
 import {
   AddMediaItemDto,
+  CompleteUploadDto,
   CreateAlbumDto,
   PresignAttachmentDto,
+  PresignBookingFileDto,
   PresignDto,
+  SignMediaDto,
 } from './dto/media.dto';
-import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { AuthUser, CurrentUser } from '../../common/decorators/current-user.decorator';
+import { RawMediaRefs } from './media-url.interceptor';
 import { Public } from '../../common/decorators/public.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { Permission } from '../../common/authz/permissions';
@@ -17,7 +21,7 @@ import { Permission } from '../../common/authz/permissions';
  * The origin a request reached, as its client sees it.
  *
  * Used only to build a mock-storage URL the same device can reach (see
- * MediaStorageProvider.mockBase). Behind the web proxy the Host header carries
+ * LocalStorageDriver.base). Behind the web proxy the Host header carries
  * the port, and X-Forwarded-* wins where a further proxy sets it. Anything that
  * is not a plain host[:port] over http or https is ignored rather than put into
  * a URL.
@@ -54,13 +58,14 @@ export class MediaController {
   @ApiBearerAuth()
   @RequirePermissions(Permission.MEDIA_MANAGE_OWN)
   @Post('albums/:id/presign')
+  @RawMediaRefs()
   presign(
-    @CurrentUser('userId') userId: string,
-    @Param('id', ParseUUIDPipe) _id: string,
+    @CurrentUser() actor: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: PresignDto,
     @Req() req: Request,
   ) {
-    return this.media.presignUpload(userId, dto.filename, requestOrigin(req));
+    return this.media.presignAlbumPhoto(actor, id, dto, requestOrigin(req));
   }
 
   /**
@@ -77,12 +82,13 @@ export class MediaController {
   @RequirePermissions(Permission.PROFILE_MANAGE_OWN)
   @ApiOperation({ summary: 'Get an upload URL for a profile photograph' })
   @Post('profile-photo/presign')
+  @RawMediaRefs()
   presignProfilePhoto(
-    @CurrentUser('userId') userId: string,
+    @CurrentUser() actor: AuthUser,
     @Body() dto: PresignDto,
     @Req() req: Request,
   ) {
-    return this.media.presignUpload(userId, dto.filename, requestOrigin(req));
+    return this.media.presignProfilePhoto(actor, dto, requestOrigin(req));
   }
 
   /**
@@ -98,12 +104,91 @@ export class MediaController {
   @RequirePermissions(Permission.CASE_RAISE)
   @ApiOperation({ summary: 'Get an upload URL for evidence — an image or a PDF' })
   @Post('attachment/presign')
+  @RawMediaRefs()
   presignAttachment(
-    @CurrentUser('userId') userId: string,
+    @CurrentUser() actor: AuthUser,
     @Body() dto: PresignAttachmentDto,
     @Req() req: Request,
   ) {
-    return this.media.presignUpload(userId, dto.filename, requestOrigin(req));
+    return this.media.presignUpload(
+      actor,
+      { owner: 'users', id: actor.userId, area: 'attachments' },
+      dto,
+      requestOrigin(req),
+    );
+  }
+
+  /**
+   * An upload slot for what a provider hands the couple: the photographer's
+   * edited set, the videographer's film, an album proof.
+   *
+   * Filed under the booking (bookings/{id}/deliveries/…) rather than under the
+   * provider, because the booking is what decides who may open it: the
+   * customer, their match-fixed partner and the provider, and nobody else.
+   * Attach the result to the booking as delivery evidence (PUT
+   * /bookings/:id/complete).
+   */
+  @ApiBearerAuth()
+  @RequirePermissions(Permission.BOOKING_COMPLETE)
+  @ApiOperation({ summary: 'Get an upload URL for a delivery to the couple on a booking' })
+  @Post('bookings/:bookingId/deliveries/presign')
+  @RawMediaRefs()
+  presignDelivery(
+    @CurrentUser() actor: AuthUser,
+    @Param('bookingId', ParseUUIDPipe) bookingId: string,
+    @Body() dto: PresignBookingFileDto,
+    @Req() req: Request,
+  ) {
+    return this.media.presignUpload(
+      actor,
+      { owner: 'bookings', id: bookingId, area: 'deliveries' },
+      dto,
+      requestOrigin(req),
+    );
+  }
+
+  /**
+   * An upload slot for a reference on an existing booking: the look the couple
+   * want, the venue plan. Either side of the booking may add one. A booking
+   * request that does not exist yet uses the attachment slot instead.
+   */
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get an upload URL for a reference file on a booking' })
+  @Post('bookings/:bookingId/references/presign')
+  @RawMediaRefs()
+  presignReference(
+    @CurrentUser() actor: AuthUser,
+    @Param('bookingId', ParseUUIDPipe) bookingId: string,
+    @Body() dto: PresignBookingFileDto,
+    @Req() req: Request,
+  ) {
+    return this.media.presignUpload(
+      actor,
+      { owner: 'bookings', id: bookingId, area: 'references' },
+      dto,
+      requestOrigin(req),
+    );
+  }
+
+  /**
+   * The server-side half of an upload: reads the object back and refuses it
+   * (deleting it) if it is empty, too large, or not the kind of file its name
+   * says. Optional for older clients; the web and mobile uploaders call it.
+   */
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Confirm an upload finished and is acceptable' })
+  @Post('complete')
+  @RawMediaRefs()
+  complete(@CurrentUser() actor: AuthUser, @Body() dto: CompleteUploadDto, @Req() req: Request) {
+    return this.media.completeUpload(actor, dto.key, requestOrigin(req));
+  }
+
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'A fresh link to a stored file, or a download link' })
+  @Post('sign')
+  @RawMediaRefs()
+  sign(@CurrentUser() actor: AuthUser, @Body() dto: SignMediaDto, @Req() req: Request) {
+    return this.media.sign(actor, dto, requestOrigin(req));
   }
 
   @ApiBearerAuth()
