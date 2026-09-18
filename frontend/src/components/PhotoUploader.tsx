@@ -7,6 +7,9 @@ const IMAGE_EXTENSIONS = [
   'gif', 'bmp', 'avif', 'heic', 'heif', 'tif', 'tiff',
 ];
 
+/** A type worth passing on: an image, a video or a PDF, never a blank. */
+const REPORTED_TYPE = /^(image|video)\/[a-z0-9.+-]+$|^application\/pdf$/i;
+
 /**
  * Picks a file, uploads it, and hands back the URL it now lives at.
  *
@@ -70,17 +73,31 @@ export default function PhotoUploader({
 
     setBusy(true);
     try {
+      /*
+       * The size and type go with the request so the storage can hold the
+       * upload to them: on S3 both are signed into the upload URL, and a file
+       * of any other length is refused there rather than stored and billed.
+       * The type is only sent when the browser actually reported one.
+       */
       const { data } = await api.post(
         kind === 'attachment' ? '/media/attachment/presign' : '/media/profile-photo/presign',
-        { filename: file.name },
+        {
+          filename: file.name,
+          size: file.size,
+          ...(REPORTED_TYPE.test(file.type) ? { contentType: file.type } : {}),
+        },
       );
 
       const response = await fetch(data.uploadUrl, {
         method: 'PUT',
         body: file,
-        headers: { 'Content-Type': file.type },
+        headers: { 'Content-Type': file.type, ...(data.headers ?? {}) },
       });
       if (!response.ok) throw new Error(`Storage returned ${response.status}`);
+
+      // The server reads the file back and refuses one that is not what it
+      // claimed to be, before anything is attached to it.
+      await api.post('/media/complete', { key: data.key });
 
       onUploaded(data.publicUrl);
     } catch (err) {

@@ -49,6 +49,9 @@ const DOCUMENT_EXTENSIONS = [...IMAGE_EXTENSIONS, 'pdf'];
  *  immediate rather than ten megabytes later. */
 const MAX_BYTES = 10 * 1024 * 1024;
 
+/** A type worth passing on: an image, a video or a PDF, never a blank. */
+const REPORTED_TYPE = /^(image|video)\/[a-z0-9.+-]+$|^application\/pdf$/i;
+
 /** A refusal the person can act on, as opposed to one about the network. */
 class UploadError extends Error {}
 
@@ -104,9 +107,16 @@ async function upload(
     throw new UploadError('That file is over 10MB. Choose a smaller one.');
   }
 
+  // The size and type go with the request so storage can hold the upload to
+  // them: on S3 both are signed into the upload URL, and a file of any other
+  // length is refused there. The type only when it is a real one.
   const { data } = await api.post(
     kind === 'attachment' ? '/media/attachment/presign' : '/media/profile-photo/presign',
-    { filename: fileName },
+    {
+      filename: fileName,
+      size: info.size,
+      ...(REPORTED_TYPE.test(mimeType) ? { contentType: mimeType } : {}),
+    },
   );
 
   const uploadUrl = reachable(data.uploadUrl as string);
@@ -118,7 +128,7 @@ async function upload(
       uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
       // The type only. Setting a multipart content type by hand is what breaks
       // an upload that has no boundary to go with it.
-      headers: { 'Content-Type': mimeType },
+      headers: { 'Content-Type': mimeType, ...((data.headers as Record<string, string>) ?? {}) },
     },
     (progress) => {
       if (!onProgress || !progress.totalBytesExpectedToSend) return;
@@ -137,6 +147,10 @@ async function upload(
   if (response.status < 200 || response.status >= 300) {
     throw new UploadError(`Storage refused the file (${response.status}). Try again.`);
   }
+
+  // The server reads the file back and refuses one that is not what it
+  // claimed to be, before anything is attached to it.
+  await api.post('/media/complete', { key: data.key });
 
   return reachable(data.publicUrl as string);
 }
