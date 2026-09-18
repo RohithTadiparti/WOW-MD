@@ -32,7 +32,8 @@ export const ACTION_LABEL: Record<string, string> = {
 
 export const TYPE_LABEL: Record<string, string> = {
   match_interest: 'Interest shown',
-  match_interest_for_client: 'Interest in your client',
+  match_interest_for_client: 'Interest to review',
+  match_declined_by_agency: 'Declined by their agency',
   match_accepted: 'Interest accepted',
   new_message: 'New message',
   match_conversation: 'Your clients are talking',
@@ -127,10 +128,20 @@ export function describe(n: Notification): string {
         : 'Someone would like to take your profile forward.';
     }
     case 'match_interest_for_client': {
-      // For the agency: which family is interested, and in which of its clients.
+      // For the agency: which family is interested, and in which of its
+      // clients. The client has not been told — it waits on the agency.
       const who = str('counterpartName') ?? 'A family';
       const from = str('counterpartCity') ? ` from ${str('counterpartCity')}` : '';
-      return `${who}${from} is interested in ${str('subjectName') ?? 'one of your clients'}.`;
+      return `${who}${from} is interested in ${str('subjectName') ?? 'one of your clients'} — review it.`;
+    }
+    case 'match_declined_by_agency': {
+      // For the sender. The person it was for never saw it; their agency answered.
+      const who = str('counterpartName');
+      const forWhom = p.forManagedProfile === true ? str('subjectName') : null;
+      const base = who
+        ? `${who}'s agency has declined this proposal`
+        : "The family's agency has declined this proposal";
+      return forWhom ? `${base} for ${forWhom}.` : `${base}.`;
     }
     case 'match_accepted': {
       // Naming them is the whole point: somebody who has sent five interests
