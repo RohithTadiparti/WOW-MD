@@ -1,7 +1,8 @@
-import { FormEvent, ReactNode, useEffect, useRef, useState } from 'react';
+import { FormEvent, ReactNode, useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { api, apiMessage } from '../lib/api';
+import { Draft, createDraftGuard, loadDraft, submitDraft } from '../lib/biodata-draft';
 import { useAuth } from '../store/auth';
 import {
   ASSET_TYPE_LABEL,
@@ -133,7 +134,8 @@ export default function Biodata() {
   const siblings: Sibling[] = data?.siblings ?? [];
   const assets: Asset[] = data?.assets ?? [];
 
-  async function save(section: string, body: unknown) {
+  /** Resolves true once the server has accepted the section, false otherwise. */
+  async function save(section: string, body: unknown): Promise<boolean> {
     setError('');
     setNotice('');
     try {
@@ -165,8 +167,10 @@ export default function Biodata() {
       } else {
         setNotice('Saved. That is the last section.');
       }
+      return true;
     } catch (err) {
       setError(apiMessage(err, 'That section could not be saved.'));
+      return false;
     }
   }
 
@@ -488,93 +492,33 @@ function Field({
   );
 }
 
-type Draft = Record<string, unknown>;
-
-/*
- * Unsaved bio-data must survive leaving the page and coming back (EZ1-I73).
- *
- * Every section form seeds itself from the server copy on mount, so navigating
- * to Security and back re-seeded from the server and wiped anything typed but
- * not yet saved. These back the working values with sessionStorage, keyed per
- * profile and section, so a return restores the draft rather than the last save.
- * All three swallow their own errors: a private window or a storage quota must
- * degrade to the old behaviour, never throw.
- */
-function loadDraft(storageKey?: string): Draft | null {
-  if (!storageKey) return null;
-  try {
-    const raw = sessionStorage.getItem(storageKey);
-    return raw ? (JSON.parse(raw) as Draft) : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveDraft(storageKey: string | undefined, value: Draft): void {
-  if (!storageKey) return;
-  try {
-    sessionStorage.setItem(storageKey, JSON.stringify(value));
-  } catch {
-    /* private window / quota — the form still works, it just will not restore. */
-  }
-}
-
-function clearDraft(storageKey?: string): void {
-  if (!storageKey) return;
-  try {
-    sessionStorage.removeItem(storageKey);
-  } catch {
-    /* ignore */
-  }
-}
-
 function useDraft(initial: Draft, keys: string[], storageKey?: string) {
   const seed = (): Draft => {
     const next: Draft = {};
     for (const key of keys) next[key] = initial?.[key] ?? '';
     return next;
   };
-  /*
-   * Whether anything in here came from the person rather than from the seed.
-   *
-   * Only a touched draft is written to local storage. Without this the empty
-   * first render -- before the server's answer has arrived -- was itself saved
-   * as a "draft", and the effect below then preferred that empty draft over
-   * the real values when they landed. The result was a biodata that read as
-   * blank however many times it had been filled in: a family opening their
-   * daughter's personal details saw no date of birth even though the profile
-   * had carried one since it was created (EZ1-I236).
-   *
-   * A draft already in storage on arrival is a genuine unsaved edit from a
-   * previous visit, so it still wins -- which is the whole point of EZ1-I73.
-   */
-  const touched = useRef(false);
-  const [draft, setDraft] = useState<Draft>(() => loadDraft(storageKey) ?? seed());
+  // Only an edited draft is written (EZ1-I236); see createDraftGuard.
+  const [guard] = useState(createDraftGuard);
+  const [draft, seedDraft] = useState<Draft>(() => loadDraft(storageKey) ?? seed());
   useEffect(() => {
     // Prefer an unsaved local draft over re-seeding from the server (EZ1-I73).
     const stored = loadDraft(storageKey);
-    touched.current = Boolean(stored);
-    setDraft(stored ?? seed());
+    guard.seeded(Boolean(stored));
+    seedDraft(stored ?? seed());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(initial), keys.join(','), storageKey]);
 
   useEffect(() => {
-    if (!touched.current) return;
-    saveDraft(storageKey, draft);
-  }, [storageKey, draft]);
+    guard.persist(storageKey, draft);
+  }, [guard, storageKey, draft]);
 
-  const edit = (fn: (d: Draft) => Draft) => {
-    touched.current = true;
-    setDraft(fn);
-  };
+  const edit = guard.edit((fn: (d: Draft) => Draft) => seedDraft(fn));
   const set = (key: string) => (e: { target: { value: string } }) =>
     edit((d) => ({ ...d, [key]: e.target.value }));
   /** For controls that hand back a value rather than an event. */
   const put = (key: string) => (value: string) => edit((d) => ({ ...d, [key]: value }));
-  const clear = () => {
-    touched.current = false;
-    clearDraft(storageKey);
-  };
+  const clear = () => guard.clear(storageKey);
   return { draft, setDraft: edit, set, put, clear };
 }
 
@@ -587,7 +531,7 @@ function PersonalForm({
 }: {
   initial: Draft;
   contact?: ContactBlock;
-  onSave: (b: Draft) => void;
+  onSave: (b: Draft) => Promise<boolean>;
   storageKey?: string;
   /** Family login only: the bride/groom's date of birth is entered here. */
   showDob?: boolean;
@@ -605,17 +549,21 @@ function PersonalForm({
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    // The draft is saved to the server now, so the local copy can go: the
-    // server is authoritative again until the next unsaved edit (EZ1-I73).
-    clear();
-    onSave({
-      ...draft,
-      heightCm: Number(draft.heightCm) || undefined,
-      alternateMobile: draft.alternateMobile || undefined,
-      // Only meaningful for a family login; blank otherwise, and the server
-      // ignores it for a self-registered individual (EZ1-I158).
-      dateOfBirth: draft.dateOfBirth || undefined,
-    });
+    // The local copy goes only once the server has the draft: until then it is
+    // the only copy, and a refused save must not lose it (EZ1-I73).
+    void submitDraft(
+      onSave({
+        ...draft,
+        heightCm: Number(draft.heightCm) || undefined,
+        // null, not undefined: an absent field is left alone by the server,
+        // so emptying the box has to be said explicitly.
+        alternateMobile: draft.alternateMobile || null,
+        // Only meaningful for a family login; blank otherwise, and the server
+        // ignores it for a self-registered individual (EZ1-I158).
+        dateOfBirth: draft.dateOfBirth || undefined,
+      }),
+      clear,
+    );
   }
 
   return (
@@ -735,7 +683,7 @@ function ReligionForm({
   storageKey,
 }: {
   initial: Draft;
-  onSave: (b: Draft) => void;
+  onSave: (b: Draft) => Promise<boolean>;
   storageKey?: string;
 }) {
   const { draft, put, clear } = useDraft(
@@ -761,8 +709,7 @@ function ReligionForm({
         // Denomination is deliberately not sent: the field is gone, and the
         // server treats it as optional, so an old value simply stops being
         // rewritten. Nothing is deleted from rows that already have one.
-        clear();
-        onSave(draft);
+        void submitDraft(onSave(draft), clear);
       }}
       className="space-y-3"
     >
@@ -830,29 +777,32 @@ function HoroscopeForm({
   storageKey,
 }: {
   initial: Draft;
-  onSave: (b: Draft) => void;
+  onSave: (b: Draft) => Promise<boolean>;
   storageKey?: string;
 }) {
   const chart = (initial?.horoscope ?? {}) as Draft;
+  // Only an edited draft is written (EZ1-I236); see createDraftGuard.
+  const [guard] = useState(createDraftGuard);
   const stored0 = loadDraft(storageKey);
-  const [available, setAvailable] = useState(
+  const [available, seedAvailable] = useState(
     stored0 ? Boolean(stored0.available) : Boolean(initial?.horoscopeAvailable),
   );
-  const [values, setValues] = useState<Draft>(
+  const [values, seedValues] = useState<Draft>(
     stored0 ? ((stored0.values as Draft) ?? {}) : {},
   );
 
   useEffect(() => {
     // An unsaved draft wins over re-seeding from the server (EZ1-I73).
     const stored = loadDraft(storageKey);
+    guard.seeded(Boolean(stored));
     if (stored) {
-      setAvailable(Boolean(stored.available));
-      setValues((stored.values as Draft) ?? {});
+      seedAvailable(Boolean(stored.available));
+      seedValues((stored.values as Draft) ?? {});
       return;
     }
-    setAvailable(Boolean(initial?.horoscopeAvailable));
+    seedAvailable(Boolean(initial?.horoscopeAvailable));
     const place = (chart.birthPlace ?? {}) as Draft;
-    setValues({
+    seedValues({
       rashi: chart.rashi ?? '',
       star: chart.star ?? '',
       padam: chart.padam ?? '',
@@ -868,8 +818,11 @@ function HoroscopeForm({
   }, [JSON.stringify(initial), storageKey]);
 
   useEffect(() => {
-    saveDraft(storageKey, { available, values });
-  }, [storageKey, available, values]);
+    guard.persist(storageKey, { available, values });
+  }, [guard, storageKey, available, values]);
+
+  const setAvailable = guard.edit(seedAvailable);
+  const setValues = guard.edit(seedValues);
 
   const set = (k: string) => (e: { target: { value: string } }) =>
     setValues((v) => ({ ...v, [k]: e.target.value }));
@@ -879,7 +832,6 @@ function HoroscopeForm({
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        clearDraft(storageKey);
         /*
          * Where and when somebody was born is true either way.
          *
@@ -901,7 +853,7 @@ function HoroscopeForm({
             : {}),
         };
         const chartOnly = ['rashi', 'star', 'padam', 'gothram', 'kujaDosham'];
-        onSave(
+        const sent = onSave(
           available
             ? {
                 horoscopeAvailable: true,
@@ -912,6 +864,7 @@ function HoroscopeForm({
               }
             : { horoscopeAvailable: false, ...always },
         );
+        void submitDraft(sent, () => guard.clear(storageKey));
       }}
       className="space-y-3"
     >
@@ -1083,27 +1036,30 @@ function MaritalForm({
   storageKey,
 }: {
   initial: Draft;
-  onSave: (b: Draft) => void;
+  onSave: (b: Draft) => Promise<boolean>;
   storageKey?: string;
 }) {
   const history = (initial?.maritalHistory ?? {}) as Draft;
+  // Only an edited draft is written (EZ1-I236); see createDraftGuard.
+  const [guard] = useState(createDraftGuard);
   const stored0 = loadDraft(storageKey);
-  const [status, setStatus] = useState<MaritalStatus>(
+  const [status, seedStatus] = useState<MaritalStatus>(
     stored0
       ? (stored0.status as MaritalStatus)
       : ((initial?.maritalStatus as MaritalStatus) ?? 'never_married'),
   );
-  const [values, setValues] = useState<Draft>(stored0 ? ((stored0.values as Draft) ?? {}) : {});
+  const [values, seedValues] = useState<Draft>(stored0 ? ((stored0.values as Draft) ?? {}) : {});
 
   useEffect(() => {
     const stored = loadDraft(storageKey);
+    guard.seeded(Boolean(stored));
     if (stored) {
-      setStatus(stored.status as MaritalStatus);
-      setValues((stored.values as Draft) ?? {});
+      seedStatus(stored.status as MaritalStatus);
+      seedValues((stored.values as Draft) ?? {});
       return;
     }
-    setStatus((initial?.maritalStatus as MaritalStatus) ?? 'never_married');
-    setValues({
+    seedStatus((initial?.maritalStatus as MaritalStatus) ?? 'never_married');
+    seedValues({
       marriageDate: history.marriageDate ?? '',
       divorceDate: history.divorceDate ?? '',
       yearsMarried: history.yearsMarried ?? '',
@@ -1117,8 +1073,11 @@ function MaritalForm({
   }, [JSON.stringify(initial), storageKey]);
 
   useEffect(() => {
-    saveDraft(storageKey, { status, values });
-  }, [storageKey, status, values]);
+    guard.persist(storageKey, { status, values });
+  }, [guard, storageKey, status, values]);
+
+  const setStatus = guard.edit(seedStatus);
+  const setValues = guard.edit(seedValues);
 
   const set = (k: string) => (e: { target: { value: string } }) =>
     setValues((v) => ({ ...v, [k]: e.target.value }));
@@ -1127,7 +1086,6 @@ function MaritalForm({
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        clearDraft(storageKey);
         const body: Draft = { maritalStatus: status };
         if (status !== 'never_married') {
           if (values.marriageDate) body.marriageDate = values.marriageDate;
@@ -1139,7 +1097,7 @@ function MaritalForm({
           if (values.childrenLivingWith) body.childrenLivingWith = values.childrenLivingWith;
           if (values.reason) body.reason = values.reason;
         }
-        onSave(body);
+        void submitDraft(onSave(body), () => guard.clear(storageKey));
       }}
       className="space-y-3"
     >
@@ -1239,7 +1197,7 @@ function FamilyForm({
   initial: Draft;
   siblings: Sibling[];
   assets: Asset[];
-  onSave: (b: Draft) => void;
+  onSave: (b: Draft) => Promise<boolean>;
   onAddSibling: (b: Draft) => void;
   onRemoveSibling: (id: string) => void;
   onAddAsset: (b: Draft) => void;
@@ -1248,17 +1206,20 @@ function FamilyForm({
 }) {
   const father = (initial?.father ?? {}) as Draft;
   const mother = (initial?.mother ?? {}) as Draft;
-  const [values, setValues] = useState<Draft>(() => (loadDraft(storageKey) as Draft) ?? {});
+  // Only an edited draft is written (EZ1-I236); see createDraftGuard.
+  const [guard] = useState(createDraftGuard);
+  const [values, seedValues] = useState<Draft>(() => (loadDraft(storageKey) as Draft) ?? {});
   const [sibling, setSibling] = useState<Draft>({ name: '' });
   const [asset, setAsset] = useState<Draft>({ type: 'independent_house' });
 
   useEffect(() => {
     const stored = loadDraft(storageKey);
+    guard.seeded(Boolean(stored));
     if (stored) {
-      setValues(stored);
+      seedValues(stored);
       return;
     }
-    setValues({
+    seedValues({
       fatherName: father.name ?? '',
       fatherProfession: father.profession ?? '',
       // Accepted by the API from the beginning and never asked for here, so
@@ -1287,8 +1248,10 @@ function FamilyForm({
   }, [JSON.stringify(initial), storageKey]);
 
   useEffect(() => {
-    saveDraft(storageKey, values);
-  }, [storageKey, values]);
+    guard.persist(storageKey, values);
+  }, [guard, storageKey, values]);
+
+  const setValues = guard.edit(seedValues);
 
   const set = (k: string) => (e: { target: { value: string } }) =>
     setValues((v) => ({ ...v, [k]: e.target.value }));
@@ -1299,8 +1262,7 @@ function FamilyForm({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          clearDraft(storageKey);
-          onSave({
+          const sent = onSave({
             father: {
               name: values.fatherName,
               profession: values.fatherProfession || undefined,
@@ -1333,6 +1295,7 @@ function FamilyForm({
                 : Number(values.familyNetWorth),
             familyNetWorthVisible: Boolean(values.familyNetWorthVisible),
           });
+          void submitDraft(sent, () => guard.clear(storageKey));
         }}
         className="space-y-3"
       >
@@ -1697,28 +1660,31 @@ function EducationForm({
   storageKey,
 }: {
   initial: Draft;
-  onSave: (b: Draft) => void;
+  onSave: (b: Draft) => Promise<boolean>;
   storageKey?: string;
 }) {
   const employment = (initial?.employment ?? {}) as Draft;
   const business = (initial?.business ?? {}) as Draft;
+  // Only an edited draft is written (EZ1-I236); see createDraftGuard.
+  const [guard] = useState(createDraftGuard);
   const stored0 = loadDraft(storageKey);
-  const [status, setStatus] = useState<OccupationStatus>(
+  const [status, seedStatus] = useState<OccupationStatus>(
     stored0
       ? (stored0.status as OccupationStatus)
       : ((initial?.occupationStatus as OccupationStatus) ?? 'employed'),
   );
-  const [values, setValues] = useState<Draft>(stored0 ? ((stored0.values as Draft) ?? {}) : {});
+  const [values, seedValues] = useState<Draft>(stored0 ? ((stored0.values as Draft) ?? {}) : {});
 
   useEffect(() => {
     const stored = loadDraft(storageKey);
+    guard.seeded(Boolean(stored));
     if (stored) {
-      setStatus(stored.status as OccupationStatus);
-      setValues((stored.values as Draft) ?? {});
+      seedStatus(stored.status as OccupationStatus);
+      seedValues((stored.values as Draft) ?? {});
       return;
     }
-    setStatus((initial?.occupationStatus as OccupationStatus) ?? 'employed');
-    setValues({
+    seedStatus((initial?.occupationStatus as OccupationStatus) ?? 'employed');
+    seedValues({
       highestQualification: initial?.highestQualification ?? '',
       course: initial?.course ?? '',
       institution: initial?.institution ?? '',
@@ -1736,8 +1702,11 @@ function EducationForm({
   }, [JSON.stringify(initial), storageKey]);
 
   useEffect(() => {
-    saveDraft(storageKey, { status, values });
-  }, [storageKey, status, values]);
+    guard.persist(storageKey, { status, values });
+  }, [guard, storageKey, status, values]);
+
+  const setStatus = guard.edit(seedStatus);
+  const setValues = guard.edit(seedValues);
 
   const set = (k: string) => (e: { target: { value: string } }) =>
     setValues((v) => ({ ...v, [k]: e.target.value }));
@@ -1747,12 +1716,12 @@ function EducationForm({
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        clearDraft(storageKey);
         const body: Draft = {
           highestQualification: values.highestQualification,
           course: values.course,
-          institution: values.institution || undefined,
-          collegePlace: values.collegePlace || undefined,
+          // null clears; undefined would leave the stored value in place.
+          institution: values.institution || null,
+          collegePlace: values.collegePlace || null,
           occupationStatus: status,
           incomeVisible: Boolean(values.incomeVisible),
         };
@@ -1771,7 +1740,7 @@ function EducationForm({
             businessLocation: values.businessLocation || undefined,
           };
         }
-        onSave(body);
+        void submitDraft(onSave(body), () => guard.clear(storageKey));
       }}
       className="space-y-3"
     >
@@ -1906,19 +1875,22 @@ function PreferencesForm({
   storageKey,
 }: {
   initial: Draft;
-  onSave: (b: Draft) => void;
+  onSave: (b: Draft) => Promise<boolean>;
   storageKey?: string;
 }) {
   const prefs = (initial?.partnerPreferences ?? {}) as Draft;
-  const [values, setValues] = useState<Draft>(() => (loadDraft(storageKey) as Draft) ?? {});
+  // Only an edited draft is written (EZ1-I236); see createDraftGuard.
+  const [guard] = useState(createDraftGuard);
+  const [values, seedValues] = useState<Draft>(() => (loadDraft(storageKey) as Draft) ?? {});
 
   useEffect(() => {
     const stored = loadDraft(storageKey);
+    guard.seeded(Boolean(stored));
     if (stored) {
-      setValues(stored);
+      seedValues(stored);
       return;
     }
-    setValues({
+    seedValues({
       preferredAgeMin: initial?.preferredAgeMin ?? 24,
       preferredAgeMax: initial?.preferredAgeMax ?? 34,
       preferredHeightMinCm: initial?.preferredHeightMinCm ?? 150,
@@ -1942,8 +1914,10 @@ function PreferencesForm({
   }, [JSON.stringify(initial), storageKey]);
 
   useEffect(() => {
-    saveDraft(storageKey, values);
-  }, [storageKey, values]);
+    guard.persist(storageKey, values);
+  }, [guard, storageKey, values]);
+
+  const setValues = guard.edit(seedValues);
 
   const set = (k: string) => (e: { target: { value: string } }) =>
     setValues((v) => ({ ...v, [k]: e.target.value }));
@@ -1953,8 +1927,7 @@ function PreferencesForm({
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        clearDraft(storageKey);
-        onSave({
+        const sent = onSave({
           preferredAgeMin: Number(values.preferredAgeMin),
           preferredAgeMax: Number(values.preferredAgeMax),
           preferredHeightMinCm: Number(values.preferredHeightMinCm),
@@ -1980,6 +1953,7 @@ function PreferencesForm({
           preferredNriCountry:
             values.nriPreference === 'yes' ? values.preferredNriCountry || undefined : undefined,
         });
+        void submitDraft(sent, () => guard.clear(storageKey));
       }}
       className="space-y-3"
     >

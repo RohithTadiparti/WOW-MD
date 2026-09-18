@@ -130,8 +130,19 @@ export class ProfileDetailsService {
       // collected and is ignored.
       ...(dto.nativePlace ? { nativePlace: dto.nativePlace } : {}),
       communicationAddress: dto.communicationAddress,
-      alternateMobile: dto.alternateMobile ?? null,
-      residence: (dto.residence ?? {}) as Record<string, string>,
+      /*
+       * Written only when sent. Both used to be `?? null` / `?? {}`, so a
+       * client that simply did not send them -- the web form never sends a
+       * residence at all -- blanked what was stored on every save of this
+       * section. Absent means "not part of this save"; an explicit null (or an
+       * empty string) is how a client clears one.
+       */
+      ...(dto.alternateMobile !== undefined
+        ? { alternateMobile: dto.alternateMobile || null }
+        : {}),
+      ...(dto.residence !== undefined
+        ? { residence: (dto.residence ?? {}) as Record<string, string> }
+        : {}),
     });
 
     // A family member fills the biodata in for the bride/groom they manage, but
@@ -186,7 +197,9 @@ export class ProfileDetailsService {
       caste: dto.caste,
       subCaste: dto.subCaste,
       motherTongue: dto.motherTongue,
-      denomination: dto.denomination ?? null,
+      // The web form no longer sends it, and `?? null` wiped a stored one on
+      // every save; only a value actually sent (null clears) is written.
+      ...(dto.denomination !== undefined ? { denomination: dto.denomination || null } : {}),
     });
     return this.persist(profileId, row);
   }
@@ -291,8 +304,9 @@ export class ProfileDetailsService {
     Object.assign(row, {
       highestQualification: dto.highestQualification,
       course: dto.course,
-      institution: dto.institution ?? null,
-      collegePlace: dto.collegePlace ?? null,
+      // Absent leaves the stored value alone; null (or '') clears it.
+      ...(dto.institution !== undefined ? { institution: dto.institution || null } : {}),
+      ...(dto.collegePlace !== undefined ? { collegePlace: dto.collegePlace || null } : {}),
       occupationStatus: dto.occupationStatus,
       employment: dto.employment ?? {},
       business: dto.business ?? {},
