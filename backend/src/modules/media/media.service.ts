@@ -1,11 +1,19 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
 import { Album } from './entities/album.entity';
 import { MediaItem } from './entities/media-item.entity';
-import { AddMediaItemDto, CreateAlbumDto } from './dto/media.dto';
-import { MediaStorageProvider } from './media-storage.provider';
+import { AddMediaItemDto, CreateAlbumDto, SignMediaDto, UploadDetailsDto } from './dto/media.dto';
+import { MediaAccessService } from './media-access.service';
+import { StorageService } from '../../platform/storage/storage.service';
+import { KeyScope, buildKey, isSafeKey, refKey } from '../../platform/storage/storage-keys';
+import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { AppConfigService } from '../../config/app-config.service';
 import { MediaType } from '../../common/enums';
 import { ModerationService } from '../../platform/moderation/moderation.service';
@@ -22,7 +30,8 @@ export class MediaService {
   constructor(
     @InjectRepository(Album) private readonly albums: Repository<Album>,
     @InjectRepository(MediaItem) private readonly items: Repository<MediaItem>,
-    private readonly storage: MediaStorageProvider,
+    private readonly storage: StorageService,
+    private readonly access: MediaAccessService,
     private readonly cfg: AppConfigService,
     private readonly moderation: ModerationService,
   ) {}
@@ -98,8 +107,94 @@ export class MediaService {
     return { removed: true };
   }
 
-  presignUpload(userId: string, filename: string, requestOrigin?: string) {
-    return this.storage.presign(userId, filename, requestOrigin);
+  /**
+   * An upload slot under a key the caller owns.
+   *
+   * The key is built here, from the scope the route decided, and never taken
+   * from the client — so where a file lands is a fact about who uploaded it
+   * and what for, and the access rules can be read back off the key.
+   */
+  async presignUpload(
+    actor: AuthUser,
+    scope: KeyScope,
+    file: UploadDetailsDto & { filename: string },
+    requestOrigin?: string,
+  ) {
+    const key = buildKey(scope, file.filename);
+    if (!(await this.access.canUpload(actor, key))) {
+      throw new ForbiddenException(
+        scope.owner === 'bookings' && scope.area === 'deliveries'
+          ? 'Only the provider on this booking can upload its deliveries'
+          : 'You cannot upload files there',
+      );
+    }
+    return this.storage.presignUpload(key, {
+      size: file.size,
+      contentType: file.contentType,
+      requestOrigin,
+    });
+  }
+
+  /** A profile photograph, or with `purpose: 'portfolio'` one for the caller's listing. */
+  async presignProfilePhoto(
+    actor: AuthUser,
+    file: UploadDetailsDto & { filename: string; purpose?: 'profile' | 'portfolio' },
+    requestOrigin?: string,
+  ) {
+    if (file.purpose === 'portfolio') {
+      const vendorId = await this.access.vendorIdOf(actor.userId);
+      if (!vendorId) throw new BadRequestException('There is no vendor listing on this account');
+      return this.presignUpload(actor, { owner: 'vendors', id: vendorId, area: 'portfolio' }, file, requestOrigin);
+    }
+    return this.presignUpload(actor, { owner: 'users', id: actor.userId, area: 'profile' }, file, requestOrigin);
+  }
+
+  async presignAlbumPhoto(
+    actor: AuthUser,
+    albumId: string,
+    file: UploadDetailsDto & { filename: string },
+    requestOrigin?: string,
+  ) {
+    await this.getOwnedAlbum(actor.userId, albumId);
+    return this.presignUpload(actor, { owner: 'users', id: actor.userId, area: 'albums' }, file, requestOrigin);
+  }
+
+  /**
+   * Confirms an upload landed as promised (StorageService.verifyUpload).
+   *
+   * Only for a key the caller could have been issued, so it cannot be used to
+   * probe, or delete, somebody else's files.
+   */
+  async completeUpload(actor: AuthUser, key: string, requestOrigin?: string) {
+    if (!(await this.access.canUpload(actor, key))) {
+      throw new ForbiddenException('That is not one of your uploads');
+    }
+    return this.storage.verifyUpload(key, requestOrigin);
+  }
+
+  /**
+   * A fresh link to one stored file, for whoever may open it.
+   *
+   * Responses already carry signed links; this is for a link that has expired
+   * on a page left open, and for a download — a couple saving the whole of a
+   * photographer's delivery wants files, not tabs.
+   */
+  async sign(actor: AuthUser, dto: SignMediaDto, requestOrigin?: string) {
+    const key = refKey(dto.ref) ?? (isSafeKey(dto.ref) ? dto.ref : this.storage.keyOf(dto.ref));
+    if (!key) throw new BadRequestException('That is not a stored file');
+    if (!(await this.access.canView(actor, key))) {
+      throw new ForbiddenException('You cannot open that file');
+    }
+    const url = await this.storage.signedUrl(key, {
+      requestOrigin,
+      downloadName: dto.download ? key.slice(key.lastIndexOf('/') + 1) : undefined,
+    });
+    // The least the link is good for (see S3StorageDriver.urlFor); null when
+    // the local store's links never expire.
+    return {
+      url,
+      expiresIn: this.storage.isPrivate ? Math.floor(this.cfg.media.getExpirySeconds / 2) : null,
+    };
   }
 
   async addItem(userId: string, albumId: string, dto: AddMediaItemDto) {

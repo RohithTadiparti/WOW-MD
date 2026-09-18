@@ -284,7 +284,9 @@ export default () => ({
     s3Bucket: process.env.S3_BUCKET || '',
     s3Region: process.env.S3_REGION || '',
     maxFileSizeBytes: toNumber(process.env.MAX_FILE_SIZE, 10 * 1024 * 1024),
-    // 'mock' returns fake presigned URLs for local/testing; 's3' uses real S3.
+    // 'mock' stores uploads on the API's own disk and serves them publicly
+    // (local and test stacks); 's3' keeps them in a private bucket and hands
+    // out short-lived signed links (see src/platform/storage).
     storageProvider: process.env.MEDIA_STORAGE_PROVIDER || 'mock',
     /**
      * Where a shared album link points.
@@ -303,9 +305,27 @@ export default () => ({
     shareBaseUrl:
       process.env.MEDIA_SHARE_BASE_URL ||
       `${(process.env.APP_BASE_URL || 'http://localhost:8080').replace(/\/+$/, '')}/album`,
+    // Optional. Blank means the SDK's own chain: AWS_ACCESS_KEY_ID and
+    // AWS_SECRET_ACCESS_KEY, a shared profile, or the instance/task role.
     s3AccessKeyId: process.env.S3_ACCESS_KEY_ID || '',
     s3SecretAccessKey: process.env.S3_SECRET_ACCESS_KEY || '',
+    /**
+     * An S3-compatible endpoint (MinIO, R2, Spaces). Blank for AWS itself.
+     * S3_PUBLIC_ENDPOINT is the same store as a browser reaches it, when that
+     * differs from what the API reaches — `http://minio:9000` inside compose is
+     * `http://localhost:9100` on the machine, and a presigned URL is signed for
+     * one host only.
+     */
+    s3Endpoint: process.env.S3_ENDPOINT || '',
+    s3PublicEndpoint: process.env.S3_PUBLIC_ENDPOINT || '',
+    // Path-style (`endpoint/bucket/key`) is what MinIO expects; AWS prefers
+    // virtual-hosted. Defaults to path-style only when an endpoint is set.
+    s3ForcePathStyle: toBool(process.env.S3_FORCE_PATH_STYLE || undefined, Boolean(process.env.S3_ENDPOINT)),
+    // How long an upload slot stays open.
     presignExpirySeconds: toNumber(process.env.S3_PRESIGN_EXPIRY, 900),
+    // How long a viewing link lasts. See StorageService.signedUrl for why a
+    // link handed out is always good for at least half of this.
+    getExpirySeconds: toNumber(process.env.S3_GET_EXPIRY, 3600),
     /**
      * Where the mock provider actually puts the bytes.
      *

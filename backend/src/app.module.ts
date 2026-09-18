@@ -17,6 +17,7 @@ import { WhatsAppModule } from './platform/whatsapp/whatsapp.module';
 import { JobsModule } from './platform/jobs/jobs.module';
 import { AuditModule } from './platform/audit/audit.module';
 import { ModerationModule } from './platform/moderation/moderation.module';
+import { StorageModule } from './platform/storage/storage.module';
 import { ThrottlingModule } from './platform/throttling/throttling.module';
 import { RedisThrottlerStorage } from './platform/throttling/redis-throttler.storage';
 import { AccountThrottlerGuard } from './platform/throttling/account-throttler.guard';
@@ -88,6 +89,7 @@ import { AiModule } from './modules/ai/ai.module';
     JobsModule,
     AuditModule,
     ModerationModule,
+    StorageModule,
 
     AuthModule,
     InvitationsModule,

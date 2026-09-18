@@ -130,7 +130,11 @@ export const configValidationSchema = Joi.object({
   MEDIA_SHARE_BASE_URL: Joi.string().allow('').optional(),
   S3_ACCESS_KEY_ID: Joi.string().allow('').optional(),
   S3_SECRET_ACCESS_KEY: Joi.string().allow('').optional(),
-  S3_PRESIGN_EXPIRY: Joi.number().default(900),
+  S3_PRESIGN_EXPIRY: Joi.number().min(60).max(604800).default(900),
+  S3_GET_EXPIRY: Joi.number().min(120).max(604800).default(3600),
+  S3_ENDPOINT: Joi.string().uri({ scheme: ['http', 'https'] }).allow('').optional(),
+  S3_PUBLIC_ENDPOINT: Joi.string().uri({ scheme: ['http', 'https'] }).allow('').optional(),
+  S3_FORCE_PATH_STYLE: Joi.string().valid('true', 'false').allow('').optional(),
 
   // Payments
   PAYMENT_PROVIDER: Joi.string().valid('mock', 'razorpay').default('mock'),
