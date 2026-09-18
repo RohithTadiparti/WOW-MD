@@ -55,6 +55,10 @@ export interface IncomingBooking {
   vendorServiceId?: string | null;
   serviceAnswers?: Record<string, unknown>;
   quantity?: number | null;
+  /** The chosen price times the quantity: the total the customer was shown. */
+  estimatedAmount?: string | null;
+  /** Designs the customer attached to the request, as uploaded image URLs. */
+  referenceImages?: string[];
   /** The newest quotation and where the negotiation stands (EZ1-I264). */
   quotation?: QuotationSummary | null;
   /** Worked out by the server with the same rule as the tab count (EZ1-I266). */

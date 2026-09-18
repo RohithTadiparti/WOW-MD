@@ -47,6 +47,11 @@ import { SupportCasesService } from '../verification/support-cases.service';
 import { MatchmakingService } from '../matchmaking/matchmaking.service';
 import { AvailabilityService } from '../vendors/availability.service';
 import { VendorServicesService } from '../catalog/vendor-services.service';
+import {
+  QUANTITY_MODELS,
+  estimateAmount,
+  requirementsRequired,
+} from '../catalog/booking-request-rules';
 import { AuditAction, AuditService } from '../../platform/audit/audit.service';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
@@ -319,12 +324,16 @@ export class BookingsService {
     providerType: ProviderType,
     providerId: string,
     manager?: EntityManager,
-  ): Promise<{ ownerUserId: string; isApproved: boolean }> {
+  ): Promise<{ ownerUserId: string; isApproved: boolean; categories?: string[] }> {
     if (providerType === ProviderType.VENDOR) {
       const repo = manager ? manager.getRepository(Vendor) : this.vendors;
       const vendor = await repo.findOne({ where: { id: providerId } });
       if (!vendor) throw new NotFoundException('Vendor not found');
-      return { ownerUserId: vendor.ownerUserId, isApproved: vendor.isApproved };
+      return {
+        ownerUserId: vendor.ownerUserId,
+        isApproved: vendor.isApproved,
+        categories: vendor.categories?.length ? vendor.categories : [vendor.category ?? ''],
+      };
     }
     const repo = manager ? manager.getRepository(PlannerProfile) : this.planners;
     const planner = await repo.findOne({ where: { id: providerId } });
@@ -413,6 +422,7 @@ export class BookingsService {
     }
 
     let slotServiceId: string | null = null;
+    let slotDate: string | null = null;
     if (dto.slotId) {
       const slot = await this.availability.findSlot(dto.slotId);
       // Both halves. A slot is identified by the provider it belongs to and
@@ -434,17 +444,28 @@ export class BookingsService {
       // see which job it is even when the customer did not pick it again
       // (EZ1-I264).
       slotServiceId = slot.vendorServiceId ?? null;
+      slotDate = slot.date;
     }
+
+    // The day of the function is the day of the window, or the date asked for
+    // when there is no window. A form that also asks "Date of the function" is
+    // answered from that rather than asking the buyer twice, and cannot then
+    // disagree with the slot they held.
+    const functionDate = slotDate ?? dto.eventDate ?? null;
 
     // What the catalog contributes: the buyer's answers are validated against
     // the same rows the form they filled in was generated from, and the chosen
     // price is proved to belong to the service they chose.
     let serviceAnswers: Record<string, unknown> = {};
+    let estimatedAmount: number | null = null;
+    let briefRequired = requirementsRequired(provider.categories ?? [], false);
     if (dto.vendorServiceId) {
-      const { service, answers } = await this.vendorServices.validateBookingAnswers(
-        dto.vendorServiceId,
-        dto.serviceAnswers,
-      );
+      const validated = await this.vendorServices.validateBookingAnswers(dto.vendorServiceId, {
+        ...(dto.serviceAnswers ?? {}),
+        ...(functionDate ? { event_date: functionDate } : {}),
+      });
+      const { service, answers } = validated;
+      briefRequired = validated.requirementsRequired;
       if (service.vendorId !== dto.providerId) {
         throw new BadRequestException('That service does not belong to this provider');
       }
@@ -468,11 +489,22 @@ export class BookingsService {
             `${offering.name} tops out at ${offering.maxQuantity}${offering.unitLabel ? ' ' + offering.unitLabel : ''}`,
           );
         }
+        // A per-day price with no number of days is not a price anybody saw.
+        if (QUANTITY_MODELS.includes(offering.pricingModel) && !dto.quantity) {
+          throw new BadRequestException(`Say how many for ${offering.name}`);
+        }
+        estimatedAmount = estimateAmount(offering, dto.quantity);
       }
     } else if (dto.serviceAnswers && Object.keys(dto.serviceAnswers).length > 0) {
       // Answers with nothing to validate them against would be stored
       // unchecked, which is the one thing the catalog exists to prevent.
       throw new BadRequestException('Choose a service before answering its questions');
+    }
+
+    // Venue, catering and florist cannot quote without a brief; everybody else
+    // quotes from the price the buyer picked (booking-request-rules.ts).
+    if (briefRequired && !dto.requirements?.trim()) {
+      throw new BadRequestException('Tell the provider what you need — at least a sentence');
     }
 
     return this.dataSource.transaction(async (manager) => {
@@ -489,12 +521,14 @@ export class BookingsService {
           // the requirements. `amount` stays zero until a quotation is accepted.
           amount: (dto.amount ?? 0).toFixed(2),
           currency: this.cfg.payments.currency,
-          eventDate: dto.eventDate ?? null,
+          eventDate: functionDate,
           requirements: dto.requirements ?? null,
           vendorServiceId: dto.vendorServiceId ?? slotServiceId,
           offeringId: dto.offeringId ?? null,
           serviceAnswers,
           quantity: dto.quantity ?? null,
+          estimatedAmount: estimatedAmount !== null ? estimatedAmount.toFixed(2) : null,
+          referenceImages: dto.referenceImages ?? [],
           expectedBudget: dto.expectedBudget !== undefined ? dto.expectedBudget.toFixed(2) : null,
           notes: dto.notes,
           status: BookingStatus.REQUESTED,

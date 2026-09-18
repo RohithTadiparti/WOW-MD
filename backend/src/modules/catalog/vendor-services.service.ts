@@ -10,21 +10,10 @@ import { CatalogService } from './catalog.service';
 import { serviceNamesByIds } from './service-names';
 import { UpsertOfferingDto, UpsertVendorServiceDto } from './dto/catalog.dto';
 import { describeForm, validateAttributes } from './attribute-validation';
-import { AttributeScope, BusinessStatus, PricingModel, UserRole } from '../../common/enums';
+import { AttributeScope, BusinessStatus, UserRole } from '../../common/enums';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { AppConfigService } from '../../config/app-config.service';
-
-/** The two models that carry no published amount — the vendor quotes instead. */
-const QUOTE_ONLY: PricingModel[] = [PricingModel.CUSTOM_QUOTE, PricingModel.NO_PUBLIC_PRICE];
-
-/** The models where a quantity is part of the price rather than decoration. */
-const QUANTITY_MODELS: PricingModel[] = [
-  PricingModel.PER_PERSON,
-  PricingModel.PER_ITEM,
-  PricingModel.PER_HOUR,
-  PricingModel.PER_DAY,
-  PricingModel.PER_SESSION,
-];
+import { QUANTITY_MODELS, QUOTE_ONLY, requirementsRequired } from './booking-request-rules';
 
 /**
  * The vendor's half of the catalog: which services they offer, how they have
@@ -499,15 +488,26 @@ export class VendorServicesService {
       throw new BadRequestException('This service has no published prices yet');
     }
 
+    const bookingForm = describeForm(attributes, AttributeScope.BOOKING);
+    const categorySlug = await this.categorySlugOf(definition.categoryId);
     return {
       vendorService: service,
       vendorId: service.vendorId,
       vendorName: vendor?.name ?? null,
       definition,
+      categorySlug,
       availabilityModel: definition.availabilityModel,
-      bookingForm: describeForm(attributes, AttributeScope.BOOKING),
+      bookingForm,
       offerings,
+      // Said by the server so the form asks exactly what the request is checked
+      // against: a mehendi artist does not need "What do you need?" answered.
+      requirementsRequired: requirementsRequired([categorySlug], bookingForm.length > 0),
     };
+  }
+
+  private async categorySlugOf(categoryId: string): Promise<string | null> {
+    const category = await this.categories.findOne({ where: { id: categoryId } });
+    return category?.slug ?? null;
   }
 
   /**
@@ -520,15 +520,27 @@ export class VendorServicesService {
   async validateBookingAnswers(
     vendorServiceId: string,
     answers: Record<string, unknown> | undefined,
-  ): Promise<{ service: VendorService; answers: Record<string, unknown> }> {
+  ): Promise<{
+    service: VendorService;
+    answers: Record<string, unknown>;
+    requirementsRequired: boolean;
+  }> {
     const service = await this.services.findOne({ where: { id: vendorServiceId } });
     if (!service) throw new NotFoundException('That service is not available');
     if (!service.active) throw new BadRequestException('That service is not currently offered');
 
-    const attributes = await this.catalog.attributesFor(service.definitionId);
+    const [attributes, definition] = await Promise.all([
+      this.catalog.attributesFor(service.definitionId),
+      this.catalog.getDefinition(service.definitionId),
+    ]);
+    const hasFormFields = attributes.some((a) => a.scope === AttributeScope.BOOKING);
     return {
       service,
       answers: validateAttributes(attributes, AttributeScope.BOOKING, answers),
+      requirementsRequired: requirementsRequired(
+        [await this.categorySlugOf(definition.categoryId)],
+        hasFormFields,
+      ),
     };
   }
 
