@@ -43,7 +43,20 @@ interface InterestRow {
   createdAt: string;
   direction: 'incoming' | 'outgoing';
   counterpart: Counterpart;
-  actions: { accept: boolean; decline: boolean; unsend: boolean; block: boolean };
+  /**
+   * Where it stands with the receiving side's agency: 'with_agency' until the
+   * agency forwards or declines it. Null when it was never held.
+   */
+  screening?: 'with_agency' | 'forwarded' | 'declined_by_agency' | null;
+  actions: {
+    accept: boolean;
+    decline: boolean;
+    unsend: boolean;
+    block: boolean;
+    /** The agency's answers to an interest held for it. */
+    forward?: boolean;
+    agencyDecline?: boolean;
+  };
   acceptedBy: {
     profileId: string;
     displayName: string;
@@ -175,6 +188,7 @@ export default function Interests() {
     try {
       await fn();
       qc.invalidateQueries({ queryKey: ['interest-board'] });
+      qc.invalidateQueries({ queryKey: ['agency-interests'] });
       // The same interests drive the Matches inbox and the chat list, so both
       // are dropped rather than left showing an answer that has changed.
       qc.invalidateQueries({ queryKey: ['incoming-interests'] });
@@ -550,6 +564,34 @@ export default function Interests() {
                         Accepting a received interest is the loud action; viewing
                         is the quiet default everywhere else.
                       */}
+                      {/*
+                        Held for the agency: the client has not been told yet.
+                        Forwarding is what tells them; declining means they
+                        never hear of it.
+                      */}
+                      {row.actions.forward && (
+                        <button
+                          className="btn btn-sm"
+                          disabled={busy}
+                          onClick={() =>
+                            void act(() => api.put(`/matches/${row.id}/agency/forward`, {}))
+                          }
+                        >
+                          Forward to client
+                        </button>
+                      )}
+                      {row.actions.agencyDecline && (
+                        <button
+                          className="btn-outline btn-sm"
+                          disabled={busy}
+                          onClick={() =>
+                            void act(() => api.put(`/matches/${row.id}/agency/decline`, {}))
+                          }
+                        >
+                          Decline
+                        </button>
+                      )}
+
                       {row.actions.accept ? (
                         <>
                           <button
@@ -568,7 +610,7 @@ export default function Interests() {
                         </>
                       ) : (
                         <button
-                          className="btn btn-sm"
+                          className={row.actions.forward ? 'btn-outline btn-sm' : 'btn btn-sm'}
                           onClick={() => setPreviewId(row.counterpart.id)}
                         >
                           View profile
@@ -690,12 +732,26 @@ function StatusBadge({ row }: { row: InterestRow }) {
     case 'accepted':
       return <span className="pill-positive shrink-0">Accepted</span>;
     case 'rejected':
-      return <span className="pill-neutral shrink-0">Declined</span>;
+      return (
+        <span className="pill-neutral shrink-0">
+          {row.screening === 'declined_by_agency' && row.direction === 'outgoing'
+            ? 'Declined by their agency'
+            : 'Declined'}
+        </span>
+      );
     case 'withdrawn':
       return <span className="pill-neutral shrink-0">Unsent</span>;
     case 'blocked':
       return <span className="pill-critical shrink-0">Blocked</span>;
     case 'pending':
+      // Held for the agency: the agent reviews it, the sender waits on them.
+      if (row.screening === 'with_agency') {
+        return row.direction === 'incoming' ? (
+          <span className="pill-brand shrink-0">Awaiting your review</span>
+        ) : (
+          <span className="pill-caution shrink-0">With their agency</span>
+        );
+      }
       return row.direction === 'incoming' ? (
         <span className="pill-brand shrink-0">Needs your reply</span>
       ) : (

@@ -469,6 +469,8 @@ function linkFor(n: Notification, canVerify = false): string | null {
         // The agency reads it on its own Interests board, which opens on its
         // whole book, so the new interest is there without picking a client.
         if (n.type === 'match_interest_for_client') return '/interests';
+        // Declined by the other family's agency: it sits under Declined.
+        if (n.type === 'match_declined_by_agency') return '/interests';
         return n.targetId ? `/matches?profile=${n.targetId}` : '/matches';
     }
   }

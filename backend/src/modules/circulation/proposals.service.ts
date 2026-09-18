@@ -12,6 +12,7 @@ import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { InterestStatus, UserRole } from '../../common/enums';
 import { toPublicProfile, PublicProfileView } from '../users/dto/public-profile.dto';
 import { ChatService } from '../chat/chat.service';
+import { visibleTo } from '../matchmaking/interest-screening.service';
 
 export interface ProposalThread {
   interestId: string;
@@ -85,7 +86,11 @@ export class ProposalsService {
     const to = profiles.find((p) => p.id === interest.toProfileId);
     if (!from || !to) throw new NotFoundException('That match no longer exists');
 
-    const mine = [from, to].filter((p) => this.controls(actor, p));
+    // The receiving side of an interest still held for its agency is only the
+    // agency's (see interest-screening): the client has not been told of it.
+    const mine = [from, to].filter(
+      (p) => this.controls(actor, p) && visibleTo(actor, p, [interest]).length > 0,
+    );
     if (mine.length === 0) {
       throw new ForbiddenException('You are not handling either side of this match');
     }
@@ -248,9 +253,17 @@ export class ProposalsService {
     if (controlled.length === 0) return [];
 
     const ids = new Set(controlled.map((p) => p.id));
-    const interests = await this.interests.find({
-      where: [{ fromProfileId: In([...ids]) }, { toProfileId: In([...ids]) }],
-      order: { updatedAt: 'DESC' },
+    // Held for an agency, an interest is not yet the client's to see — only the
+    // agency stewarding their profile reads it (see interest-screening).
+    const byControlled = new Map(controlled.map((p) => [p.id, p]));
+    const interests = (
+      await this.interests.find({
+        where: [{ fromProfileId: In([...ids]) }, { toProfileId: In([...ids]) }],
+        order: { updatedAt: 'DESC' },
+      })
+    ).filter((i) => {
+      const to = byControlled.get(i.toProfileId);
+      return !to || ids.has(i.fromProfileId) || visibleTo(actor, to, [i]).length > 0;
     });
     if (interests.length === 0) return [];
 
