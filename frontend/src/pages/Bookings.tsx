@@ -19,6 +19,8 @@ import PaymentMethodPicker from '../components/PaymentMethodPicker';
 import PhotoUploader from '../components/PhotoUploader';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { Loading } from '../components/ui/Feedback';
+import { ReferenceThumbs, RequestEstimate } from '../components/RequestExtras';
+import { estimateSummary } from '../lib/booking-request';
 
 interface Booking {
   id: string;
@@ -52,6 +54,11 @@ interface Booking {
   expectedGuests?: number | null;
   serviceName?: string | null;
   offeringName?: string | null;
+  quantity?: number | null;
+  /** The chosen price times the quantity, as shown when the request was sent. */
+  estimatedAmount?: string | null;
+  /** Designs attached to the request for the vendor to see. */
+  referenceImages?: string[];
   paymentStatus?: string | null;
   /** Cancellation detail, when the booking is cancelled (EZ1-I77). */
   cancellationReason?: string | null;
@@ -996,6 +1003,27 @@ function BookingDetail({
           <p className="mt-1 text-red-900">
             Reason: {booking.cancellationReason || 'No reason was given.'}
           </p>
+        </div>
+      )}
+
+      {/* What was sent with the request. The estimate is the published price
+          times the quantity; what is owed is the quotation, never this. */}
+      {(estimateSummary(booking.estimatedAmount, booking.quantity) ||
+        (booking.referenceImages?.length ?? 0) > 0) && (
+        <div className="space-y-2 text-sm">
+          <h3 className="section-title text-sm">Your request</h3>
+          <RequestEstimate
+            estimatedAmount={booking.estimatedAmount}
+            quantity={booking.quantity}
+            currency={booking.currency}
+            label={Number(booking.amount) > 0 ? 'Estimated when you asked' : 'Estimated total'}
+            note={
+              Number(booking.amount) > 0
+                ? 'What you pay is the accepted quotation, not this estimate.'
+                : 'An estimate from their published price. Their quotation sets what you pay.'
+            }
+          />
+          <ReferenceThumbs urls={booking.referenceImages} />
         </div>
       )}
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  estimateSummary,
   estimateTotal,
   offeringPrice,
   requestFormFields,
@@ -69,5 +70,24 @@ describe('requestFormFields', () => {
   it('drops "Date of the function", which the chosen date answers', () => {
     const keys = requestFormFields([field('event_date'), field('guest_count')]).map((f) => f.key);
     expect(keys).toEqual(['guest_count']);
+  });
+});
+
+describe('estimateSummary', () => {
+  it('reads the total and the unit × quantity it came from', () => {
+    expect(estimateSummary('120000.00', 10, 'INR')).toEqual({
+      total: `INR ${(120000).toLocaleString('en-IN')}`,
+      breakdown: `INR ${(12000).toLocaleString('en-IN')} × 10`,
+    });
+  });
+
+  it('has no breakdown for a single unit or a fixed price', () => {
+    expect(estimateSummary('18000.00', null)?.breakdown).toBeNull();
+    expect(estimateSummary('18000.00', 1)?.breakdown).toBeNull();
+  });
+
+  it('is absent where nothing was estimated', () => {
+    expect(estimateSummary(null, 3)).toBeNull();
+    expect(estimateSummary('0.00', 3)).toBeNull();
   });
 });
