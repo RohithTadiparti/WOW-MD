@@ -35,6 +35,7 @@ import {
 } from '../../common/enums';
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
 import { ProfileDetailsService } from '../profile-details/profile-details.service';
+import { matchGenderSql } from '../matchmaking/match-gender';
 
 export interface ShareResult {
   share: ProfileShare;
@@ -430,7 +431,11 @@ export class SharingService {
       // either, whatever its pool flag still says.
       .andWhere('p.lifecycle = :active', { active: ProfileLifecycle.ACTIVE });
 
-    if (q.gender) qb.andWhere('LOWER(p.gender) = LOWER(:gender)', { gender: q.gender });
+    // "Bride" and "Groom" in the pool mean the side of the match, which for a
+    // family-run profile is `managingFor` rather than the steward's own gender.
+    if (q.gender) {
+      qb.andWhere(`${matchGenderSql('p')} = LOWER(:gender)`, { gender: q.gender.trim() });
+    }
     if (q.city) qb.andWhere('LOWER(p.city) = LOWER(:city)', { city: q.city });
     if (q.q) {
       const term = `%${q.q.toLowerCase()}%`;

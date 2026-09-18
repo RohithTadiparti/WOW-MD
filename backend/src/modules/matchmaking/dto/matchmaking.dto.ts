@@ -14,6 +14,7 @@ import {
 import { Type } from 'class-transformer';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { MaritalStatus, OccupationStatus } from '../../../common/enums';
+import { MATCH_VIEWS, MatchView } from '../suggestion-views';
 
 /**
  * Which profile the caller is acting as.
@@ -182,6 +183,14 @@ export class SuggestionsQueryDto extends PaginationDto {
   @ApiPropertyOptional()
   @IsOptional() @StrictBoolean()
   shortlistedOnly?: boolean | string;
+
+  /**
+   * Which of the four tiles at the top of Matches is pressed. Applied after the
+   * counts are taken, so each tile's figure is the number of rows it shows.
+   */
+  @ApiPropertyOptional({ enum: MATCH_VIEWS, default: 'all' })
+  @IsOptional() @IsIn([...MATCH_VIEWS])
+  view?: MatchView;
 
   /**
    * `score` is the default and is what matchmaking is for. `recent` exists
