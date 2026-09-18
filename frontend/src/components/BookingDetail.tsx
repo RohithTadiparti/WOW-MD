@@ -55,6 +55,11 @@ interface DetailBooking {
   serviceName: string | null;
   offeringName?: string | null;
   quantity?: number | null;
+  currency?: string;
+  /** The chosen price times the quantity: the total the customer was shown. */
+  estimatedAmount?: string | null;
+  /** Designs the customer attached to the request. */
+  referenceImages?: string[];
   quotation?: QuotationSummary | null;
 }
 
@@ -135,7 +140,25 @@ export default function BookingDetail({
         <Row label="Service">{booking.serviceName ?? 'No service chosen'}</Row>
         {booking.offeringName && <Row label="Package">{booking.offeringName}</Row>}
         {booking.quantity ? <Row label="Quantity">{booking.quantity}</Row> : null}
+        {booking.estimatedAmount && Number(booking.estimatedAmount) > 0 ? (
+          <Row label="Customer was shown">
+            {booking.currency ?? 'INR'} {Number(booking.estimatedAmount).toLocaleString('en-IN')}
+          </Row>
+        ) : null}
       </Section>
+
+      {/* The designs the customer sent for reference, each opening full size. */}
+      {booking.referenceImages && booking.referenceImages.length > 0 && (
+        <Section title="Reference photos">
+          <div className="flex flex-wrap gap-2 sm:col-span-2">
+            {booking.referenceImages.map((url) => (
+              <a key={url} href={url} target="_blank" rel="noopener noreferrer">
+                <img src={url} alt="Reference design" className="h-20 w-20 rounded-sm object-cover" />
+              </a>
+            ))}
+          </div>
+        </Section>
+      )}
 
       {extras}
 

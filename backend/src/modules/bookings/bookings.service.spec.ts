@@ -421,4 +421,67 @@ describe('BookingsService', () => {
       expect(matchmaking.isMatchFixed).not.toHaveBeenCalled();
     });
   });
+  // The request form (EZ1 booking-form fixes): the total the buyer saw is the
+  // one stored, the slot answers "Date of the function", and only the trades
+  // that quote from a brief insist on one.
+  // The request form: the total the buyer saw is the one stored, the slot
+  // answers the form's date, and only trades that quote from a brief demand one.
+  describe('a booking request', () => {
+    const request = { providerType: ProviderType.VENDOR, providerId: 'v1' };
+    const slotId = '11111111-1111-4111-8111-111111111111';
+    const validate = vendorServices.validateBookingAnswers as jest.Mock;
+    const serviceFound = (extra = {}) =>
+      validate.mockResolvedValueOnce({ service: { id: 's1', vendorId: 'v1' }, answers: {}, ...extra });
+    const vendorIn = (categories: string[]) =>
+      vendorsRepo.findOne.mockResolvedValueOnce({
+        id: 'v1', ownerUserId: 'vendor-owner', isApproved: true, categories,
+      } as never);
+    const perDay = { id: 'o1', vendorServiceId: 's1', name: 'Guest mehendi', pricingModel: 'per_day',
+      price: '12000.00', active: true, minQuantity: null, maxQuantity: null, unitLabel: null };
+    const bride = asUser('u1', UserRole.BRIDE);
+
+    it('stores price times quantity as the estimate, and refuses a missing quantity', async () => {
+      serviceFound();
+      (vendorServices.findOffering as jest.Mock).mockResolvedValueOnce(perDay);
+      const booking = await service.create(bride, {
+        ...request, vendorServiceId: 's1', offeringId: 'o1', quantity: 10,
+      });
+      expect(booking.estimatedAmount).toBe('120000.00');
+
+      serviceFound();
+      (vendorServices.findOffering as jest.Mock).mockResolvedValueOnce(perDay);
+      await expect(
+        service.create(bride, { ...request, vendorServiceId: 's1', offeringId: 'o1' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('answers "Date of the function" from the slot and dates the booking by it', async () => {
+      (availability.findSlot as jest.Mock).mockResolvedValueOnce({
+        id: slotId, providerId: 'v1', providerType: ProviderType.VENDOR, date: '2026-12-01',
+      });
+      serviceFound();
+      const booking = await service.create(bride, {
+        ...request, slotId, vendorServiceId: 's1', serviceAnswers: { guest_count: 40 },
+        referenceImages: ['http://localhost:3000/mock-storage/u1/design.jpg'],
+      });
+      expect(validate).toHaveBeenCalledWith('s1', { guest_count: 40, event_date: '2026-12-01' });
+      expect(booking.eventDate).toBe('2026-12-01');
+      expect(booking.referenceImages).toEqual(['http://localhost:3000/mock-storage/u1/design.jpg']);
+    });
+
+    it('insists on a brief only where the trade quotes from one', async () => {
+      vendorIn(['catering']);
+      await expect(service.create(bride, request)).rejects.toThrow(/what you need/);
+
+      vendorIn(['mehendi-artist']);
+      expect((await service.create(bride, request)).requirements).toBeNull();
+
+      // The service's own rule wins over whatever the vendor lists.
+      vendorIn(['mehendi-artist']);
+      serviceFound({ requirementsRequired: true });
+      await expect(
+        service.create(bride, { ...request, vendorServiceId: 's1' }),
+      ).rejects.toThrow(/what you need/);
+    });
+  });
 });
