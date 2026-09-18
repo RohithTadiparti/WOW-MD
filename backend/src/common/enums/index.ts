@@ -117,6 +117,15 @@ export enum TaskStatus {
 export enum NotificationType {
   MATCH_INTEREST = 'match_interest',
   MATCH_ACCEPTED = 'match_accepted',
+  /**
+   * Somebody has sent an interest to a profile an agency manages.
+   *
+   * For the managing agent, when the profile's owner is the one told about the
+   * interest itself: a client who has claimed their profile hears about it on
+   * their own account, and until now the agency running their matchmaking heard
+   * nothing.
+   */
+  MATCH_INTEREST_FOR_CLIENT = 'match_interest_for_client',
   NEW_MESSAGE = 'new_message',
   /**
    * Two of an agency's clients have started talking, or have started a call.

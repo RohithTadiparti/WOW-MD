@@ -45,7 +45,16 @@ const job = (payload: Record<string, unknown>): string => {
 export const DELIVERY: Record<NotificationType, DeliverySpec> = {
   [NotificationType.MATCH_INTEREST]: {
     title: 'Someone is interested',
-    body: (p) => `${str(p, 'counterpartName', 'A family')} would like to take your profile forward.`,
+    body: (p) =>
+      p.forManagedProfile === true && str(p, 'subjectName')
+        ? `${str(p, 'counterpartName', 'A family')} is interested in ${str(p, 'subjectName')}.`
+        : `${str(p, 'counterpartName', 'A family')} would like to take your profile forward.`,
+    whatsappTemplate: null,
+  },
+  [NotificationType.MATCH_INTEREST_FOR_CLIENT]: {
+    title: 'Interest in your client',
+    body: (p) =>
+      `${str(p, 'counterpartName', 'A family')} is interested in ${str(p, 'subjectName', 'your client')}.`,
     whatsappTemplate: null,
   },
   [NotificationType.MATCH_ACCEPTED]: {

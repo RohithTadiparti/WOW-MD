@@ -57,6 +57,13 @@ export function routeFor(n: Notification, opts: RouteOptions = {}): Href | null 
         if (opts.canVerify && n.targetId) return { pathname: '/visit/[id]', params: { id: n.targetId } };
         return '/verification';
       case 'matches':
+        // An agency told about interest in a client opens that client's
+        // Interests board, already acting for them.
+        if (n.type === 'match_interest_for_client') {
+          return n.targetId
+            ? { pathname: '/interests', params: { client: n.targetId } }
+            : '/interests';
+        }
         return '/matches';
       // A new message targets the person who sent it, which is the thread's own
       // address in this app.

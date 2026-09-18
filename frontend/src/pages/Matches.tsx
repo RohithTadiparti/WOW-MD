@@ -6,6 +6,11 @@ import { api, apiMessage } from '../lib/api';
 import ProfilePreview from '../components/ProfilePreview';
 import MatchCard, { PublicProfile, Suggestion } from '../components/MatchCard';
 import { PersonPhoto } from '../components/ProfileSilhouette';
+import MatchStatTiles, {
+  MatchView,
+  MatchViewCounts,
+  VIEW_TILES,
+} from '../components/MatchStatTiles';
 import { useAuth } from '../store/auth';
 import {
   MatchFixedState,
@@ -201,6 +206,8 @@ export default function Matches() {
   );
   const [pages, setPages] = useState(1);
   const [showShortlist, setShowShortlist] = useState(false);
+  // Which of the four tiles at the top is pressed; 'all' is Total matches.
+  const [view, setView] = useState<MatchView>('all');
 
   const openPreview = (id: string, score?: number, lastActiveAt?: string | null) => {
     setPreviewId(id);
@@ -232,6 +239,7 @@ export default function Matches() {
   const searchParams = {
     ...params,
     ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '')),
+    ...(view !== 'all' ? { view } : {}),
     limit: PAGE_SIZE * pages,
   };
 
@@ -247,7 +255,7 @@ export default function Matches() {
   const canBrowse = ready && Boolean(status) && !matchmakingGate(status);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['suggestions', profileId, JSON.stringify(filters), pages],
+    queryKey: ['suggestions', profileId, JSON.stringify(filters), view, pages],
     queryFn: async () => (await api.get('/matches/suggestions', { params: searchParams })).data,
     retry: false,
     enabled: canBrowse,
@@ -354,19 +362,10 @@ export default function Matches() {
   const shortlistRows: Suggestion[] = shortlist ?? [];
   const recommendedRows = (recommended?.data as Suggestion[] | undefined) ?? [];
 
-  // The one-line summary at the top. Every figure comes off data already
-  // loaded — the browse total, the profiles active in the last day, the
-  // engine's own 50%+ list, and the private shortlist (EZ1-I189).
-  const newToday = suggestions.filter((s) => {
-    const la = s.profile.lastActiveAt;
-    return la ? (Date.now() - new Date(la).getTime()) / 86_400_000 < 1 : false;
-  }).length;
-  const summary = [
-    { label: 'Total matches', value: total },
-    { label: 'Active today', value: newToday },
-    { label: 'High compatibility', value: recommendedRows.length },
-    { label: 'Shortlisted', value: shortlistRows.length },
-  ];
+  // The tiles at the top, counted by the server over the same list the browse
+  // column is cut from — so each figure is the number of rows its tile shows.
+  const counts = data?.counts as MatchViewCounts | undefined;
+  const viewLabel = VIEW_TILES.find((t) => t.view === view)?.label;
 
   // The search box, sort, quick pills and clear-all live on the compact bar;
   // everything else opens in the "More filters" panel. This counts only the
@@ -423,19 +422,16 @@ export default function Matches() {
         </p>
       )}
 
-      {/* At-a-glance counts, all off data already loaded (EZ1-I189). */}
+      {/* At-a-glance counts that are also the way into each list (EZ1-I189). */}
       {ready && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {summary.map((s) => (
-            <div
-              key={s.label}
-              className="rounded-[--radius-lg] border border-gray-200 bg-surface p-4 shadow-card"
-            >
-              <p className="text-2xl font-semibold tracking-[-0.02em] text-gray-900">{s.value}</p>
-              <p className="mt-0.5 text-xs text-gray-500">{s.label}</p>
-            </div>
-          ))}
-        </div>
+        <MatchStatTiles
+          counts={counts}
+          value={view}
+          onChange={(next) => {
+            setView(next);
+            setPages(1);
+          }}
+        />
       )}
 
       {error && <p className="alert-critical">{error}</p>}
@@ -774,6 +770,9 @@ export default function Matches() {
                 <div>
                   <h2 className="section-title">
                     {SORTS.find((s) => s.value === filters.sort)?.label ?? 'Browse'}
+                    {view !== 'all' && viewLabel && (
+                      <span className="text-brand-dark"> · {viewLabel}</span>
+                    )}
                   </h2>
                   <p className="text-sm text-gray-600">
                     Everyone who fits the filters above, whatever the match score. This is
@@ -798,7 +797,15 @@ export default function Matches() {
                     />
                   ))}
                   {isLoading && <Loading rows={3} />}
-                  {!isLoading && suggestions.length === 0 && (
+                  {!isLoading && suggestions.length === 0 && view !== 'all' && (
+                    <div className="rounded-sm border border-dashed border-gray-300 p-4 text-sm">
+                      <p className="font-medium text-gray-700">Nobody under {viewLabel} right now.</p>
+                      <button className="btn-outline mt-3 text-xs" onClick={() => setView('all')}>
+                        Show all matches
+                      </button>
+                    </div>
+                  )}
+                  {!isLoading && suggestions.length === 0 && view === 'all' && (
                     <EmptyState
                       hasFilters={activeFilterCount > 0}
                       onClear={() => setFilters(NO_FILTERS)}
