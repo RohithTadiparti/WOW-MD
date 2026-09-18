@@ -5,6 +5,7 @@ import {
   ImageVerdict,
 } from './image-moderation.provider';
 import { AuditAction, AuditService } from '../audit/audit.service';
+import { StorageService } from '../storage/storage.service';
 
 /**
  * The one place a photograph is checked before it is attached to anybody.
@@ -27,6 +28,7 @@ export class ModerationService {
   constructor(
     @Inject(IMAGE_MODERATION_PROVIDER) private readonly provider: ImageModerationProvider,
     private readonly audit: AuditService,
+    private readonly storage: StorageService,
   ) {}
 
   /**
@@ -57,7 +59,12 @@ export class ModerationService {
     );
   }
 
-  check(url: string): Promise<ImageVerdict> {
-    return this.provider.check(url);
+  /**
+   * A stored reference to a private object means nothing to a detector on the
+   * other side of the internet, so it is sent a short-lived link instead.
+   */
+  async check(url: string): Promise<ImageVerdict> {
+    const key = this.storage.keyOf(url);
+    return this.provider.check(key ? await this.storage.signedUrl(key) : url);
   }
 }

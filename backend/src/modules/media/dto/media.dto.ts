@@ -1,5 +1,17 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsEnum, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
 import { IsUploadedUrl } from '../../../common/decorators/uploaded-url.decorator';
 import { IsStrictString } from '../../../common/decorators/strict-type.decorator';
 import { MediaType } from '../../../common/enums';
@@ -56,7 +68,44 @@ const FILENAME = new RegExp(
   'i',
 );
 
-export class PresignDto {
+/**
+ * What a client knows about the file before it uploads it.
+ *
+ * Optional, so every client written before these existed keeps working on the
+ * local store. When given, both are signed into the upload slot and the store
+ * refuses a file that differs; on a private (S3) store the size is required,
+ * because a slot with no length signed into it accepts anything up to 5 GB.
+ */
+export class UploadDetailsDto {
+  @ApiPropertyOptional({ description: 'The exact size of the file in bytes.', example: 482133 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(5 * 1024 * 1024 * 1024)
+  size?: number;
+
+  @ApiPropertyOptional({
+    description: 'The type the file will be uploaded with. Must be sent as Content-Type on the PUT.',
+    example: 'image/jpeg',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  @Matches(/^[a-z]+\/[a-z0-9.+-]+$/i, { message: 'contentType must be a MIME type such as image/jpeg' })
+  contentType?: string;
+}
+
+export class PresignDto extends UploadDetailsDto {
+  /**
+   * Where the photograph is going. `portfolio` files it under the caller's own
+   * vendor listing (vendors/{vendorId}/portfolio/…); anything else under their
+   * profile (users/{userId}/profile/…).
+   */
+  @ApiPropertyOptional({ enum: ['profile', 'portfolio'], default: 'profile' })
+  @IsOptional()
+  @IsIn(['profile', 'portfolio'])
+  purpose?: 'profile' | 'portfolio';
+
   @ApiProperty({ example: 'holiday photo (1).jpeg', maxLength: 200 })
   @IsString()
   @MaxLength(200)
@@ -76,7 +125,7 @@ export class PresignDto {
  * support attachment is whatever proves the point, and in practice that is as
  * often an invoice as a photograph. The album route stays image-and-video only.
  */
-export class PresignAttachmentDto {
+export class PresignAttachmentDto extends UploadDetailsDto {
   @ApiProperty({ example: 'invoice april 2026.pdf', maxLength: 200 })
   @IsString()
   @MaxLength(200)
@@ -84,6 +133,43 @@ export class PresignAttachmentDto {
     message: 'Choose an image or a PDF.',
   })
   filename: string;
+}
+
+/**
+ * A file on a booking: what the provider delivers, or what the couple shows
+ * them. Photographs and films, and a PDF for an album proof or a contract.
+ */
+export class PresignBookingFileDto extends UploadDetailsDto {
+  @ApiProperty({ example: 'sangeet-0412.jpg', maxLength: 200 })
+  @IsString()
+  @MaxLength(200)
+  @Matches(
+    new RegExp(`^${NAME_PART}\\.(${UPLOAD_IMAGE_EXTENSIONS}|${UPLOAD_VIDEO_EXTENSIONS}|pdf)$`, 'i'),
+    { message: 'Choose an image, a video or a PDF.' },
+  )
+  filename: string;
+}
+
+/** The upload slot a client has just finished writing to. */
+export class CompleteUploadDto {
+  @ApiProperty({ example: 'users/5b1d…/profile/1767000000000-3f2a…-photo.jpg', maxLength: 1024 })
+  @IsString()
+  @MaxLength(1024)
+  @Matches(/^[A-Za-z0-9._\-/]+$/, { message: 'key must be the key the upload slot was issued for' })
+  key: string;
+}
+
+/** A stored reference to open: `media://…` as stored, or the bare key. */
+export class SignMediaDto {
+  @ApiProperty({ example: 'media://bookings/9c0e…/deliveries/1767000000000-ab12…-sangeet.jpg' })
+  @IsString()
+  @MaxLength(1100)
+  ref: string;
+
+  @ApiPropertyOptional({ description: 'Served as a download rather than shown inline.' })
+  @IsOptional()
+  @IsBoolean()
+  download?: boolean;
 }
 
 export class AddMediaItemDto {
