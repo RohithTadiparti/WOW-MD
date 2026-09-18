@@ -80,14 +80,11 @@ export default function Login() {
           transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
           className="w-full max-w-[22rem]"
         >
-          <Link to="/" className="mb-10 flex items-baseline gap-2">
-            <span className="text-[1.5rem] font-semibold tracking-[-0.04em] text-gray-900">WOW</span>
-            <span className="text-[0.6875rem] font-medium uppercase tracking-[0.14em] text-gray-400">
-              World of Weddings
-            </span>
+          <Link to="/" className="mb-10 block font-serif text-[1.35rem] uppercase tracking-[0.2em] text-brand">
+            World of Weddings
           </Link>
 
-          <h1 className="text-hero font-semibold text-gray-900">Welcome back</h1>
+          <h1 className="font-serif text-[2.75rem] font-light leading-[1.05] text-brand">Welcome back</h1>
           <p className="page-subtitle mb-8">
             Sign in to pick up where your family left off.
           </p>
@@ -239,7 +236,7 @@ export default function Login() {
         <div className="absolute inset-0 bg-gradient-to-tr from-brand/25 via-transparent to-transparent" />
         <div className="absolute inset-0 bg-gradient-to-t from-scrim via-scrim/75 to-scrim/30" />
         <div className="absolute inset-x-0 bottom-0 p-12">
-          <p className="max-w-[26ch] text-[1.75rem] font-semibold leading-[1.15] tracking-[-0.028em] text-white">
+          <p className="max-w-[24ch] font-serif text-[2.25rem] font-light italic leading-[1.3] text-white">
             Every family deserves to know who they are talking to.
           </p>
           <p className="mt-3 max-w-[42ch] text-sm leading-relaxed text-white/70">

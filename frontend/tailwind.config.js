@@ -49,6 +49,13 @@ export default {
           light: channel('brand-soft'),
         },
 
+        // The template's struck gold, for ornament: numerals, rules, hearts.
+        gold: {
+          DEFAULT: channel('gold'),
+          lit: channel('gold-lit'),
+          deep: channel('gold-deep'),
+        },
+
         canvas: channel('canvas'),
         // Deliberately outside the themed ramp: see --scrim in index.css.
         scrim: channel('scrim'),
@@ -120,16 +127,20 @@ export default {
        * designed in 2014.
        */
       boxShadow: {
-        btn: '0 1px 2px 0 rgb(var(--shadow-color) / 0.14)',
-        card: '0 1px 2px -1px rgb(var(--shadow-color) / 0.08), 0 2px 8px -2px rgb(var(--shadow-color) / 0.06)',
+        // The template draws with hairlines, not shadows: buttons and cards
+        // sit flat, and only things that float over the page keep a lift.
+        btn: 'none',
+        card: 'none',
         lifted:
           '0 2px 4px -2px rgb(var(--shadow-color) / 0.10), 0 12px 28px -8px rgb(var(--shadow-color) / 0.14)',
         pop: '0 8px 40px -12px rgb(var(--shadow-color) / 0.28)',
       },
 
       fontFamily: {
-        sans: ['Geist Variable', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        mono: ['Geist Mono Variable', 'ui-monospace', 'monospace'],
+        sans: ['Karla', 'Helvetica Neue', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        serif: ['Cormorant Garamond', 'Georgia', 'serif'],
+        // Figures, not code: see .font-mono in index.css.
+        mono: ['Karla', 'Helvetica Neue', 'ui-sans-serif', 'sans-serif'],
       },
 
       // A real scale rather than Tailwind's defaults at display sizes: the
