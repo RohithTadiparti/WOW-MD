@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { Body, Caption, SectionTitle } from '@/components/ui';
 import { radius, rgb, space, useTheme, type Theme } from '@/theme';
+import { Txt } from '@/theme/fonts';
 
 /**
  * The pieces the vendor and officer portals are assembled from.
@@ -40,7 +41,7 @@ export function Badge({ tone = 'neutral', children }: { tone?: Tone; children: R
   const { bg, fg } = toneColours(theme, tone);
   return (
     <View style={{ backgroundColor: bg, borderRadius: 999, paddingHorizontal: space(2), paddingVertical: space(1) }}>
-      <Text style={{ fontSize: 12, fontWeight: '500', color: fg }}>{children}</Text>
+      <Txt style={{ fontSize: 12, fontWeight: '500', color: fg }}>{children}</Txt>
     </View>
   );
 }
@@ -109,7 +110,7 @@ export function FilterChips({
               pressed && { opacity: 0.7 },
             ]}
           >
-            <Text
+            <Txt
               style={{
                 fontSize: 13,
                 fontWeight: active ? '600' : '500',
@@ -119,9 +120,9 @@ export function FilterChips({
               }}
             >
               {option.label}
-            </Text>
+            </Txt>
             {option.count !== undefined && (
-              <Text
+              <Txt
                 style={{
                   fontSize: 12,
                   fontVariant: ['tabular-nums'],
@@ -129,7 +130,7 @@ export function FilterChips({
                 }}
               >
                 {option.count}
-              </Text>
+              </Txt>
             )}
           </Pressable>
         );
@@ -172,7 +173,7 @@ export function StatTile({
   const body = (
     <>
       <Caption numberOfLines={1}>{label}</Caption>
-      <Text
+      <Txt
         style={{
           fontSize: 26,
           fontWeight: '500',
@@ -183,7 +184,7 @@ export function StatTile({
         }}
       >
         {value ?? '—'}
-      </Text>
+      </Txt>
       {hint ? (
         <Caption tone="faint" numberOfLines={1}>
           {hint}

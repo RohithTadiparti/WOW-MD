@@ -17,6 +17,7 @@ import {
 import { Permission, can, canAny } from '@/shared/permissions';
 import { useAuth } from '@/store/auth';
 import { rgb, useTheme } from '@/theme';
+import { typeface } from '@/theme/fonts';
 
 /**
  * The tab bar.
@@ -88,7 +89,7 @@ export default function TabsLayout() {
           borderTopColor: rgb(theme.border),
           borderTopWidth: StyleSheet.hairlineWidth,
         },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '500' },
+        tabBarLabelStyle: typeface({ fontSize: 11, fontWeight: '500' }),
         sceneStyle: { backgroundColor: rgb(theme.canvas) },
       }}
     >

@@ -82,7 +82,7 @@ export default function Login() {
       <Screen>
         <View style={{ gap: space(1), marginTop: space(10), marginBottom: space(4) }}>
           <PageTitle>WOW</PageTitle>
-          <PageSubtitle>World of Weddings. Sign in to pick up where you left off.</PageSubtitle>
+          <PageSubtitle>World of Weddingz. Sign in to pick up where you left off.</PageSubtitle>
         </View>
 
         {byMobile ? (

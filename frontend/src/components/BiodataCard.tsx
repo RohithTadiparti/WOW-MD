@@ -165,7 +165,7 @@ export default function BiodataCard({
 
       {print && (
         <p className="mt-6 border-t pt-3 text-xs text-gray-400">
-          Shared through WOW, World of Weddings. Please contact the agent who sent you this to take
+          Shared through WOW, World of Weddingz. Please contact the agent who sent you this to take
           it further.
         </p>
       )}

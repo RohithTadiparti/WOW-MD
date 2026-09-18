@@ -1,7 +1,7 @@
 {
   "name": "wow-backend",
   "version": "1.0.0",
-  "description": "WOW - World of Weddings backend (NestJS modulith, PostgreSQL + Redis)",
+  "description": "WOW - World of Weddingz backend (NestJS modulith, PostgreSQL + Redis)",
   "private": true,
   "scripts": {
     "build": "nest build",

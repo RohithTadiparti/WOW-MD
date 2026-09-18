@@ -4,7 +4,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   TextInput,
   View,
   type StyleProp,
@@ -15,6 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { radius, rgb, rgba, space, useTheme, type Theme } from '@/theme';
+import { Txt, typeface } from '@/theme/fonts';
 
 /**
  * The primitives, matching the component layer in the web app's index.css.
@@ -23,11 +23,9 @@ import { radius, rgb, rgba, space, useTheme, type Theme } from '@/theme';
  * page-title, section-title — so that a change of mind about what a button
  * looks like is one edit per app rather than an audit of every screen.
  *
- * Typography is the one deliberate divergence. The web sets Geist; here the
- * platform face is used instead, because a wedding app that renders in a
- * webfont on a phone reads as a website in a wrapper, which is the exact
- * impression this build exists to avoid. Geist ships woff2, which React Native
- * cannot load anyway.
+ * Typography matches the web too: the matrimony home template's Karla for
+ * text and Cormorant Garamond for page titles, loaded as native fonts at
+ * start-up (see theme/fonts).
  */
 
 // ------------------------------------------------------------------ text --
@@ -62,14 +60,15 @@ interface TxtProps {
 export function PageTitle({ children, style }: TxtProps) {
   const theme = useTheme();
   return (
-    <Text
+    <Txt
+      serif
       style={[
-        { fontSize: 28, fontWeight: '600', letterSpacing: -0.6, color: rgb(theme.ink[900]) },
+        { fontSize: 32, lineHeight: 36, fontWeight: '400', color: rgb(theme.brand) },
         style,
       ]}
     >
       {children}
-    </Text>
+    </Txt>
   );
 }
 
@@ -78,16 +77,16 @@ export function PageTitle({ children, style }: TxtProps) {
 export function PageSubtitle({ children, style }: TxtProps) {
   const theme = useTheme();
   return (
-    <Text style={[{ fontSize: 15, lineHeight: 22, color: rgb(theme.ink[500]) }, style]}>
+    <Txt style={[{ fontSize: 15, lineHeight: 22, color: rgb(theme.ink[500]) }, style]}>
       {children}
-    </Text>
+    </Txt>
   );
 }
 
 export function SectionTitle({ children, style, numberOfLines }: TxtProps) {
   const theme = useTheme();
   return (
-    <Text
+    <Txt
       numberOfLines={numberOfLines}
       style={[
         { fontSize: 16, fontWeight: '600', letterSpacing: -0.2, color: rgb(theme.ink[900]) },
@@ -95,31 +94,31 @@ export function SectionTitle({ children, style, numberOfLines }: TxtProps) {
       ]}
     >
       {children}
-    </Text>
+    </Txt>
   );
 }
 
 export function Body({ children, tone = 'default', style, numberOfLines }: TxtProps) {
   const theme = useTheme();
   return (
-    <Text
+    <Txt
       numberOfLines={numberOfLines}
       style={[{ fontSize: 15, lineHeight: 21, color: toneColour(theme, tone) }, style]}
     >
       {children}
-    </Text>
+    </Txt>
   );
 }
 
 export function Caption({ children, tone = 'muted', style, numberOfLines }: TxtProps) {
   const theme = useTheme();
   return (
-    <Text
+    <Txt
       numberOfLines={numberOfLines}
       style={[{ fontSize: 13, lineHeight: 18, color: toneColour(theme, tone) }, style]}
     >
       {children}
-    </Text>
+    </Txt>
   );
 }
 
@@ -127,20 +126,20 @@ export function Caption({ children, tone = 'muted', style, numberOfLines }: TxtP
 export function Eyebrow({ children, style }: TxtProps) {
   const theme = useTheme();
   return (
-    <Text
+    <Txt
       style={[
         {
           fontSize: 11,
-          fontWeight: '600',
-          letterSpacing: 0.8,
+          fontWeight: '500',
+          letterSpacing: 2.4,
           textTransform: 'uppercase',
-          color: rgb(theme.ink[400]),
+          color: rgb(theme.ink[500]),
         },
         style,
       ]}
     >
       {children}
-    </Text>
+    </Txt>
   );
 }
 
@@ -252,9 +251,17 @@ export function Button({
       ]}
     >
       {busy && <ActivityIndicator size="small" color={labels[variant]} />}
-      <Text style={{ fontSize: small ? 14 : 15, fontWeight: '600', color: labels[variant] }}>
+      <Txt
+        style={{
+          fontSize: small ? 11 : 12,
+          fontWeight: '500',
+          letterSpacing: small ? 1.4 : 1.9,
+          textTransform: 'uppercase',
+          color: labels[variant],
+        }}
+      >
         {label}
-      </Text>
+      </Txt>
     </Pressable>
   );
 }
@@ -279,10 +286,10 @@ export function Field({ label, hint, error, style, ...props }: FieldProps) {
   const theme = useTheme();
   return (
     <View style={{ gap: space(1.5) }}>
-      <Text style={{ fontSize: 13, fontWeight: '500', color: rgb(theme.ink[600]) }}>{label}</Text>
+      <Txt style={{ fontSize: 13, fontWeight: '500', color: rgb(theme.ink[600]) }}>{label}</Txt>
       <TextInput
         placeholderTextColor={rgb(theme.ink[400])}
-        style={[
+        style={typeface([
           {
             borderWidth: StyleSheet.hairlineWidth,
             borderColor: rgb(error ? theme.criticalFg : theme.border),
@@ -295,7 +302,7 @@ export function Field({ label, hint, error, style, ...props }: FieldProps) {
             minHeight: 46,
           },
           style,
-        ]}
+        ])}
         {...props}
       />
       {error ? <Caption tone="critical">{error}</Caption> : null}
@@ -321,7 +328,7 @@ export function Alert({ tone, children }: { tone: AlertTone; children: ReactNode
         padding: space(3),
       }}
     >
-      <Text style={{ fontSize: 14, lineHeight: 20, color: rgb(ink[tone]) }}>{children}</Text>
+      <Txt style={{ fontSize: 14, lineHeight: 20, color: rgb(ink[tone]) }}>{children}</Txt>
     </View>
   );
 }

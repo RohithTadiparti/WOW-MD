@@ -44,7 +44,7 @@ export default function Home() {
             to="/"
             className="plate font-serif text-[1.35rem] uppercase tracking-[0.2em] text-brand sm:text-[1.7rem]"
           >
-            World of Weddings
+            World of Weddingz
           </Link>
           <nav className="flex flex-wrap items-center gap-x-8 gap-y-2">
             <a href="#how" className="plate text-[0.8125rem] uppercase tracking-[0.16em] text-gray-700 hover:text-brand">
@@ -128,7 +128,7 @@ export default function Home() {
         </section>
 
         <footer className="mt-auto flex flex-wrap items-center justify-between gap-6 border-t border-gray-200 py-10 mt-24">
-          <p className="plate eyebrow tracking-[0.18em]">World of Weddings · © {new Date().getFullYear()}</p>
+          <p className="plate eyebrow tracking-[0.18em]">World of Weddingz · © {new Date().getFullYear()}</p>
           <nav className="flex items-center gap-8">
             <Link to="/login" className="plate eyebrow tracking-[0.18em] hover:text-brand">
               Sign in

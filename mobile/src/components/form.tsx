@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { CaretDown, Check } from 'phosphor-react-native';
 
 import { MonthCalendar, formatLongDate } from '@/components/calendar';
 import { Sheet } from '@/components/sheet';
 import { Body, Button, Caption, Field } from '@/components/ui';
 import { radius, rgb, space, useTheme } from '@/theme';
+import { Txt } from '@/theme/fonts';
 
 /**
  * The form controls the portals need beyond a text field.
@@ -27,7 +28,7 @@ import { radius, rgb, space, useTheme } from '@/theme';
 function Label({ children }: { children: string }) {
   const theme = useTheme();
   return (
-    <Text style={{ fontSize: 13, fontWeight: '500', color: rgb(theme.ink[600]) }}>{children}</Text>
+    <Txt style={{ fontSize: 13, fontWeight: '500', color: rgb(theme.ink[600]) }}>{children}</Txt>
   );
 }
 
@@ -73,7 +74,7 @@ function Trigger({
         disabled && { opacity: 0.5 },
       ]}
     >
-      <Text
+      <Txt
         style={{
           flex: 1,
           fontSize: 16,
@@ -82,7 +83,7 @@ function Trigger({
         numberOfLines={1}
       >
         {value || placeholder}
-      </Text>
+      </Txt>
       <CaretDown size={16} color={rgb(theme.ink[400])} />
     </Pressable>
   );

@@ -1,4 +1,4 @@
-# WOW, World of Weddings
+# WOW, World of Weddingz
 
 WOW is a full stack platform that carries a couple through the whole wedding journey. People discover and match with a partner, connect and chat once both sides agree, plan the wedding with an automatic timeline, book vendors and wedding planners with money held safely in escrow, run the individual ceremonies with guest lists and seating, arrange the honeymoon, and finally keep their photos and videos in shareable albums.
 

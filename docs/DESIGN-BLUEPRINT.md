@@ -1,4 +1,4 @@
-# WOW World of Weddings, design blueprint
+# WOW World of Weddingz, design blueprint
 
 This document explains how the WOW platform is designed and why it is built the way it is. It is written in plain language so that anyone on the team can read it, and it uses only ordinary keyboard characters.
 

@@ -760,7 +760,7 @@ function Wordmark({ compact = false }: { compact?: boolean }) {
       <span className="font-serif text-[1.5rem] uppercase tracking-[0.18em] text-brand">WOW</span>
       {!compact && (
         <span className="text-[0.625rem] uppercase tracking-[0.22em] text-gray-500">
-          World of Weddings
+          World of Weddingz
         </span>
       )}
     </Link>
