@@ -12,6 +12,7 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { MatchmakingService } from './matchmaking.service';
 import { MatchLifecycleService } from './match-lifecycle.service';
+import { InterestScreeningService } from './interest-screening.service';
 import {
   SendInterestDto,
   ShortlistNoteDto,
@@ -30,6 +31,7 @@ export class MatchmakingController {
   constructor(
     private readonly matchmaking: MatchmakingService,
     private readonly lifecycle: MatchLifecycleService,
+    private readonly screening: InterestScreeningService,
   ) {}
 
   @RequirePermissions(Permission.MATCH_BROWSE)
@@ -99,6 +101,29 @@ export class MatchmakingController {
   @Put(':id/reject')
   reject(@CurrentUser() actor: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.matchmaking.respond(actor, id, false);
+  }
+
+  @RequirePermissions(Permission.AGENCY_MANAGE)
+  @ApiOperation({
+    summary: 'Pass an interest held for the agency on to its client',
+    description:
+      'An interest to a profile an agency manages goes to the agency first. Forwarding makes ' +
+      'it an ordinary pending interest: the client and their family are told, and answer it.',
+  })
+  @Put(':id/agency/forward')
+  forwardToClient(@CurrentUser() actor: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.screening.forward(actor, id);
+  }
+
+  @RequirePermissions(Permission.AGENCY_MANAGE)
+  @ApiOperation({
+    summary: 'Decline an interest held for the agency',
+    description:
+      "Declined on the client's behalf. The sender is told it was the agency; the client never sees it.",
+  })
+  @Put(':id/agency/decline')
+  declineForClient(@CurrentUser() actor: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.screening.decline(actor, id);
   }
 
   /**

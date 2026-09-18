@@ -22,7 +22,7 @@ describe('interest notifications for a managed profile', () => {
   it('names the client for the agency whose client has an account', () => {
     expect(
       describeNotification(row('match_interest_for_client', { ...who, subjectName: 'Kiran Gowda' })),
-    ).toBe('Chaitra Gowda from Bengaluru is interested in Kiran Gowda.');
+    ).toBe('Chaitra Gowda from Bengaluru is interested in Kiran Gowda — review it.');
   });
 
   it('names the client for the agency running an unclaimed profile', () => {
@@ -39,5 +39,32 @@ describe('interest notifications for a managed profile', () => {
         row('match_interest', { ...who, subjectName: 'Kiran Gowda', forManagedProfile: false }),
       ),
     ).toBe('Chaitra Gowda from Bengaluru would like to take your profile forward.');
+  });
+});
+
+/** The agency turned an interest down; the sender is told who answered. */
+describe("an interest declined by the other family's agency", () => {
+  it('names whose agency declined it', () => {
+    expect(
+      describeNotification(row('match_declined_by_agency', { counterpartName: 'Kiran Gowda' })),
+    ).toBe("Kiran Gowda's agency has declined this proposal.");
+  });
+
+  it('says which client it was for, to a steward', () => {
+    expect(
+      describeNotification(
+        row('match_declined_by_agency', {
+          counterpartName: 'Kiran Gowda',
+          subjectName: 'Chaitra Gowda',
+          forManagedProfile: true,
+        }),
+      ),
+    ).toBe("Kiran Gowda's agency has declined this proposal for Chaitra Gowda.");
+  });
+
+  it('still reads without a name', () => {
+    expect(describeNotification(row('match_declined_by_agency', {}))).toBe(
+      "The family's agency has declined this proposal.",
+    );
   });
 });

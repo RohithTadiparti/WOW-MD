@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, HandHeart } from '@phosphor-icons/react';
-import { api } from '../lib/api';
+import { api, apiMessage } from '../lib/api';
 import { formatDateTime } from '../lib/dates';
 import { EmptyState, Loading } from './ui/Feedback';
 import { PersonPhoto } from './ProfileSilhouette';
@@ -43,6 +43,10 @@ interface AgencyInterestRow {
   direction: 'sent' | 'received';
   bothClients: boolean;
   clientProfileId: string;
+  /** Where it stands with this agency; null when it was never held. */
+  screening: 'with_agency' | 'forwarded' | 'declined_by_agency' | null;
+  /** Held for this agency, waiting to be forwarded to the client or declined. */
+  awaitingReview: boolean;
   from: PartyView;
   to: PartyView;
 }
@@ -54,6 +58,7 @@ interface AgencyInterests {
 }
 
 const STATUS_LABEL: Record<string, string> = {
+  with_agency: 'To review',
   pending: 'Pending',
   accepted: 'Accepted',
   rejected: 'Rejected',
@@ -78,7 +83,7 @@ const DIRECTIONS = [
   { key: 'received', label: 'Received' },
 ];
 
-const STATUSES = ['pending', 'accepted', 'rejected', 'withdrawn'];
+const STATUSES = ['with_agency', 'pending', 'accepted', 'rejected', 'withdrawn'];
 
 export default function AgencyInterests({
   onViewProfile,
@@ -94,6 +99,24 @@ export default function AgencyInterests({
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [search, setSearch] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const qc = useQueryClient();
+
+  /** Forward a held interest to the client, or decline it for them. */
+  async function review(row: AgencyInterestRow, answer: 'forward' | 'decline') {
+    setError('');
+    setBusy(true);
+    try {
+      await api.put(`/matches/${row.id}/agency/${answer}`, {});
+      qc.invalidateQueries({ queryKey: ['agency-interests'] });
+      qc.invalidateQueries({ queryKey: ['interest-board'] });
+    } catch (err) {
+      setError(apiMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const { data, isLoading } = useQuery<AgencyInterests>({
     queryKey: ['agency-interests'],
@@ -111,7 +134,10 @@ export default function AgencyInterests({
 
     return rows.filter((row) => {
       if (direction && row.direction !== direction) return false;
-      if (status && row.status !== status) return false;
+      // "To review" is the agency's own queue rather than a status of the row.
+      if (status && (status === 'with_agency' ? !row.awaitingReview : row.status !== status)) {
+        return false;
+      }
       const at = new Date(row.createdAt).getTime();
       if (fromTime && at < fromTime) return false;
       if (toTime && at > toTime) return false;
@@ -224,6 +250,12 @@ export default function AgencyInterests({
         </p>
       </div>
 
+      {error && (
+        <p className="alert-critical" role="alert">
+          {error}
+        </p>
+      )}
+
       {filtered.length === 0 ? (
         <div className="card">
           <EmptyState icon={HandHeart} title="Nothing matches those filters">
@@ -235,9 +267,15 @@ export default function AgencyInterests({
           {filtered.map((row) => (
             <li key={row.id} className="card space-y-2">
               <div className="flex flex-wrap items-center gap-2">
-                <span className={`pill ${STATUS_STYLE[row.status] ?? 'bg-gray-100 text-gray-600'}`}>
-                  {STATUS_LABEL[row.status] ?? row.status}
-                </span>
+                {row.awaitingReview ? (
+                  <span className="pill bg-brand-soft text-brand-strong">Awaiting your review</span>
+                ) : (
+                  <span className={`pill ${STATUS_STYLE[row.status] ?? 'bg-gray-100 text-gray-600'}`}>
+                    {row.screening === 'declined_by_agency'
+                      ? 'Declined by you'
+                      : (STATUS_LABEL[row.status] ?? row.status)}
+                  </span>
+                )}
                 <span className="pill bg-surface-sunken text-gray-600">
                   {row.bothClients ? 'Between your clients' : row.direction === 'sent' ? 'Sent' : 'Received'}
                 </span>
@@ -251,7 +289,32 @@ export default function AgencyInterests({
                 <Party party={row.to} label="Sent to" onView={() => onViewProfile(row.to.id)} />
               </div>
 
+              {row.awaitingReview && (
+                <p className="text-xs text-gray-500">
+                  {row.to.displayName} has not been told. Forward it and they hear about it as usual;
+                  decline it and they never see it.
+                </p>
+              )}
+
               <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-2">
+                {row.awaitingReview && (
+                  <>
+                    <button
+                      className="btn btn-sm"
+                      disabled={busy}
+                      onClick={() => void review(row, 'forward')}
+                    >
+                      Forward to client
+                    </button>
+                    <button
+                      className="btn-outline btn-sm"
+                      disabled={busy}
+                      onClick={() => void review(row, 'decline')}
+                    >
+                      Decline
+                    </button>
+                  </>
+                )}
                 <button className="btn-outline btn-sm" onClick={() => onViewProfile(row.to.id)}>
                   View profile
                 </button>

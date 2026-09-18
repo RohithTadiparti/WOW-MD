@@ -64,6 +64,8 @@ export function routeFor(n: Notification, opts: RouteOptions = {}): Href | null 
             ? { pathname: '/interests', params: { client: n.targetId } }
             : '/interests';
         }
+        // Declined by the other family's agency: it sits under Declined.
+        if (n.type === 'match_declined_by_agency') return '/interests';
         return '/matches';
       // A new message targets the person who sent it, which is the thread's own
       // address in this app.

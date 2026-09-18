@@ -11,7 +11,13 @@ import { VendorService } from '../catalog/entities/vendor-service.entity';
 import { ServiceDefinition } from '../catalog/entities/service-definition.entity';
 import { User } from '../auth/entities/user.entity';
 import { WeddingEvent } from '../events/entities/event.entity';
-import { NotificationType, ProviderType, UserRole } from '../../common/enums';
+import {
+  InterestScreening,
+  NotificationType,
+  ProviderType,
+  UserRole,
+} from '../../common/enums';
+import { Permission, roleHasPermission } from '../../common/authz/permissions';
 import { bookingContextOf } from '../bookings/booking-venue';
 import { displayNamesByUserIds } from '../users/display-names';
 
@@ -54,8 +60,17 @@ export class NotificationsConsumer implements OnModuleInit {
         fromProfileId: string;
         toProfileId: string;
         sentByUserId?: string;
+        screening?: string | null;
       }>('match.interest_sent')
       .subscribe((e) => {
+        // Held for the agency running the profile: the agency is asked to
+        // review it, and nobody else hears about it until it is forwarded.
+        if (e.payload.screening === InterestScreening.WITH_AGENCY) {
+          void this.notifyManagingAgent(e.payload).catch((err) =>
+            this.logger.error('notify managing agent failed', err),
+          );
+          return;
+        }
         // Both parties, but only one of them is told: the counterpart's name is
         // worked out by finding the other profile in this list, so passing the
         // recipient alone left nobody to name and every incoming interest read
@@ -66,9 +81,34 @@ export class NotificationsConsumer implements OnModuleInit {
           e.payload,
           [e.payload.toProfileId],
         ).catch((err) => this.logger.error('notify interest failed', err));
-        void this.notifyManagingAgent(e.payload).catch((err) =>
-          this.logger.error('notify managing agent failed', err),
+      });
+
+    // The agency let it through: now the client hears about it, as an
+    // ordinary interest. On a profile nobody has claimed the agent is the only
+    // reader, and has just read it, so nobody is told.
+    this.bus
+      .on<{ interestId: string; fromProfileId: string; toProfileId: string }>(
+        'match.interest_forwarded',
+      )
+      .subscribe((e) => {
+        void this.notifyForwarded(e.payload).catch((err) =>
+          this.logger.error('notify forwarded interest failed', err),
         );
+      });
+
+    // The agency turned it down. The sender is told, and told it was the
+    // agency: the person it was for never saw it.
+    this.bus
+      .on<{ interestId: string; fromProfileId: string; toProfileId: string }>(
+        'match.interest_declined_by_agency',
+      )
+      .subscribe((e) => {
+        void this.notifyProfiles(
+          [e.payload.fromProfileId, e.payload.toProfileId],
+          NotificationType.MATCH_DECLINED_BY_AGENCY,
+          e.payload,
+          [e.payload.fromProfileId],
+        ).catch((err) => this.logger.error('notify agency decline failed', err));
       });
 
     this.bus
@@ -279,14 +319,15 @@ export class NotificationsConsumer implements OnModuleInit {
   }
 
   /**
-   * Tells the agency that manages the profile an interest was sent to.
+   * Asks the agency that manages the profile an interest was sent to to review
+   * it.
    *
-   * The interest notification itself goes to whoever answers for the profile —
-   * its owner once they have an account — so an agency whose client had claimed
-   * their profile never heard that anybody was interested in them. This is that
-   * second notification, and only that: it is skipped when the agency is
-   * already the one told (an unclaimed profile), and when the agency sent the
-   * interest itself, which is not news to them.
+   * Only for an interest held for the agency (InterestScreening.WITH_AGENCY),
+   * which the sender marks — so the agency never sent it itself. This is the
+   * only notification such an interest raises until the agency forwards it,
+   * whether or not the client has claimed their profile. The recipient is
+   * checked again here rather than trusted: a profile whose steward is not an
+   * agency has nobody to ask.
    */
   private async notifyManagingAgent(payload: {
     interestId: string;
@@ -300,12 +341,10 @@ export class NotificationsConsumer implements OnModuleInit {
     const target = profiles.find((p) => p.id === payload.toProfileId);
     const from = profiles.find((p) => p.id === payload.fromProfileId);
     const agentId = target?.managedByUserId;
-    if (!target || !from || !agentId) return;
-    // No owner yet means the agency is who notifyProfiles already told.
-    if (!target.userId || agentId === target.userId || agentId === payload.sentByUserId) return;
+    if (!target || !from || !agentId || agentId === payload.sentByUserId) return;
     // Agencies only — the profiles that carry "Managed by their agency".
     const steward = await this.users.findOne({ where: { id: agentId }, select: ['id', 'role'] });
-    if (steward?.role !== UserRole.AGENT) return;
+    if (!steward || !roleHasPermission(steward.role, Permission.AGENCY_MANAGE)) return;
 
     await this.notifications.create(agentId, NotificationType.MATCH_INTEREST_FOR_CLIENT, {
       ...payload,
@@ -318,6 +357,22 @@ export class NotificationsConsumer implements OnModuleInit {
       subjectProfileId: target.id,
       subjectName: target.displayName ?? null,
     });
+  }
+
+  /** The client's ordinary interest notification, once the agency forwards. */
+  private async notifyForwarded(payload: {
+    interestId: string;
+    fromProfileId: string;
+    toProfileId: string;
+  }): Promise<void> {
+    const target = await this.profiles.findOne({ where: { id: payload.toProfileId } });
+    if (!target?.userId || target.userId === target.managedByUserId) return;
+    await this.notifyProfiles(
+      [payload.fromProfileId, payload.toProfileId],
+      NotificationType.MATCH_INTEREST,
+      payload,
+      [payload.toProfileId],
+    );
   }
 
   /**

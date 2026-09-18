@@ -52,9 +52,15 @@ export const DELIVERY: Record<NotificationType, DeliverySpec> = {
     whatsappTemplate: null,
   },
   [NotificationType.MATCH_INTEREST_FOR_CLIENT]: {
-    title: 'Interest in your client',
+    title: 'Interest to review',
     body: (p) =>
-      `${str(p, 'counterpartName', 'A family')} is interested in ${str(p, 'subjectName', 'your client')}.`,
+      `${str(p, 'counterpartName', 'A family')} is interested in ${str(p, 'subjectName', 'your client')}. Review it.`,
+    whatsappTemplate: null,
+  },
+  [NotificationType.MATCH_DECLINED_BY_AGENCY]: {
+    title: 'Interest declined',
+    body: (p) =>
+      `The agency for ${str(p, 'counterpartName', 'the family')} has declined this proposal.`,
     whatsappTemplate: null,
   },
   [NotificationType.MATCH_ACCEPTED]: {
