@@ -79,3 +79,23 @@ export const FUNCTION_DATE_KEY = 'event_date';
 export function requestFormFields(fields: FieldSpec[]): FieldSpec[] {
   return fields.filter((f) => f.key !== FUNCTION_DATE_KEY);
 }
+
+/**
+ * The stored estimate on a booking, as it reads: the total, and "unit × qty"
+ * where a quantity went into it. Null when the request carried no estimate.
+ *
+ * Read back from `estimatedAmount` and `quantity` rather than the offering,
+ * so an old request says what was shown then, not today's price.
+ */
+export function estimateSummary(
+  estimatedAmount: string | null | undefined,
+  quantity: number | null | undefined,
+  currency = 'INR',
+): { total: string; breakdown: string | null } | null {
+  const total = Number(estimatedAmount);
+  if (!estimatedAmount || !Number.isFinite(total) || total <= 0) return null;
+  const money = (n: number) => `${currency} ${n.toLocaleString('en-IN')}`;
+  const breakdown =
+    quantity && quantity > 1 ? `${money(Math.round((total / quantity) * 100) / 100)} × ${quantity}` : null;
+  return { total: money(total), breakdown };
+}

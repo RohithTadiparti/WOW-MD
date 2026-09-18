@@ -7,6 +7,7 @@ import { Permission, can } from '../lib/permissions';
 import { SELLER_STATUS_LABEL, humanize } from '../lib/labels';
 import { useAuth } from '../store/auth';
 import { PlacedBookingFacts, usePlacedForClients } from './PlacedForClients';
+import { ReferenceThumbs, RequestEstimate } from './RequestExtras';
 import type { QuotationSummary } from '../lib/booking-progress';
 import {
   BookingProgress,
@@ -140,22 +141,19 @@ export default function BookingDetail({
         <Row label="Service">{booking.serviceName ?? 'No service chosen'}</Row>
         {booking.offeringName && <Row label="Package">{booking.offeringName}</Row>}
         {booking.quantity ? <Row label="Quantity">{booking.quantity}</Row> : null}
-        {booking.estimatedAmount && Number(booking.estimatedAmount) > 0 ? (
-          <Row label="Customer was shown">
-            {booking.currency ?? 'INR'} {Number(booking.estimatedAmount).toLocaleString('en-IN')}
-          </Row>
-        ) : null}
+        <RequestEstimate
+          estimatedAmount={booking.estimatedAmount}
+          quantity={booking.quantity}
+          currency={booking.currency}
+          label="Customer was shown"
+        />
       </Section>
 
       {/* The designs the customer sent for reference, each opening full size. */}
       {booking.referenceImages && booking.referenceImages.length > 0 && (
         <Section title="Reference photos">
-          <div className="flex flex-wrap gap-2 sm:col-span-2">
-            {booking.referenceImages.map((url) => (
-              <a key={url} href={url} target="_blank" rel="noopener noreferrer">
-                <img src={url} alt="Reference design" className="h-20 w-20 rounded-sm object-cover" />
-              </a>
-            ))}
+          <div className="sm:col-span-2">
+            <ReferenceThumbs urls={booking.referenceImages} />
           </div>
         </Section>
       )}
