@@ -32,6 +32,7 @@ export const ACTION_LABEL: Record<string, string> = {
 
 export const TYPE_LABEL: Record<string, string> = {
   match_interest: 'Interest shown',
+  match_interest_for_client: 'Interest in your client',
   match_accepted: 'Interest accepted',
   new_message: 'New message',
   match_conversation: 'Your clients are talking',
@@ -114,10 +115,23 @@ export function describe(n: Notification): string {
       return status ? `A booking moved to ${status}.` : 'One of your bookings changed.';
     case 'new_message':
       return str('preview') ?? 'Someone replied to you.';
-    case 'match_interest':
-      return str('counterpartName')
-        ? `${str('counterpartName')}${str('counterpartCity') ? ` from ${str('counterpartCity')}` : ''} would like to take your profile forward.`
+    case 'match_interest': {
+      const who = str('counterpartName');
+      const from = str('counterpartCity') ? ` from ${str('counterpartCity')}` : '';
+      // An agency or family running somebody's profile is told whose it is:
+      // "your profile" read as the agency's own and named none of its clients.
+      const forWhom = p.forManagedProfile === true ? str('subjectName') : null;
+      if (forWhom) return `${who ?? 'A family'}${from} is interested in ${forWhom}.`;
+      return who
+        ? `${who}${from} would like to take your profile forward.`
         : 'Someone would like to take your profile forward.';
+    }
+    case 'match_interest_for_client': {
+      // For the agency: which family is interested, and in which of its clients.
+      const who = str('counterpartName') ?? 'A family';
+      const from = str('counterpartCity') ? ` from ${str('counterpartCity')}` : '';
+      return `${who}${from} is interested in ${str('subjectName') ?? 'one of your clients'}.`;
+    }
     case 'match_accepted': {
       // Naming them is the whole point: somebody who has sent five interests
       // cannot act on "your interest was accepted". Naming the reader's own

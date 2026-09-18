@@ -49,9 +49,12 @@ export class NotificationsConsumer implements OnModuleInit {
 
   onModuleInit() {
     this.bus
-      .on<{ interestId: string; fromProfileId: string; toProfileId: string }>(
-        'match.interest_sent',
-      )
+      .on<{
+        interestId: string;
+        fromProfileId: string;
+        toProfileId: string;
+        sentByUserId?: string;
+      }>('match.interest_sent')
       .subscribe((e) => {
         // Both parties, but only one of them is told: the counterpart's name is
         // worked out by finding the other profile in this list, so passing the
@@ -63,6 +66,9 @@ export class NotificationsConsumer implements OnModuleInit {
           e.payload,
           [e.payload.toProfileId],
         ).catch((err) => this.logger.error('notify interest failed', err));
+        void this.notifyManagingAgent(e.payload).catch((err) =>
+          this.logger.error('notify managing agent failed', err),
+        );
       });
 
     this.bus
@@ -273,6 +279,48 @@ export class NotificationsConsumer implements OnModuleInit {
   }
 
   /**
+   * Tells the agency that manages the profile an interest was sent to.
+   *
+   * The interest notification itself goes to whoever answers for the profile —
+   * its owner once they have an account — so an agency whose client had claimed
+   * their profile never heard that anybody was interested in them. This is that
+   * second notification, and only that: it is skipped when the agency is
+   * already the one told (an unclaimed profile), and when the agency sent the
+   * interest itself, which is not news to them.
+   */
+  private async notifyManagingAgent(payload: {
+    interestId: string;
+    fromProfileId: string;
+    toProfileId: string;
+    sentByUserId?: string;
+  }): Promise<void> {
+    const profiles = await this.profiles.find({
+      where: { id: In([payload.fromProfileId, payload.toProfileId]) },
+    });
+    const target = profiles.find((p) => p.id === payload.toProfileId);
+    const from = profiles.find((p) => p.id === payload.fromProfileId);
+    const agentId = target?.managedByUserId;
+    if (!target || !from || !agentId) return;
+    // No owner yet means the agency is who notifyProfiles already told.
+    if (!target.userId || agentId === target.userId || agentId === payload.sentByUserId) return;
+    // Agencies only — the profiles that carry "Managed by their agency".
+    const steward = await this.users.findOne({ where: { id: agentId }, select: ['id', 'role'] });
+    if (steward?.role !== UserRole.AGENT) return;
+
+    await this.notifications.create(agentId, NotificationType.MATCH_INTEREST_FOR_CLIENT, {
+      ...payload,
+      counterpartProfileId: from.id,
+      counterpartName: from.displayName ?? null,
+      counterpartCity: from.city ?? null,
+      counterpartPhotoUrl: from.photos?.[0] ?? null,
+      // The agency's own client, named so an agency running many can tell
+      // which of them this is about.
+      subjectProfileId: target.id,
+      subjectName: target.displayName ?? null,
+    });
+  }
+
+  /**
    * Sends one notification per profile, to whoever is actually reachable for
    * it. Duplicates are collapsed: an agency that runs both sides of a match
    * should be told once, not twice.
@@ -324,6 +372,10 @@ export class NotificationsConsumer implements OnModuleInit {
         // "Shravani accepted your interest in <subjectName>".
         subjectProfileId: ownProfileId,
         subjectName: own?.displayName ?? null,
+        // Told as the steward of somebody else's profile — an agency or family
+        // running an unclaimed one — rather than as its owner, so the line can
+        // name whose profile it is instead of saying "your profile".
+        forManagedProfile: own?.userId !== userId,
       });
     }
   }

@@ -466,6 +466,9 @@ function linkFor(n: Notification, canVerify = false): string | null {
         // where the actions are Accept / Decline — not on Matches, which offers
         // "Send interest" to somebody who has already sent one to you (EZ1-I107).
         if (n.type === 'match_interest') return '/interests';
+        // The agency reads it on its own Interests board, which opens on its
+        // whole book, so the new interest is there without picking a client.
+        if (n.type === 'match_interest_for_client') return '/interests';
         return n.targetId ? `/matches?profile=${n.targetId}` : '/matches';
     }
   }
@@ -483,7 +486,7 @@ function linkFor(n: Notification, canVerify = false): string | null {
   if (n.type === 'dispute_update') return canVerify ? '/verification' : '/support';
   if (n.type === 'new_message') return '/chat';
   if (n.type === 'task_reminder') return '/planner';
-  if (n.type === 'match_interest') return '/interests';
+  if (n.type === 'match_interest' || n.type === 'match_interest_for_client') return '/interests';
   if (n.type.startsWith('match_')) {
     const profileId = typeof p.counterpartProfileId === 'string' ? p.counterpartProfileId : null;
     return profileId ? `/matches?profile=${profileId}` : '/matches';

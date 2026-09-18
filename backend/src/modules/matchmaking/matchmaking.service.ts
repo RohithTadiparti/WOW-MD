@@ -36,6 +36,8 @@ import { ProfileShare } from '../circulation/entities/profile-share.entity';
 import { ProfileDetails } from '../profile-details/entities/profile-details.entity';
 import { AgentProfile } from '../agents/entities/agent-profile.entity';
 import { SuggestionsQueryDto } from './dto/matchmaking.dto';
+import { genderWhere, matchGender, soughtGender } from './match-gender';
+import { MatchViewCounts, inView, viewCounts } from './suggestion-views';
 
 /**
  * Where the viewer already stands with a candidate.
@@ -264,7 +266,10 @@ export class MatchmakingService {
     );
   }
 
-  async suggestions(actor: AuthUser, q: SuggestionsQueryDto): Promise<PaginatedResult<Suggestion>> {
+  async suggestions(
+    actor: AuthUser,
+    q: SuggestionsQueryDto,
+  ): Promise<PaginatedResult<Suggestion> & { counts?: MatchViewCounts }> {
     const { page, limit } = q;
     // A client whose profile an agent built does not browse the directory
     // themselves — the agent runs their matchmaking. Once they log in with
@@ -277,6 +282,9 @@ export class MatchmakingService {
     }
     const me = await this.resolveSubject(actor, q.profileId);
     await this.assertMatchmakingOpen(me);
+    // Brides are shown grooms and grooms brides — judged by whose match this
+    // is, not by the gender of whoever holds the account (see matchGender).
+    const want = soughtGender(me);
 
     // The filters are part of the identity of the result, so they are part of
     // the cache key. Without that, setting a filter would return the previous,
@@ -319,8 +327,8 @@ export class MatchmakingService {
           id: Not(me.id),
           visibility: Not(ProfileVisibility.PRIVATE),
           lifecycle: ProfileLifecycle.ACTIVE,
-          ...(me.gender ? { gender: Not(me.gender) } : {}),
         };
+        const bases = want ? genderWhere(want).map((g) => ({ ...base, ...g })) : [base];
 
         /*
          * A search asks the database, not the pool.
@@ -334,20 +342,24 @@ export class MatchmakingService {
         const term = q.q?.trim();
         candidates = term
           ? await this.profiles.find({
-              where: [
-                { ...base, profileCode: term.replace(/\s+/g, '').toUpperCase() },
-                { ...base, displayName: ILike(`%${term}%`) },
-                { ...base, city: ILike(`%${term}%`) },
-              ],
+              where: bases.flatMap((b) => [
+                { ...b, profileCode: term.replace(/\s+/g, '').toUpperCase() },
+                { ...b, displayName: ILike(`%${term}%`) },
+                { ...b, city: ILike(`%${term}%`) },
+              ]),
               order: { createdAt: 'DESC' },
               take: this.cfg.matchmaking.maxSuggestions,
             })
           : await this.profiles.find({
-              where: base,
+              where: bases,
               order: { createdAt: 'DESC' },
               take: this.cfg.matchmaking.maxSuggestions,
             });
       }
+
+      // Again in memory, because the graph-ranked pool above never went through
+      // the gender condition at all.
+      if (want) candidates = candidates.filter((c) => matchGender(c) === want);
 
       const eligible = await this.eligibleProfileIds(candidates);
       const excluded = await this.excludedCounterpartIds(me.id);
@@ -416,8 +428,13 @@ export class MatchmakingService {
         .filter((s) => s.score >= floor)
         .sort((a, b) => compare(a.profile, b.profile, a.score, b.score));
 
+      // The tiles count the whole scored list; the one pressed then narrows it.
+      const now = Date.now();
+      const counts = viewCounts(scored, shortlisted, now);
+      const shown = scored.filter((s) => inView(q.view, s, shortlisted, now));
+
       const start = (page - 1) * limit;
-      const window = scored.slice(start, start + limit);
+      const window = shown.slice(start, start + limit);
 
       // The facts for the cards, and how each one already stands with this
       // profile — both fetched for the page rather than the pool, because a
@@ -440,7 +457,7 @@ export class MatchmakingService {
         shortlisted: shortlisted.has(s.profile.id),
         interaction: interactions.get(s.profile.id) ?? 'none',
       }));
-      return paginate(pageItems, scored.length, page, limit);
+      return { ...paginate(pageItems, shown.length, page, limit), counts };
     });
   }
 
@@ -687,10 +704,13 @@ export class MatchmakingService {
     ]);
     const mine = { profile: me, details: pool.get(me.id) ?? null };
     const sharerById = new Map(sharers.map((u) => [u.id, u]));
+    // A relative's suggestion still has to be somebody this profile could marry.
+    const want = soughtGender(me);
 
     return fromFamily.flatMap((row) => {
       const profile = byId.get(row.profileId);
       if (!profile || profile.id === me.id) return [];
+      if (want && matchGender(profile) !== want) return [];
       const { score, breakdown } = this.engine.score(mine, {
         profile,
         details: pool.get(profile.id) ?? null,
@@ -751,6 +771,7 @@ export class MatchmakingService {
     add('nriCountry', q.nriCountry);
     add('q', q.q);
     add('short', q.shortlistedOnly === true);
+    add('view', q.view);
     return parts.length ? parts.join('|') : 'none';
   }
 
@@ -946,8 +967,10 @@ export class MatchmakingService {
     }
     // Opposite genders only (EZ1-I134): a bride is matched to a groom and vice
     // versa. The suggestions already filter on this, but an interest sent by
-    // profile code or a stale card must be refused here too.
-    if (from.gender && target.gender && from.gender === target.gender) {
+    // profile code or a stale card must be refused here too. Sides are read the
+    // same way the suggestions read them, so a steward's own gender never counts.
+    const fromSide = matchGender(from);
+    if (fromSide && fromSide === matchGender(target)) {
       throw new BadRequestException(
         'You can only send an interest to a profile of the opposite gender.',
       );
