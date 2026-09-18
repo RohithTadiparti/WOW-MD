@@ -6,6 +6,7 @@ import { useAuth } from '../store/auth';
 import { Permission, can, isProvider, MOBILE_10_PATTERN } from '../lib/permissions';
 import { formatDate, adultDobMax } from '../lib/dates';
 import { Loading } from '../components/ui/Feedback';
+import { PersonPhoto } from '../components/ProfileSilhouette';
 
 const empty = {
   displayName: '',
@@ -204,21 +205,11 @@ export default function Profile() {
             the biodata saved.
           */}
           <div className="flex items-start gap-3">
-            {data?.primaryPhotoUrl || data?.photos?.[0] ? (
-              <img
-                src={String(data.primaryPhotoUrl ?? data.photos[0])}
-                alt=""
-                className="h-16 w-16 shrink-0 rounded-full object-cover ring-1 ring-inset ring-gray-900/10"
-              />
-            ) : (
-              <div
-                className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full
-                  bg-surface-sunken text-lg font-medium text-gray-400"
-                aria-hidden
-              >
-                {(data?.displayName ?? '?').slice(0, 1).toUpperCase()}
-              </div>
-            )}
+            <PersonPhoto
+              url={data?.primaryPhotoUrl || data?.photos?.[0]}
+              gender={data?.gender}
+              className="h-16 w-16 shrink-0 rounded-full object-cover ring-1 ring-inset ring-gray-900/10"
+            />
             <div>
             <h1 className="page-title">Your Profile</h1>
             <p className="page-subtitle">

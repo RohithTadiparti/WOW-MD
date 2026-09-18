@@ -34,6 +34,8 @@ export interface ProposalThreadSummary {
   otherProfileId: string;
   otherName: string;
   otherPhotoUrl: string | null;
+  /** For the groom or bride silhouette when there is no photo. */
+  otherGender: string | null;
   lastNote: string | null;
   lastNoteAt: Date | null;
   lastNoteMine: boolean;
@@ -277,6 +279,7 @@ export class ProposalsService {
         otherProfileId: otherId,
         otherName: other?.displayName ?? 'The other side',
         otherPhotoUrl: other?.photos?.[0] ?? null,
+        otherGender: other?.gender ?? null,
         lastNote: last?.body ?? null,
         lastNoteAt: last?.createdAt ?? null,
         /**

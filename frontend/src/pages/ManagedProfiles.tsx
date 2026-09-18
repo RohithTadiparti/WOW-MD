@@ -21,6 +21,7 @@ import ConsentFields, { ConsentDraft, consentPayload, emptyConsent } from '../co
 import ShareProfileDialog from '../components/ShareProfileDialog';
 import PhotoUploader from '../components/PhotoUploader';
 import { Loading } from '../components/ui/Feedback';
+import { ProfileSilhouette } from '../components/ProfileSilhouette';
 
 interface ManagedProfile {
   id: string;
@@ -888,7 +889,10 @@ function PhotoEditor({
           </div>
         ))}
         {(profile.photos ?? []).length === 0 && (
-          <p className="text-sm text-gray-500">No photos yet.</p>
+          <div className="flex items-center gap-3">
+            <ProfileSilhouette gender={profile.gender} className="h-24 w-24 rounded-sm" />
+            <p className="text-sm text-gray-500">No photos yet.</p>
+          </div>
         )}
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-3">

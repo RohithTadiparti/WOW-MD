@@ -23,6 +23,7 @@ import {
   SectionTitle,
 } from '@/components/ui';
 import { radius, rgb, space, useTheme } from '@/theme';
+import { ProfileSilhouette } from '@/components/profile-silhouette';
 
 /**
  * One profile, as somebody browsing may see it (EZ1-I261, EZ1-I231).
@@ -140,7 +141,12 @@ export default function MatchProfile() {
             />
           ))}
         </View>
-      ) : null}
+      ) : (
+        <ProfileSilhouette
+          gender={profile.gender}
+          style={{ width: 104, height: 130, borderRadius: radius.md }}
+        />
+      )}
 
       {profile.bio?.trim() ? (
         <Card>

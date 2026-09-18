@@ -633,6 +633,8 @@ export class ProfileDetailsService {
       // family member's account DOB (EZ1-I182). This is the same column
       // `savePersonal` writes the bride/groom's date into.
       dateOfBirth: profile.dateOfBirth,
+      // The profile's own gender, for the silhouette shown until it has a photo.
+      gender: profile.gender,
     };
   }
 

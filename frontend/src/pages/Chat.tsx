@@ -7,6 +7,7 @@ import CallPanel from '../components/CallPanel';
 import ChatMenu from '../components/ChatMenu';
 import ProfilePreview from '../components/ProfilePreview';
 import { Loading } from '../components/ui/Feedback';
+import { PersonPhoto } from '../components/ProfileSilhouette';
 
 /**
  * A time a reader can scan.
@@ -27,6 +28,8 @@ interface Conversation {
   withUserId: string;
   displayName: string;
   photoUrl: string | null;
+  /** The matrimony profile's gender, for its silhouette. Null for a business. */
+  gender?: string | null;
   lastMessage: string | null;
   lastMessageAt: string | null;
   lastMessageMine: boolean;
@@ -74,6 +77,7 @@ interface ProposalThread {
   status: string;
   otherName: string;
   otherPhotoUrl: string | null;
+  otherGender?: string | null;
   lastNote: string | null;
   lastNoteAt: string | null;
   lastNoteMine: boolean;
@@ -235,8 +239,13 @@ export default function Chat() {
               }`}
             >
               <span className="relative shrink-0">
-                {c.photoUrl ? (
-                  <img src={c.photoUrl} alt="" className="h-10 w-10 rounded-full object-cover" />
+                {/* A person gets their photo or silhouette; a business its initial. */}
+                {c.photoUrl || c.profileId ? (
+                  <PersonPhoto
+                    url={c.photoUrl}
+                    gender={c.gender}
+                    className="h-10 w-10 rounded-full object-cover"
+                  />
                 ) : (
                   <span className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-200 text-sm text-gray-600">
                     {c.displayName.slice(0, 1).toUpperCase()}
@@ -304,17 +313,11 @@ export default function Chat() {
               }`}
             >
               <span className="shrink-0">
-                {t.otherPhotoUrl ? (
-                  <img
-                    src={t.otherPhotoUrl}
-                    alt=""
-                    className="h-10 w-10 rounded-full object-cover"
-                  />
-                ) : (
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-200 text-sm text-gray-600">
-                    {t.otherName.slice(0, 1).toUpperCase()}
-                  </span>
-                )}
+                <PersonPhoto
+                  url={t.otherPhotoUrl}
+                  gender={t.otherGender}
+                  className="h-10 w-10 rounded-full object-cover"
+                />
               </span>
               <span className="min-w-0 flex-1">
                 <span className="flex items-center justify-between gap-2">
@@ -360,10 +363,10 @@ export default function Chat() {
             <>
               <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
                 <div className="flex min-w-0 items-center gap-3">
-                  {active?.photoUrl ? (
-                    <img
-                      src={active.photoUrl}
-                      alt=""
+                  {active?.photoUrl || active?.profileId ? (
+                    <PersonPhoto
+                      url={active.photoUrl}
+                      gender={active.gender}
                       className="h-10 w-10 shrink-0 rounded-full object-cover"
                     />
                   ) : (

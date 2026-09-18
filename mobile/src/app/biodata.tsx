@@ -10,6 +10,7 @@ import { HoroscopeSection } from '@/components/biodata/horoscope-section';
 import { PreferencesSection } from '@/components/biodata/preferences-section';
 import { DetailGrid, DetailRow } from '@/components/chrome';
 import { MediaStrip, PhotoPicker } from '@/components/uploader';
+import { ProfileSilhouette } from '@/components/profile-silhouette';
 import {
   Body,
   Caption,
@@ -19,7 +20,7 @@ import {
   Screen,
   SectionTitle,
 } from '@/components/ui';
-import { rgb, space, useTheme } from '@/theme';
+import { radius, rgb, space, useTheme } from '@/theme';
 
 /**
  * The biodata, on a phone (EZ1-I261).
@@ -63,7 +64,8 @@ export default function Biodata() {
   // profile the account owns rather than being asked for.
   const { data: me, isPending: loadingMe } = useQuery({
     queryKey: ['me'],
-    queryFn: async () => (await api.get('/users/me')).data as { id?: string | null },
+    queryFn: async () =>
+      (await api.get('/users/me')).data as { id?: string | null; gender?: string | null },
     retry: false,
   });
   // `/users/me` answers with the profile itself, so its id is the profile id.
@@ -188,6 +190,13 @@ export default function Biodata() {
         <Body tone="muted">
           A profile with photographs is asked about several times more often than one without.
         </Body>
+        {/* The empty slot holds the groom or bride silhouette until a photo is added. */}
+        {photos && (photos.photos ?? []).length === 0 ? (
+          <ProfileSilhouette
+            gender={me?.gender}
+            style={{ width: 116, height: 84, borderRadius: radius.sm }}
+          />
+        ) : null}
         <MediaStrip
           urls={photos?.photos ?? []}
           onRemove={(url) => {

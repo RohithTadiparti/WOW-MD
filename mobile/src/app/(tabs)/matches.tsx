@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle } from 'phosphor-react-native';
 
 import { HeartBackdrop } from '@/components/heart-field';
+import { ProfileSilhouette } from '@/components/profile-silhouette';
 import { api, apiMessage } from '@/lib/api';
 import { useMatchmakingGate } from '@/lib/matchmaking';
 import { ActingClientPicker, useActingClient } from '@/components/matches/acting-client';
@@ -26,6 +27,7 @@ import { radius, rgb, rgba, space, useTheme } from '@/theme';
 interface PublicProfile {
   id: string;
   displayName: string;
+  gender?: string | null;
   ageRange: string | null;
   city?: string;
   photos: string[];
@@ -225,9 +227,7 @@ function MatchCard({
         {cover ? (
           <Image source={{ uri: cover }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
         ) : (
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-            <Caption tone="faint">No photograph yet</Caption>
-          </View>
+          <ProfileSilhouette gender={profile.gender} style={{ flex: 1 }} />
         )}
       </View>
 

@@ -4,6 +4,7 @@ import { ArrowRight, HandHeart } from '@phosphor-icons/react';
 import { api } from '../lib/api';
 import { formatDateTime } from '../lib/dates';
 import { EmptyState, Loading } from './ui/Feedback';
+import { PersonPhoto } from './ProfileSilhouette';
 
 /**
  * Every interest across an agency's book, on one page (EZ1-I243).
@@ -306,15 +307,11 @@ function Party({
   const facts = [party.ageRange, party.gender, party.city].filter(Boolean).join(' · ');
   return (
     <div className="flex min-w-0 flex-1 items-center gap-2">
-      {party.photos?.[0] ? (
-        <img
-          src={party.photos[0]}
-          alt=""
-          className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-inset ring-gray-900/5"
-        />
-      ) : (
-        <span className="h-9 w-9 shrink-0 rounded-full bg-surface-sunken" aria-hidden />
-      )}
+      <PersonPhoto
+        url={party.photos?.[0]}
+        gender={party.gender}
+        className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-inset ring-gray-900/5"
+      />
       <div className="min-w-0">
         <p className="text-[0.6875rem] uppercase tracking-wide text-gray-400">{label}</p>
         <button className="block truncate text-sm font-medium text-brand-strong" onClick={onView}>
