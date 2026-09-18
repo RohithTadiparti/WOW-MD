@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { View } from 'react-native';
+import { Linking, Pressable, View } from 'react-native';
+import { Image } from 'expo-image';
 import { useQuery } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
 import { SELLER_STATUS_LABEL, type IncomingBooking } from '@/lib/bookings';
-import { dateTime, shortDate } from '@/lib/format';
+import { dateTime, money, shortDate } from '@/lib/format';
 import { formatAnswer, type FieldSpec } from '@/shared/dynamic-form';
 import { Permission, can } from '@/shared/permissions';
 import { PlacedBookingFacts, usePlacedForClients } from '@/components/bookings/placed-for-clients';
@@ -116,9 +117,32 @@ export function BookingDetail({ booking }: { booking: IncomingBooking }) {
             <DetailRow label="Package">{booking.offeringName}</DetailRow>
           ) : null}
           {booking.quantity ? <DetailRow label="Quantity">{String(booking.quantity)}</DetailRow> : null}
+          {booking.estimatedAmount && Number(booking.estimatedAmount) > 0 ? (
+            <DetailRow label="Customer was shown">
+              {money(booking.estimatedAmount, booking.currency)}
+            </DetailRow>
+          ) : null}
         </DetailGrid>
         <ServiceAnswers booking={booking} />
       </Section>
+
+      {/* The designs the customer sent for reference; a tap opens one full size. */}
+      {booking.referenceImages && booking.referenceImages.length > 0 ? (
+        <Section title="Reference photos">
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2) }}>
+            {booking.referenceImages.map((url) => (
+              <Pressable
+                key={url}
+                onPress={() => void Linking.openURL(url)}
+                accessibilityRole="imagebutton"
+                accessibilityLabel="Open the reference photo full size"
+              >
+                <Image source={{ uri: url }} style={{ width: 80, height: 80, borderRadius: 4 }} contentFit="cover" />
+              </Pressable>
+            ))}
+          </View>
+        </Section>
+      ) : null}
 
       {/* The extras the customer asked for after the quotation: what they
           asked for, what they offered, what the vendor answered. */}

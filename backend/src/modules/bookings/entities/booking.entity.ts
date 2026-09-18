@@ -119,6 +119,19 @@ export class Booking {
   quantity: number | null;
 
   /**
+   * The total the buyer was shown when they asked: the chosen price times the
+   * quantity where the price counts something. Not what is owed — `amount`
+   * stays zero until a quotation is agreed — but what the vendor is quoting
+   * against. Null for a quote-only price or a request with no price chosen.
+   */
+  @Column({ type: 'numeric', precision: 12, scale: 2, nullable: true })
+  estimatedAmount: string | null;
+
+  /** Designs the buyer attached for reference: uploaded image URLs. */
+  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
+  referenceImages: string[];
+
+  /**
    * What the buyer hopes to spend. Optional on purpose — the provider quotes
    * against the requirements, and forcing a number out of someone who does not
    * have one only produces a fictional one.
