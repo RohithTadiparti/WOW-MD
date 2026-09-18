@@ -50,6 +50,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { useTheme } from './store/theme';
 import { motion, useReducedMotion } from 'motion/react';
 import Login from './pages/Login';
+import Home from './pages/Home';
 import Register from './pages/Register';
 import AcceptInvite from './pages/AcceptInvite';
 import AgentSignup from './pages/AgentSignup';
@@ -748,21 +749,36 @@ function Layout({ children }: { children: ReactNode }) {
 /**
  * The mark.
  *
- * Set in the display face at a tight track with the two halves weighted
- * differently, so it reads as a wordmark rather than as the first heading on
- * the page. No drawn logo: an invented glyph would be a decoration standing in
+ * The template's masthead: the serif in widely tracked capitals, with the
+ * name beside it in small spaced caps, so it reads as a wordmark rather than
+ * as the first heading on the page. No drawn logo: an invented glyph would be a decoration standing in
  * for an identity the brand has not decided on yet.
  */
 function Wordmark({ compact = false }: { compact?: boolean }) {
   return (
-    <Link to="/" className="flex items-baseline gap-1.5 px-3 py-1">
-      <span className="text-[1.375rem] font-semibold tracking-[-0.04em] text-gray-900">WOW</span>
+    <Link to="/" className="flex items-baseline gap-2 px-3 py-1">
+      <span className="font-serif text-[1.5rem] uppercase tracking-[0.18em] text-brand">WOW</span>
       {!compact && (
-        <span className="text-[0.6875rem] font-medium uppercase tracking-[0.14em] text-gray-400">
+        <span className="text-[0.625rem] uppercase tracking-[0.22em] text-gray-500">
           World of Weddings
         </span>
       )}
     </Link>
+  );
+}
+
+/**
+ * `/` for somebody signed out is the public home page — only once the silent
+ * refresh has answered, so a signed-in reload never flashes it.
+ */
+function HomeOrDashboard() {
+  const token = useAuth((s) => s.accessToken);
+  const ready = useAuth((s) => s.ready);
+  if (ready && !token) return <Home />;
+  return (
+    <Protected>
+      <Dashboard />
+    </Protected>
   );
 }
 
@@ -876,14 +892,8 @@ export default function App() {
           Protected, which would bounce straight back here. */}
       <Route path="/set-password" element={<SetPassword />} />
 
-      <Route
-        path="/"
-        element={
-          <Protected>
-            <Dashboard />
-          </Protected>
-        }
-      />
+      {/* The public home page to a visitor, the dashboard to everyone else. */}
+      <Route path="/" element={<HomeOrDashboard />} />
       <Route
         path="/profile"
         element={

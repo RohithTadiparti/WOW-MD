@@ -25,64 +25,62 @@ export const rgba = (c: Channels, alpha: number): string =>
 // Primitives. Named for what they are, never for where they are used.
 
 const lightInk = {
-  50: [250, 247, 249],
-  100: [243, 238, 241],
-  200: [230, 222, 227],
-  300: [202, 190, 197],
-  400: [158, 144, 152],
-  500: [120, 107, 115],
-  600: [92, 81, 88],
-  700: [70, 61, 67],
-  800: [47, 40, 45],
-  900: [29, 24, 28],
-  950: [18, 14, 17],
+  50: [247, 242, 234],
+  100: [241, 234, 224],
+  200: [226, 217, 208],
+  300: [205, 193, 188],
+  400: [160, 145, 145],
+  500: [124, 107, 110],
+  600: [98, 80, 85],
+  700: [79, 59, 64],
+  800: [56, 37, 43],
+  900: [36, 16, 23],
+  950: [24, 10, 15],
 } as const;
 
 /** Inverted, but hand-set rather than mirrored, so hierarchy survives. */
 const darkInk = {
-  50: [28, 22, 26],
-  100: [38, 30, 35],
-  200: [52, 43, 49],
-  300: [76, 64, 72],
-  400: [112, 98, 107],
-  500: [150, 136, 145],
-  600: [180, 168, 175],
-  700: [208, 198, 204],
-  800: [228, 221, 225],
-  900: [243, 238, 241],
-  950: [250, 247, 249],
+  50: [30, 21, 23],
+  100: [40, 29, 32],
+  200: [55, 42, 45],
+  300: [80, 64, 67],
+  400: [117, 100, 101],
+  500: [155, 139, 137],
+  600: [186, 172, 167],
+  700: [212, 201, 193],
+  800: [232, 224, 214],
+  900: [245, 239, 229],
+  950: [250, 246, 239],
 } as const;
 
 /**
- * Rose. Asked for by name in the brief, with an example that is a deep magenta
- * rather than a pastel — the right instinct, because a pale pink cannot carry a
- * button and an interface built from it has nothing to point with. The pale end
- * does the surfaces; the deep end does the work.
+ * The accent ramp, still named rose so no screen changes: the matrimony home
+ * template's maroon, #6E1026 at 600 and #8A1230 at 500.
  */
 const lightRose = {
-  50: [253, 242, 246],
-  100: [251, 228, 237],
-  200: [246, 194, 214],
-  300: [238, 151, 184],
-  400: [226, 96, 145],
-  500: [196, 30, 99],
-  600: [163, 22, 79],
-  700: [134, 18, 64],
-  800: [108, 15, 52],
-  900: [84, 12, 41],
+  50: [248, 236, 233],
+  100: [240, 220, 214],
+  200: [227, 188, 188],
+  300: [204, 139, 148],
+  400: [170, 72, 92],
+  500: [138, 18, 48],
+  600: [110, 16, 38],
+  700: [88, 12, 30],
+  800: [68, 9, 23],
+  900: [50, 7, 17],
 } as const;
 
 const darkRose = {
-  50: [46, 16, 29],
-  100: [61, 20, 37],
-  200: [84, 26, 50],
-  300: [116, 35, 68],
-  400: [168, 55, 102],
-  500: [232, 105, 158],
-  600: [242, 141, 184],
-  700: [247, 175, 205],
-  800: [250, 205, 224],
-  900: [252, 228, 238],
+  50: [45, 17, 24],
+  100: [60, 21, 31],
+  200: [84, 28, 42],
+  300: [118, 38, 58],
+  400: [168, 66, 88],
+  500: [214, 122, 138],
+  600: [230, 152, 165],
+  700: [240, 182, 191],
+  800: [246, 210, 215],
+  900: [250, 230, 233],
 } as const;
 
 // ---------------------------------------------------------------- tier 2 --
@@ -132,17 +130,17 @@ export const lightTheme: Theme = {
   ink: lightInk,
   rose: lightRose,
 
-  canvas: [253, 247, 250],
-  surface: [255, 253, 254],
+  canvas: [250, 246, 239],
+  surface: [255, 255, 255],
   surfaceRaised: [255, 255, 255],
-  surfaceSunken: [250, 240, 245],
+  surfaceSunken: [246, 239, 228],
   border: lightInk[200],
   borderStrong: lightInk[300],
 
-  brand: lightRose[500],
-  brandStrong: lightRose[600],
+  brand: lightRose[600],
+  brandStrong: lightRose[700],
   brandSoft: lightRose[50],
-  brandFg: [255, 255, 255],
+  brandFg: [250, 246, 239],
   focus: lightRose[400],
 
   positiveFg: [21, 94, 76],
@@ -153,8 +151,8 @@ export const lightTheme: Theme = {
   criticalBg: [253, 232, 228],
 
   // Tinted to the ground rather than pure black: a black shadow on a
-  // pink-white canvas reads as a hole punched in the page.
-  shadowColor: [42, 22, 32],
+  // ivory canvas reads as a hole punched in the page.
+  shadowColor: [36, 16, 23],
   scrim: [14, 8, 11],
 };
 
@@ -163,17 +161,17 @@ export const darkTheme: Theme = {
   ink: darkInk,
   rose: darkRose,
 
-  canvas: [18, 12, 16],
-  surface: [28, 20, 25],
-  surfaceRaised: [36, 26, 32],
-  surfaceSunken: [22, 15, 19],
-  border: [48, 37, 44],
-  borderStrong: [68, 54, 62],
+  canvas: [20, 13, 15],
+  surface: [30, 21, 23],
+  surfaceRaised: [38, 27, 30],
+  surfaceSunken: [24, 16, 18],
+  border: [52, 40, 42],
+  borderStrong: [72, 57, 59],
 
   brand: darkRose[500],
   brandStrong: darkRose[600],
   brandSoft: darkRose[100],
-  brandFg: [24, 8, 15],
+  brandFg: [30, 8, 14],
   focus: darkRose[400],
 
   positiveFg: [126, 214, 186],
@@ -187,8 +185,9 @@ export const darkTheme: Theme = {
   scrim: [14, 8, 11],
 };
 
-/** Inputs and chips, buttons, cards. The same 8/12/16 scale the web app uses. */
-export const radius = { sm: 8, md: 12, lg: 16 } as const;
+/** Inputs and chips, buttons, cards: near-square, the web app's 2/2/4 scale
+ *  from the matrimony home template. */
+export const radius = { sm: 2, md: 2, lg: 4 } as const;
 
 /**
  * The spacing step. Four points, like Tailwind's, so a gap named here and a gap
