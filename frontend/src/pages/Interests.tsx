@@ -18,6 +18,7 @@ import {
   UsersThree,
 } from '@phosphor-icons/react';
 import { Loading } from '../components/ui/Feedback';
+import { PersonPhoto } from '../components/ProfileSilhouette';
 import { formatShortDate, relativeToToday } from '../lib/dates';
 
 interface Counterpart {
@@ -666,16 +667,14 @@ export default function Interests() {
   );
 }
 
-/** The counterpart's photo, or their initial when there is none. */
+/** The counterpart's photo, or their groom or bride silhouette when there is none. */
 function Avatar({ counterpart }: { counterpart: Counterpart }) {
-  const src = counterpart.photoUrl ?? counterpart.photos?.[0];
-  if (src) {
-    return <img src={src} alt="" className="h-14 w-14 shrink-0 rounded-full object-cover" />;
-  }
   return (
-    <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-brand-soft text-lg font-semibold text-brand-strong">
-      {counterpart.displayName.charAt(0).toUpperCase()}
-    </span>
+    <PersonPhoto
+      url={counterpart.photoUrl ?? counterpart.photos?.[0]}
+      gender={counterpart.gender}
+      className="h-14 w-14 shrink-0 rounded-full object-cover"
+    />
   );
 }
 

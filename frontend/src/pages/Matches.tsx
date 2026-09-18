@@ -5,6 +5,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { api, apiMessage } from '../lib/api';
 import ProfilePreview from '../components/ProfilePreview';
 import MatchCard, { PublicProfile, Suggestion } from '../components/MatchCard';
+import { PersonPhoto } from '../components/ProfileSilhouette';
 import { useAuth } from '../store/auth';
 import {
   MatchFixedState,
@@ -896,8 +897,8 @@ export default function Matches() {
                 <div className="flex min-w-0 gap-3">
                   <Thumb
                     url={m.counterpart.photos?.[0]}
-                    name={m.counterpart.displayName}
-                    className="h-14 w-14 shrink-0 rounded-sm object-cover text-lg"
+                    gender={m.counterpart.gender}
+                    className="h-14 w-14 shrink-0 rounded-sm object-cover"
                   />
                   <div className="min-w-0">
                     <button
@@ -1001,21 +1002,12 @@ function pill(active: boolean): string {
 }
 
 /**
- * A small profile photo that falls back to an initial rather than the browser's
- * broken-image icon when the photo is missing or fails to load (EZ1-I190).
+ * A small profile photo that falls back to the groom or bride silhouette rather
+ * than the browser's broken-image icon when the photo is missing or fails to
+ * load (EZ1-I190).
  */
-function Thumb({ url, name, className }: { url?: string | null; name: string; className: string }) {
-  const [failed, setFailed] = useState(false);
-  if (!url || failed) {
-    return (
-      <span
-        className={`flex items-center justify-center bg-surface-sunken font-medium text-gray-500 ${className}`}
-      >
-        {(name || '?').trim().slice(0, 1).toUpperCase()}
-      </span>
-    );
-  }
-  return <img src={url} alt="" loading="lazy" onError={() => setFailed(true)} className={className} />;
+function Thumb(props: { url?: string | null; gender?: string | null; className: string }) {
+  return <PersonPhoto {...props} />;
 }
 
 function Fact({ label, value }: { label: string; value: string }) {

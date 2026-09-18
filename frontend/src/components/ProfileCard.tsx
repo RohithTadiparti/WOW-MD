@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, apiMessage } from '../lib/api';
 import { formatDate } from '../lib/dates';
+import { PersonPhoto } from './ProfileSilhouette';
 
 interface Details {
   firstName?: string | null;
@@ -46,6 +47,7 @@ export default function ProfileCard({
   onEdit,
   onPhotos,
   onView,
+  gender,
 }: {
   profileId: string;
   profile: Profile | null;
@@ -55,6 +57,8 @@ export default function ProfileCard({
   onEdit: () => void;
   onPhotos: () => void;
   onView: () => void;
+  /** Picks the groom or bride silhouette shown until there is a photograph. */
+  gender?: string | null;
 }) {
   const qc = useQueryClient();
   const [confirming, setConfirming] = useState(false);
@@ -108,17 +112,11 @@ export default function ProfileCard({
   return (
     <div className="card space-y-4">
       <div className="flex flex-wrap gap-4">
-        {photo ? (
-          <img
-            src={photo}
-            alt=""
-            className="h-28 w-28 shrink-0 rounded-lg object-cover ring-1 ring-gray-200"
-          />
-        ) : (
-          <div className="flex h-28 w-28 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-center text-xs text-gray-400">
-            No photograph yet
-          </div>
-        )}
+        <PersonPhoto
+          url={photo}
+          gender={gender}
+          className="h-28 w-28 shrink-0 rounded-lg object-cover ring-1 ring-gray-200"
+        />
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-start justify-between gap-2">

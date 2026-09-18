@@ -58,6 +58,8 @@ export interface ConversationSummary {
   muted: boolean;
   displayName: string;
   photoUrl: string | null;
+  /** The other side's profile gender, so a client can draw the right silhouette. */
+  gender: string | null;
   lastMessage: string | null;
   lastMessageAt: Date | null;
   lastMessageMine: boolean;
@@ -664,6 +666,7 @@ export class ChatService {
           muted: false,
           displayName: profile?.displayName ?? accountNames.get(otherUserId) ?? 'Match',
           photoUrl: profile?.photos?.[0] ?? null,
+          gender: profile?.gender ?? null,
           lastMessage: null,
           lastMessageAt: null,
           lastMessageMine: false,
@@ -721,6 +724,7 @@ export class ChatService {
           muted: Boolean(pref?.muted),
           displayName: profile?.displayName ?? accountNames.get(otherUserId) ?? 'Match',
           photoUrl: profile?.photos?.[0] ?? null,
+          gender: profile?.gender ?? null,
           lastMessage: last?.body ?? null,
           lastMessageAt: last?.createdAt ?? null,
           lastMessageMine: last ? last.senderId === userId : false,
