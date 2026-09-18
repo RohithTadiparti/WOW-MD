@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsDateString,
   IsEnum,
   IsInt,
@@ -104,7 +106,9 @@ export class CreateBookingDto {
 
   /**
    * What the provider needs to know to price the job: guest count, menu,
-   * timings, anything particular. A quotation written without this is a guess.
+   * timings, anything particular. Required by the service only for the trades
+   * that cannot quote without it (venue, catering, florist) and only where the
+   * service has no booking form of its own; see booking-request-rules.ts.
    */
   @ApiPropertyOptional({ maxLength: 4000, minLength: 10 })
   @IsOptional()
@@ -112,6 +116,18 @@ export class CreateBookingDto {
   @MinLength(10, { message: 'Tell the provider what you need — at least a sentence' })
   @MaxLength(4000)
   requirements?: string;
+
+  /**
+   * Designs the buyer has for reference — a mehendi pattern, a stage they liked.
+   * Uploaded first through the media presign; only the URLs arrive here.
+   */
+  @ApiPropertyOptional({ type: [String], maxItems: 6 })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(6)
+  @IsUploadedUrl({ each: true })
+  @MaxLength(2048, { each: true })
+  referenceImages?: string[];
 
   /**
    * What the buyer hopes to spend. Optional on purpose: the provider quotes

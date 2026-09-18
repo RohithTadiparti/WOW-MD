@@ -7,6 +7,7 @@ import { Permission, can } from '../lib/permissions';
 import { SELLER_STATUS_LABEL, humanize } from '../lib/labels';
 import { useAuth } from '../store/auth';
 import { PlacedBookingFacts, usePlacedForClients } from './PlacedForClients';
+import { ReferenceThumbs, RequestEstimate } from './RequestExtras';
 import type { QuotationSummary } from '../lib/booking-progress';
 import {
   BookingProgress,
@@ -55,6 +56,11 @@ interface DetailBooking {
   serviceName: string | null;
   offeringName?: string | null;
   quantity?: number | null;
+  currency?: string;
+  /** The chosen price times the quantity: the total the customer was shown. */
+  estimatedAmount?: string | null;
+  /** Designs the customer attached to the request. */
+  referenceImages?: string[];
   quotation?: QuotationSummary | null;
 }
 
@@ -135,7 +141,22 @@ export default function BookingDetail({
         <Row label="Service">{booking.serviceName ?? 'No service chosen'}</Row>
         {booking.offeringName && <Row label="Package">{booking.offeringName}</Row>}
         {booking.quantity ? <Row label="Quantity">{booking.quantity}</Row> : null}
+        <RequestEstimate
+          estimatedAmount={booking.estimatedAmount}
+          quantity={booking.quantity}
+          currency={booking.currency}
+          label="Customer was shown"
+        />
       </Section>
+
+      {/* The designs the customer sent for reference, each opening full size. */}
+      {booking.referenceImages && booking.referenceImages.length > 0 && (
+        <Section title="Reference photos">
+          <div className="sm:col-span-2">
+            <ReferenceThumbs urls={booking.referenceImages} />
+          </div>
+        </Section>
+      )}
 
       {extras}
 
