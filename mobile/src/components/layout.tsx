@@ -2,6 +2,7 @@ import type { ReactElement, ReactNode } from 'react';
 import { FlatList, RefreshControl, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { HeartBackdrop } from '@/components/heart-field';
 import { EmptyState, Loading } from '@/components/ui';
 import { rgb, space, useTheme } from '@/theme';
 
@@ -48,45 +49,47 @@ export function ListScreen<T>({
   const insets = useSafeAreaInsets();
 
   return (
-    <FlatList
-      style={{ flex: 1, backgroundColor: rgb(theme.canvas) }}
-      contentContainerStyle={{
-        padding: space(4),
-        // Clears the tab bar's own inset; without it the last row sits under
-        // the bar and the list looks truncated.
-        paddingBottom: insets.bottom + space(6),
-        gap: space(2.5),
-      }}
-      data={data}
-      keyExtractor={keyExtractor}
-      renderItem={({ item }) => renderItem(item)}
-      ListHeaderComponent={
-        header ? <View style={{ gap: space(3.5), marginBottom: space(1) }}>{header}</View> : null
-      }
-      ListEmptyComponent={
-        loading ? (
-          <Loading rows={3} />
-        ) : (
-          <EmptyState title={emptyTitle}>{emptyBody}</EmptyState>
-        )
-      }
-      ListFooterComponent={footer ? <View style={{ marginTop: space(2) }}>{footer}</View> : null}
-      keyboardShouldPersistTaps="handled"
-      // The rows carry nested queries and images, so keeping the window tight
-      // is what makes a long queue scroll at frame rate.
-      initialNumToRender={8}
-      windowSize={7}
-      removeClippedSubviews
-      refreshControl={
-        onRefresh ? (
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={rgb(theme.brandStrong)}
-            colors={[rgb(theme.brandStrong)]}
-          />
-        ) : undefined
-      }
-    />
+    <HeartBackdrop>
+      <FlatList
+        style={{ flex: 1 }}
+        contentContainerStyle={{
+          padding: space(4),
+          // Clears the tab bar's own inset; without it the last row sits under
+          // the bar and the list looks truncated.
+          paddingBottom: insets.bottom + space(6),
+          gap: space(2.5),
+        }}
+        data={data}
+        keyExtractor={keyExtractor}
+        renderItem={({ item }) => renderItem(item)}
+        ListHeaderComponent={
+          header ? <View style={{ gap: space(3.5), marginBottom: space(1) }}>{header}</View> : null
+        }
+        ListEmptyComponent={
+          loading ? (
+            <Loading rows={3} />
+          ) : (
+            <EmptyState title={emptyTitle}>{emptyBody}</EmptyState>
+          )
+        }
+        ListFooterComponent={footer ? <View style={{ marginTop: space(2) }}>{footer}</View> : null}
+        keyboardShouldPersistTaps="handled"
+        // The rows carry nested queries and images, so keeping the window tight
+        // is what makes a long queue scroll at frame rate.
+        initialNumToRender={8}
+        windowSize={7}
+        removeClippedSubviews
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={rgb(theme.brandStrong)}
+              colors={[rgb(theme.brandStrong)]}
+            />
+          ) : undefined
+        }
+      />
+    </HeartBackdrop>
   );
 }

@@ -53,7 +53,7 @@ export default function Sidebar({
         return (
           <div key={key}>
             {title && (
-              <h2 className="mb-2 px-3 text-[0.6875rem] font-medium uppercase tracking-[0.09em] text-gray-400">
+              <h2 className="mb-2 w-fit bg-canvas px-3 text-[0.6875rem] font-medium uppercase tracking-[0.09em] text-gray-400">
                 {title}
               </h2>
             )}
@@ -74,7 +74,8 @@ export default function Sidebar({
                             ? gradient
                               ? 'text-brand-fg'
                               : 'text-brand-strong'
-                            : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                            : // The ground colour, so the heart field never runs behind a label.
+                              'bg-canvas text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                         }`}
                     >
                       {/*

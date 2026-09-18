@@ -12,6 +12,7 @@ import { useLocalSearchParams, useNavigation } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { PaperPlaneRight, Paperclip } from 'phosphor-react-native';
+import { HeartField } from '@/components/heart-field';
 
 import { api, apiMessage } from '@/lib/api';
 import { dateTime } from '@/lib/format';
@@ -106,6 +107,7 @@ export default function Thread() {
   if (isPending) {
     return (
       <View style={{ flex: 1, padding: space(4), backgroundColor: rgb(theme.canvas) }}>
+        <HeartField />
         <Loading rows={4} />
       </View>
     );
@@ -117,6 +119,7 @@ export default function Thread() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 92 : 0}
     >
+      <HeartField />
       <FlatList
         ref={list}
         inverted

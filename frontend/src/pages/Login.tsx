@@ -8,7 +8,6 @@ import { useAuth } from '../store/auth';
 import SupportContact from '../components/SupportContact';
 import PasswordField from '../components/PasswordField';
 import OtpSignIn from '../components/OtpSignIn';
-import HeartField from '../components/HeartField';
 
 export default function Login() {
   const nav = useNavigate();
@@ -215,12 +214,11 @@ export default function Login() {
 
       {/*
         The right half, in the matrimony home template's manner: the ivory
-        ground under its field of gold hearts, a gold rule, and one line in
-        the serif. It replaces a blurred stock photograph that was only ever a
+        ground and the app-wide field of gold hearts, a gold rule, and one line
+        in the serif. It replaces a blurred stock photograph that was only ever a
         placeholder for a brand image nobody had.
       */}
-      <div className="relative isolate hidden overflow-hidden border-l border-gray-200 bg-canvas lg:flex lg:items-end">
-        <HeartField />
+      <div className="relative hidden overflow-hidden border-l border-gray-200 lg:flex lg:items-end">
         <div className="p-12 xl:p-16">
           <span aria-hidden className="mb-7 block h-px w-16 bg-gold" />
           <p className="plate max-w-[20ch] font-serif text-[2.75rem] font-light italic leading-[1.2] text-brand">

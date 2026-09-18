@@ -336,7 +336,7 @@
   /* A page title and its one-line explanation, used at the top of every
    * screen. Written once so the app has a single masthead rhythm. */
   .page-title {
-    @apply font-serif text-[2rem] font-normal leading-[1.1] text-brand sm:text-[2.5rem];
+    @apply plate w-fit font-serif text-[2rem] font-normal leading-[1.1] text-brand sm:text-[2.5rem];
   }
 
   /* Clears the heart field from behind a run of text: a patch of the ground
@@ -346,13 +346,23 @@
     box-shadow: 0 0 0 11px rgb(var(--canvas));
   }
 
+  /* Inside a panel there is no heart field to clear, and an ivory plate on
+   * white would show as a box. */
+  .card .page-title,
+  .card .page-subtitle,
+  .card-raised .page-title,
+  .card-raised .page-subtitle {
+    background: none;
+    box-shadow: none;
+  }
+
   /* The template's small uppercase line above or beside a heading. */
   .eyebrow {
     @apply text-[0.6875rem] uppercase tracking-[0.3em] text-gray-600;
   }
 
   .page-subtitle {
-    @apply mt-1 max-w-[65ch] text-sm leading-relaxed text-gray-500;
+    @apply plate mt-1 w-fit max-w-[65ch] text-sm leading-relaxed text-gray-500;
   }
 
   /* Status pills. Fully round, which is the documented exception to the

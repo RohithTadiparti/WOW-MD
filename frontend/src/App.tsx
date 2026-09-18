@@ -629,7 +629,7 @@ function Layout({ children }: { children: ReactNode }) {
   useEffect(() => setDrawer(false), [loc.pathname]);
 
   return (
-    <div className="min-h-[100dvh] bg-canvas">
+    <div className="min-h-[100dvh]">
       {/*
         Two columns above `lg`, one below. The rail is sticky and scrolls
         independently, so a long navigation never pushes the page down and the
