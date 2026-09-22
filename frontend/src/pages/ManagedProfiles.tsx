@@ -1,4 +1,5 @@
 import { FormEvent, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiMessage } from '../lib/api';
 import { adultDobMax } from '../lib/dates';
@@ -100,7 +101,23 @@ const emptyDraft = {
  * deliberate step: it emails the subject a link where THEY choose a password,
  * which is why the steward never sets one here.
  */
-export default function ManagedProfiles({ embedded = false }: { embedded?: boolean } = {}) {
+interface ManagedProfilesProps {
+  embedded?: boolean;
+  /** Lets a host page place the create action in its own header. */
+  creating?: boolean;
+  onCreatingChange?: (creating: boolean) => void;
+  hideCreateAction?: boolean;
+  /** Optional slot for putting the create form before a host page's list. */
+  createFormContainer?: Element | null;
+}
+
+export default function ManagedProfiles({
+  embedded = false,
+  creating: controlledCreating,
+  onCreatingChange,
+  hideCreateAction = false,
+  createFormContainer,
+}: ManagedProfilesProps = {}) {
   const qc = useQueryClient();
   const permissions = useAuth((s) => s.user?.permissions ?? []);
   // A family member holds the same stewardship capability an agency does, so
@@ -113,7 +130,12 @@ export default function ManagedProfiles({ embedded = false }: { embedded?: boole
    * exists to show the profiles, and it closes itself again on a successful
    * save so the agent lands back on the list with the new client in it.
    */
-  const [creating, setCreating] = useState(false);
+  const [uncontrolledCreating, setUncontrolledCreating] = useState(false);
+  const creating = controlledCreating ?? uncontrolledCreating;
+  const setCreating = (next: boolean) => {
+    if (controlledCreating !== undefined) onCreatingChange?.(next);
+    else setUncontrolledCreating(next);
+  };
   const [draft, setDraft] = useState(emptyDraft);
   const [consent, setConsent] = useState<ConsentDraft>(emptyConsent());
   const [error, setError] = useState('');
@@ -166,6 +188,8 @@ export default function ManagedProfiles({ embedded = false }: { embedded?: boole
           : 'Profile saved. It is matchable now: circulate it, or invite them to claim it later.',
       );
       qc.invalidateQueries({ queryKey: ['managed-profiles'] });
+      // My Clients includes these profiles as well as claimed accounts.
+      qc.invalidateQueries({ queryKey: ['agent-clients'] });
     },
     onError: (err) => {
       setNotice('');
@@ -277,23 +301,27 @@ export default function ManagedProfiles({ embedded = false }: { embedded?: boole
         profile is doing what an agency does and holds the same permissions to
         do it, but "client" is not what she is to him (council round 2).
       */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          {!embedded && (
-            <>
-              <h1 className="page-title">{isFamily ? 'Family Profiles' : 'Client Profiles'}</h1>
-              <p className="page-subtitle">
-                {isFamily
-                  ? 'The relatives whose profiles you look after. Build one for someone who has not joined yet and it can be matched immediately; when you invite them, they set their own password and take ownership.'
-                  : 'The clients you look after. Build a profile for someone who has not joined yet and it can be matched immediately; when you invite them, they set their own password and take ownership.'}
-              </p>
-            </>
+      {(!embedded || !hideCreateAction) && (
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            {!embedded && (
+              <>
+                <h1 className="page-title">{isFamily ? 'Family Profiles' : 'Client Profiles'}</h1>
+                <p className="page-subtitle">
+                  {isFamily
+                    ? 'The relatives whose profiles you look after. Build one for someone who has not joined yet and it can be matched immediately; when you invite them, they set their own password and take ownership.'
+                    : 'The clients you look after. Build a profile for someone who has not joined yet and it can be matched immediately; when you invite them, they set their own password and take ownership.'}
+                </p>
+              </>
+            )}
+          </div>
+          {!hideCreateAction && (
+            <button className="btn shrink-0" onClick={() => setCreating(!creating)}>
+              {creating ? 'Cancel' : isFamily ? 'Add a relative' : 'Create new client'}
+            </button>
           )}
         </div>
-        <button className="btn shrink-0" onClick={() => setCreating((open) => !open)}>
-          {creating ? 'Cancel' : isFamily ? 'Add a relative' : 'Create new client'}
-        </button>
-      </div>
+      )}
 
       {notice && <p className="rounded-sm bg-brand-light p-3 text-sm text-brand-dark">{notice}</p>}
       {error && <p className="alert-critical">{error}</p>}
@@ -302,7 +330,12 @@ export default function ManagedProfiles({ embedded = false }: { embedded?: boole
         <ClientSignupLink active={Boolean(agency.shareLinkActive)} />
       )}
 
-      {creating && (
+      {renderCreateForm()}
+    </div>
+  );
+
+  function renderCreateForm() {
+    const form = (
       <form onSubmit={submit} className="card space-y-4">
         <h2 className="section-title">New profile</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -466,7 +499,12 @@ export default function ManagedProfiles({ embedded = false }: { embedded?: boole
           </p>
         </div>
       </form>
-      )}
+    );
+
+    return (
+      <>
+        {creating &&
+          (createFormContainer ? createPortal(form, createFormContainer) : form)}
 
       <div className="card space-y-3">
         <h2 className="section-title">Profiles you manage</h2>
@@ -703,8 +741,9 @@ export default function ManagedProfiles({ embedded = false }: { embedded?: boole
           ))}
         </div>
       </div>
-    </div>
-  );
+      </>
+    );
+  }
 }
 
 /**
