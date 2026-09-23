@@ -693,14 +693,21 @@ function ReligionForm({
   );
 
   const religion = String(draft.religion ?? '');
-  /*
-   * Castes follow the religion, not one list for everybody.
-   *
-   * Offering a Hindu caste list to a Christian family is not a neutral
-   * mistake. Religions with no caste structure get an empty list, and the
-   * field then offers only the free-text box.
-   */
-  const casteOptions = CASTES_BY_RELIGION[religion] ?? [];
+  const { data: casteCatalog } = useQuery({
+    queryKey: ['reference', 'castes'],
+    queryFn: async () => (await api.get('/reference/castes')).data,
+    staleTime: 60 * 60 * 1000,
+  });
+  const casteEntries = (casteCatalog?.castes ?? []).filter((entry: {
+    religions: string[];
+  }) => entry.religions.includes(religion));
+  const casteOptions = casteEntries.map((entry: { casteName: string }) => entry.casteName);
+  const caste = String(draft.caste ?? '');
+  const selectedCaste = casteEntries.find((entry: { casteName: string }) => entry.casteName === caste);
+  const subCasteOptions = (selectedCaste?.subCastes ?? []).map(
+    (entry: { subCasteName: string }) => entry.subCasteName,
+  );
+  const OTHER_NOT_LISTED = 'Other / Not Listed';
 
   return (
     <form
@@ -717,28 +724,34 @@ function ReligionForm({
         <ChoiceField
           label="Religion"
           value={religion}
-          onChange={put('religion')}
+          onChange={(value) => {
+            put('religion')(value);
+            put('caste')('');
+            put('subCaste')('');
+          }}
           options={RELIGIONS}
           required
         />
         <ChoiceField
           label="Caste"
-          value={String(draft.caste ?? '')}
-          onChange={put('caste')}
+          value={caste}
+          onChange={(value) => {
+            put('caste')(value);
+            put('subCaste')('');
+          }}
           options={casteOptions}
-          hint={religion ? undefined : 'Pick a religion first, or type the caste.'}
+          hint={religion ? 'Options are commonly reported labels and may vary by region.' : 'Pick a religion first.'}
           required
         />
-        {/*
-          Sub-caste and gothram have no finite list — there are thousands, and
-          they vary by district. The control is a dropdown of nothing plus the
-          free-text escape, which is the honest shape for them.
-        */}
         <ChoiceField
+          key={caste}
           label="Sub-caste"
           value={String(draft.subCaste ?? '')}
           onChange={put('subCaste')}
-          options={[]}
+          options={subCasteOptions}
+          otherOption={OTHER_NOT_LISTED}
+          disabled={!caste}
+          hint={caste ? 'Options are commonly reported labels and may vary by region.' : 'Select a caste first.'}
           required
         />
         <ChoiceField

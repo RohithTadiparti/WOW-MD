@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { ProfileDetails } from './entities/profile-details.entity';
+import { isKnownSubCaste, OTHER_NOT_LISTED } from './caste-catalog';
 import { ProfileSibling } from './entities/profile-sibling.entity';
 import { ProfileAsset } from './entities/profile-asset.entity';
 import { Profile } from '../users/entities/profile.entity';
@@ -192,6 +193,9 @@ export class ProfileDetailsService {
 
   async saveReligion(actor: AuthUser, profileId: string, dto: ReligionDetailsDto) {
     const row = await this.editable(actor, profileId);
+    if (dto.subCaste !== OTHER_NOT_LISTED && !isKnownSubCaste(dto.caste, dto.subCaste)) {
+      throw new BadRequestException('Sub-caste is not valid for the selected caste.');
+    }
     Object.assign(row, {
       religion: dto.religion,
       caste: dto.caste,
