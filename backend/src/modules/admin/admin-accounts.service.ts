@@ -14,7 +14,13 @@ import { SupportCase } from '../verification/entities/support-case.entity';
 import { VerificationRequest } from '../verification/entities/verification-request.entity';
 import { AgentCharge } from '../agents/entities/agent-charge.entity';
 import { DirectoryQueryDto } from './dto/console.dto';
-import { InterestStatus, MatchFixedState, PaymentStatus, UserRole } from '../../common/enums';
+import {
+  InterestStatus,
+  MatchFixedState,
+  PaymentStatus,
+  UserRole,
+  VerificationStatus,
+} from '../../common/enums';
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
 import { AdminBookingsService } from './admin-bookings.service';
 
@@ -69,6 +75,7 @@ export class AdminAccountsService {
     if (q.active !== undefined) {
       qb.andWhere('u.isActive = :active', { active: q.active === true });
     }
+    if (q.agentId) qb.andWhere('u.managedByAgentId = :agentId', { agentId: q.agentId });
     if (q.q) {
       qb.andWhere('LOWER(u.email) LIKE :needle', { needle: `%${q.q.toLowerCase()}%` });
     }
@@ -149,6 +156,43 @@ export class AdminAccountsService {
           }),
         )
       : [];
+
+    // Aggregates use the complete relationships; the arrays above remain
+    // bounded recent activity for a fast detail page.
+    const providerMetrics = providerIds.length
+      ? await Promise.all([
+          this.bookings.count({ where: { providerId: In(providerIds) } }),
+          ...[PaymentStatus.HELD_IN_ESCROW, PaymentStatus.RELEASED].map(async (status) =>
+            this.payments
+              .createQueryBuilder('p')
+              .innerJoin('bookings', 'b', 'b.id = p.bookingId')
+              .where('b.providerId IN (:...providerIds)', { providerIds })
+              .andWhere('p.status = :status', { status })
+              .select('COALESCE(SUM(p.amount), 0)', 'total')
+              .getRawOne<{ total: string }>(),
+          ),
+        ]).then(([bookings, escrow, released]) => ({
+          bookings,
+          inEscrow: escrow?.total ?? '0',
+          released: released?.total ?? '0',
+        }))
+      : { bookings: 0, inEscrow: '0', released: '0' };
+
+    const agentMetrics = user.role === UserRole.AGENT
+      ? await Promise.all([
+          this.users.count({ where: { managedByAgentId: userId } }),
+          this.bookings.count({ where: { bookedByUserId: userId } }),
+        ]).then(([clients, bookings]) => ({ clients, bookings }))
+      : null;
+
+    const officerMetrics = user.role === UserRole.IN_PERSON
+      ? await Promise.all(
+          Object.values(VerificationStatus).map(async (status) => [
+            status,
+            await this.verifications.count({ where: { assignedToUserId: userId, status } }),
+          ] as const),
+        ).then((rows) => Object.fromEntries(rows))
+      : null;
 
     /*
      * The parts that only make sense for some accounts.
@@ -232,6 +276,11 @@ export class AdminAccountsService {
       bookings: await this.adminBookings.attachParties(placed),
       /** Bookings made *with* this account (vendor/planner), newest first. */
       providerBookings,
+      metrics: {
+        provider: providerMetrics,
+        agent: agentMetrics,
+        officer: officerMetrics,
+      },
       /**
        * A planner's own agency record(s) — the vendor equivalent is `businesses`.
        * The full agency detail (packages, coverage, contact) rides along so the

@@ -130,6 +130,11 @@ interface AccountDetail {
       createdAt: string;
     }[];
   } | null;
+  metrics: {
+    provider: { bookings: number; inEscrow: string; released: string };
+    agent: { clients: number; bookings: number } | null;
+    officer: Record<string, number> | null;
+  };
 }
 
 const money = (v: string) => `₹${Number(v ?? 0).toLocaleString('en-IN')}`;
@@ -188,6 +193,23 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
 
   const { user } = data;
   const name = data.profiles[0]?.displayName || user.email;
+  const providerId = data.businesses[0]?.id ?? data.plannerBusinesses[0]?.id;
+  const metricCards = kind === 'agent'
+    ? [
+        { label: 'Total clients', value: data.metrics.agent?.clients ?? 0, to: `/admin/users?role=bride&agentId=${id}` },
+        { label: 'Bookings placed', value: data.metrics.agent?.bookings ?? 0, to: `/admin/bookings?userId=${id}` },
+      ]
+    : kind === 'officer'
+      ? [
+          { label: 'Assigned cases', value: Object.values(data.metrics.officer ?? {}).reduce((n, v) => n + v, 0), to: undefined },
+          { label: 'In progress', value: data.metrics.officer?.in_progress ?? 0, to: undefined },
+          { label: 'Submitted', value: data.metrics.officer?.submitted ?? 0, to: undefined },
+        ]
+      : [
+          { label: 'Total bookings', value: data.metrics.provider.bookings, to: providerId ? `/admin/bookings?providerId=${providerId}` : undefined },
+          { label: 'Amount in escrow', value: money(data.metrics.provider.inEscrow), to: undefined },
+          { label: 'Amount released', value: money(data.metrics.provider.released), to: undefined },
+        ];
 
   return (
     <div className="space-y-5">
@@ -283,6 +305,23 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
             <Row label="Past the deadline">{String(data.officer.overdue)}</Row>
           </Section>
         )}
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {metricCards.map((card) => (
+          card.to ? (
+            <Link key={card.label} to={card.to} className="card transition-colors hover:border-brand hover:bg-brand-soft/30">
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{card.label}</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums text-gray-900">{card.value}</p>
+              <p className="mt-1 text-xs text-brand-strong">View filtered records</p>
+            </Link>
+          ) : (
+            <div key={card.label} className="card">
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{card.label}</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums text-gray-900">{card.value}</p>
+            </div>
+          )
+        ))}
       </div>
 
       {/* An agency's book: the accounts they brought on, each clickable (EZ1-I171). */}

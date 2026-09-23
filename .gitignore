@@ -21,3 +21,4 @@ coverage/
 
 # Local compose secrets
 docker/.env
+.claude

@@ -115,6 +115,7 @@ export function AdminUsers() {
         roles={[role]}
         hideRoleFilter
         detailBase="/admin/clients"
+        agentId={params.get('agentId') ?? undefined}
       />
     </div>
   );

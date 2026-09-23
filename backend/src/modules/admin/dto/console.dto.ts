@@ -71,6 +71,11 @@ export class DirectoryQueryDto extends PaginationDto {
   @IsOptional()
   @StrictBoolean()
   active?: boolean | string;
+
+  @ApiPropertyOptional({ format: 'uuid', description: 'Only clients managed by this agent.' })
+  @IsOptional()
+  @IsUUID('4')
+  agentId?: string;
 }
 
 export class AdminBookingQueryDto extends PaginationDto {
