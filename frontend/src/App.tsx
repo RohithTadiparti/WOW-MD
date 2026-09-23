@@ -120,6 +120,7 @@ import Availability from './pages/Availability';
 import Accounts from './pages/Accounts';
 import AccountsTransaction from './pages/AccountsTransaction';
 import Escrow from './pages/Escrow';
+import AgentEscrow from './pages/AgentEscrow';
 import MyReviews from './pages/MyReviews';
 import PlannerReviews from './pages/PlannerReviews';
 import Notifications from './pages/Notifications';
@@ -264,6 +265,13 @@ const NAV: NavEntry[] = [
     hideFor: ['family'],
     group: 'clients',
     icon: ShareNetwork,
+  },
+  {
+    to: '/agent-escrow',
+    label: 'Escrow',
+    requires: [Permission.AGENCY_MANAGE],
+    group: 'business',
+    icon: Vault,
   },
   { to: '/pool', label: 'Network Pool', requires: [Permission.NETWORK_POOL_BROWSE], group: 'clients', icon: Graph },
   {
@@ -1208,6 +1216,14 @@ export default function App() {
         element={
           <Protected requires={[Permission.BOOKING_READ_INCOMING]}>
             <Accounts />
+          </Protected>
+        }
+      />
+      <Route
+        path="/agent-escrow"
+        element={
+          <Protected requires={[Permission.AGENCY_MANAGE]}>
+            <AgentEscrow />
           </Protected>
         }
       />

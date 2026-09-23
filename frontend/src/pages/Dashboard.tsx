@@ -20,7 +20,18 @@ import GetStarted from '../components/GetStarted';
 import VendorDashboard from '../components/VendorDashboard';
 import IndividualDashboard from '../components/IndividualDashboard';
 import { motion, useReducedMotion } from 'motion/react';
-import { ArrowRight } from '@phosphor-icons/react';
+import {
+  ArrowRight,
+  Bell,
+  CheckCircle,
+  Coins,
+  Lifebuoy,
+  UserCircle,
+  UserPlus,
+  UsersThree,
+  Vault,
+  Warning,
+} from '@phosphor-icons/react';
 
 interface Tile {
   to: string;
@@ -355,16 +366,23 @@ export default function Dashboard() {
   // interests their profiles have taken part in.
   const isAgent = canAny(permissions, [Permission.AGENCY_MANAGE]);
   const { data: agentStats } = useQuery({
-    queryKey: ['agent-stats'],
+    queryKey: ['agent-dashboard'],
     queryFn: async () =>
-      (await api.get('/agents/stats')).data as {
+      (await api.get('/agents/dashboard')).data as {
         totalClients: number;
         matchesFixed: number;
         remainingClients: number;
         totalInterests: number;
+        newInterests: number;
+        pendingClientActions: number;
+        issuesPending: number;
+        escrow: { total: string; pending: string; released: string; refunded: string; currency: string };
       },
     retry: false,
     enabled: isAgent,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    refetchInterval: 30_000,
   });
 
   // A verification officer opens the app to see the work waiting on them
@@ -580,21 +598,35 @@ export default function Dashboard() {
         counters above because these are about the clients they run.
       */}
       {isAgent && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Counter label="Total clients" value={agentStats?.totalClients ?? 0} to="/clients" />
-          <Counter
+        <section className="space-y-4">
+          <h2 className="section-title">Action required</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <AgentMetric label="Unread notifications" value={unread?.unread ?? 0} to="/notifications" icon={Bell} gradient="from-brand-100 to-brand-50" />
+            <AgentMetric label="New interests" value={agentStats?.newInterests ?? 0} to="/interests?status=pending" icon={UserPlus} gradient="from-brand-soft to-surface" />
+            <AgentMetric label="Pending client actions" value={agentStats?.pendingClientActions ?? 0} to="/clients?status=incomplete" icon={UserCircle} gradient="from-caution-bg to-surface" />
+            <AgentMetric label="Issues pending" value={agentStats?.issuesPending ?? 0} to="/support?status=open" icon={Warning} gradient="from-rose-50 to-surface" />
+          </div>
+          <h2 className="section-title pt-2">Clients & matchmaking</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <AgentMetric label="Total clients" value={agentStats?.totalClients ?? 0} to="/clients" icon={UsersThree} gradient="from-brand-100 to-surface" />
+            <AgentMetric
             label="Matches fixed"
             value={agentStats?.matchesFixed ?? 0}
             to="/matches"
-            tone={(agentStats?.matchesFixed ?? 0) > 0 ? 'text-emerald-700' : undefined}
-          />
-          <Counter
-            label="Remaining clients"
-            value={agentStats?.remainingClients ?? 0}
-            to="/clients"
-          />
-          <Counter label="Total interests" value={agentStats?.totalInterests ?? 0} to="/interests" />
-        </div>
+            icon={CheckCircle}
+            gradient="from-positive-bg to-brand-50"
+            />
+            <AgentMetric label="Remaining clients" value={agentStats?.remainingClients ?? 0} to="/clients?status=remaining" icon={UsersThree} gradient="from-caution-bg to-surface" />
+            <AgentMetric label="Total interests" value={agentStats?.totalInterests ?? 0} to="/interests" icon={UserPlus} gradient="from-brand-soft to-brand-50" />
+          </div>
+          <h2 className="section-title pt-2">Escrow & financial</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <AgentMetric label="Total escrow" value={money(agentStats?.escrow.total, agentStats?.escrow.currency)} to="/agent-escrow" icon={Vault} gradient="from-caution-bg to-brand-50" />
+            <AgentMetric label="Escrow pending" value={money(agentStats?.escrow.pending, agentStats?.escrow.currency)} to="/agent-escrow?status=pending" icon={Coins} gradient="from-positive-bg to-surface" />
+            <AgentMetric label="Escrow released" value={money(agentStats?.escrow.released, agentStats?.escrow.currency)} to="/agent-escrow?status=released" icon={CheckCircle} gradient="from-positive-bg to-brand-50" />
+            <AgentMetric label="Escrow refunded" value={money(agentStats?.escrow.refunded, agentStats?.escrow.currency)} to="/agent-escrow?status=refunded" icon={Lifebuoy} gradient="from-rose-50 to-surface" />
+          </div>
+        </section>
       )}
 
       {/*
@@ -887,6 +919,34 @@ function Counter({
       >
         {value}
       </p>
+    </Link>
+  );
+}
+
+function money(value?: string, currency = 'INR') {
+  return `${currency === 'INR' ? '₹' : ''}${Number(value ?? 0).toLocaleString('en-IN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function AgentMetric({ label, value, to, icon: Icon, gradient }: {
+  label: string;
+  value: ReactNode;
+  to: string;
+  icon: any;
+  gradient: string;
+}) {
+  return (
+    <Link
+      to={to}
+      className={`group rounded-lg border border-gray-200 bg-gradient-to-br ${gradient} p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-card`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <p className="truncate text-[0.8125rem] font-medium text-gray-600">{label}</p>
+        <Icon size={20} weight="duotone" className="shrink-0 text-brand-dark" aria-hidden />
+      </div>
+      <p className="mt-2 font-mono text-[1.75rem] font-medium leading-none text-gray-900">{value}</p>
     </Link>
   );
 }

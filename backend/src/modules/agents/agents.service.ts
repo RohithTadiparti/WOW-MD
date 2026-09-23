@@ -4,7 +4,12 @@ import { In, IsNull, Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
 import { Profile } from '../users/entities/profile.entity';
 import { Interest } from '../matchmaking/entities/interest.entity';
-import { MatchFixedState, ProfileLifecycle } from '../../common/enums';
+import { Booking } from '../bookings/entities/booking.entity';
+import { Payment } from '../bookings/entities/payment.entity';
+import { Vendor } from '../vendors/entities/vendor.entity';
+import { PlannerProfile } from '../wedding-planners/entities/planner-profile.entity';
+import { SupportCase } from '../verification/entities/support-case.entity';
+import { MatchFixedState, PaymentStatus, ProfileLifecycle, ProviderType } from '../../common/enums';
 import { ClientSearchDto } from './dto/agent.dto';
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
 
@@ -14,6 +19,14 @@ export interface AgentStats {
   matchesFixed: number;
   remainingClients: number;
   totalInterests: number;
+}
+
+export interface AgentEscrowSummary {
+  total: string;
+  pending: string;
+  released: string;
+  refunded: string;
+  currency: string;
 }
 
 /**
@@ -54,6 +67,11 @@ export class AgentsService {
     @InjectRepository(User) private readonly users: Repository<User>,
     @InjectRepository(Profile) private readonly profiles: Repository<Profile>,
     @InjectRepository(Interest) private readonly interests: Repository<Interest>,
+    @InjectRepository(Booking) private readonly bookings: Repository<Booking>,
+    @InjectRepository(Payment) private readonly payments: Repository<Payment>,
+    @InjectRepository(Vendor) private readonly vendors: Repository<Vendor>,
+    @InjectRepository(PlannerProfile) private readonly planners: Repository<PlannerProfile>,
+    @InjectRepository(SupportCase) private readonly cases: Repository<SupportCase>,
   ) {}
 
   /**
@@ -93,6 +111,89 @@ export class AgentsService {
       matchesFixed,
       remainingClients: totalClients - matchesFixed,
       totalInterests: interests.length,
+    };
+  }
+
+  /** Live agent dashboard figures and the ownership-scoped escrow ledger. */
+  async dashboard(agentId: string) {
+    const clients = await this.profiles.find({
+      where: { managedByUserId: agentId, archivedAt: IsNull() },
+      select: ['id', 'userId', 'profileCompleted'],
+    });
+    const profileIds = clients.map((client) => client.id);
+    const userIds = clients.map((client) => client.userId).filter((id): id is string => Boolean(id));
+    const [stats, interests, assignedCases, clientCases, payments] = await Promise.all([
+      this.stats(agentId),
+      profileIds.length
+        ? this.interests.find({ where: [{ toProfileId: In(profileIds) }, { fromProfileId: In(profileIds) }] })
+        : Promise.resolve([]),
+      this.cases.find({ where: { assignedToUserId: agentId } }),
+      userIds.length
+        ? this.cases.find({ where: { raisedByUserId: In(userIds) } })
+        : Promise.resolve([]),
+      userIds.length
+        ? this.payments.find({ where: { userId: In(userIds) }, order: { createdAt: 'DESC' } })
+        : Promise.resolve([]),
+    ]);
+    const openStatuses = new Set(['open', 'triaged', 'allocated', 'in_progress', 'waiting_for_information', 'resolution_submitted', 'reassigned']);
+    const issues = [...new Map([...assignedCases, ...clientCases].map((issue) => [issue.id, issue])).values()];
+    const escrow = this.escrowSummary(payments);
+    return {
+      ...stats,
+      newInterests: interests.filter((interest) => interest.status === 'pending' && profileIds.includes(interest.toProfileId)).length,
+      pendingClientActions: clients.filter((client) => !client.profileCompleted).length,
+      issuesPending: issues.filter((issue) => openStatuses.has(String(issue.status))).length,
+      escrow,
+    };
+  }
+
+  async escrow(agentId: string, query: { status?: string; search?: string }) {
+    const clients = await this.profiles.find({
+      where: { managedByUserId: agentId, archivedAt: IsNull() },
+      select: ['id', 'userId', 'displayName', 'profileCode'],
+    });
+    const clientByUserId = new Map(clients.filter((client) => client.userId).map((client) => [client.userId as string, client]));
+    if (!clientByUserId.size) return { summary: this.escrowSummary([]), data: [] };
+    const payments = await this.payments.find({ where: { userId: In([...clientByUserId.keys()]) }, order: { createdAt: 'DESC' } });
+    const bookings = await this.bookings.find({ where: { id: In(payments.map((payment) => payment.bookingId)) } });
+    const bookingById = new Map(bookings.map((booking) => [booking.id, booking]));
+    const vendorIds = bookings.filter((booking) => booking.providerType === ProviderType.VENDOR).map((booking) => booking.providerId);
+    const plannerIds = bookings.filter((booking) => booking.providerType === ProviderType.PLANNER).map((booking) => booking.providerId);
+    const [vendors, planners] = await Promise.all([
+      vendorIds.length ? this.vendors.find({ where: { id: In(vendorIds) } }) : Promise.resolve([]),
+      plannerIds.length ? this.planners.find({ where: { id: In(plannerIds) } }) : Promise.resolve([]),
+    ]);
+    const providerNames = new Map([
+      ...vendors.map((vendor) => [vendor.id, vendor.name] as const),
+      ...planners.map((planner) => [planner.id, planner.agencyName] as const),
+    ]);
+    const term = query.search?.trim().toLowerCase();
+    const requestedStatuses = query.status === 'pending'
+      ? [PaymentStatus.HELD_IN_ESCROW, PaymentStatus.DISPUTED]
+      : query.status && query.status !== 'all' ? [query.status] : null;
+    const data = payments.map((payment) => {
+      const booking = bookingById.get(payment.bookingId);
+      const client = clientByUserId.get(payment.userId);
+      return {
+        id: payment.id, clientName: client?.displayName ?? 'Unnamed client', clientId: client?.profileCode ?? client?.id,
+        bookingId: payment.bookingId, provider: booking ? providerNames.get(booking.providerId) ?? booking.providerType : null,
+        service: booking?.requirements ?? 'Booking service', bookingAmount: booking?.amount ?? null, escrowAmount: payment.amount,
+        status: payment.status, paymentDate: payment.createdAt, releaseDate: payment.status === PaymentStatus.RELEASED ? payment.updatedAt : null,
+        refundDate: payment.status === PaymentStatus.REFUNDED ? payment.updatedAt : null, referenceId: payment.providerRef ?? payment.id,
+        remarks: payment.payoutNote, createdAt: payment.createdAt, updatedAt: payment.updatedAt,
+      };
+    }).filter((row) => (!requestedStatuses || requestedStatuses.includes(row.status)) && (!term || [row.clientName, row.clientId, row.bookingId, row.provider, row.referenceId].some((value) => String(value ?? '').toLowerCase().includes(term))));
+    return { summary: this.escrowSummary(payments), data };
+  }
+
+  private escrowSummary(payments: Payment[]): AgentEscrowSummary {
+    const amount = (statuses: PaymentStatus[]) => payments.filter((payment) => statuses.includes(payment.status)).reduce((sum, payment) => sum + Number(payment.amount || 0), 0).toFixed(2);
+    return {
+      total: amount([PaymentStatus.HELD_IN_ESCROW, PaymentStatus.DISPUTED, PaymentStatus.RELEASED, PaymentStatus.PENDING_PAYOUT, PaymentStatus.REFUNDED, PaymentStatus.PARTIALLY_SETTLED]),
+      pending: amount([PaymentStatus.HELD_IN_ESCROW, PaymentStatus.DISPUTED]),
+      released: amount([PaymentStatus.RELEASED, PaymentStatus.PENDING_PAYOUT]),
+      refunded: amount([PaymentStatus.REFUNDED]),
+      currency: payments[0]?.currency ?? 'INR',
     };
   }
 
