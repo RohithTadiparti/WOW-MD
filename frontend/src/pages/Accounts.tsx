@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api, apiMessage } from '../lib/api';
@@ -8,6 +8,12 @@ import { Loading } from '../components/ui/Feedback';
 import PayoutAccount from '../components/PayoutAccount';
 import { useAuth } from '../store/auth';
 import { useBusinesses } from '../store/business';
+
+const maskAccountId = (value: string | null | undefined) => {
+  if (!value) return 'Not configured';
+  if (value.length <= 8) return value;
+  return `${value.slice(0, 4)}••••${value.slice(-4)}`;
+};
 
 interface LedgerRow {
   paymentId: string;
@@ -67,6 +73,8 @@ export default function Accounts() {
   const isPlanner = can(permissions, Permission.PLANNER_LISTING_MANAGE);
   const { activeId } = useBusinesses();
 
+  const [payoutVerified, setPayoutVerified] = useState(false);
+
   const { data, isLoading } = useQuery<Earnings>({
     queryKey: ['earnings'],
     queryFn: async () => (await api.get('/bookings/earnings')).data,
@@ -91,6 +99,12 @@ export default function Accounts() {
       minimumFractionDigits: 2,
     })}`;
 
+  const availableBalance = Number(data?.pendingPayout ?? '0');
+  const escrowRows = useMemo(
+    () => (data?.ledger ?? []).filter((row) => ['held_in_escrow', 'disputed'].includes(row.status)),
+    [data?.ledger],
+  );
+
   return (
     <div className="space-y-6">
       <div>
@@ -104,12 +118,14 @@ export default function Accounts() {
         <PayoutAccount
           endpoint={`/vendors/${activeId}/payout-account`}
           current={payout?.payoutAccountId ?? null}
+          onStatusChange={setPayoutVerified}
         />
       )}
       {isPlanner && (
         <PayoutAccount
           endpoint="/wedding-planners/me/payout-account"
           current={payout?.payoutAccountId ?? null}
+          onStatusChange={setPayoutVerified}
         />
       )}
 
@@ -117,42 +133,90 @@ export default function Accounts() {
 
       {data && (
         <>
-          <div className="grid gap-3 sm:grid-cols-4">
-            <Figure
-              label="Paid out to you"
-              value={money(data.released)}
-              tone="text-emerald-700"
-              note="Already released from escrow"
-            />
-            <Figure
-              label="Held in escrow"
-              value={money(data.heldInEscrow)}
-              tone="text-amber-700"
-              note="Yours once the work is signed off"
-            />
-            {/*
-              Only shown when there is some. "Owed" is a different fact from
-              "held" — the work is done and the money is no longer the buyer's —
-              and a provider seeing a zero here every day would stop reading it.
-            */}
-            {Number(data.pendingPayout) > 0 && (
-              <Figure
-                label="Owed to you"
-                value={money(data.pendingPayout)}
-                tone="text-amber-700"
-                note="Earned. Waiting on a payout account to send it to."
+          <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
+            <Figure label="Total earned" value={money(data.gross)} tone="text-brand-700" note="Gross bookings revenue" />
+            <Figure label="Escrow" value={money(data.heldInEscrow)} tone="text-amber-700" note="Currently on hold" />
+            <Figure label="Available for payout" value={money(data.pendingPayout)} tone="text-sky-700" note="Eligible for transfer" />
+            <Figure label="Paid" value={money(data.released)} tone="text-emerald-700" note="Already released" />
+            <Figure label="Commission" value={money(data.commission)} tone="text-gray-700" note="Deducted from payouts" />
+            <Figure label="Refunded" value={money(data.refunded)} tone="text-gray-700" note="Returned to the customer" />
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="card space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="section-title">Request payout</h2>
+                <span className="rounded-full bg-sky-50 px-2 py-1 text-xs font-medium text-sky-700">
+                  Available: {money(data.pendingPayout)}
+                </span>
+              </div>
+
+              <PayoutRequestForm
+                currentBalance={availableBalance}
+                payoutAccount={payout?.payoutAccountId ?? null}
+                currency={data.currency}
+                verified={payoutVerified}
               />
+            </div>
+
+            <div className="card space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="section-title">Payout account</h2>
+                <span
+                  className={`rounded-full px-2 py-1 text-xs ${payout?.payoutAccountId ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'}`}
+                >
+                  {payout?.payoutAccountId ? 'Verified' : 'Not configured'}
+                </span>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                <div className="font-medium text-slate-900">Razorpay account</div>
+                <div className="mt-1 font-mono">{maskAccountId(payout?.payoutAccountId ?? null)}</div>
+                <div className="mt-2 text-xs text-slate-500">
+                  {payout?.payoutAccountId
+                    ? 'Transfers can be sent once the account is verified by the payout provider.'
+                    : 'Add a linked payout account to allow transfers from escrow.'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="card overflow-x-auto">
+            <div className="mb-3 flex items-baseline justify-between gap-3">
+              <h2 className="font-semibold text-gray-900">Escrow</h2>
+              <span className="text-xs text-gray-400">Only eligible milestones can move to available for payout</span>
+            </div>
+            {escrowRows.length === 0 ? (
+              <div className="py-4 text-center text-sm text-gray-500">No escrow is currently pending release.</div>
+            ) : (
+              <table className="w-full min-w-[720px] text-sm">
+                <thead>
+                  <tr className="border-b text-left text-xs uppercase tracking-wide text-gray-500">
+                    <th className="pb-2">Booking</th>
+                    <th className="pb-2">Customer</th>
+                    <th className="pb-2">Milestone</th>
+                    <th className="pb-2 text-right">Amount</th>
+                    <th className="pb-2">Status</th>
+                    <th className="pb-2">Expected release</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  {escrowRows.map((row) => (
+                    <tr key={row.paymentId}>
+                      <td className="py-2 font-mono text-xs text-gray-700">{row.bookingId.slice(0, 8)}</td>
+                      <td className="py-2 text-gray-700">{row.clientName ?? 'Customer'}</td>
+                      <td className="py-2">{MILESTONE_LABEL[row.milestone] ?? row.milestone}</td>
+                      <td className="py-2 text-right font-medium">{money(row.payoutAmount)}</td>
+                      <td className="py-2">
+                        <span className={`rounded-full px-2 py-1 text-xs ${row.status === 'disputed' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`}>
+                          {paymentStatusLabel(row.status, 'provider')}
+                        </span>
+                      </td>
+                      <td className="py-2 text-gray-600">{row.confirmedAt ? new Date(row.confirmedAt).toLocaleDateString() : 'Awaiting confirmation'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             )}
-            <Figure
-              label="Platform commission"
-              value={money(data.commission)}
-              note="Deducted from released payments"
-            />
-            <Figure
-              label="Refunded"
-              value={money(data.refunded)}
-              note="Returned to the buyer"
-            />
           </div>
 
           <div className="card overflow-x-auto">
@@ -247,6 +311,72 @@ export default function Accounts() {
  * the same sentence. Only if they still want a person does a case exist — and
  * the second press returns the one already open rather than raising another.
  */
+function PayoutRequestForm({
+  currentBalance,
+  payoutAccount,
+  currency,
+  verified,
+}: {
+  currentBalance: number;
+  payoutAccount: string | null;
+  currency: string;
+  verified: boolean;
+}) {
+  const [amount, setAmount] = useState('0.00');
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const maxAmount = Math.max(0, currentBalance);
+  const requestAmount = Number(amount || 0);
+  const invalid = !verified || !payoutAccount || requestAmount <= 0 || requestAmount > maxAmount;
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setNotice(null);
+    if (!verified || !payoutAccount) {
+      setError('Please verify your payout account before requesting a payout.');
+      return;
+    }
+    if (requestAmount <= 0) {
+      setError('Enter an amount greater than zero.');
+      return;
+    }
+    if (requestAmount > maxAmount) {
+      setError(`You can request up to ${currency === 'INR' ? '₹' : ''}${maxAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`);
+      return;
+    }
+    setError(null);
+    setNotice(`Request for ${currency === 'INR' ? '₹' : ''}${requestAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} is ready to submit to admin for approval.`);
+  }
+
+  return (
+    <form className="space-y-3" onSubmit={submit}>
+      <label className="block text-sm text-gray-700">
+        <span className="mb-1 block">Amount</span>
+        <input
+          className="input w-full"
+          type="number"
+          min="0"
+          step="0.01"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+        />
+      </label>
+      <div className="flex items-center justify-between text-xs text-gray-500">
+        <span>Max: {currency === 'INR' ? '₹' : ''}{maxAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+        <button type="button" className="text-sky-700 underline" onClick={() => setAmount(maxAmount.toFixed(2))}>
+          Use max
+        </button>
+      </div>
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      {notice && <p className="text-sm text-emerald-700">{notice}</p>}
+      <button type="submit" className="btn w-full disabled:cursor-not-allowed disabled:bg-slate-200" disabled={invalid}>
+        Request payout
+      </button>
+    </form>
+  );
+}
+
 function SettleMyPayment({ bookingId }: { bookingId: string }) {
   const [state, setState] = useState<{ reason: string; owed: string; open: boolean } | null>(null);
   const [busy, setBusy] = useState(false);

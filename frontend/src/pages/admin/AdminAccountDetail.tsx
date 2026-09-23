@@ -132,6 +132,14 @@ interface AccountDetail {
   } | null;
 }
 
+interface VendorActivity {
+  at: string;
+  kind: string;
+  summary: string;
+  resourceType: string;
+  resourceId: string;
+}
+
 const money = (v: string) => `₹${Number(v ?? 0).toLocaleString('en-IN')}`;
 
 export default function AdminAccountDetail({ kind }: { kind: Kind }) {
@@ -146,6 +154,13 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
     queryKey: ['admin-account-detail', id],
     queryFn: async () => (await api.get(`/admin/accounts/${id}`)).data,
     retry: false,
+  });
+
+  const { data: activity = [] } = useQuery<VendorActivity[]>({
+    queryKey: ['admin-vendor-activity', id],
+    queryFn: async () => (await api.get('/admin/activity', { params: { limit: 100 } })).data,
+    enabled: Boolean(data && kind === 'vendor'),
+    refetchInterval: 60000,
   });
 
   // Suspend or reinstate — an admin management action the backend already
@@ -188,6 +203,16 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
 
   const { user } = data;
   const name = data.profiles[0]?.displayName || user.email;
+  const activityIds = new Set([
+    user.id,
+    ...data.businesses.map((business) => business.id),
+    ...data.providerBookings.map((booking) => booking.id),
+    ...data.bookings.map((booking) => booking.id),
+    ...data.payments.history.map((payment) => payment.id),
+    ...data.verifications.map((verification) => verification.id),
+    ...data.casesRaised.map((supportCase) => supportCase.id),
+  ]);
+  const vendorActivity = activity.filter((item) => activityIds.has(item.resourceId));
 
   return (
     <div className="space-y-5">
@@ -563,6 +588,20 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
                 <span className="font-medium tabular-nums text-gray-900">{money(p.amount)}</span>
                 <span className="pill bg-gray-100 text-gray-600">{paymentStatusLabel(p.status, 'admin')}</span>
               </span>
+            </div>
+          )}
+        />
+      )}
+
+      {kind === 'vendor' && (
+        <ListSection
+          title="Recent activity"
+          empty="No recent activity recorded."
+          rows={vendorActivity}
+          render={(item) => (
+            <div key={`${item.resourceType}-${item.resourceId}-${item.at}`} className="flex items-center justify-between gap-3 py-2">
+              <span className="text-sm text-gray-800">{item.summary}</span>
+              <span className="whitespace-nowrap text-xs text-gray-500">{new Date(item.at).toLocaleString()}</span>
             </div>
           )}
         />

@@ -95,6 +95,14 @@ interface BusinessDetail {
     /** The newest offer on a request with no agreed amount yet. */
     quotation?: { amount: string; currency?: string; stage?: string } | null;
   }[];
+  reviews: {
+    id: string;
+    rating: number;
+    comment: string | null;
+    status: string;
+    moderationReason: string | null;
+    createdAt: string;
+  }[];
 }
 
 const dash = (v: unknown) => (v === null || v === undefined || v === '' ? '—' : String(v));
@@ -298,6 +306,27 @@ export default function AdminBusinessDetail() {
           </div>
         </div>
       )}
+
+      <div className="card">
+        <h2 className="section-title mb-2">Reviews</h2>
+        {data.reviews.length === 0 ? (
+          <p className="py-2 text-sm text-gray-400">No reviews recorded.</p>
+        ) : (
+          <div className="divide-y">
+            {data.reviews.map((review) => (
+              <div key={review.id} className="py-2">
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span className="font-medium text-amber-700">{'★'.repeat(review.rating)}{'☆'.repeat(Math.max(0, 5 - review.rating))}</span>
+                  <span className="pill bg-gray-100 text-gray-600">{review.status}</span>
+                </div>
+                {review.comment && <p className="mt-1 text-sm text-gray-700">{review.comment}</p>}
+                <p className="mt-1 text-xs text-gray-400">{formatDate(review.createdAt)}</p>
+                {review.moderationReason && <p className="mt-1 text-xs text-gray-500">{review.moderationReason}</p>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {data.bookings.length > 0 && (
         <div className="card">
