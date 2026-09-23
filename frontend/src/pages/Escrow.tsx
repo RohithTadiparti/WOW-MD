@@ -61,7 +61,7 @@ const STATUS_STYLE: Record<string, string> = {
 function StatusBadge({ status }: { status: string }) {
   return (
     <span
-      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+      className={`rounded-sm px-2 py-0.5 text-xs font-medium ${
         STATUS_STYLE[status] ?? 'bg-gray-100 text-gray-600'
       }`}
     >

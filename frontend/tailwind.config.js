@@ -114,11 +114,16 @@ export default {
         },
       },
 
+      // Every step resolves to the template's square corner; `full` stays round
+      // for avatars and dots, which are shapes rather than panels.
       borderRadius: {
+        DEFAULT: 'var(--radius-sm)',
         sm: 'var(--radius-sm)',
         md: 'var(--radius-md)',
         lg: 'var(--radius-lg)',
-        xl: 'calc(var(--radius-lg) + 0.25rem)',
+        xl: 'var(--radius-lg)',
+        '2xl': 'var(--radius-lg)',
+        '3xl': 'var(--radius-lg)',
       },
 
       /*

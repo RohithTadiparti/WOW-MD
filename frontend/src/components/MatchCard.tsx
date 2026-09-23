@@ -269,7 +269,7 @@ export default function MatchCard({
                 mono face and its own weight; "match" is a unit, not data, and
                 shrinks accordingly.
               */
-              <span className="flex shrink-0 items-baseline gap-1 rounded-full bg-brand-soft px-2.5 py-1 text-brand-strong">
+              <span className="flex shrink-0 items-baseline gap-1 rounded-sm bg-brand-soft px-2.5 py-1 text-brand-strong">
                 <span className="font-mono text-sm font-semibold leading-none">{suggestion.score}%</span>
                 <span className="text-[0.6875rem] opacity-70">match</span>
               </span>
@@ -284,23 +284,23 @@ export default function MatchCard({
               is the whole reason this label exists.
             */}
             {suggestion.sharedByFamily && (
-              <span className="rounded-full bg-brand-light px-2 py-0.5 text-xs font-medium text-brand-dark">
+              <span className="rounded-sm bg-brand-light px-2 py-0.5 text-xs font-medium text-brand-dark">
                 Shared by family member
               </span>
             )}
             {p.verified && (
-              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-800">
+              <span className="rounded-sm bg-emerald-50 px-2 py-0.5 text-xs text-emerald-800">
                 Verified
               </span>
             )}
             {active && (
-              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+              <span className="rounded-sm bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
                 {active}
               </span>
             )}
             {interactionLabel && (
               <span
-                className={`rounded-full px-2 py-0.5 text-xs ${INTERACTION_TONE[interaction]}`}
+                className={`rounded-sm px-2 py-0.5 text-xs ${INTERACTION_TONE[interaction]}`}
               >
                 {interactionLabel}
               </span>

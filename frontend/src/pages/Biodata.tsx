@@ -243,7 +243,7 @@ export default function Biodata() {
               <button
                 key={s.section}
                 onClick={() => setOpen(s.section)}
-                className={`rounded-full px-3 py-1 text-xs font-medium ${
+                className={`rounded-sm px-3 py-1 text-xs font-medium ${
                   s.complete ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'
                 }`}
               >
@@ -643,7 +643,7 @@ function PersonalForm({
             </span>
             {contact?.primaryMobile && (
               <span
-                className={`rounded-full px-2 py-0.5 text-xs ${
+                className={`rounded-sm px-2 py-0.5 text-xs ${
                   contact.primaryMobileVerified
                     ? 'bg-emerald-50 text-emerald-800'
                     : 'bg-amber-50 text-amber-800'
@@ -2182,7 +2182,7 @@ function AadhaarPanel({ profileId }: { profileId: string }) {
     return (
       <div className="space-y-1">
         <p className="flex flex-wrap items-center gap-2 text-sm text-gray-800">
-          <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-800">
+          <span className="rounded-sm bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-800">
             Verified
           </span>
           {label} ending <strong>{data.last4}</strong>
@@ -2232,7 +2232,7 @@ function AadhaarPanel({ profileId }: { profileId: string }) {
       */}
       <p className="flex flex-wrap items-center gap-2 text-sm">
         <span
-          className={`rounded-full px-2 py-1 text-xs font-medium ${
+          className={`rounded-sm px-2 py-1 text-xs font-medium ${
             data?.submittedAt ? 'bg-amber-50 text-amber-800' : 'bg-gray-100 text-gray-600'
           }`}
         >

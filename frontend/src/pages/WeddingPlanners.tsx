@@ -291,7 +291,7 @@ export default function WeddingPlanners() {
             <SlidersHorizontal size={16} aria-hidden />
             Filters
             {drawerActive > 0 && (
-              <span className="ml-1 rounded-full bg-brand px-1.5 text-xs font-semibold text-brand-fg">
+              <span className="ml-1 rounded-sm bg-brand px-1.5 text-xs font-semibold text-brand-fg">
                 {drawerActive}
               </span>
             )}
@@ -555,7 +555,7 @@ function PlannerCard({
               group-hover:scale-[1.03]"
           />
         ) : (
-          <span className="grid h-full w-full place-items-center bg-gradient-to-br from-brand/[0.07] to-transparent text-3xl font-semibold text-gray-300">
+          <span className="grid h-full w-full place-items-center bg-surface-sunken text-3xl font-semibold text-gray-300">
             {p.agencyName.slice(0, 1).toUpperCase()}
           </span>
         )}
