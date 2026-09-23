@@ -2,13 +2,10 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useAuth } from '../store/auth';
-import { navDenied } from '../lib/nav-access';
 import { useBusinesses } from '../store/business';
 import {
   Permission,
-  PermissionValue,
   ROLE_LABEL,
-  UserRole,
   VERIFICATION_LABEL,
   canAny,
 } from '../lib/permissions';
@@ -19,23 +16,13 @@ import ClaimRequests from '../components/ClaimRequests';
 import GetStarted from '../components/GetStarted';
 import VendorDashboard from '../components/VendorDashboard';
 import IndividualDashboard from '../components/IndividualDashboard';
-import { motion, useReducedMotion } from 'motion/react';
 import { ArrowRight } from '@phosphor-icons/react';
-
-interface Tile {
-  to: string;
-  title: string;
-  desc: string;
-  requires: PermissionValue[];
-  /** Mirrors the navbar: a role that holds the capability but not the entry. */
-  hideFor?: UserRole[];
-}
 
 /**
  * One tile catalogue for every persona; each tile declares what it needs, and
  * the dashboard renders only the ones the signed-in account can actually use.
  */
-const TILES: Tile[] = [
+const TILES = [
   {
     to: '/profile',
     title: 'Your Profile',
@@ -186,6 +173,8 @@ const TILES: Tile[] = [
     requires: [Permission.ADMIN_ANALYTICS_READ],
   },
 ];
+
+void TILES;
 
 export default function Dashboard() {
   const user = useAuth((s) => s.user);
@@ -398,17 +387,7 @@ export default function Dashboard() {
         (b.slaDeadline ? new Date(b.slaDeadline).getTime() : Infinity),
     );
 
-  const reduce = useReducedMotion();
   const firstName = (profile?.displayName ?? '').trim().split(' ')[0];
-
-  // The same question the sidebar asks, from the same place. This list used to
-  // carry its own hideFor, which is how a planner ended up with no Chat in the
-  // rail and a Messages tile on their dashboard pointing at it.
-  const tiles = TILES.filter(
-    (t) =>
-      !(user && navDenied(t, user.role)) &&
-      (t.requires.length === 0 || canAny(permissions, t.requires)),
-  );
 
   // The vendor's home is a dedicated, backend-driven dashboard (EZ1-I147). All
   // the hooks above still run so the hook order is stable across a role change;
@@ -643,7 +622,7 @@ export default function Dashboard() {
       */}
       {isPlanner && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Counter label="Weddings" value={plannerOverview?.weddings ?? 0} to="/my-clients" />
+          <Counter label="Weddings" value={plannerOverview?.weddings ?? 0} to="/my-weddings" />
           {/*
             To the bookings, not to the client list.
 
@@ -697,21 +676,21 @@ export default function Dashboard() {
               to="/bookings"
               tone={plannerRequests > 0 ? 'text-amber-700' : undefined}
             />
-            <Counter label="Active weddings" value={activeClients} to="/my-clients" />
-            <Counter label="Upcoming weddings" value={upcomingClients} to="/my-clients" />
+            <Counter label="Active weddings" value={activeClients} to="/my-weddings" />
+            <Counter label="Upcoming weddings" value={upcomingClients} to="/my-weddings" />
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
             <Link className="btn" to="/bookings">
               Review requests
             </Link>
-            <Link className="btn-outline" to="/my-clients">
-              Manage clients &amp; tasks
+            <Link className="btn-outline" to="/my-weddings">
+              Manage weddings &amp; tasks
             </Link>
             <Link className="btn-outline" to="/availability">
               Set availability
             </Link>
-            <Link className="btn-outline" to="/events">
-              View events
+            <Link className="btn-outline" to="/my-clients">
+              View clients
             </Link>
           </div>
 
@@ -719,7 +698,12 @@ export default function Dashboard() {
               planner opens the app to see, not just their counts (EZ1-I52). */}
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
             <div className="card">
-              <h3 className="section-title text-sm">Upcoming weddings</h3>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h3 className="section-title text-sm">Upcoming weddings</h3>
+                <Link className="text-xs text-brand-dark hover:underline" to="/my-weddings">
+                  Open weddings
+                </Link>
+              </div>
               {upcomingWeddings.length === 0 ? (
                 <p className="mt-1 text-sm text-gray-500">No dated weddings yet.</p>
               ) : (
@@ -781,43 +765,6 @@ export default function Dashboard() {
         </section>
       )}
 
-      {/*
-        Where to go next.
-
-        Rows, not a grid of identical cards. Equal boxes side by side give every
-        destination the same weight and stop being scannable at about the sixth
-        one; a divided column reads top to bottom the way a list of choices is
-        actually read, and keeps each description on one line instead of
-        wrapping it into a paragraph nobody finishes.
-      */}
-      <section>
-        <h2 className="mb-3 text-sm font-medium text-gray-500">Where to go next</h2>
-        <ul className="divide-y divide-gray-200 overflow-hidden rounded-lg border border-gray-200 bg-surface">
-          {tiles.map((t, i) => (
-            <motion.li
-              key={t.to}
-              initial={reduce ? false : { opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: Math.min(i, 8) * 0.035, ease: [0.16, 1, 0.3, 1] }}
-            >
-              <Link
-                to={t.to}
-                className="group flex items-center gap-4 px-5 py-4 transition-colors hover:bg-gray-100"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium text-gray-900">{t.title}</p>
-                  <p className="mt-0.5 truncate text-sm text-gray-500">{t.desc}</p>
-                </div>
-                <ArrowRight
-                  size={17}
-                  className="shrink-0 text-gray-300 transition-[transform,color] duration-200 group-hover:translate-x-0.5 group-hover:text-brand-strong"
-                  aria-hidden
-                />
-              </Link>
-            </motion.li>
-          ))}
-        </ul>
-      </section>
     </div>
   );
 }

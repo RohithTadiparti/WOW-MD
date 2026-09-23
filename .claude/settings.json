@@ -1,0 +1,7 @@
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://localhost:20128/v1",
+    "ANTHROPIC_AUTH_TOKEN": "sk-8b6f28196afc4a5a-5b5556-2d44c4bc",
+    "ANTHROPIC_MODEL": "agy/gemini-3.7-flash-high"
+  }
+}

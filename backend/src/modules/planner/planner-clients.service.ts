@@ -200,9 +200,15 @@ export class PlannerClientsService {
     }
 
     const hostIds = [...new Set(plans.map((p) => p.userId))];
+    // Payment state belongs to the planner engagement booking, not to the
+    // client's vendor bookings. Loading it here lets My Weddings say where the
+    // planner contract has got to without exposing any vendor financial data.
+    const plannerBookingIds = plans
+      .map((p) => p.plannerBookingId)
+      .filter((id): id is string => Boolean(id));
     const partners = await this.dashboard.fixedPartners(hostIds);
     const accounts = [...new Set([...hostIds, ...partners.values()])];
-    const [users, profilesBy, events, tasks, bookings, facts] = await Promise.all([
+    const [users, profilesBy, events, tasks, bookings, plannerPayments, facts] = await Promise.all([
       this.users.find({ where: { id: In(hostIds) }, select: ['id', 'email', 'phone', 'role'] }),
       this.profilesByAccount(accounts),
       this.events.find({ where: { userId: In(hostIds) }, order: { eventDate: 'ASC' } }),
@@ -211,8 +217,22 @@ export class PlannerClientsService {
       // spending has got to, not only its tasks (EZ1-I7) — the match-fixed
       // partner's included, because either of the couple may have booked.
       this.bookings.find({ where: { userId: In(accounts) } }),
+      plannerBookingIds.length
+        ? this.payments.find({ where: { bookingId: In(plannerBookingIds) } })
+        : Promise.resolve([]),
       this.weddingFacts(hostIds, partners),
     ]);
+
+    const paymentByBooking = new Map<string, string>();
+    for (const payment of plannerPayments) {
+      const current = paymentByBooking.get(payment.bookingId);
+      if (
+        !current ||
+        (PAYMENT_STATUS_RANK[payment.status] ?? 0) > (PAYMENT_STATUS_RANK[current] ?? 0)
+      ) {
+        paymentByBooking.set(payment.bookingId, payment.status);
+      }
+    }
 
     const userById = new Map(users.map((u) => [u.id, u]));
 
@@ -267,6 +287,9 @@ export class PlannerClientsService {
           confirmed,
           pending: pendingBookings,
         },
+        paymentStatus: plan.plannerBookingId
+          ? (paymentByBooking.get(plan.plannerBookingId) ?? 'payment_pending')
+          : 'payment_pending',
         status: this.lifecycle(weddingDate, planTasks),
       };
     });
