@@ -1,4 +1,5 @@
 import { ComponentType, FormEvent, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { IconProps } from '@phosphor-icons/react';
 import { Lifebuoy, WarningCircle, Hourglass, CheckCircle } from '@phosphor-icons/react';
@@ -81,7 +82,7 @@ const OUTCOME_LABEL: Record<string, string> = {
 const DONE = ['resolved', 'rejected', 'closed'];
 
 /** The three buckets the overview card counts and filters by. */
-type Bucket = 'open' | 'pending' | 'resolved';
+type Bucket = 'raised' | 'open' | 'pending' | 'resolved' | 'escalated';
 
 export default function Support() {
   const qc = useQueryClient();
@@ -89,7 +90,13 @@ export default function Support() {
   const [notice, setNotice] = useState('');
   const [raising, setRaising] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
-  const [filter, setFilter] = useState<Bucket | null>(null);
+  const [searchParams] = useSearchParams();
+  const [filter, setFilter] = useState<Bucket | null>(() => {
+    const value = searchParams.get('status');
+    return value === 'raised' || value === 'open' || value === 'pending' || value === 'resolved' || value === 'escalated'
+      ? value
+      : null;
+  });
 
   const { data: cases, isLoading } = useQuery({
     queryKey: ['support-cases'],
@@ -103,6 +110,7 @@ export default function Support() {
   const openCases = rows.filter((c) => c.status === 'open');
   const done = rows.filter((c) => DONE.includes(c.status));
   const pending = rows.filter((c) => c.status !== 'open' && !DONE.includes(c.status));
+  const escalated = rows.filter((c) => c.status === 'escalated');
 
   const showAll = filter === null;
 
@@ -161,11 +169,17 @@ export default function Support() {
       {(showAll || filter === 'open') && openCases.length > 0 && (
         <Section title="Open" cases={openCases} open={open} setOpen={setOpen} />
       )}
+      {filter === 'raised' && rows.length > 0 && (
+        <Section title="Raised" cases={rows} open={open} setOpen={setOpen} />
+      )}
       {(showAll || filter === 'pending') && pending.length > 0 && (
         <Section title="In progress" cases={pending} open={open} setOpen={setOpen} />
       )}
       {(showAll || filter === 'resolved') && done.length > 0 && (
         <Section title="Resolved" cases={done} open={open} setOpen={setOpen} />
+      )}
+      {(showAll || filter === 'escalated') && escalated.length > 0 && (
+        <Section title="Escalated to Admin" cases={escalated} open={open} setOpen={setOpen} />
       )}
     </div>
   );

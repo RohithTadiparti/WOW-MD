@@ -249,6 +249,14 @@ export class VendorsController {
     return this.vendors.listOwn(userId);
   }
 
+  @ApiBearerAuth()
+  @RequirePermissions(Permission.VENDOR_LISTING_MANAGE)
+  @ApiOperation({ summary: 'Live issue buckets for the vendor dashboard' })
+  @Get('dashboard/issues')
+  dashboardIssues(@CurrentUser('userId') userId: string) {
+    return this.vendors.dashboardIssues(userId);
+  }
+
   // ---------------------------------------------------- business lifecycle
 
   @ApiBearerAuth()

@@ -43,6 +43,7 @@ export function StatCard({
   tone,
   hint,
   icon: Glyph,
+  gradient = 'from-brand-soft to-surface',
 }: {
   label: string;
   value: ReactNode;
@@ -50,11 +51,12 @@ export function StatCard({
   tone?: string;
   hint?: string;
   icon?: typeof Receipt;
+  gradient?: string;
 }) {
   return (
     <Link
       to={to}
-      className="group rounded-lg border border-gray-200 bg-surface p-4 transition-[border-color,box-shadow] duration-200 hover:border-gray-300 hover:shadow-card"
+      className={`group rounded-lg border border-gray-200 bg-gradient-to-br ${gradient} p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-card`}
     >
       <div className="flex items-center gap-1.5">
         {Glyph && <Glyph size={14} className="text-gray-400" aria-hidden />}
