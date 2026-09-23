@@ -363,7 +363,7 @@ export default function Interests() {
                   {t.label}
                   {count > 0 && (
                     <span
-                      className={`rounded-full px-1.5 text-xs ${
+                      className={`rounded-sm px-1.5 text-xs ${
                         isActive ? 'bg-brand-soft text-brand-strong' : 'bg-gray-100 text-gray-600'
                       }`}
                     >

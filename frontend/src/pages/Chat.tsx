@@ -268,7 +268,7 @@ export default function Chat() {
                       <span className="text-[10px] text-gray-400">{shortTime(c.lastMessageAt)}</span>
                     )}
                     {c.unread > 0 && (
-                      <span className="rounded-full bg-brand px-1.5 text-xs font-semibold text-brand-fg">
+                      <span className="rounded-sm bg-brand px-1.5 text-xs font-semibold text-brand-fg">
                         {c.unread}
                       </span>
                     )}
@@ -328,7 +328,7 @@ export default function Chat() {
                     honest version of the same signal.
                   */}
                   {t.lastNote && !t.lastNoteMine && (
-                    <span className="shrink-0 rounded-full bg-amber-100 px-1.5 text-xs font-medium text-amber-800">
+                    <span className="shrink-0 rounded-sm bg-amber-100 px-1.5 text-xs font-medium text-amber-800">
                       reply
                     </span>
                   )}
@@ -399,7 +399,7 @@ export default function Chat() {
                           ? `Last seen ${new Date(presence.lastSeen).toLocaleString()}`
                           : 'Offline'}
                       {active?.context && (
-                        <span className="ml-2 rounded-full bg-brand-light px-2 py-0.5 text-brand-dark">
+                        <span className="ml-2 rounded-sm bg-brand-light px-2 py-0.5 text-brand-dark">
                           {active.context.score !== null && `${active.context.score}% match \u00b7 `}
                           {active.context.standing === 'fixed' ? 'Match fixed' : 'Interest accepted'}
                         </span>

@@ -193,7 +193,7 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
     <div className="space-y-5">
       {back}
 
-      <div className="card bg-gradient-to-br from-brand-soft to-surface">
+      <div className="card">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-xs uppercase tracking-wide text-brand-strong">{meta.title}</p>
@@ -595,7 +595,7 @@ function ActionsMenu({ children }: { children: React.ReactNode }) {
           <div className="fixed inset-0 z-10" aria-hidden onClick={() => setOpen(false)} />
           <div
             role="menu"
-            className="absolute right-0 z-20 mt-1 w-52 overflow-hidden rounded-md border border-gray-200 bg-surface py-1 shadow-lg"
+            className="absolute right-0 z-20 mt-1 w-52 overflow-hidden rounded-md border border-gray-200 bg-surface py-1 shadow-pop"
             onClick={() => setOpen(false)}
           >
             {children}

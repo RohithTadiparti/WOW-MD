@@ -97,12 +97,11 @@ export default function GuestRsvp() {
   return (
     <div className="flex min-h-screen items-center justify-center px-4 py-10">
       <div className="card w-full max-w-md space-y-4 text-center">
-        <p className="text-4xl" aria-hidden>
-          &#128141;
-        </p>
+        <span aria-hidden className="mx-auto block h-px w-16 bg-gold" />
         <div>
-          <h1 className="page-title">{data.eventName}</h1>
-          <p className="page-subtitle">
+          <p className="eyebrow mb-3">You are invited</p>
+          <h1 className="page-title mx-auto">{data.eventName}</h1>
+          <p className="page-subtitle mx-auto">
             {data.eventDate ? new Date(data.eventDate).toLocaleDateString() : 'Date to be confirmed'}
             {data.venue ? ` · ${data.venue}` : ''}
           </p>

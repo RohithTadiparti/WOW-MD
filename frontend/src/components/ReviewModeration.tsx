@@ -168,8 +168,8 @@ export default function ReviewModeration({ kind = 'vendor' }: { kind?: 'vendor' 
             key={entry.key}
             className={
               tab === entry.key
-                ? 'rounded-full bg-brand px-3 py-1 text-xs font-medium text-brand-fg'
-                : 'rounded-full bg-surface-sunken px-3 py-1 text-xs text-gray-600 hover:bg-gray-100'
+                ? 'rounded-sm bg-brand px-3 py-1 text-xs font-medium text-brand-fg'
+                : 'rounded-sm bg-surface-sunken px-3 py-1 text-xs text-gray-600 hover:bg-gray-100'
             }
             onClick={() => setTab(entry.key)}
           >
@@ -264,7 +264,7 @@ export default function ReviewModeration({ kind = 'vendor' }: { kind?: 'vendor' 
                   </p>
                 </div>
                 <span
-                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_TONE[review.status]}`}
+                  className={`rounded-sm px-2 py-0.5 text-xs font-medium ${STATUS_TONE[review.status]}`}
                 >
                   {STATUS_LABEL[review.status]}
                 </span>

@@ -490,7 +490,7 @@ export default function ManagedProfiles({ embedded = false }: { embedded?: boole
                   <p className="font-medium">
                     {p.displayName}
                     <span
-                      className={`ml-2 rounded-full px-2 py-0.5 text-xs ${
+                      className={`ml-2 rounded-sm px-2 py-0.5 text-xs ${
                         p.claimStatus === 'claimed'
                           ? 'bg-green-50 text-green-700'
                           : p.claimStatus === 'invited'

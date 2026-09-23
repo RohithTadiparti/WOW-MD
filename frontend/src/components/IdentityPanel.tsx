@@ -64,7 +64,7 @@ export default function IdentityPanel({ profileId }: { profileId: string }) {
             people are looking for when they open this.
           */}
           <span
-            className={`rounded-full px-2 py-1 text-xs font-medium ${
+            className={`rounded-sm px-2 py-1 text-xs font-medium ${
               data.verifiedAt
                 ? 'bg-emerald-50 text-emerald-800'
                 : 'bg-amber-50 text-amber-800'

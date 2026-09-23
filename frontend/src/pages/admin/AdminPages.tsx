@@ -89,15 +89,15 @@ export function AdminUsers() {
               key={t.role}
               onClick={() => setRole(t.role)}
               aria-pressed={isActive}
-              className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+              className={`inline-flex items-center gap-2 rounded-sm px-3 py-1.5 text-sm font-medium transition-colors ${
                 isActive
-                  ? 'bg-gradient-to-r from-brand to-brand-strong text-brand-fg shadow-btn'
+                  ? 'bg-brand text-brand-fg shadow-btn'
                   : 'bg-surface text-gray-600 ring-1 ring-gray-200 hover:bg-gray-100'
               }`}
             >
               <span>{t.label}</span>
               <span
-                className={`rounded-full px-1.5 text-xs tabular-nums ${
+                className={`rounded-sm px-1.5 text-xs tabular-nums ${
                   isActive ? 'bg-white/25 text-brand-fg' : 'bg-gray-100 text-gray-500'
                 }`}
               >
@@ -296,7 +296,7 @@ function ServiceAreas({ officerId }: { officerId: string }) {
         {areas.map((a) => (
           <span
             key={a.id}
-            className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${
+            className={`flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs ${
               a.primary ? 'bg-brand/10 text-brand' : 'bg-gray-100 text-gray-600'
             }`}
             title={a.state && !a.city ? 'Whole state' : a.primary ? 'Primary area' : 'Will travel'}
@@ -567,15 +567,15 @@ export function AdminOfficers() {
               key={f.key}
               onClick={() => setFilter(f.key)}
               aria-pressed={isActive}
-              className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+              className={`inline-flex items-center gap-2 rounded-sm px-3 py-1.5 text-sm font-medium transition-colors ${
                 isActive
-                  ? 'bg-gradient-to-r from-brand to-brand-strong text-brand-fg shadow-btn'
+                  ? 'bg-brand text-brand-fg shadow-btn'
                   : 'bg-surface text-gray-600 ring-1 ring-gray-200 hover:bg-gray-100'
               }`}
             >
               <span>{f.label}</span>
               <span
-                className={`rounded-full px-1.5 text-xs tabular-nums ${
+                className={`rounded-sm px-1.5 text-xs tabular-nums ${
                   isActive ? 'bg-white/25 text-brand-fg' : 'bg-gray-100 text-gray-500'
                 }`}
               >
@@ -632,7 +632,7 @@ export function AdminOfficers() {
                           {o.serviceAreas.slice(0, 3).map((a, i) => (
                             <span
                               key={`${a.label}-${i}`}
-                              className={`rounded-full px-2 py-0.5 text-xs ${
+                              className={`rounded-sm px-2 py-0.5 text-xs ${
                                 a.primary
                                   ? 'bg-brand-soft text-brand-strong'
                                   : 'bg-gray-100 text-gray-500'
@@ -1012,7 +1012,7 @@ export function AdminPayments() {
                   <td className="py-2 text-right text-gray-600">{money(t.payoutAmount)}</td>
                   <td className="py-2">
                     <span
-                      className={`rounded-full px-2 py-1 text-xs ${
+                      className={`rounded-sm px-2 py-1 text-xs ${
                         TXN_STATUS_STYLE[t.status] ?? 'bg-gray-100 text-gray-600'
                       }`}
                     >

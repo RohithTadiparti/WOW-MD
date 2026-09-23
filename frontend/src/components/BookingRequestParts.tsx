@@ -145,7 +145,7 @@ export function ReferencePhotos({
               <img src={url} alt="Reference design" className="h-20 w-20 rounded-sm object-cover" />
               <button
                 type="button"
-                className="absolute right-0.5 top-0.5 rounded-full bg-black/60 px-1.5 text-xs text-white"
+                className="absolute right-0.5 top-0.5 rounded-sm bg-black/60 px-1.5 text-xs text-white"
                 onClick={() => onChange(urls.filter((u) => u !== url))}
                 aria-label="Remove this photo"
               >
