@@ -5,6 +5,7 @@ import {
   Briefcase,
   HandHeart,
   CalendarBlank,
+  ChatCircle,
   ClipboardText,
   DotsThreeCircle,
   House,
@@ -63,6 +64,10 @@ export default function TabsLayout() {
   // them from Support there, which this app does not carry, so the tab is not
   // withheld from them here — it is the same records either way.
   const worksCases = can(permissions, Permission.CASE_INVESTIGATE);
+  // The couple's plan flow is a five-item mobile bar. Keeping Interests and
+  // More visible here after adding Plan produced six labels that overflowed on
+  // compact phones; both remain available to every other persona as before.
+  const isPlanUser = can(permissions, Permission.PLAN_MANAGE_OWN);
 
   // The colour is read from the tokens rather than taken from the tab bar's
   // own `color` argument, which is a ColorValue and not always a string.
@@ -105,13 +110,25 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="plan"
+        options={{
+          title: 'Plan',
+          tabBarIcon: icon(CalendarBlank),
+          href: can(permissions, Permission.PLAN_MANAGE_OWN) ? undefined : null,
+        }}
+      />
+      <Tabs.Screen
+        name="chat"
+        options={{ title: 'Chat', tabBarIcon: icon(ChatCircle), href: isPlanUser ? undefined : null }}
+      />
+      <Tabs.Screen
         name="interests"
         options={{
           title: 'Interests',
           tabBarIcon: icon(HandHeart),
           // The other half of matchmaking: who has asked about you, and what
           // came of it. Same capability the web sidebar gates it on.
-          href: can(permissions, Permission.MATCH_RESPOND_INTEREST) ? undefined : null,
+          href: can(permissions, Permission.MATCH_RESPOND_INTEREST) && !isPlanUser ? undefined : null,
         }}
       />
       <Tabs.Screen
@@ -161,7 +178,7 @@ export default function TabsLayout() {
         options={{
           title: 'Alerts',
           tabBarIcon: icon(Bell),
-          href: isProvider ? null : undefined,
+          href: isProvider || isPlanUser ? null : undefined,
         }}
       />
       <Tabs.Screen name="more" options={{ title: 'More', tabBarIcon: icon(DotsThreeCircle) }} />
