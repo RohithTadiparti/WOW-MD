@@ -14,6 +14,10 @@ import { ProfileShare } from '../circulation/entities/profile-share.entity';
 import { Interest } from '../matchmaking/entities/interest.entity';
 import { Booking } from '../bookings/entities/booking.entity';
 import { Invitation } from '../invitations/entities/invitation.entity';
+import { SupportCase } from '../verification/entities/support-case.entity';
+import { Vendor } from '../vendors/entities/vendor.entity';
+import { PlannerProfile } from '../wedding-planners/entities/planner-profile.entity';
+import { Notification } from '../notifications/entities/notification.entity';
 
 @Module({
   imports: [
@@ -28,6 +32,10 @@ import { Invitation } from '../invitations/entities/invitation.entity';
       Interest,
       Booking,
       Invitation,
+      SupportCase,
+      Vendor,
+      PlannerProfile,
+      Notification,
     ]),
   ],
   providers: [UsersService, IdentityService, DataRightsService],

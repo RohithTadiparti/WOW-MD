@@ -444,6 +444,17 @@ function useUnreadCount(): number {
   return data?.unread ?? 0;
 }
 
+function useNavigationCounts(): Record<string, number> {
+  const { data } = useQuery({
+    queryKey: ['navigation-counts'],
+    queryFn: async () => (await api.get('/users/me/navigation-counts')).data as Record<string, number>,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+    retry: false,
+  });
+  return data ?? {};
+}
+
 
 /**
  * How the account signs out, switches business, and changes theme.
@@ -602,6 +613,7 @@ function Layout({ children }: { children: ReactNode }) {
               ? 'agent'
               : 'individual';
   const unread = useUnreadCount();
+  const navCounts = useNavigationCounts();
 
   /*
    * For an administrator the left rail *is* the admin portal navigation
@@ -624,7 +636,7 @@ function Layout({ children }: { children: ReactNode }) {
         label: n.label,
         icon: n.icon,
         group: 'main',
-        badge: n.to === '/admin/notifications' ? unread : undefined,
+        badge: n.to === '/admin/notifications' ? Math.max(unread, navCounts[n.to] ?? 0) : navCounts[n.to] ?? undefined,
       }))
     : NAV.filter(
         (n) =>
@@ -635,7 +647,10 @@ function Layout({ children }: { children: ReactNode }) {
         label: (user && n.labelFor?.[user.role]) ?? n.label,
         icon: n.icon,
         group: n.group,
-        badge: n.to === '/notifications' ? unread : undefined,
+        badge:
+          n.to === '/notifications'
+            ? Math.max(unread, navCounts[n.to] ?? 0)
+            : navCounts[n.to] ?? undefined,
       }));
 
   const groups = isAdmin ? [{ key: 'main', title: null }] : NAV_GROUPS;
