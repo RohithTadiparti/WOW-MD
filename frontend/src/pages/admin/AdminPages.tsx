@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiMessage } from '../../lib/api';
@@ -120,14 +120,30 @@ export function AdminUsers() {
   );
 }
 
+/** The masthead every admin screen opens with, so directory pages match the rest. */
+function Masthead({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div>
+      <h1 className="page-title">{title}</h1>
+      <p className="page-subtitle">{children}</p>
+    </div>
+  );
+}
+
 export function AdminAgents() {
-  return <Directory title="Agents" initialRole="agent" roles={['agent']} detailBase="/admin/agents" />;
+  return (
+    <div className="space-y-4">
+      <Masthead title="Agents">Agencies acting for families, and where each stands on approval.</Masthead>
+      <Directory title="Agent accounts" initialRole="agent" roles={['agent']} detailBase="/admin/agents" />
+    </div>
+  );
 }
 
 export function AdminVendors() {
   return (
     <div className="space-y-6">
-      <Directory title="Vendors" initialRole="vendor" roles={['vendor']} detailBase="/admin/vendors" />
+      <Masthead title="Vendors">The people who sell on the marketplace, and the businesses they hold.</Masthead>
+      <Directory title="Vendor accounts" initialRole="vendor" roles={['vendor']} detailBase="/admin/vendors" />
       <Businesses />
     </div>
   );
@@ -135,12 +151,15 @@ export function AdminVendors() {
 
 export function AdminPlanners() {
   return (
-    <Directory
-      title="Wedding Planners"
-      initialRole="planner"
-      roles={['planner']}
-      detailBase="/admin/planners"
-    />
+    <div className="space-y-4">
+      <Masthead title="Wedding Planners">Planners who run weddings end to end for the families here.</Masthead>
+      <Directory
+        title="Planner accounts"
+        initialRole="planner"
+        roles={['planner']}
+        detailBase="/admin/planners"
+      />
+    </div>
   );
 }
 
@@ -726,7 +745,14 @@ export function AdminBookings() {
  * so the merge is a single nav entry pointing at it, not a new component.
  */
 export function AdminServicesCatalog() {
-  return <CatalogAdmin />;
+  return (
+    <div className="space-y-4">
+      <Masthead title="Services & Catalog">
+        The categories, services and questions vendors list against. Configuration, not code.
+      </Masthead>
+      <CatalogAdmin />
+    </div>
+  );
 }
 
 export function AdminReports() {
@@ -955,6 +981,7 @@ export function AdminPayments() {
 
   return (
     <div className="space-y-4">
+      <Masthead title="Payments">Every transaction, and where the money in escrow stands.</Masthead>
       {escrow && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           <EscrowStat label="Held in escrow" value={money(escrow.held)} tone="text-amber-700" />

@@ -242,6 +242,9 @@
    * Cormorant at those sizes turns spindly. */
   .font-serif {
     letter-spacing: 0;
+    /* Cormorant's default figures are old-style, where 1 reads as I and 0 as
+     * O — fine in running prose, wrong on a count or a price. */
+    font-variant-numeric: lining-nums;
   }
 
   /* One visible focus treatment for the whole app. Keyboard users get a ring
@@ -340,6 +343,16 @@
   /* The template's field label: 11px capitals tracked 0.22em, above the field. */
   .label {
     @apply mb-2 block text-[0.6875rem] font-normal uppercase tracking-[0.22em] text-gray-600;
+  }
+
+  /*
+   * The other way fields are written here: a <label> wrapping its caption in a
+   * <span> and the control after it. Forty-odd forms use that shape, so the
+   * caption takes the template's label from the shape rather than from a class
+   * each of them would have to remember.
+   */
+  label:has(.input) > span:first-child {
+    @apply mb-1 block text-[0.6875rem] font-normal uppercase tracking-[0.22em] text-gray-600;
   }
 
   /* A page title and its one-line explanation, used at the top of every

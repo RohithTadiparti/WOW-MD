@@ -458,10 +458,10 @@ function Accordion({
         className="flex w-full items-center justify-between text-left"
         onClick={() => setOpen(isOpen ? '' : name)}
       >
-        <span className="font-semibold text-gray-900">
+        <span className="flex items-baseline font-serif text-[1.375rem] font-normal text-brand">
           {/* Which of how many, so the form has a visible end. */}
           {step >= 0 && (
-            <span className="mr-2 text-xs font-normal text-gray-400">
+            <span className="mr-3 font-sans text-[0.6875rem] uppercase tracking-[0.22em] text-gold-deep">
               {step + 1} of {SECTION_ORDER.length}
             </span>
           )}
