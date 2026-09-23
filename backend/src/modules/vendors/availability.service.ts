@@ -177,16 +177,12 @@ export class AvailabilityService {
     this.assertWithinWindow(dto.date);
     this.assertTimeOrder(dto.startTime, dto.endTime);
 
-    // Capacity comes from the service where the vendor named one, because that
-    // is where "five catering teams" and "one convention hall" are actually
-    // recorded. An explicit capacity on the request still wins.
     let capacity = dto.capacity ?? 1;
     if (dto.vendorServiceId) {
       const service = await this.services.findService(dto.vendorServiceId);
       if (!service || service.vendorId !== providerId) {
         throw new BadRequestException('That service is not on this business');
       }
-      capacity = dto.capacity ?? service.concurrentCapacity;
     }
 
     await this.assertNoIdenticalWindow(

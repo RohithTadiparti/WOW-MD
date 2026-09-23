@@ -47,7 +47,6 @@ export function ServiceCard({
           {[service.category?.name, service.definition?.name]
             .filter(Boolean)
             .join(' · ')}
-          {` · up to ${service.concurrentCapacity} at once`}
         </Caption>
       </View>
 
@@ -152,7 +151,6 @@ function EditService({
   const [displayName, setDisplayName] = useState(service.displayName ?? '');
   const [description, setDescription] = useState(service.description ?? '');
   const [answers, setAnswers] = useState<Answers>(service.attributes);
-  const [capacity, setCapacity] = useState(String(service.concurrentCapacity));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [confirming, setConfirming] = useState(false);
 
@@ -165,7 +163,6 @@ function EditService({
       displayName: displayName.trim(),
       description: description.trim(),
       attributes: cleanAnswers(service.serviceForm, answers),
-      concurrentCapacity: Number(capacity) || 1,
     });
   }
 
@@ -177,13 +174,6 @@ function EditService({
         placeholder={service.definition?.name ?? ''}
         value={displayName}
         onChangeText={setDisplayName}
-      />
-      <Field
-        label="How many at once?"
-        value={capacity}
-        onChangeText={setCapacity}
-        keyboardType="number-pad"
-        hint="How many of these you can run simultaneously."
       />
       <Textarea label="Description" value={description} onChange={setDescription} rows={3} />
 

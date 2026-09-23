@@ -93,6 +93,7 @@ export interface SupportCase {
     id: string;
     name: string;
     category: string;
+    categories?: string[];
     city: string | null;
     status: string;
     isApproved: boolean;

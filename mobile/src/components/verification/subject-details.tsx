@@ -6,6 +6,7 @@ import { dateTime, humanise, rupees, shortDate } from '@/lib/format';
 import { CORRECTION_FIELD_LABELS } from '@/shared/permissions';
 import { DetailGrid, DetailRow, Divider } from '@/components/chrome';
 import { DocumentList, MediaStrip } from '@/components/uploader';
+import { useCategoryNames } from '@/components/business/category-picker';
 import { Body, Caption, Card, Loading, SectionTitle } from '@/components/ui';
 import { radius, rgb, space, useTheme } from '@/theme';
 
@@ -45,6 +46,7 @@ export function SubjectDetails({
   applicantType?: string;
 }) {
   const theme = useTheme();
+  const categoryNames = useCategoryNames();
 
   const { data, isPending } = useQuery({
     queryKey: ['verification-request', requestId],
@@ -99,15 +101,18 @@ export function SubjectDetails({
               applicant type is what the queue already knows.
             */}
             <DetailRow label="Category">
-              {text(
-                subject.otherCategory ??
-                  subject.category ??
-                  (applicantType === 'planner'
-                    ? 'Wedding planner'
-                    : applicantType === 'agent'
-                      ? 'Marriage agency'
-                      : null),
-              )}
+              {Array.isArray(subject.categories) && subject.categories.length > 0
+                ? categoryNames(subject.categories as string[]).join(', ')
+                : subject.category
+                  ? categoryNames([String(subject.category)]).join(', ')
+                  : text(
+                      subject.otherCategory ??
+                        (applicantType === 'planner'
+                          ? 'Wedding planner'
+                          : applicantType === 'agent'
+                            ? 'Marriage agency'
+                            : null),
+                    )}
             </DetailRow>
             <DetailRow label="City">{text(subject.city)}</DetailRow>
             <DetailRow label="Registered address">

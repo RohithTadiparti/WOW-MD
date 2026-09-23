@@ -7,6 +7,8 @@ import { Booking } from '../bookings/entities/booking.entity';
 import { Profile } from '../users/entities/profile.entity';
 import { VendorService } from '../catalog/entities/vendor-service.entity';
 import { ServiceOffering } from '../catalog/entities/service-offering.entity';
+import { ServiceDefinition } from '../catalog/entities/service-definition.entity';
+import { ServiceCategory } from '../catalog/entities/service-category.entity';
 import { OfficerServiceArea } from '../verification/entities/officer-service-area.entity';
 import { SupportCase } from '../verification/entities/support-case.entity';
 import { VerificationRequest } from '../verification/entities/verification-request.entity';
@@ -36,6 +38,8 @@ export class AdminConsoleService {
     @InjectRepository(Profile) private readonly profiles: Repository<Profile>,
     @InjectRepository(VendorService) private readonly vendorServices: Repository<VendorService>,
     @InjectRepository(ServiceOffering) private readonly offerings: Repository<ServiceOffering>,
+    @InjectRepository(ServiceDefinition) private readonly definitions: Repository<ServiceDefinition>,
+    @InjectRepository(ServiceCategory) private readonly categories: Repository<ServiceCategory>,
     @InjectRepository(OfficerServiceArea)
     private readonly serviceAreas: Repository<OfficerServiceArea>,
     @InjectRepository(SupportCase) private readonly cases: Repository<SupportCase>,
@@ -56,7 +60,7 @@ export class AdminConsoleService {
    * The vendor account drill-down lists a vendor's businesses by name and
    * status; this is what opens when an administrator clicks one — the
    * registration and compliance details, every service in the catalogue with
-   * its offerings and concurrency, the uploaded documents, the verification
+  * its offerings, the uploaded documents, the verification
    * history, and the bookings taken against it.
    */
   async businessDetail(vendorId: string) {
@@ -77,7 +81,23 @@ export class AdminConsoleService {
       }),
     ]);
 
-    const serviceIds = services.map((s) => s.id);
+    const allServiceIds = services.map((s) => s.id);
+    const definitions = allServiceIds.length
+      ? await this.definitions.find({ where: { id: In(services.map((s) => s.definitionId)) } })
+      : [];
+    const categoryIds = [...new Set(definitions.map((definition) => definition.categoryId))];
+    const categories = categoryIds.length
+      ? await this.categories.find({ where: { id: In(categoryIds) } })
+      : [];
+    const definitionById = new Map(definitions.map((definition) => [definition.id, definition]));
+    const categoryById = new Map(categories.map((category) => [category.id, category]));
+    const selectedCategories = new Set(vendor.categories ?? []);
+    const selectedServices = services.filter((service) => {
+      const definition = definitionById.get(service.definitionId);
+      const category = definition ? categoryById.get(definition.categoryId) : null;
+      return Boolean(category && selectedCategories.has(category.slug));
+    });
+    const serviceIds = selectedServices.map((service) => service.id);
     const offerings = serviceIds.length
       ? await this.offerings.find({
           where: { vendorServiceId: In(serviceIds) },
@@ -131,13 +151,13 @@ export class AdminConsoleService {
         updatedAt: vendor.updatedAt,
       },
       owner,
-      /** Services & catalogue, each with its priced offerings and concurrency. */
-      services: services.map((s) => ({
+      /** Services & catalogue, each with its priced offerings and category. */
+      services: selectedServices.map((s) => ({
         id: s.id,
         displayName: s.displayName,
         name: serviceNames.get(s.id) ?? null,
+        category: categoryById.get(definitionById.get(s.definitionId)?.categoryId ?? '') ?? null,
         description: s.description,
-        concurrentCapacity: s.concurrentCapacity,
         active: s.active,
         offerings: (offeringsByService.get(s.id) ?? []).map((o) => ({
           id: o.id,

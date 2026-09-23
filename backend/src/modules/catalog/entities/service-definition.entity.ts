@@ -59,10 +59,6 @@ export class ServiceDefinition {
   @Column({ default: true })
   packagesAllowed: boolean;
 
-  /** Default capacity for a published window under this service. */
-  @Column({ type: 'int', default: 1 })
-  defaultCapacity: number;
-
   @Index()
   @Column({ default: true })
   active: boolean;

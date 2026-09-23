@@ -21,7 +21,6 @@ interface Definition {
   allowedPricingModels: string[];
   availabilityModel: string;
   packagesAllowed: boolean;
-  defaultCapacity: number;
   active: boolean;
 }
 
@@ -468,7 +467,6 @@ function DefinitionForm({
   const [models, setModels] = useState<string[]>(existing?.allowedPricingModels ?? ['fixed']);
   const [availability, setAvailability] = useState(existing?.availabilityModel ?? 'slot');
   const [packagesAllowed, setPackagesAllowed] = useState(existing?.packagesAllowed ?? true);
-  const [defaultCapacity, setDefaultCapacity] = useState(String(existing?.defaultCapacity ?? 1));
   const [problem, setProblem] = useState('');
 
   const effectiveSlug =
@@ -487,7 +485,6 @@ function DefinitionForm({
       allowedPricingModels: models,
       availabilityModel: availability,
       packagesAllowed,
-      defaultCapacity: Number(defaultCapacity) || 1,
     };
     if (!existing) body.slug = effectiveSlug;
     onSave(body);
@@ -530,19 +527,6 @@ function DefinitionForm({
               </option>
             ))}
           </select>
-        </label>
-        <label className="text-sm">
-          <span className="font-medium text-gray-700">Default capacity</span>
-          <input
-            className="input mt-1"
-            type="number"
-            min={1}
-            value={defaultCapacity}
-            onChange={(e) => setDefaultCapacity(e.target.value)}
-          />
-          <span className="mt-1 block text-xs text-gray-500">
-            What a vendor's windows start at. Five for a caterer, one for a hall.
-          </span>
         </label>
       </div>
 
