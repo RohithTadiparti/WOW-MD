@@ -184,10 +184,16 @@ function Routes() {
       />
       <Stack.Screen name="biodata" options={{ headerShown: true, title: 'Biodata' }} />
       <Stack.Screen name="events" options={{ headerShown: true, title: 'Wedding Planning' }} />
-      <Stack.Screen name="chat/index" options={{ headerShown: true, title: 'Chat' }} />
+      <Stack.Screen name="plan/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="vendors/index" options={{ headerShown: true, title: 'Vendors' }} />
+      <Stack.Screen name="vendors/[id]" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="vendors/[id]/gallery"
+        options={{ headerShown: true, title: 'Photos' }}
+      />
       {/* The title becomes the other person's name once the thread knows it. */}
       <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
-      <Stack.Screen name="match/[id]" options={{ headerShown: true, title: 'Profile' }} />
+      <Stack.Screen name="match/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="visit/[id]" options={{ headerShown: true, title: 'Visit' }} />
       <Stack.Screen name="case/[id]" options={{ headerShown: true, title: 'Case' }} />
     </Stack>

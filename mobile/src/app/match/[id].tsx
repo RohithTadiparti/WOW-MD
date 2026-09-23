@@ -1,37 +1,505 @@
-import { useState, type ReactNode } from 'react';
-import { Alert as NativeAlert, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Image } from 'expo-image';
-import { ArrowLeft, DotsThree, Heart, MapPin, PaperPlaneTilt, SealCheck } from 'phosphor-react-native';
+import { useState, type ReactNode } from "react";
+import {
+  Alert as NativeAlert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+  ActionSheetIOS,
+  Platform,
+  Share,
+} from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Image } from "expo-image";
+import {
+  ArrowLeft,
+  DotsThree,
+  PaperPlaneTilt,
+  SealCheck,
+} from "phosphor-react-native";
 
-import { ProfileSilhouette } from '@/components/profile-silhouette';
-import { DetailGrid, DetailRow } from '@/components/chrome';
-import { Alert, Body, Button, Caption, EmptyState, Loading, SectionTitle } from '@/components/ui';
-import { api, apiMessage } from '@/lib/api';
-import { ageFrom, labelFor } from '@/lib/labels';
-import { OCCUPATION_LABEL } from '@/shared/permissions';
-import { rgb, space, useTheme } from '@/theme';
-import { Txt } from '@/theme/fonts';
+import { ProfileSilhouette } from "@/components/profile-silhouette";
+import { DetailGrid, DetailRow } from "@/components/chrome";
+import {
+  Alert,
+  Body,
+  Button,
+  Caption,
+  EmptyState,
+  Loading,
+  SectionTitle,
+} from "@/components/ui";
+import { api, apiMessage } from "@/lib/api";
+import { ageFrom, labelFor } from "@/lib/labels";
+import { OCCUPATION_LABEL } from "@/shared/permissions";
+import { rgb, space, useTheme } from "@/theme";
+import { Txt } from "@/theme/fonts";
 
-interface ProfileView { limited: boolean; profile: { id: string; displayName: string; profileCode: string | null; city: string | null; gender: string | null; ageRange?: string | null; dateOfBirth?: string | null; bio?: string | null; photos: string[]; identityVerified: boolean }; details: Record<string, unknown> | null; }
-const str = (value: unknown) => typeof value === 'string' && value.trim() ? value : null;
+interface ProfileView {
+  limited: boolean;
+  profile: {
+    id: string;
+    displayName: string;
+    profileCode: string | null;
+    city: string | null;
+    gender: string | null;
+    ageRange?: string | null;
+    dateOfBirth?: string | null;
+    bio?: string | null;
+    photos: string[];
+    identityVerified: boolean;
+  };
+  details: Record<string, unknown> | null;
+}
+const str = (value: unknown) =>
+  typeof value === "string" && value.trim() ? value : null;
 
 export default function MatchProfile() {
-  const theme = useTheme(); const router = useRouter(); const qc = useQueryClient(); const { width } = useWindowDimensions();
-  const { id, score, shortlisted, interaction, actingProfileId } = useLocalSearchParams<{ id: string; score?: string; shortlisted?: string; interaction?: string; actingProfileId?: string }>();
-  const [isShortlisted, setIsShortlisted] = useState(shortlisted === 'true'); const [actionError, setActionError] = useState('');
+  const theme = useTheme();
+  const router = useRouter();
+  const qc = useQueryClient();
+  const { width } = useWindowDimensions();
+  const { id, score, shortlisted, interaction, actingProfileId } =
+    useLocalSearchParams<{
+      id: string;
+      score?: string;
+      shortlisted?: string;
+      interaction?: string;
+      actingProfileId?: string;
+    }>();
+  const [isShortlisted, setIsShortlisted] = useState(shortlisted === "true");
+  const [currentInteraction, setCurrentInteraction] = useState(interaction || "none");
+  const [actionError, setActionError] = useState("");
   const clientParam = actingProfileId ? { profileId: actingProfileId } : {};
-  const { data, isPending, error } = useQuery({ queryKey: ['profile-view', id], queryFn: async () => (await api.get(`/profiles/${id}/view`)).data as ProfileView, enabled: Boolean(id), retry: false });
-  const shortlistMutation = useMutation({ mutationFn: () => isShortlisted ? api.delete(`/matches/shortlist/${id}`, { params: clientParam }) : api.put(`/matches/shortlist/${id}`, {}, { params: clientParam }), onSuccess: () => { setIsShortlisted((v) => !v); setActionError(''); void qc.invalidateQueries({ queryKey: ['suggestions'] }); void qc.invalidateQueries({ queryKey: ['shortlist'] }); }, onError: (e) => setActionError(apiMessage(e, 'That shortlist could not be updated.')) });
-  const interestMutation = useMutation({ mutationFn: () => api.post('/matches/interest', { toProfileId: id, ...clientParam }), onSuccess: () => { setActionError(''); void qc.invalidateQueries({ queryKey: ['suggestions'] }); }, onError: (e) => setActionError(apiMessage(e, 'That interest could not be sent.')) });
-  if (isPending) return <View style={{ flex: 1, padding: space(4), backgroundColor: rgb(theme.canvas) }}><Loading rows={5} /></View>;
-  if (error || !data) return <View style={{ flex: 1, padding: space(4), backgroundColor: rgb(theme.canvas) }}><EmptyState title="This profile is not available">{apiMessage(error, 'It may have been withdrawn, or it may not be yours to open.')}</EmptyState></View>;
-  const { profile } = data; const d = data.details ?? {}; const age = profile.ageRange ?? ageFrom(profile.dateOfBirth); const education = str(d.highestQualification); const profession = str(d.profession) ?? labelFor(OCCUPATION_LABEL, d.occupationStatus); const company = str(d.company) ?? str(d.employer); const languages = str(d.motherTongue) ?? str(d.languages); const tags = preferenceTags(d); const photoHeight = Math.min(width * 1.16, 460); const canMessage = interaction === 'accepted';
-  const shortlistAction = () => shortlistMutation.mutate(); const messageAction = () => canMessage ? router.push('/chat') : NativeAlert.alert('Message unavailable', 'Messaging opens once both families accept an interest.');
-  return <View style={{ flex: 1, backgroundColor: rgb(theme.canvas) }}><ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 92 }}><View style={{ height: photoHeight, backgroundColor: rgb(theme.surfaceSunken) }}><ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>{profile.photos.length ? profile.photos.map((photo) => <Image key={photo} source={{ uri: photo }} style={{ width, height: photoHeight }} contentFit="cover" />) : <ProfileSilhouette gender={profile.gender} style={{ width, height: photoHeight }} />}</ScrollView><Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.back()} style={{ position: 'absolute', top: space(5), left: space(3), width: 40, height: 40, borderRadius: 20, backgroundColor: rgb(theme.surface), alignItems: 'center', justifyContent: 'center' }}><ArrowLeft size={21} color={rgb(theme.ink[800])} /></Pressable><Pressable accessibilityRole="button" accessibilityLabel="More profile options" style={{ position: 'absolute', top: space(5), right: space(3), width: 40, height: 40, borderRadius: 20, backgroundColor: rgb(theme.surface), alignItems: 'center', justifyContent: 'center' }}><DotsThree size={22} color={rgb(theme.ink[800])} weight="bold" /></Pressable>{profile.photos.length > 1 ? <View style={{ position: 'absolute', right: space(3), bottom: space(3), borderRadius: 13, backgroundColor: 'rgba(0,0,0,.55)', paddingHorizontal: space(2), paddingVertical: 3 }}><Txt style={{ color: '#fff', fontSize: 12 }}>{`1/${profile.photos.length}`}</Txt></View> : null}</View><View style={{ marginTop: -space(3), marginHorizontal: space(3), padding: space(4), gap: space(3), backgroundColor: rgb(theme.surface), borderRadius: 18, borderWidth: StyleSheet.hairlineWidth, borderColor: rgb(theme.border) }}><View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space(2) }}><View style={{ flex: 1 }}><View style={{ flexDirection: 'row', alignItems: 'center', gap: space(1) }}><Txt serif style={{ fontSize: 29, lineHeight: 32, fontWeight: '600', color: rgb(theme.ink[900]) }}>{profile.displayName}</Txt>{profile.identityVerified ? <SealCheck size={19} color={rgb(theme.positiveFg)} weight="fill" /> : null}</View><Caption>{[age, profile.city].filter(Boolean).join(' years • ')}</Caption></View>{score ? <View style={{ paddingHorizontal: space(2), paddingVertical: space(1), borderRadius: 12, backgroundColor: rgb(theme.brandSoft) }}><Caption tone="brand" style={{ fontWeight: '700' }}>{score}% Match</Caption></View> : null}</View>{profession ? <Body>{company ? `${profession} at ${company}` : profession}</Body> : null}<View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(3) }}>{education ? <Compact label="Education" value={education} /> : null}{profile.city ? <Compact label="Location" value={profile.city} /> : null}{str(d.religion) ? <Compact label="Religion" value={str(d.religion)!} /> : null}{languages ? <Compact label="Language" value={languages} /> : null}</View><View style={{ flexDirection: 'row', gap: space(2) }}><Button label={isShortlisted ? 'Shortlisted' : 'Shortlist'} variant="outline" small onPress={shortlistAction} busy={shortlistMutation.isPending} style={{ flex: 1 }} /><Button label="Send Interest" small onPress={() => interestMutation.mutate()} busy={interestMutation.isPending} disabled={interaction !== 'none' && interaction !== undefined} style={{ flex: 1.3 }} /></View><Pressable onPress={messageAction} style={{ alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: space(1) }}><PaperPlaneTilt size={16} color={rgb(theme.brandStrong)} /><Caption tone="brand">Message</Caption></Pressable></View><View style={{ padding: space(4), gap: space(4) }}>{actionError ? <Alert tone="critical">{actionError}</Alert> : null}{profile.bio ? <Section title="About Me"><Body tone="muted">{profile.bio}</Body></Section> : null}{tags.length ? <Section title="Looking For"><View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2) }}>{tags.map((tag) => <View key={tag} style={{ borderRadius: 14, paddingHorizontal: space(2), paddingVertical: space(1), backgroundColor: rgb(theme.brandSoft) }}><Caption tone="brand">{tag}</Caption></View>)}</View></Section> : null}<Section title="Basic Details"><DetailGrid><DetailRow label="Age">{age ?? '—'}</DetailRow>{typeof d.heightCm === 'number' ? <DetailRow label="Height">{`${d.heightCm} cm`}</DetailRow> : null}{profession ? <DetailRow label="Profession">{profession}</DetailRow> : null}{company ? <DetailRow label="Company">{company}</DetailRow> : null}{education ? <DetailRow label="Education">{education}</DetailRow> : null}</DetailGrid></Section>{data.limited ? <Caption tone="faint">More profile information is shared once both families accept interest.</Caption> : null}</View></ScrollView><View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: space(3), gap: space(2), flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth, borderColor: rgb(theme.border), backgroundColor: rgb(theme.surface) }}><Button label={isShortlisted ? 'Shortlisted' : 'Shortlist'} variant="outline" onPress={shortlistAction} busy={shortlistMutation.isPending} style={{ flex: 1 }} /><Button label="Send Interest" onPress={() => interestMutation.mutate()} busy={interestMutation.isPending} disabled={interaction !== 'none' && interaction !== undefined} style={{ flex: 1.4 }} /></View></View>;
+  const { data, isPending, error } = useQuery({
+    queryKey: ["profile-view", id],
+    queryFn: async () =>
+      (await api.get(`/profiles/${id}/view`)).data as ProfileView,
+    enabled: Boolean(id),
+    retry: false,
+  });
+  const shortlistMutation = useMutation({
+    mutationFn: () =>
+      isShortlisted
+        ? api.delete(`/matches/shortlist/${id}`, { params: clientParam })
+        : api.put(`/matches/shortlist/${id}`, {}, { params: clientParam }),
+    onSuccess: () => {
+      setIsShortlisted((v) => !v);
+      setActionError("");
+      void qc.invalidateQueries({ queryKey: ["suggestions"] });
+      void qc.invalidateQueries({ queryKey: ["shortlist"] });
+    },
+    onError: (e) =>
+      setActionError(apiMessage(e, "That shortlist could not be updated.")),
+  });
+  const interestMutation = useMutation({
+    mutationFn: () =>
+      api.post("/matches/interest", { toProfileId: id, ...clientParam }),
+    onSuccess: () => {
+      setActionError("");
+      setCurrentInteraction("sent");
+      void qc.invalidateQueries({ queryKey: ["suggestions"] });
+    },
+    onError: (e) =>
+      setActionError(apiMessage(e, "That interest could not be sent.")),
+  });
+  if (isPending)
+    return (
+      <View
+        style={{
+          flex: 1,
+          padding: space(4),
+          backgroundColor: rgb(theme.canvas),
+        }}
+      >
+        <Loading rows={5} />
+      </View>
+    );
+  if (error || !data)
+    return (
+      <View
+        style={{
+          flex: 1,
+          padding: space(4),
+          backgroundColor: rgb(theme.canvas),
+        }}
+      >
+        <EmptyState title="This profile is not available">
+          {apiMessage(
+            error,
+            "It may have been withdrawn, or it may not be yours to open.",
+          )}
+        </EmptyState>
+      </View>
+    );
+  const { profile } = data;
+  const d = data.details ?? {};
+  const age = profile.ageRange ?? ageFrom(profile.dateOfBirth);
+  const education = str(d.highestQualification);
+  const profession =
+    str(d.profession) ?? labelFor(OCCUPATION_LABEL, d.occupationStatus);
+  const company = str(d.company) ?? str(d.employer);
+  const languages = str(d.motherTongue) ?? str(d.languages);
+  const tags = preferenceTags(d);
+  const photoHeight = Math.min(width * 1.16, 460);
+  const canMessage = currentInteraction === "accepted";
+  
+  let interestLabel = "Send Interest";
+  let interestDisabled = false;
+  if (currentInteraction === "sent") {
+    interestLabel = "Interest Sent";
+    interestDisabled = true;
+  } else if (currentInteraction === "accepted") {
+    interestLabel = "Accepted";
+    interestDisabled = true;
+  } else if (currentInteraction === "received") {
+    interestLabel = "Interest Received";
+    interestDisabled = true;
+  } else if (currentInteraction === "rejected") {
+    interestLabel = "Declined";
+    interestDisabled = true;
+  }
+
+  const shortlistAction = () => shortlistMutation.mutate();
+  const messageAction = () =>
+    canMessage
+      ? router.push("/chat")
+      : setActionError(
+          "You can message when they accept your request.",
+        );
+  const moreOptions = () => {
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ["Cancel", "Report", "Blocked profiles", "Share Profile"],
+          cancelButtonIndex: 0,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 1)
+            router.push({ pathname: "/support", params: { type: "contact" } });
+          else if (buttonIndex === 2) router.push("/blocked");
+          else if (buttonIndex === 3) void Share.share({ message: `Check out this profile: https://wow.com/match/${id}` });
+        },
+      );
+    } else {
+      NativeAlert.alert(profile.displayName, "Choose an action", [
+        {
+          text: "Report",
+          onPress: () =>
+            router.push({ pathname: "/support", params: { type: "contact" } }),
+        },
+        {
+          text: "Blocked profiles",
+          onPress: () => router.push("/blocked"),
+        },
+        {
+          text: "Share Profile",
+          onPress: () => void Share.share({ message: `Check out this profile: https://wow.com/match/${id}` }),
+        },
+        { text: "Cancel", style: "cancel" },
+      ]);
+    }
+  };
+  return (
+    <View style={{ flex: 1, backgroundColor: rgb(theme.canvas) }}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 92 }}
+      >
+        <View
+          style={{
+            height: photoHeight,
+            backgroundColor: rgb(theme.surfaceSunken),
+          }}
+        >
+          <ScrollView
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+          >
+            {profile.photos.length ? (
+              profile.photos.map((photo) => (
+                <Image
+                  key={photo}
+                  source={{ uri: photo }}
+                  style={{ width, height: photoHeight }}
+                  contentFit="cover"
+                />
+              ))
+            ) : (
+              <ProfileSilhouette
+                gender={profile.gender}
+                style={{ width, height: photoHeight }}
+              />
+            )}
+          </ScrollView>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            onPress={() => router.back()}
+            style={{
+              position: "absolute",
+              top: space(5),
+              left: space(3),
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor: rgb(theme.surface),
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <ArrowLeft size={21} color={rgb(theme.ink[800])} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="More profile options"
+            onPress={moreOptions}
+            style={{
+              position: "absolute",
+              top: space(5),
+              right: space(3),
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor: rgb(theme.surface),
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <DotsThree size={22} color={rgb(theme.ink[800])} weight="bold" />
+          </Pressable>
+          {profile.photos.length > 1 ? (
+            <View
+              style={{
+                position: "absolute",
+                right: space(3),
+                bottom: space(3),
+                borderRadius: 13,
+                backgroundColor: "rgba(0,0,0,.55)",
+                paddingHorizontal: space(2),
+                paddingVertical: 3,
+              }}
+            >
+              <Txt
+                style={{ color: "#fff", fontSize: 12 }}
+              >{`1/${profile.photos.length}`}</Txt>
+            </View>
+          ) : null}
+        </View>
+        <View
+          style={{
+            marginTop: -space(3),
+            marginHorizontal: space(3),
+            padding: space(4),
+            gap: space(3),
+            backgroundColor: rgb(theme.surface),
+            borderRadius: 18,
+            borderWidth: StyleSheet.hairlineWidth,
+            borderColor: rgb(theme.border),
+          }}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "flex-start",
+              gap: space(2),
+            }}
+          >
+            <View style={{ flex: 1 }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: space(1),
+                }}
+              >
+                <Txt
+                  serif
+                  style={{
+                    fontSize: 29,
+                    lineHeight: 32,
+                    fontWeight: "600",
+                    color: rgb(theme.ink[900]),
+                  }}
+                >
+                  {profile.displayName}
+                </Txt>
+                {profile.identityVerified ? (
+                  <SealCheck
+                    size={19}
+                    color={rgb(theme.positiveFg)}
+                    weight="fill"
+                  />
+                ) : null}
+              </View>
+              <Caption>
+                {[age, profile.city].filter(Boolean).join(" years • ")}
+              </Caption>
+            </View>
+            {score ? (
+              <View
+                style={{
+                  paddingHorizontal: space(2),
+                  paddingVertical: space(1),
+                  borderRadius: 12,
+                  backgroundColor: rgb(theme.brandSoft),
+                }}
+              >
+                <Caption tone="brand" style={{ fontWeight: "700" }}>
+                  {score}% Match
+                </Caption>
+              </View>
+            ) : null}
+          </View>
+          {profession ? (
+            <Body>{company ? `${profession} at ${company}` : profession}</Body>
+          ) : null}
+          <View
+            style={{ flexDirection: "row", flexWrap: "wrap", gap: space(3) }}
+          >
+            {education ? <Compact label="Education" value={education} /> : null}
+            {profile.city ? (
+              <Compact label="Location" value={profile.city} />
+            ) : null}
+            {str(d.religion) ? (
+              <Compact label="Religion" value={str(d.religion)!} />
+            ) : null}
+            {languages ? <Compact label="Language" value={languages} /> : null}
+          </View>
+          <Pressable
+            onPress={messageAction}
+            style={{
+              alignItems: "center",
+              flexDirection: "row",
+              justifyContent: "center",
+              gap: space(1),
+            }}
+          >
+            <PaperPlaneTilt size={16} color={rgb(theme.brandStrong)} />
+            <Caption tone="brand">Message</Caption>
+          </Pressable>
+        </View>
+        <View style={{ padding: space(4), gap: space(4) }}>
+          {actionError ? <Alert tone="critical">{actionError}</Alert> : null}
+          {profile.bio ? (
+            <Section title="About Me">
+              <Body tone="muted">{profile.bio}</Body>
+            </Section>
+          ) : null}
+          {tags.length ? (
+            <Section title="Looking For">
+              <View
+                style={{
+                  flexDirection: "row",
+                  flexWrap: "wrap",
+                  gap: space(2),
+                }}
+              >
+                {tags.map((tag) => (
+                  <View
+                    key={tag}
+                    style={{
+                      borderRadius: 14,
+                      paddingHorizontal: space(2),
+                      paddingVertical: space(1),
+                      backgroundColor: rgb(theme.brandSoft),
+                    }}
+                  >
+                    <Caption tone="brand">{tag}</Caption>
+                  </View>
+                ))}
+              </View>
+            </Section>
+          ) : null}
+          <Section title="Basic Details">
+            <DetailGrid>
+              <DetailRow label="Age">{age ?? "—"}</DetailRow>
+              {typeof d.heightCm === "number" ? (
+                <DetailRow label="Height">{`${d.heightCm} cm`}</DetailRow>
+              ) : null}
+              {profession ? (
+                <DetailRow label="Profession">{profession}</DetailRow>
+              ) : null}
+              {company ? (
+                <DetailRow label="Company">{company}</DetailRow>
+              ) : null}
+              {education ? (
+                <DetailRow label="Education">{education}</DetailRow>
+              ) : null}
+            </DetailGrid>
+          </Section>
+          {data.limited ? (
+            <Caption tone="faint">
+              More profile information is shared once they accept interest.
+            </Caption>
+          ) : null}
+        </View>
+      </ScrollView>
+      <View
+        style={{
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          padding: space(3),
+          gap: space(2),
+          flexDirection: "row",
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderColor: rgb(theme.border),
+          backgroundColor: rgb(theme.surface),
+        }}
+      >
+        <Button
+          label={isShortlisted ? "Shortlisted" : "Shortlist"}
+          variant="outline"
+          onPress={shortlistAction}
+          busy={shortlistMutation.isPending}
+          style={{ flex: 1 }}
+        />
+        <Button
+          label={interestLabel}
+          onPress={() => interestMutation.mutate()}
+          busy={interestMutation.isPending}
+          disabled={interestDisabled}
+          style={{ flex: 1.4 }}
+        />
+      </View>
+    </View>
+  );
 }
 
-function Compact({ label, value }: { label: string; value: string }) { const theme = useTheme(); return <View style={{ minWidth: '42%', flex: 1 }}><Caption tone="faint" style={{ fontSize: 10 }}>{label}</Caption><Caption numberOfLines={1}>{value}</Caption></View>; }
-function Section({ title, children }: { title: string; children: ReactNode }) { return <View style={{ gap: space(2) }}><SectionTitle>{title}</SectionTitle>{children}</View>; }
-function preferenceTags(d: Record<string, unknown>): string[] { const raw = d.partnerPreferences ?? d.preferences ?? d.lookingFor; if (Array.isArray(raw)) return raw.filter((x): x is string => typeof x === 'string' && Boolean(x.trim())).slice(0, 8); if (raw && typeof raw === 'object') return Object.values(raw as Record<string, unknown>).flatMap((v) => Array.isArray(v) ? v : [v]).filter((x): x is string => typeof x === 'string' && Boolean(x.trim())).slice(0, 8); return []; }
+function Compact({ label, value }: { label: string; value: string }) {
+  const theme = useTheme();
+  return (
+    <View style={{ minWidth: "42%", flex: 1 }}>
+      <Caption tone="faint" style={{ fontSize: 10 }}>
+        {label}
+      </Caption>
+      <Caption numberOfLines={1}>{value}</Caption>
+    </View>
+  );
+}
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <View style={{ gap: space(2) }}>
+      <SectionTitle>{title}</SectionTitle>
+      {children}
+    </View>
+  );
+}
+function preferenceTags(d: Record<string, unknown>): string[] {
+  const raw = d.partnerPreferences ?? d.preferences ?? d.lookingFor;
+  if (Array.isArray(raw))
+    return raw
+      .filter((x): x is string => typeof x === "string" && Boolean(x.trim()))
+      .slice(0, 8);
+  if (raw && typeof raw === "object")
+    return Object.values(raw as Record<string, unknown>)
+      .flatMap((v) => (Array.isArray(v) ? v : [v]))
+      .filter((x): x is string => typeof x === "string" && Boolean(x.trim()))
+      .slice(0, 8);
+  return [];
+}

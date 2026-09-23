@@ -15,7 +15,7 @@ import {
   type IconProps,
 } from 'phosphor-react-native';
 
-import { Permission, can, canAny } from '@/shared/permissions';
+import { Permission, can, canAny, type PermissionValue } from '@/shared/permissions';
 import { useAuth } from '@/store/auth';
 import { rgb, useTheme } from '@/theme';
 import { typeface } from '@/theme/fonts';
@@ -42,9 +42,11 @@ import { typeface } from '@/theme/fonts';
  * push anyway. The web app agrees about the priority: Notifications sits under
  * "Account" there, below "Your business".
  */
+const emptyPermissions: PermissionValue[] = [];
+
 export default function TabsLayout() {
   const theme = useTheme();
-  const permissions = useAuth((s) => s.user?.permissions ?? []);
+  const permissions = useAuth((s) => s.user?.permissions ?? emptyPermissions);
 
   // A seller: a vendor or a wedding planner. Both take bookings against
   // published windows, and both manage a listing.

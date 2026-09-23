@@ -1,4 +1,4 @@
-import { Image, Pressable, ScrollView, Share, View, useWindowDimensions } from 'react-native';
+import { Alert as NativeAlert, Image, Pressable, ScrollView, Share, View, useWindowDimensions } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Heart, MapPin, SealCheck, ShareNetwork, Star } from 'phosphor-react-native';
@@ -8,13 +8,216 @@ import { rupees } from '@/lib/format';
 import { Button, Caption, Card, EmptyState, Loading, SectionTitle } from '@/components/ui';
 import { rgb, space, useTheme } from '@/theme';
 
-type Vendor = { id: string; name: string; category: string | null; categories: string[]; city: string; description: string; ratingAvg: number; ratingCount: number; portfolio: string[]; startingPrice: number | null; verifiedAt: string | null };
+type Vendor = {
+  id: string;
+  name: string;
+  category: string | null;
+  categories: string[];
+  city: string;
+  description: string;
+  ratingAvg: number;
+  ratingCount: number;
+  portfolio: string[];
+  startingPrice: number | null;
+  verifiedAt: string | null;
+};
 
 export default function VendorDetail() {
-  const theme = useTheme(); const router = useRouter(); const { width } = useWindowDimensions(); const { id } = useLocalSearchParams<{ id: string }>();
-  const query = useQuery({ queryKey: ['vendor', id], queryFn: async () => (await api.get(`/vendors/${id}`)).data as Vendor, enabled: Boolean(id), retry: false });
-  if (query.isPending) return <View style={{ flex: 1, padding: space(4) }}><Loading rows={4} /></View>;
-  if (query.error || !query.data) return <View style={{ flex: 1, padding: space(4) }}><EmptyState title="Vendor unavailable">{apiMessage(query.error, 'This listing may no longer be available.')}</EmptyState></View>;
-  const vendor = query.data; const photos = vendor.portfolio ?? [];
-  return <View style={{ flex: 1, backgroundColor: rgb(theme.canvas) }}><ScrollView contentContainerStyle={{ paddingBottom: 88 }}><View style={{ height: width * .68, backgroundColor: rgb(theme.surfaceSunken) }}>{photos[0] ? <Image source={{ uri: photos[0] }} style={{ width, height: '100%' }} resizeMode="cover" /> : null}<Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} style={{ position: 'absolute', top: space(5), left: space(3), padding: space(2), borderRadius: 22, backgroundColor: rgb(theme.surface) }}><ArrowLeft size={20} color={rgb(theme.ink[800])} /></Pressable><View style={{ position: 'absolute', top: space(5), right: space(3), flexDirection: 'row', gap: space(2) }}><Pressable accessibilityRole="button" accessibilityLabel="Save vendor" style={{ padding: space(2), borderRadius: 22, backgroundColor: rgb(theme.surface) }}><Heart size={20} color={rgb(theme.brand)} /></Pressable><Pressable accessibilityRole="button" accessibilityLabel="Share vendor" onPress={() => void Share.share({ message: vendor.name })} style={{ padding: space(2), borderRadius: 22, backgroundColor: rgb(theme.surface) }}><ShareNetwork size={20} color={rgb(theme.brand)} /></Pressable></View></View><View style={{ padding: space(4), gap: space(4) }}><View style={{ gap: space(1) }}><View style={{ flexDirection: 'row', alignItems: 'center', gap: space(1) }}><SectionTitle>{vendor.name}</SectionTitle>{vendor.verifiedAt ? <SealCheck size={18} color={rgb(theme.positiveFg)} weight="fill" /> : null}</View><Caption><Star size={13} color={rgb(theme.brand)} weight="fill" /> {vendor.ratingAvg.toFixed(1)} · {vendor.ratingCount} reviews</Caption><Caption><MapPin size={13} color={rgb(theme.ink[400])} /> {vendor.city || 'Location on request'}</Caption><View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(1) }}>{vendor.categories.map((tag) => <View key={tag} style={{ paddingHorizontal: space(2), paddingVertical: 3, borderRadius: 12, backgroundColor: rgb(theme.brandSoft) }}><Caption tone="brand">{tag}</Caption></View>)}</View></View>{vendor.description ? <Card><SectionTitle>About</SectionTitle><Caption>{vendor.description}</Caption></Card> : null}{photos.length > 1 ? <Pressable onPress={() => router.push({ pathname: '/vendors/[id]/gallery', params: { id: vendor.id } })} style={{ gap: space(2) }}><SectionTitle>Photos</SectionTitle><View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2) }}>{photos.slice(0, 6).map((photo) => <Image key={photo} source={{ uri: photo }} style={{ width: (width - space(10)) / 3, height: 92, borderRadius: 10 }} />)}</View></Pressable> : null}{vendor.startingPrice !== null ? <Card><Caption>Starting price</Caption><SectionTitle>{rupees(vendor.startingPrice)}</SectionTitle></Card> : null}</View></ScrollView><View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: space(3), flexDirection: 'row', gap: space(2), backgroundColor: rgb(theme.surface) }}><Button label="Chat" variant="outline" onPress={() => router.push('/chat')} style={{ flex: 1 }} /><Button label="Request Booking" onPress={() => router.push('/bookings')} style={{ flex: 1.5 }} /></View></View>;
+  const theme = useTheme();
+  const router = useRouter();
+  const { width } = useWindowDimensions();
+  const { id } = useLocalSearchParams<{ id: string }>();
+
+  const query = useQuery({
+    queryKey: ['vendor', id],
+    queryFn: async () => (await api.get(`/vendors/${id}`)).data as Vendor,
+    enabled: Boolean(id),
+    retry: false,
+  });
+
+  if (query.isPending) {
+    return (
+      <View style={{ flex: 1, padding: space(4) }}>
+        <Loading rows={4} />
+      </View>
+    );
+  }
+
+  if (query.error || !query.data) {
+    return (
+      <View style={{ flex: 1, padding: space(4) }}>
+        <EmptyState title="Vendor unavailable">
+          {apiMessage(query.error, 'This listing may no longer be available.')}
+        </EmptyState>
+      </View>
+    );
+  }
+
+  const vendor = query.data;
+  const photos = vendor.portfolio ?? [];
+
+  return (
+    <View style={{ flex: 1, backgroundColor: rgb(theme.canvas) }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 88 }}>
+        <View style={{ height: width * 0.68, backgroundColor: rgb(theme.surfaceSunken) }}>
+          {photos[0] ? (
+            <Image source={{ uri: photos[0] }} style={{ width, height: '100%' }} resizeMode="cover" />
+          ) : null}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+            onPress={() => router.back()}
+            style={{
+              position: 'absolute',
+              top: space(5),
+              left: space(3),
+              padding: space(2),
+              borderRadius: 22,
+              backgroundColor: rgb(theme.surface),
+            }}
+          >
+            <ArrowLeft size={20} color={rgb(theme.ink[800])} />
+          </Pressable>
+          <View
+            style={{
+              position: 'absolute',
+              top: space(5),
+              right: space(3),
+              flexDirection: 'row',
+              gap: space(2),
+            }}
+          >
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Save vendor"
+              onPress={() =>
+                NativeAlert.alert(
+                  'Save vendor',
+                  'Saving vendors to a shortlist is not available on mobile yet.',
+                )
+              }
+              style={{ padding: space(2), borderRadius: 22, backgroundColor: rgb(theme.surface) }}
+            >
+              <Heart size={20} color={rgb(theme.brand)} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Share vendor"
+              onPress={() => void Share.share({ message: vendor.name })}
+              style={{ padding: space(2), borderRadius: 22, backgroundColor: rgb(theme.surface) }}
+            >
+              <ShareNetwork size={20} color={rgb(theme.brand)} />
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={{ padding: space(4), gap: space(4) }}>
+          <View style={{ gap: space(1) }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(1) }}>
+              <SectionTitle>{vendor.name}</SectionTitle>
+              {vendor.verifiedAt ? (
+                <SealCheck size={18} color={rgb(theme.positiveFg)} weight="fill" />
+              ) : null}
+            </View>
+            <Caption>
+              <Star size={13} color={rgb(theme.brand)} weight="fill" /> {vendor.ratingAvg.toFixed(1)}{' '}
+              · {vendor.ratingCount} reviews
+            </Caption>
+            <Caption>
+              <MapPin size={13} color={rgb(theme.ink[400])} />{' '}
+              {vendor.city || 'Location on request'}
+            </Caption>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(1) }}>
+              {vendor.categories.map((tag) => (
+                <View
+                  key={tag}
+                  style={{
+                    paddingHorizontal: space(2),
+                    paddingVertical: 3,
+                    borderRadius: 12,
+                    backgroundColor: rgb(theme.brandSoft),
+                  }}
+                >
+                  <Caption tone="brand">{tag}</Caption>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          {vendor.description ? (
+            <Card>
+              <SectionTitle>About</SectionTitle>
+              <Caption>{vendor.description}</Caption>
+            </Card>
+          ) : null}
+
+          {photos.length > 1 ? (
+            <Pressable
+              onPress={() =>
+                router.push({ pathname: '/vendors/[id]/gallery', params: { id: vendor.id } })
+              }
+              style={{ gap: space(2) }}
+            >
+              <SectionTitle>Photos</SectionTitle>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2) }}>
+                {photos.slice(0, 6).map((photo) => (
+                  <Image
+                    key={photo}
+                    source={{ uri: photo }}
+                    style={{ width: (width - space(10)) / 3, height: 92, borderRadius: 10 }}
+                  />
+                ))}
+              </View>
+            </Pressable>
+          ) : null}
+
+          {vendor.startingPrice !== null ? (
+            <Card>
+              <Caption>Starting price</Caption>
+              <SectionTitle>{rupees(vendor.startingPrice)}</SectionTitle>
+            </Card>
+          ) : null}
+        </View>
+      </ScrollView>
+
+      <View
+        style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          padding: space(3),
+          flexDirection: 'row',
+          gap: space(2),
+          backgroundColor: rgb(theme.surface),
+        }}
+      >
+        <Button
+          label="Chat"
+          variant="outline"
+          onPress={() =>
+            NativeAlert.alert(
+              'Chat with this vendor',
+              'Vendor inquiries open from Chat once a conversation exists. Browse your conversations from the Chat tab.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Open Chat', onPress: () => router.push('/chat') },
+              ],
+            )
+          }
+          style={{ flex: 1 }}
+        />
+        <Button
+          label="Request Booking"
+          onPress={() =>
+            NativeAlert.alert(
+              'Request Booking',
+              'Placing a booking request from a vendor listing is not available on mobile yet. Use the web app for now.',
+            )
+          }
+          style={{ flex: 1.5 }}
+        />
+      </View>
+    </View>
+  );
 }
