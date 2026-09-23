@@ -326,7 +326,7 @@ export default function WeddingPlanners() {
             {total === 1 ? '' : 's'} found
           </p>
           <label className="flex items-center gap-2 text-sm text-gray-600">
-            Sort
+            <span className="mb-0">Sort</span>
             <select
               className="input max-w-[13rem] py-2"
               value={sort}

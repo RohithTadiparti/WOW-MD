@@ -289,7 +289,7 @@ export default function Events() {
       */}
       {clients.length > 0 && (
         <div className="card flex flex-wrap items-center gap-3">
-          <label className="text-sm text-gray-700" htmlFor="wedding">
+          <label className="label mb-0" htmlFor="wedding">
             Working on
           </label>
           <select

@@ -210,12 +210,12 @@ export default function AdminReportsDashboard() {
           ))}
         </div>
         <div className="flex flex-wrap items-end gap-2">
-          <label className="text-xs font-medium text-gray-600">
+          <label className="text-[0.6875rem] uppercase tracking-[0.22em] text-gray-600">
             From
             <input type="date" className="input mt-1 block" value={draft.from} max={draft.to || today}
               onChange={(e) => setDraft((x) => ({ ...x, from: e.target.value }))} />
           </label>
-          <label className="text-xs font-medium text-gray-600">
+          <label className="text-[0.6875rem] uppercase tracking-[0.22em] text-gray-600">
             To
             <input type="date" className="input mt-1 block" value={draft.to} min={draft.from} max={today}
               onChange={(e) => setDraft((x) => ({ ...x, to: e.target.value }))} />
