@@ -26,6 +26,7 @@ export default function PlannerTasks() {
   const [query, setQuery] = useState('');
   const clientsQuery = useQuery<{ clients: Client[] }>({
     queryKey: ['planner-clients'], queryFn: async () => (await api.get('/planner/clients')).data, retry: false,
+    refetchOnMount: 'always', refetchOnWindowFocus: true, refetchInterval: 30_000,
   });
   const clients = clientsQuery.data?.clients ?? [];
   const details = useQueries({
@@ -33,6 +34,8 @@ export default function PlannerTasks() {
       queryKey: ['planner-client', client.userId],
       queryFn: async () => (await api.get(`/planner/clients/${client.userId}`)).data as Detail,
       retry: false,
+      refetchOnWindowFocus: true,
+      refetchInterval: 30_000,
     })),
   });
   const update = useMutation({

@@ -23,14 +23,19 @@ import { motion, useReducedMotion } from 'motion/react';
 import {
   ArrowRight,
   Bell,
+  CalendarCheck,
   CheckCircle,
   Coins,
+  ClipboardText,
+  Hourglass,
   Lifebuoy,
+  Prohibit,
   UserCircle,
   UserPlus,
   UsersThree,
   Vault,
   Warning,
+  WarningCircle,
 } from '@phosphor-icons/react';
 
 interface Tile {
@@ -79,48 +84,6 @@ const TILES: Tile[] = [
     desc: 'Who has asked about you, who you have asked, and what came of it',
     requires: [Permission.MATCH_BROWSE, Permission.ACT_ON_BEHALF],
     hideFor: ['vendor', 'planner', 'in_person'],
-  },
-  {
-    to: '/clients',
-    title: 'My Clients',
-    desc: 'Accounts created when a client accepted your invitation',
-    requires: [Permission.CLIENT_READ],
-  },
-  {
-    to: '/agency',
-    title: 'My Agency',
-    desc: 'Your registration details and approval status',
-    requires: [Permission.AGENCY_MANAGE],
-  },
-  {
-    to: '/biodata',
-    title: 'Biodata',
-    desc: 'The details every family asks about, section by section',
-    requires: [Permission.MATCH_BROWSE, Permission.MANAGED_PROFILE_MANAGE],
-  },
-  {
-    to: '/matches',
-    title: 'Find Matches',
-    desc: 'Discover compatible partners',
-    requires: [Permission.MATCH_BROWSE],
-  },
-  {
-    to: '/chat',
-    title: 'Messages',
-    desc: 'Talk to matches, providers and agents',
-    requires: [Permission.CHAT_INQUIRE, Permission.CHAT_MATCH],
-    // Kept in step with the nav table: a planner's and an officer's
-    // conversations belong to the job or the case they are about.
-    hideFor: ['vendor', 'planner', 'in_person'],
-  },
-  {
-    to: '/vendors',
-    title: 'Vendors',
-    desc: 'Browse venues, catering, photography and more',
-    // The same pair the nav entry and the route guard use. Gating the tile on
-    // BOOKING_CREATE alone dropped this row for a planner, who was being
-    // offered Vendors in the sidebar on the same screen (council round 2).
-    requires: [Permission.BOOKING_CREATE, Permission.PLANNER_LISTING_MANAGE],
   },
   {
     to: '/wedding-planners',
@@ -296,6 +259,7 @@ export default function Dashboard() {
           status: string;
           weddingDate: string | null;
           location: string | null;
+          nextEvent?: { id: string; name: string; date: string } | null;
         }[];
         requests: unknown[];
         upcomingTasks?: {
@@ -309,6 +273,9 @@ export default function Dashboard() {
       },
     retry: false,
     enabled: isPlanner,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    refetchInterval: 30_000,
   });
   // The counters come off the same engagement My Clients is built from, so a
   // wedding on the screen can never sit beside a zero count, and escrow reads
@@ -331,53 +298,46 @@ export default function Dashboard() {
     retry: false,
     enabled: isPlanner,
     refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    refetchInterval: 30_000,
   });
   const plannerClients = plannerBook?.clients ?? [];
   const activeClients = plannerOverview?.active ?? 0;
   const upcomingClients = plannerOverview?.upcoming ?? 0;
   const plannerRequests = plannerBook?.requests?.length ?? 0;
+  const plannerUpcomingEvents = plannerClients.filter((client) => client.nextEvent).length;
+  const plannerPendingTasks = Math.max(
+    0,
+    (plannerOverview?.tasks.total ?? 0) - (plannerOverview?.tasks.done ?? 0),
+  );
+  const overdueOnly = taskParams.get('tasks') === 'overdue';
+  const completedPlanIds = new Set(
+    plannerClients.filter((client) => client.status === 'completed').map((client) => client.planId),
+  );
+  const upcomingTasks = (plannerBook?.upcomingTasks ?? []).filter(
+    (task) => !completedPlanIds.has(task.planId),
+  );
+  const shownTasks = overdueOnly ? upcomingTasks.filter((task) => task.overdue) : upcomingTasks;
   // The next few weddings by date, so the band leads with what is coming rather
   // than only how many there are (EZ1-I52).
   const upcomingWeddings = plannerClients
     .filter((c) => c.weddingDate)
     .sort((a, b) => new Date(a.weddingDate!).getTime() - new Date(b.weddingDate!).getTime())
     .slice(0, 4);
-  // Drop tasks that belong to weddings that have already happened: their
-  // leftover to-dos are not the planner's live deadlines, and showing them as
-  // overdue was the stale-overdue noise EZ1-I184 set out to clear.
-  const completedPlanIds = new Set(
-    plannerClients.filter((c) => c.status === 'completed').map((c) => c.planId),
-  );
-  const upcomingTasks = (plannerBook?.upcomingTasks ?? []).filter(
-    (t) => !completedPlanIds.has(t.planId),
-  );
-  /*
-    Whether the deadlines panel is showing everything or only what is late.
 
-    Driven by the query string so the Overdue tasks tile above can link to it,
-    which is what that tile now does instead of navigating away to the client
-    list (EZ1-I230). The full list is one click back.
-  */
-  const overdueOnly = taskParams.get('tasks') === 'overdue';
-  const shownTasks = overdueOnly ? upcomingTasks.filter((t) => t.overdue) : upcomingTasks;
-
-  // A marriage agent opens the app to see their book at a glance (EZ1-I79):
-  // how many clients, how many are matched, how many are still open, and the
-  // interests their profiles have taken part in.
   const isAgent = canAny(permissions, [Permission.AGENCY_MANAGE]);
   const { data: agentStats } = useQuery({
     queryKey: ['agent-dashboard'],
-    queryFn: async () =>
-      (await api.get('/agents/dashboard')).data as {
-        totalClients: number;
-        matchesFixed: number;
-        remainingClients: number;
-        totalInterests: number;
-        newInterests: number;
-        pendingClientActions: number;
-        issuesPending: number;
-        escrow: { total: string; pending: string; released: string; refunded: string; currency: string };
-      },
+    queryFn: async () => (await api.get('/agents/dashboard')).data as {
+      totalClients: number;
+      matchesFixed: number;
+      remainingClients: number;
+      totalInterests: number;
+      newInterests: number;
+      pendingClientActions: number;
+      issuesPending: number;
+      escrow: { total: string; pending: string; released: string; refunded: string; currency: string };
+    },
     retry: false,
     enabled: isAgent,
     refetchOnMount: 'always',
@@ -398,14 +358,38 @@ export default function Dashboard() {
       },
     retry: false,
     enabled: isOfficer,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    refetchInterval: 30_000,
+  });
+  const { data: officerSummary } = useQuery({
+    queryKey: ['officer-dashboard'],
+    queryFn: async () => (await api.get('/verification/officer-dashboard')).data as {
+      today: number;
+      assigned: number;
+      pending: number;
+      inProgress: number;
+      submitted: number;
+      needsAnotherLook: number;
+      completed: number;
+      approved: number;
+      rejected: number;
+      escalated: number;
+      openIssues: number;
+    },
+    retry: false,
+    enabled: isOfficer,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    refetchInterval: 30_000,
   });
   const officerRequests: Visit[] = officerQueue?.data ?? [];
   const officerCounts = {
-    assigned: officerRequests.filter((r) => r.status === 'assigned').length,
-    inProgress: officerRequests.filter((r) => r.status === 'in_progress').length,
-    submitted: officerRequests.filter((r) => r.status === 'submitted').length,
-    additional: officerRequests.filter((r) => r.status === 'additional_review').length,
-    today: officerRequests.filter(isTodayVisit).length,
+    assigned: officerSummary?.assigned ?? officerRequests.filter((r) => r.status === 'assigned').length,
+    inProgress: officerSummary?.inProgress ?? officerRequests.filter((r) => r.status === 'in_progress').length,
+    submitted: officerSummary?.submitted ?? officerRequests.filter((r) => r.status === 'submitted').length,
+    additional: officerSummary?.needsAnotherLook ?? officerRequests.filter((r) => r.status === 'additional_review').length,
+    today: officerSummary?.today ?? officerRequests.filter(isTodayVisit).length,
   };
   // Today's schedule, soonest first, for the section below the overview.
   const todaysVisits = officerRequests
@@ -529,34 +513,28 @@ export default function Dashboard() {
               All visits
             </Link>
           </div>
-          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            <Counter
-              label="Assigned Visits"
-              value={officerCounts.assigned}
-              to="/visits?status=assigned"
-              tone={officerCounts.assigned > 0 ? 'text-amber-700' : undefined}
-            />
-            <Counter
-              label="Today's Visits"
-              value={officerCounts.today}
-              to="/visits?view=today"
-              tone={officerCounts.today > 0 ? 'text-amber-700' : undefined}
-            />
-            <Counter
-              label="In Progress"
-              value={officerCounts.inProgress}
-              to="/visits?status=in_progress"
-            />
-            <Counter
-              label="Submitted"
-              value={officerCounts.submitted}
-              to="/visits?status=submitted"
-            />
-            <Counter
-              label="Needs Another Look"
-              value={officerCounts.additional}
-              to="/visits?status=additional_review"
-            />
+          <div className="space-y-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Today's work</p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <OfficerMetric label="Unread notifications" value={unread?.unread ?? 0} to="/notifications" icon={Bell} gradient="from-brand-soft to-surface" />
+              <OfficerMetric label="Today's visits" value={officerCounts.today} to="/visits?view=today" icon={CalendarCheck} gradient="from-brand-100 to-brand-50" />
+              <OfficerMetric label="Pending visits" value={officerSummary?.pending ?? officerCounts.assigned} to="/visits?status=assigned" icon={Hourglass} gradient="from-caution-bg to-surface" />
+              <OfficerMetric label="In progress" value={officerCounts.inProgress} to="/visits?status=in_progress" icon={WarningCircle} gradient="from-positive-bg to-surface" />
+            </div>
+            <p className="pt-2 text-xs font-medium uppercase tracking-wide text-gray-500">Verification workload</p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <OfficerMetric label="Assigned visits" value={officerCounts.assigned} to="/visits?status=assigned" icon={ClipboardText} gradient="from-brand-100 to-surface" />
+              <OfficerMetric label="Submitted" value={officerCounts.submitted} to="/visits?status=submitted" icon={ClipboardText} gradient="from-brand-soft to-brand-50" />
+              <OfficerMetric label="Needs another look" value={officerCounts.additional} to="/visits?status=additional_review" icon={Warning} gradient="from-caution-bg to-surface" />
+              <OfficerMetric label="Completed visits" value={officerSummary?.completed ?? 0} to="/visits?view=completed" icon={CheckCircle} gradient="from-positive-bg to-brand-50" />
+            </div>
+            <p className="pt-2 text-xs font-medium uppercase tracking-wide text-gray-500">Verification outcomes</p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <OfficerMetric label="Approved" value={officerSummary?.approved ?? 0} to="/visits?status=approved" icon={CheckCircle} gradient="from-positive-bg to-brand-50" />
+              <OfficerMetric label="Rejected" value={officerSummary?.rejected ?? 0} to="/visits?status=rejected" icon={Prohibit} gradient="from-rose-50 to-surface" />
+              <OfficerMetric label="Escalated" value={officerSummary?.escalated ?? 0} to="/support?status=escalated" icon={Warning} gradient="from-brand-soft to-rose-50" />
+              <OfficerMetric label="Open issues" value={officerSummary?.openIssues ?? 0} to="/support?status=open" icon={Lifebuoy} gradient="from-rose-50 to-surface" />
+            </div>
           </div>
 
           {/*
@@ -674,6 +652,32 @@ export default function Dashboard() {
         borrowing a number from an unrelated listing.
       */}
       {isPlanner && (
+        <section className="space-y-4">
+          <h2 className="section-title">Action required</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <PlannerMetric label="New quotation requests" value={plannerRequests} to="/bookings?status=requested" tone="from-brand-soft to-surface" />
+            <PlannerMetric label="Pending tasks" value={plannerPendingTasks} to="/tasks?status=pending" tone="from-caution-bg to-surface" />
+            <PlannerMetric label="Overdue tasks" value={plannerOverview?.tasks.overdue ?? 0} to="/tasks?status=overdue" tone="from-rose-50 to-surface" />
+            <PlannerMetric label="Upcoming events" value={plannerUpcomingEvents} to="/events" tone="from-positive-bg to-brand-50" />
+          </div>
+          <h2 className="section-title pt-2">Wedding portfolio</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <PlannerMetric label="Active weddings" value={activeClients} to="/weddings?status=active" tone="from-brand-100 to-brand-50" />
+            <PlannerMetric label="Upcoming weddings" value={upcomingClients} to="/weddings?status=upcoming" tone="from-brand-soft to-surface" />
+            <PlannerMetric label="Completed weddings" value={plannerOverview?.completed ?? 0} to="/weddings?status=completed" tone="from-positive-bg to-brand-50" />
+            <PlannerMetric label="Client weddings" value={plannerOverview?.weddings ?? 0} to="/weddings" tone="from-brand-100 to-surface" />
+          </div>
+          <h2 className="section-title pt-2">Bookings & escrow</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <PlannerMetric label="Planner bookings" value={plannerOverview?.bookings.total ?? 0} to="/bookings" tone="from-brand-soft to-brand-50" />
+            <PlannerMetric label="Pending payment milestones" value={plannerOverview?.bookings.pending ?? 0} to="/bookings?status=payment_pending" tone="from-caution-bg to-surface" />
+            <PlannerMetric label="Amount in escrow" value={`₹${Number(plannerOverview?.escrowHeld ?? 0).toLocaleString('en-IN')}`} to="/accounts" tone="from-positive-bg to-brand-50" />
+            <PlannerMetric label="Tasks completed" value={plannerOverview?.tasks.done ?? 0} to="/tasks?status=done" tone="from-positive-bg to-surface" />
+          </div>
+        </section>
+      )}
+
+      {false && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Counter label="Weddings" value={plannerOverview?.weddings ?? 0} to="/weddings" />
           {/*
@@ -919,6 +923,55 @@ function Counter({
       >
         {value}
       </p>
+    </Link>
+  );
+}
+
+function PlannerMetric({
+  label,
+  value,
+  to,
+  tone,
+}: {
+  label: string;
+  value: ReactNode;
+  to: string;
+  tone: string;
+}) {
+  return (
+    <Link
+      to={to}
+      className={`group rounded-lg border border-gray-200 bg-gradient-to-br ${tone} p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-card`}
+    >
+      <p className="truncate text-[0.8125rem] font-medium text-gray-600">{label}</p>
+      <p className="mt-2 font-mono text-[1.75rem] font-medium leading-none text-gray-900">{value}</p>
+    </Link>
+  );
+}
+
+function OfficerMetric({
+  label,
+  value,
+  to,
+  icon: Icon,
+  gradient,
+}: {
+  label: string;
+  value: ReactNode;
+  to: string;
+  icon: typeof Bell;
+  gradient: string;
+}) {
+  return (
+    <Link
+      to={to}
+      className={`group rounded-lg border border-gray-200 bg-gradient-to-br ${gradient} p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-card`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <p className="truncate text-[0.8125rem] font-medium text-gray-600">{label}</p>
+        <Icon size={20} weight="duotone" className="shrink-0 text-brand-dark" aria-hidden />
+      </div>
+      <p className="mt-2 font-mono text-[1.75rem] font-medium leading-none text-gray-900">{value}</p>
     </Link>
   );
 }

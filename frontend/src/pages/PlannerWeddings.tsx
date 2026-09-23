@@ -43,6 +43,9 @@ export default function PlannerWeddings() {
     queryKey: ['planner-clients'],
     queryFn: async () => (await api.get('/planner/clients')).data,
     retry: false,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    refetchInterval: 30_000,
   });
 
   const weddings = useMemo(() => {
