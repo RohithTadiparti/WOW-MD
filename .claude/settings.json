@@ -1,0 +1,7 @@
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://localhost:20128/v1",
+    "ANTHROPIC_AUTH_TOKEN": "sk-327be90c1e7090f3-c97091-024807f1",
+    "ANTHROPIC_MODEL": "agy/claude-sonnet-4-6"
+  }
+}

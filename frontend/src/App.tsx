@@ -68,6 +68,8 @@ import Planner from './pages/Planner';
 import PlannerClients from './pages/PlannerClients';
 import PlannerClientDetail from './pages/PlannerClientDetail';
 import PlannerEventWorkspace from './pages/PlannerEventWorkspace';
+import PlannerWeddings from './pages/PlannerWeddings';
+import PlannerTasks from './pages/PlannerTasks';
 import Chat from './pages/Chat';
 import Bookings from './pages/Bookings';
 import Genie from './pages/Genie';
@@ -288,6 +290,8 @@ const NAV: NavEntry[] = [
    * serving both would need a fork at the top of every screen below it.
    */
   { to: '/my-clients', label: 'My Clients', requires: [Permission.PLAN_MANAGE_ENGAGED], group: 'clients', icon: AddressBook },
+  { to: '/weddings', label: 'My Weddings', requires: [Permission.PLAN_MANAGE_ENGAGED], group: 'wedding', icon: CalendarCheck },
+  { to: '/tasks', label: 'Tasks', requires: [Permission.PLAN_MANAGE_ENGAGED], group: 'wedding', icon: ClipboardText },
   { to: '/agency', label: 'My Agency', requires: [Permission.AGENCY_MANAGE], group: 'clients', icon: Buildings },
   // Reviews are about how the agency is doing, not what it is, so they get
   // their own entry rather than living inside the agency's details form
@@ -585,6 +589,18 @@ function Layout({ children }: { children: ReactNode }) {
 
   const permissions = user?.permissions ?? [];
   const isAdmin = user?.role === 'admin';
+  const portal =
+    user?.role === 'admin'
+      ? 'admin'
+      : user?.role === 'in_person'
+        ? 'verification'
+        : user?.role === 'vendor'
+          ? 'vendor'
+          : user?.role === 'planner'
+            ? 'planner'
+            : user?.role === 'agent'
+              ? 'agent'
+              : 'individual';
   const unread = useUnreadCount();
 
   /*
@@ -629,7 +645,7 @@ function Layout({ children }: { children: ReactNode }) {
   useEffect(() => setDrawer(false), [loc.pathname]);
 
   return (
-    <div className="min-h-[100dvh]">
+    <div className="portal-shell min-h-[100dvh]" data-portal={portal}>
       {/*
         Two columns above `lg`, one below. The rail is sticky and scrolls
         independently, so a long navigation never pushes the page down and the
@@ -1057,6 +1073,22 @@ export default function App() {
         element={
           <Protected requires={[Permission.PLAN_MANAGE_ENGAGED]}>
             <PlannerClients />
+          </Protected>
+        }
+      />
+      <Route
+        path="/weddings"
+        element={
+          <Protected requires={[Permission.PLAN_MANAGE_ENGAGED]}>
+            <PlannerWeddings />
+          </Protected>
+        }
+      />
+      <Route
+        path="/tasks"
+        element={
+          <Protected requires={[Permission.PLAN_MANAGE_ENGAGED]}>
+            <PlannerTasks />
           </Protected>
         }
       />

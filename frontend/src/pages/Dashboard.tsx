@@ -643,7 +643,7 @@ export default function Dashboard() {
       */}
       {isPlanner && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Counter label="Weddings" value={plannerOverview?.weddings ?? 0} to="/my-clients" />
+          <Counter label="Weddings" value={plannerOverview?.weddings ?? 0} to="/weddings" />
           {/*
             To the bookings, not to the client list.
 
@@ -675,7 +675,7 @@ export default function Dashboard() {
           <Counter
             label="Overdue tasks"
             value={plannerOverview?.tasks.overdue ?? 0}
-            to="/?tasks=overdue#planner-tasks"
+            to="/tasks?status=overdue"
             tone={(plannerOverview?.tasks.overdue ?? 0) > 0 ? 'text-red-600' : undefined}
           />
         </div>
@@ -697,15 +697,15 @@ export default function Dashboard() {
               to="/bookings"
               tone={plannerRequests > 0 ? 'text-amber-700' : undefined}
             />
-            <Counter label="Active weddings" value={activeClients} to="/my-clients" />
-            <Counter label="Upcoming weddings" value={upcomingClients} to="/my-clients" />
+            <Counter label="Active weddings" value={activeClients} to="/weddings?status=active" />
+            <Counter label="Upcoming weddings" value={upcomingClients} to="/weddings?status=upcoming" />
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
             <Link className="btn" to="/bookings">
               Review requests
             </Link>
-            <Link className="btn-outline" to="/my-clients">
-              Manage clients &amp; tasks
+            <Link className="btn-outline" to="/tasks">
+              Manage tasks
             </Link>
             <Link className="btn-outline" to="/availability">
               Set availability

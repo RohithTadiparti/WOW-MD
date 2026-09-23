@@ -36,6 +36,22 @@
    * neutral ramp leans warm toward both, so the greys read as chosen.
    */
   :root {
+    /* Official WOW palette. Values stay as RGB channels so Tailwind alpha
+     * utilities continue to compose correctly across the application. */
+    --wow-primary: 199 44 105; /* #C72C69 */
+    --wow-primary-light: 224 62 130; /* #E03E82 */
+    --wow-accent-gold: 233 196 106; /* #E9C46A */
+    --wow-accent-warm: 244 162 97; /* #F4A261 */
+    --wow-bg-main: 247 244 239; /* #F7F4EF */
+    --wow-bg-secondary: 234 226 208; /* #EAE2D0 */
+    --wow-surface: 255 253 252; /* #FFFDFC */
+    --wow-text-main: 63 46 38; /* #3F2E26 */
+    --wow-text-muted: 128 111 104; /* #806F68 */
+    --wow-success: 22 101 52;
+    --wow-success-bg: 220 252 231;
+    --wow-error: 185 28 28;
+    --wow-error-bg: 254 226 226;
+
     /* Warm plum-brown, from the template's text colours: #241017 at the top,
      * #4F3B40 for running text, and hairlines that are that ink at 14%. */
     --ink-50: 247 242 234;
@@ -43,12 +59,12 @@
     --ink-200: 226 217 208;
     --ink-300: 205 193 188;
     --ink-400: 160 145 145;
-    --ink-500: 124 107 110;
-    --ink-600: 98 80 85;
-    --ink-700: 79 59 64;
-    --ink-800: 56 37 43;
-    --ink-900: 36 16 23;
-    --ink-950: 24 10 15;
+    --ink-500: var(--wow-text-muted);
+    --ink-600: var(--wow-text-muted);
+    --ink-700: var(--wow-text-main);
+    --ink-800: var(--wow-text-main);
+    --ink-900: var(--wow-text-main);
+    --ink-950: 45 31 25;
 
     /* The accent ramp keeps its old name, rose, so no utility changes. The
      * template's maroon, #6E1026, at 600; #8A1230 at 500. */
@@ -57,41 +73,41 @@
     --rose-200: 227 188 188;
     --rose-300: 204 139 148;
     --rose-400: 170 72 92;
-    --rose-500: 138 18 48;
-    --rose-600: 110 16 38;
-    --rose-700: 88 12 30;
-    --rose-800: 68 9 23;
-    --rose-900: 50 7 17;
+    --rose-500: var(--wow-primary-light);
+    --rose-600: var(--wow-primary);
+    --rose-700: 168 28 84;
+    --rose-800: 137 23 68;
+    --rose-900: 106 18 53;
 
     /* Struck gold: the numerals, rules and heart outlines. Ornament only,
      * never text on the ground, where it is too light to read. */
-    --gold: 169 131 47;
-    --gold-lit: 217 180 95;
-    --gold-deep: 122 90 28;
+    --gold: var(--wow-accent-gold);
+    --gold-lit: 245 216 139;
+    --gold-deep: 157 119 43;
 
     /* Semantic hues, deliberately separate from the accent. A status colour
      * that doubles as the brand colour cannot signal anything. */
-    --positive-fg: 21 94 76;
-    --positive-bg: 226 243 237;
+    --positive-fg: var(--wow-success);
+    --positive-bg: var(--wow-success-bg);
     --caution-fg: 124 74 12;
     --caution-bg: 250 240 222;
-    --critical-fg: 176 42 28;
-    --critical-bg: 253 232 228;
+    --critical-fg: var(--wow-error);
+    --critical-bg: var(--wow-error-bg);
 
     /* ---------------------------------------------------------- tier 2 --
      * Semantic tokens. Components only ever read these.
      */
     /* Ivory and white: the ground is warm so white panels read as panels. */
-    --canvas: 250 246 239;
-    --surface: 255 255 255;
-    --surface-raised: 255 255 255;
-    --surface-sunken: 246 239 228;
+    --canvas: var(--wow-bg-main);
+    --surface: var(--wow-surface);
+    --surface-raised: var(--wow-surface);
+    --surface-sunken: var(--wow-bg-secondary);
     --border: var(--ink-200);
     --border-strong: var(--ink-300);
 
-    --brand: var(--rose-600);
-    --brand-strong: var(--rose-700);
-    --brand-soft: var(--rose-50);
+    --brand: var(--wow-primary);
+    --brand-strong: var(--wow-primary-light);
+    --brand-soft: 251 226 237;
     /* What sits ON the accent. The ivory ground here, near-black in dark mode,
      * because the accent lifts in dark mode and light text on it fails. */
     --brand-fg: 250 246 239;
@@ -307,12 +323,41 @@
     @apply px-3 py-1.5 text-[0.6875rem] tracking-[0.12em];
   }
 
+  .btn:focus-visible,
+  .btn-outline:focus-visible,
+  .btn-ghost:focus-visible {
+    outline-offset: 3px;
+  }
+
+  .portal-shell button:disabled,
+  .portal-shell input:disabled,
+  .portal-shell select:disabled,
+  .portal-shell textarea:disabled {
+    cursor: not-allowed;
+  }
+
   .input {
     @apply w-full rounded-[--radius-sm] border border-gray-300 bg-surface px-3 py-2.5
       text-sm text-gray-900 transition-[border-color,box-shadow] duration-150
       placeholder:text-gray-400
       focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/12
       disabled:opacity-55;
+  }
+
+  .portal-shell form input:not([type='checkbox']):not([type='radio']):not([type='file']),
+  .portal-shell form select,
+  .portal-shell form textarea {
+    border-color: rgb(var(--border-strong));
+    background-color: rgb(var(--surface));
+    color: rgb(var(--wow-text-main));
+  }
+
+  .portal-shell form input:not([type='checkbox']):not([type='radio']):not([type='file']):focus,
+  .portal-shell form select:focus,
+  .portal-shell form textarea:focus {
+    border-color: rgb(var(--wow-primary));
+    box-shadow: 0 0 0 4px rgb(var(--wow-primary) / 0.12);
+    outline: none;
   }
 
   select.input {
@@ -327,6 +372,102 @@
   /* For the one or two places that genuinely need to sit above a card. */
   .card-raised {
     @apply rounded-[--radius-lg] border border-gray-200 bg-surface-raised p-5 shadow-lifted;
+  }
+
+  /* -------------------------------------------------------- portal layer --
+   * The shell keeps one WOW identity while these modes tune composition for
+   * the job at hand. They intentionally share tokens and controls; only
+   * density, hierarchy and depth change by portal.
+   */
+  .portal-shell {
+    background:
+      linear-gradient(180deg, rgb(var(--surface) / 0.32), transparent 18rem),
+      rgb(var(--canvas));
+  }
+
+  .portal-shell[data-portal='individual'] {
+    --portal-radius: 0.75rem;
+    background:
+      radial-gradient(circle at 92% 4%, rgb(var(--wow-accent-warm) / 0.12), transparent 20rem),
+      linear-gradient(180deg, rgb(var(--wow-primary) / 0.06), transparent 22rem),
+      rgb(var(--canvas));
+  }
+
+  .portal-shell[data-portal='individual'] .card,
+  .portal-shell[data-portal='individual'] .card-raised {
+    border-radius: var(--portal-radius);
+    box-shadow: 0 12px 34px -28px rgb(var(--wow-primary) / 0.5);
+  }
+
+  .portal-shell[data-portal='individual'] .page-title {
+    color: rgb(var(--wow-primary));
+  }
+
+  .portal-shell[data-portal='planner'] .card,
+  .portal-shell[data-portal='planner'] .card-raised {
+    border-top: 2px solid rgb(var(--wow-accent-gold) / 0.75);
+  }
+
+  .portal-shell[data-portal='planner'] .page-title {
+    color: rgb(var(--wow-text-main));
+  }
+
+  .portal-shell[data-portal='vendor'],
+  .portal-shell[data-portal='agent'],
+  .portal-shell[data-portal='verification'] {
+    --portal-content-width: 78rem;
+  }
+
+  .portal-shell[data-portal='vendor'] .card,
+  .portal-shell[data-portal='agent'] .card,
+  .portal-shell[data-portal='verification'] .card {
+    border-radius: 0.375rem;
+    box-shadow: none;
+  }
+
+  .portal-shell[data-portal='vendor'] .page-title,
+  .portal-shell[data-portal='agent'] .page-title,
+  .portal-shell[data-portal='verification'] .page-title {
+    font-family: 'Karla', 'Helvetica Neue', ui-sans-serif, sans-serif;
+    font-size: clamp(1.65rem, 1.2rem + 1vw, 2.25rem);
+    font-weight: 600;
+    color: rgb(var(--wow-text-main));
+  }
+
+  .portal-shell[data-portal='admin'] .card,
+  .portal-shell[data-portal='admin'] .card-raised {
+    border-radius: 0.25rem;
+    box-shadow: none;
+  }
+
+  .portal-shell[data-portal='admin'] .page-title {
+    font-family: 'Karla', 'Helvetica Neue', ui-sans-serif, sans-serif;
+    font-size: clamp(1.5rem, 1.15rem + 0.8vw, 2rem);
+    font-weight: 600;
+    color: rgb(var(--wow-text-main));
+  }
+
+  .portal-shell[data-portal='admin'] .section-title {
+    font-size: 0.875rem;
+    letter-spacing: 0.01em;
+  }
+
+  .portal-shell[data-portal='admin'] .btn,
+  .portal-shell[data-portal='admin'] .btn-outline,
+  .portal-shell[data-portal='admin'] .btn-sm {
+    border-radius: 0.25rem;
+    letter-spacing: 0.08em;
+  }
+
+  @media (max-width: 639px) {
+    .portal-shell main {
+      overflow-x: clip;
+    }
+
+    .portal-shell[data-portal='individual'] .card,
+    .portal-shell[data-portal='individual'] .card-raised {
+      padding: 1rem;
+    }
   }
 
   .label {
@@ -414,6 +555,44 @@
   }
   .alert-neutral {
     @apply alert bg-surface-sunken text-gray-600;
+  }
+
+  .portal-shell table {
+    border-collapse: separate;
+    border-spacing: 0;
+    color: rgb(var(--wow-text-main));
+  }
+
+  .portal-shell thead {
+    background-color: rgb(var(--wow-bg-secondary) / 0.45);
+  }
+
+  .portal-shell th {
+    color: rgb(var(--wow-text-muted));
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .portal-shell tbody tr {
+    border-color: rgb(var(--border));
+    transition: background-color 150ms ease;
+  }
+
+  .portal-shell tbody tr:hover {
+    background-color: rgb(var(--wow-primary) / 0.04);
+  }
+
+  .portal-shell [role='dialog'] {
+    border-color: rgb(var(--border-strong));
+    background-color: rgb(var(--wow-surface));
+    color: rgb(var(--wow-text-main));
+  }
+
+  .portal-shell [role='tab'][aria-selected='true'] {
+    color: rgb(var(--wow-primary));
+    border-color: rgb(var(--wow-primary));
   }
 
   /*

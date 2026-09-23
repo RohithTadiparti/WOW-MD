@@ -23,6 +23,7 @@ import { VerificationRequest } from '../verification/entities/verification-reque
 import { SupportCase } from '../verification/entities/support-case.entity';
 import { RefreshSession } from '../auth/entities/refresh-session.entity';
 import { OfficerAvailability } from '../verification/entities/officer-availability.entity';
+import { AuditEvent } from '../../platform/audit/entities/audit-event.entity';
 import { AgentsModule } from '../agents/agents.module';
 import { BookingsModule } from '../bookings/bookings.module';
 import { CatalogModule } from '../catalog/catalog.module';
@@ -59,6 +60,7 @@ import { AdminController } from './admin.controller';
       SupportCase,
       RefreshSession,
       OfficerAvailability,
+      AuditEvent,
       // Read-only: the price on the table while a booking's total is 0.00, and
       // the wedding a planner booking's date and place are read from.
       Quotation,

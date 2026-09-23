@@ -12,6 +12,7 @@ import {
   roleLabel,
 } from '../lib/labels';
 import { Loading } from './ui/Feedback';
+import ActivityDetailDrawer, { type ActivityDetail } from './admin/ActivityDetailDrawer';
 
 /**
  * The parts of the admin console that are about *particular* things.
@@ -26,13 +27,7 @@ import { Loading } from './ui/Feedback';
  * end up entangled.
  */
 
-interface Activity {
-  at: string;
-  kind: string;
-  summary: string;
-  resourceType: string;
-  resourceId: string;
-}
+type Activity = ActivityDetail;
 
 /** Colour by what kind of thing happened, so the feed can be skimmed. */
 const KIND_TONE: Record<string, string> = {
@@ -45,6 +40,7 @@ const KIND_TONE: Record<string, string> = {
 };
 
 export function ActivityFeed() {
+  const [selected, setSelected] = useState<Activity | null>(null);
   const { data = [], isLoading } = useQuery<Activity[]>({
     queryKey: ['admin-activity'],
     queryFn: async () => (await api.get('/admin/activity', { params: { limit: 40 } })).data,
@@ -62,7 +58,7 @@ export function ActivityFeed() {
       {isLoading && <Loading rows={3} />}
       <div className="max-h-96 divide-y overflow-y-auto">
         {data.map((a) => (
-          <div key={`${a.resourceType}-${a.resourceId}-${a.at}`} className="flex gap-3 py-2">
+          <button key={a.id} onClick={() => setSelected(a)} className="flex w-full gap-3 py-2 text-left transition hover:bg-brand-soft/40">
             <span
               className={`h-fit whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium ${
                 KIND_TONE[a.kind] ?? 'bg-gray-100 text-gray-700'
@@ -74,12 +70,13 @@ export function ActivityFeed() {
               <p className="truncate text-sm text-gray-800">{a.summary}</p>
               <p className="text-xs text-gray-400">{new Date(a.at).toLocaleString()}</p>
             </div>
-          </div>
+          </button>
         ))}
       </div>
       {!isLoading && data.length === 0 && (
         <p className="text-sm text-gray-400">Nothing has happened yet.</p>
       )}
+      {selected && <ActivityDetailDrawer activity={selected} onClose={() => setSelected(null)} />}
     </div>
   );
 }

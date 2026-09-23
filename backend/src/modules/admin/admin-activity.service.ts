@@ -14,9 +14,11 @@ import { MONEY_TAKEN } from './reports.service';
 import { ActivityQueryDto } from './dto/console.dto';
 import { UserRole, VerificationStatus, isIndividual } from '../../common/enums';
 import { bookingContextOf } from '../bookings/booking-venue';
+import { AuditEvent } from '../../platform/audit/entities/audit-event.entity';
 
 /** One line in the activity feed. Deliberately uniform across every source. */
 export interface ActivityItem {
+  id: string;
   at: Date;
   /** What happened, in the platform's own vocabulary. */
   kind: string;
@@ -24,6 +26,10 @@ export interface ActivityItem {
   summary: string;
   resourceType: string;
   resourceId: string;
+  actorUserId: string | null;
+  actorName: string | null;
+  actorRole: string | null;
+  metadata: Record<string, unknown>;
 }
 
 /**
@@ -47,6 +53,7 @@ export class AdminActivityService {
     @InjectRepository(Dispute) private readonly disputes: Repository<Dispute>,
     // Read-only: a booking's date is its linked function's date.
     @InjectRepository(WeddingEvent) private readonly events: Repository<WeddingEvent>,
+    @InjectRepository(AuditEvent) private readonly auditEvents: Repository<AuditEvent>,
   ) {}
 
   /** Who raised a dispute, by the side they are on. */
@@ -77,15 +84,57 @@ export class AdminActivityService {
     const take = q.limit;
 
     /*
+     * Recent Activity is an audit view, not a UI-created event stream. This
+     * gives every row its immutable action id, authenticated actor, affected
+     * record and before/after metadata — the facts needed for a meaningful
+     * drill-down instead of only a friendly sentence.
+     */
+    let auditRange: ReturnType<typeof Between<Date>> | undefined;
+    if (q.from || q.to) {
+      const fromDate = q.from;
+      const toDate = q.to;
+      const to = new Date(toDate ?? Date.now());
+      to.setHours(23, 59, 59, 999);
+      auditRange = Between(new Date(fromDate ?? 0), to);
+    }
+    const auditRows = await this.auditEvents.find({
+      where: auditRange ? { createdAt: auditRange } : {},
+      order: { createdAt: 'DESC' },
+      take,
+    });
+    const actorIds = auditRows
+      .map((row) => row.actorUserId)
+      .filter((id): id is string => Boolean(id));
+    const actors = actorIds.length
+      ? await this.users.find({ where: { id: In([...new Set(actorIds)]) }, select: ['id', 'email', 'phone'] })
+      : [];
+    const actorById = new Map(actors.map((actor) => [actor.id, actor]));
+    const actionText = (action: string) => action.replace(/[._]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    return auditRows.map((row) => ({
+      id: row.id,
+      at: row.createdAt,
+      kind: row.action,
+      summary: actionText(row.action),
+      resourceType: row.resourceType ?? 'platform',
+      resourceId: row.resourceId ?? '',
+      actorUserId: row.actorUserId,
+      actorName: row.actorUserId ? (actorById.get(row.actorUserId)?.email ?? actorById.get(row.actorUserId)?.phone ?? null) : null,
+      actorRole: row.actorRole,
+      metadata: row.metadata ?? {},
+    }));
+
+    /*
      * An optional window over each event's own timestamp -- a booking cancelled
      * today belongs to today even though it was placed last month (EZ1-I242).
      * Without one, every source is simply its newest rows.
      */
     let range: ReturnType<typeof Between<Date>> | undefined;
     if (q.from || q.to) {
-      const to = q.to ? new Date(q.to) : new Date();
+      const fromDate = q.from;
+      const toDate = q.to;
+      const to = new Date(toDate ?? Date.now());
       to.setHours(23, 59, 59, 999);
-      const from = q.from ? new Date(q.from) : new Date(0);
+      const from = new Date(fromDate ?? 0);
       range = Between(from, to);
     }
     const on = (column: string) => (range ? { [column]: range } : {});
@@ -161,7 +210,9 @@ export class AdminActivityService {
     const dayOf = (b: Booking) =>
       bookingContextOf(b, b.eventId ? eventById.get(b.eventId) : null).eventDate;
 
-    const items: ActivityItem[] = [
+    // Legacy source rows remain below as a reference for the event vocabulary;
+    // the returned feed above is the audit-backed source of truth.
+    const items: any[] = [
       ...users.map((u) => ({
         at: u.createdAt,
         kind: 'account.registered',

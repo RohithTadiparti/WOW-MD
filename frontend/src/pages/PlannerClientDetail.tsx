@@ -129,8 +129,11 @@ export default function PlannerClientDetail() {
           {client.city ? ` · ${client.city}` : ''}
         </p>
         {/* Quick actions into the rest of the workspace (EZ1-I56). */}
-        <div className="mt-2 flex flex-wrap gap-2">
-          <Link className="btn-outline btn-sm" to={`/planner/plan/${wedding.planId}/timeline`}>
+        <div className="mt-2 flex flex-nowrap items-center gap-2 overflow-x-auto pb-1">
+          <Link
+            className="btn-outline btn-sm h-9 shrink-0"
+            to={`/planner/plan/${wedding.planId}/timeline`}
+          >
             View wedding plan
           </Link>
           {/*
@@ -140,10 +143,10 @@ export default function PlannerClientDetail() {
             own incoming queue, which never contains the client's vendor
             bookings at all. Both now stay on this client (council review).
           */}
-          <Link className="btn-outline btn-sm" to={`/events?host=${client.userId}`}>
+          <Link className="btn-outline btn-sm h-9 shrink-0" to={`/events?host=${client.userId}`}>
             Events &amp; tasks
           </Link>
-          <a className="btn-outline btn-sm" href="#vendors">
+          <a className="btn-outline btn-sm h-9 shrink-0" href="#vendors">
             Bookings
           </a>
         </div>
@@ -171,7 +174,6 @@ export default function PlannerClientDetail() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Section title="Client">
           <Row label="Email" value={client.email ?? '-'} />
-          <Row label="Phone" value={client.phone ?? '-'} />
           <Row label="Bride" value={client.bride ?? '-'} />
           <Row label="Groom" value={client.groom ?? '-'} />
           <Row label="Status" value={humanize(client.status)} />

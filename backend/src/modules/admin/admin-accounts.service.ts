@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Interest } from '../matchmaking/entities/interest.entity';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
 import { Vendor } from '../vendors/entities/vendor.entity';
 import { Booking } from '../bookings/entities/booking.entity';
@@ -197,6 +197,17 @@ export class AdminAccountsService {
           : Promise.resolve([]),
       ]);
 
+    /*
+     * The agency dashboard is deliberately built from profiles, rather than
+     * just user accounts. An agent can have a perfectly valid client profile
+     * before that person claims an account, and excluding it made the admin
+     * view disagree with the agent's own dashboard.
+     */
+    const agentDashboard =
+      user.role === UserRole.AGENT
+        ? await this.agentDashboard(userId)
+        : null;
+
     // The matchmaking story as counts, because fifty interest rows is not an
     // answer to "where is this person up to".
     const matchmaking = profileIds.length
@@ -284,6 +295,9 @@ export class AdminAccountsService {
             }
           : null,
 
+      /** Live, agent-scoped figures and the records behind each figure. */
+      agentDashboard,
+
       /**
        * Only for an officer: the workload, which is the thing an administrator
        * reallocating work needs and cannot get from anywhere else.
@@ -316,6 +330,83 @@ export class AdminAccountsService {
               })),
             }
           : null,
+    };
+  }
+
+  private async agentDashboard(agentId: string) {
+    const clients = await this.profiles.find({
+      where: { managedByUserId: agentId, archivedAt: IsNull() },
+      order: { createdAt: 'DESC' },
+    });
+    const clientProfileIds = clients.map((client) => client.id);
+    const clientUserIds = clients
+      .map((client) => client.userId)
+      .filter((id): id is string => Boolean(id));
+
+    if (!clientProfileIds.length) {
+      return {
+        totalClients: 0, matchesFixed: 0, remainingClients: 0,
+        interestsReceived: 0, interestsSent: 0, escrow: '0.00',
+        issuesPending: 0, issuesSolved: 0, issuesEscalated: 0,
+        clients: [], matches: [], interestsReceivedRows: [], interestsSentRows: [],
+        payments: [], pendingIssues: [], solvedIssues: [], escalatedIssues: [],
+      };
+    }
+
+    const [agentInterests, payments, assignedCases, clientCases] = await Promise.all([
+      this.interests.find({
+        where: [{ fromProfileId: In(clientProfileIds) }, { toProfileId: In(clientProfileIds) }],
+        order: { createdAt: 'DESC' },
+      }),
+      clientUserIds.length
+        ? this.payments.find({ where: { userId: In(clientUserIds) }, order: { createdAt: 'DESC' } })
+        : Promise.resolve([]),
+      this.cases.find({ where: { assignedToUserId: agentId }, order: { createdAt: 'DESC' } }),
+      clientUserIds.length
+        ? this.cases.find({ where: { raisedByUserId: In(clientUserIds) }, order: { createdAt: 'DESC' } })
+        : Promise.resolve([]),
+    ]);
+
+    const fixedClientIds = new Set<string>();
+    for (const interest of agentInterests) {
+      if (interest.matchFixedState !== MatchFixedState.CONFIRMED) continue;
+      if (clientProfileIds.includes(interest.fromProfileId)) fixedClientIds.add(interest.fromProfileId);
+      if (clientProfileIds.includes(interest.toProfileId)) fixedClientIds.add(interest.toProfileId);
+    }
+    const issues = [...new Map([...assignedCases, ...clientCases].map((issue) => [issue.id, issue])).values()];
+    const openStatuses = new Set([
+      'open', 'triaged', 'allocated', 'in_progress', 'waiting_for_information', 'resolution_submitted', 'reassigned',
+    ]);
+    const pendingIssues = issues.filter((issue) => openStatuses.has(String(issue.status)));
+    const solvedIssues = issues.filter((issue) => String(issue.status) === 'resolved');
+    const escalatedIssues = issues.filter((issue) => String(issue.status) === 'escalated');
+    const escrow = payments
+      .filter((payment) => [PaymentStatus.HELD_IN_ESCROW, PaymentStatus.DISPUTED].includes(payment.status))
+      .reduce((total, payment) => total + Number(payment.amount ?? 0), 0)
+      .toFixed(2);
+
+    return {
+      totalClients: clients.length,
+      matchesFixed: fixedClientIds.size,
+      remainingClients: clients.length - fixedClientIds.size,
+      interestsReceived: agentInterests.filter((interest) => clientProfileIds.includes(interest.toProfileId)).length,
+      interestsSent: agentInterests.filter((interest) => clientProfileIds.includes(interest.fromProfileId)).length,
+      escrow,
+      issuesPending: pendingIssues.length,
+      issuesSolved: solvedIssues.length,
+      issuesEscalated: escalatedIssues.length,
+      clients: clients.map((client) => ({
+        id: client.id, userId: client.userId, displayName: client.displayName,
+        profileCode: client.profileCode, city: client.city, profileCompleted: client.profileCompleted,
+        lifecycle: client.lifecycle, createdAt: client.createdAt,
+      })),
+      matches: agentInterests.filter((interest) => interest.matchFixedState === MatchFixedState.CONFIRMED),
+      interestsReceivedRows: agentInterests.filter((interest) => clientProfileIds.includes(interest.toProfileId)),
+      interestsSentRows: agentInterests.filter((interest) => clientProfileIds.includes(interest.fromProfileId)),
+      payments,
+      pendingIssues,
+      solvedIssues,
+      escalatedIssues,
     };
   }
 
