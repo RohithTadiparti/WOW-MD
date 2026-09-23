@@ -96,6 +96,7 @@ export function TwoFactorCard({
             value={password}
             onChangeText={setPassword}
             secureTextEntry
+            showPasswordToggle
             autoCapitalize="none"
           />
           <Field

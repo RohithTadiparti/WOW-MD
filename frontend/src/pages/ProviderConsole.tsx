@@ -519,6 +519,13 @@ function ReviewSummary({ current }: { current: VendorListing }) {
   );
 }
 
+function validateBusinessDescription(description: string): string | undefined {
+  if (!description.trim()) return 'Description is required.';
+  if (description.length > 1000) return 'Description cannot exceed 1,000 characters.';
+  if (description.trim().length < 50) return 'Description must contain at least 50 characters.';
+  return undefined;
+}
+
 const emptyListing = {
   name: '',
   // No category is pre-selected — the vendor must choose one rather than have
@@ -604,7 +611,15 @@ function VendorListingForm({
   /** Field-level, and specific about what is wrong rather than "invalid". */
   function validate(): Record<string, string> {
     const errors: Record<string, string> = {};
-    if (!form.name.trim()) errors.name = 'Your business needs a name';
+    const descriptionError = validateBusinessDescription(form.description);
+    if (descriptionError) errors.description = descriptionError;
+    const businessName = form.name.trim();
+    if (!businessName) errors.name = 'Business name is required.';
+    else if (businessName.length < 2 || businessName.length > 100) {
+      errors.name = 'Business name must be between 2 and 100 characters.';
+    } else if (!/^(?=.*[\p{L}\p{N}])[\p{L}\p{N} .&'-]+$/u.test(businessName)) {
+      errors.name = 'Please enter a valid business name.';
+    }
     // Category, city, registered address, a portfolio image and a compliance
     // document are all mandatory to submit a listing for verification
     // (EZ1-I152) — an officer cannot verify a business that has named none of
@@ -653,6 +668,8 @@ function VendorListingForm({
    */
   function validatePresentational(): Record<string, string> {
     const errors: Record<string, string> = {};
+    const descriptionError = validateBusinessDescription(form.description);
+    if (descriptionError) errors.description = descriptionError;
     if (portfolio.length === 0) errors.portfolio = 'Add at least one portfolio photo';
     if (!form.contactPhone.trim()) {
       errors.contactPhone = 'A contact mobile number is required';
@@ -843,14 +860,16 @@ function VendorListingForm({
         </p>
         {msg && <p className="rounded-sm bg-brand-light p-2 text-sm text-brand-dark">{msg}</p>}
 
-        <Field label="Description">
+        <Field label="Description" error={fieldErrors.description}>
           <textarea
             className="input"
             rows={3}
-            maxLength={2000}
+            maxLength={1000}
+            required
             value={form.description}
             onChange={set('description')}
           />
+          <p className="mt-1 text-right text-xs text-gray-500">{form.description.length}/1,000</p>
         </Field>
 
         <Field label="Contact number" error={fieldErrors.contactPhone}>
@@ -907,7 +926,7 @@ function VendorListingForm({
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Business name" error={fieldErrors.name}>
-          <input className="input" value={form.name} onChange={set('name')} />
+          <input className="input" value={form.name} onChange={set('name')} maxLength={100} />
         </Field>
         <Field label="City" error={fieldErrors.city}>
           <input className="input" value={form.city} onChange={set('city')} />
@@ -916,14 +935,16 @@ function VendorListingForm({
 
       <CategoryPicker value={categories} onChange={setCategories} error={fieldErrors.categories} />
 
-      <Field label="Description">
+      <Field label="Description" error={fieldErrors.description}>
         <textarea
           className="input"
           rows={3}
-          maxLength={2000}
+          maxLength={1000}
+          required
           value={form.description}
           onChange={set('description')}
         />
+        <p className="mt-1 text-right text-xs text-gray-500">{form.description.length}/1,000</p>
       </Field>
 
       {/*
