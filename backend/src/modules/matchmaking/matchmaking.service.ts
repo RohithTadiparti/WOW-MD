@@ -1,3 +1,4 @@
+import { businessEntries } from '../profile-details/business-entries';
 import {
   BadRequestException,
   ForbiddenException,
@@ -9,7 +10,7 @@ import { ILike, In, IsNull, Not, Repository } from 'typeorm';
 import { Interest } from './entities/interest.entity';
 import { Profile } from '../users/entities/profile.entity';
 import { User } from '../auth/entities/user.entity';
-import { CompatibilityEngine } from './compatibility.engine';
+import { CompatibilityEngine, matchesPackageRange } from './compatibility.engine';
 import { AppConfigService } from '../../config/app-config.service';
 import { RedisService } from '../../platform/redis/redis.service';
 import { OutboxService } from '../../platform/events/outbox.service';
@@ -274,6 +275,12 @@ export class MatchmakingService {
     actor: AuthUser,
     q: SuggestionsQueryDto,
   ): Promise<PaginatedResult<Suggestion> & { counts?: MatchViewCounts }> {
+    if (q.heightMinFeet != null && q.heightMaxFeet != null && q.heightMinFeet > q.heightMaxFeet) {
+      throw new BadRequestException('The minimum height cannot be above the maximum');
+    }
+    if (q.packageMin != null && q.packageMax != null && q.packageMin > q.packageMax) {
+      throw new BadRequestException('The minimum package cannot be above the maximum');
+    }
     const { page, limit } = q;
     // A client whose profile an agent built does not browse the directory
     // themselves — the agent runs their matchmaking. Once they log in with
@@ -421,7 +428,13 @@ export class MatchmakingService {
       const pool = await this.detailsFor([me.id, ...candidates.map((c) => c.id)]);
       const mine = { profile: me, details: pool.get(me.id) ?? null };
 
+      const packageMin = q.packageMin ?? mine.details?.preferredPackageMin;
+      const packageMax = q.packageMax ?? mine.details?.preferredPackageMax;
+      if (packageMin != null && packageMax != null && packageMin > packageMax) {
+        throw new BadRequestException('The minimum package cannot be above the maximum');
+      }
       const scored = candidates
+        .filter((profile) => matchesPackageRange(pool.get(profile.id), packageMin, packageMax))
         .map((profile) => {
           const { score, breakdown } = this.engine.score(mine, {
             profile,
@@ -751,10 +764,12 @@ export class MatchmakingService {
     const add = (name: string, value: unknown) => {
       if (value !== undefined && value !== null && value !== '') parts.push(`${name}=${value}`);
     };
+    add('packageMin', q.packageMin);
+    add('packageMax', q.packageMax);
     add('ageMin', q.ageMin);
     add('ageMax', q.ageMax);
-    add('hMin', q.heightMinCm);
-    add('hMax', q.heightMaxCm);
+    add('hMin', q.heightMinFeet);
+    add('hMax', q.heightMaxFeet);
     add('rel', q.religion);
     add('cst', q.caste);
     add('tng', q.motherTongue);
@@ -841,8 +856,8 @@ export class MatchmakingService {
     if (pool.length === 0) return pool;
 
     const wantsBiodata =
-      q.heightMinCm !== undefined ||
-      q.heightMaxCm !== undefined ||
+      q.heightMinFeet !== undefined ||
+      q.heightMaxFeet !== undefined ||
       Boolean(q.religion) ||
       Boolean(q.caste) ||
       Boolean(q.motherTongue) ||
@@ -873,8 +888,8 @@ export class MatchmakingService {
     return pool.filter((p) => {
       const d = byProfile.get(p.id);
       if (!d) return false;
-      if (q.heightMinCm !== undefined && (d.heightCm ?? 0) < q.heightMinCm) return false;
-      if (q.heightMaxCm !== undefined && (d.heightCm ?? 999) > q.heightMaxCm) return false;
+      if (q.heightMinFeet !== undefined && (d.heightFeet ?? 0) < q.heightMinFeet) return false;
+      if (q.heightMaxFeet !== undefined && (d.heightFeet ?? 999) > q.heightMaxFeet) return false;
       if (!same(d.religion, q.religion)) return false;
       if (!same(d.caste, q.caste)) return false;
       if (!same(d.motherTongue, q.motherTongue)) return false;
@@ -887,7 +902,7 @@ export class MatchmakingService {
           d.employment?.role,
           d.employment?.designation,
           d.employment?.company,
-          d.business?.name,
+          ...businessEntries(d.business).flatMap((entry) => [entry.businessName, entry.businessType, entry.name]),
         ]
           .filter((v): v is string => typeof v === 'string')
           .join(' ')

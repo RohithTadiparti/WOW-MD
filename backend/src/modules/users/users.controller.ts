@@ -57,7 +57,9 @@ export class UsersController {
 
   @Get('me')
   async getMe(@CurrentUser('userId') userId: string) {
-    return toOwnProfile(await this.users.getByUserId(userId));
+    const profile = await this.users.getByUserId(userId);
+    const accountName = await this.users.resolveAccountName(userId, profile);
+    return toOwnProfile(profile, accountName);
   }
 
   @Get('me/navigation-counts')
@@ -67,7 +69,9 @@ export class UsersController {
 
   @Put('me/profile')
   async upsert(@CurrentUser('userId') userId: string, @Body() dto: CreateProfileDto) {
-    return toOwnProfile(await this.users.upsert(userId, dto));
+    const profile = await this.users.upsert(userId, dto);
+    const accountName = await this.users.resolveAccountName(userId, profile);
+    return toOwnProfile(profile, accountName);
   }
 
   // ---------------------------------------------------------------- identity

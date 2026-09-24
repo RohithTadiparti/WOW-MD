@@ -167,8 +167,8 @@ export default function MatchProfile() {
           <DetailRow label="Occupation">
             {labelFor(OCCUPATION_LABEL, d.occupationStatus) ?? '—'}
           </DetailRow>
-          {typeof d.heightCm === 'number' ? (
-            <DetailRow label="Height">{`${d.heightCm} cm`}</DetailRow>
+          {typeof d.heightFeet === 'number' ? (
+            <DetailRow label="Height">{`${d.heightFeet} feet`}</DetailRow>
           ) : null}
         </DetailGrid>
       </Card>

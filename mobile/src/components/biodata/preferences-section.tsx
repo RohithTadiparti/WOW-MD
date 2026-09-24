@@ -55,8 +55,8 @@ export function PreferencesSection({
     // back over a family's real preferences by the next press of Save.
     preferredAgeMin: stored(details.preferredAgeMin),
     preferredAgeMax: stored(details.preferredAgeMax),
-    preferredHeightMinCm: stored(details.preferredHeightMinCm),
-    preferredHeightMaxCm: stored(details.preferredHeightMaxCm),
+    preferredHeightMinFeet: stored(details.preferredHeightMinFeet),
+    preferredHeightMaxFeet: stored(details.preferredHeightMaxFeet),
     religion: String(bag.religion ?? ''),
     caste: String(bag.caste ?? ''),
     education: String(bag.education ?? ''),
@@ -70,8 +70,8 @@ export function PreferencesSection({
       await api.put(`/profiles/${profileId}/details/preferences`, {
         preferredAgeMin: Number(form.preferredAgeMin),
         preferredAgeMax: Number(form.preferredAgeMax),
-        preferredHeightMinCm: Number(form.preferredHeightMinCm),
-        preferredHeightMaxCm: Number(form.preferredHeightMaxCm),
+        preferredHeightMinFeet: Number(form.preferredHeightMinFeet),
+        preferredHeightMaxFeet: Number(form.preferredHeightMaxFeet),
         preferences: {
           ...(form.religion.trim() ? { religion: form.religion.trim() } : {}),
           ...(form.caste.trim() ? { caste: form.caste.trim() } : {}),
@@ -103,8 +103,8 @@ export function PreferencesSection({
     const ranges = [
       form.preferredAgeMin,
       form.preferredAgeMax,
-      form.preferredHeightMinCm,
-      form.preferredHeightMaxCm,
+      form.preferredHeightMinFeet,
+      form.preferredHeightMaxFeet,
     ];
     // Asked for rather than filled in: a blank sent as 0 would be saved as a
     // preference nobody stated.
@@ -112,11 +112,16 @@ export function PreferencesSection({
       setError('Give both ends of the age range and the height range before saving.');
       return;
     }
+    if ([form.preferredHeightMinFeet, form.preferredHeightMaxFeet].some((value) =>
+      !/^[3-7](?:[.][0-9])?$|^8(?:[.]0)?$/.test(value))) {
+      setError('Enter heights from 3 to 8 feet with at most one decimal place.');
+      return;
+    }
     if (Number(form.preferredAgeMin) > Number(form.preferredAgeMax)) {
       setError('The minimum age cannot be above the maximum.');
       return;
     }
-    if (Number(form.preferredHeightMinCm) > Number(form.preferredHeightMaxCm)) {
+    if (Number(form.preferredHeightMinFeet) > Number(form.preferredHeightMaxFeet)) {
       setError('The minimum height cannot be above the maximum.');
       return;
     }
@@ -157,18 +162,18 @@ export function PreferencesSection({
           <View style={{ flexDirection: 'row', gap: space(2) }}>
             <View style={{ flex: 1 }}>
               <Field
-                label="Height from (cm)"
-                value={form.preferredHeightMinCm}
-                onChangeText={set('preferredHeightMinCm')}
+                label="Height from (feet)"
+                value={form.preferredHeightMinFeet}
+                onChangeText={set('preferredHeightMinFeet')}
                 keyboardType="number-pad"
                 maxLength={3}
               />
             </View>
             <View style={{ flex: 1 }}>
               <Field
-                label="Height to (cm)"
-                value={form.preferredHeightMaxCm}
-                onChangeText={set('preferredHeightMaxCm')}
+                label="Height to (feet)"
+                value={form.preferredHeightMaxFeet}
+                onChangeText={set('preferredHeightMaxFeet')}
                 keyboardType="number-pad"
                 maxLength={3}
               />
@@ -222,7 +227,7 @@ export function PreferencesSection({
               {`${details.preferredAgeMin ?? '—'} to ${details.preferredAgeMax ?? '—'}`}
             </DetailRow>
             <DetailRow label="Height">
-              {`${details.preferredHeightMinCm ?? '—'} to ${details.preferredHeightMaxCm ?? '—'} cm`}
+              {`${details.preferredHeightMinFeet ?? '—'} to ${details.preferredHeightMaxFeet ?? '—'} feet`}
             </DetailRow>
             <DetailRow label="Religion">{String(bag.religion ?? '—')}</DetailRow>
             <DetailRow label="Caste">{String(bag.caste ?? '—')}</DetailRow>

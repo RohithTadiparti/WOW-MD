@@ -404,7 +404,11 @@ export default function Dashboard({
         (b.slaDeadline ? new Date(b.slaDeadline).getTime() : Infinity),
     );
 
-  const firstName = (profile?.displayName ?? '').trim().split(' ')[0];
+  const isFamily = user?.role === 'family';
+  const accountName = isFamily
+    ? (profile?.accountName ?? user?.accountName ?? profile?.displayName)
+    : (profile?.accountName ?? profile?.displayName);
+  const firstName = (accountName ?? '').trim().split(' ')[0];
 
   // The vendor's home is a dedicated, backend-driven dashboard (EZ1-I147). All
   // the hooks above still run so the hook order is stable across a role change;

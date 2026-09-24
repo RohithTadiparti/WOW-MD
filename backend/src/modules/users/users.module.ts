@@ -19,12 +19,15 @@ import { Vendor } from '../vendors/entities/vendor.entity';
 import { PlannerProfile } from '../wedding-planners/entities/planner-profile.entity';
 import { Notification } from '../notifications/entities/notification.entity';
 
+import { AgentProfile } from '../agents/entities/agent-profile.entity';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       Profile,
       User,
       ProfileDetails,
+      AgentProfile,
       ProfileSibling,
       ProfileAsset,
       ProfileConsent,

@@ -1,3 +1,9 @@
+import BusinessEntriesFields from '../components/BusinessEntriesFields';
+import HeightInput from '../components/HeightInput';
+import OtherIncomeFields from '../components/OtherIncomeFields';
+import { OtherIncomeEntry, readOtherIncome } from '../lib/other-income';
+import { readBusinessEntries, BusinessEntry } from '../lib/business-entries';
+import PackageRangeFields from '../components/PackageRangeFields';
 import { FormEvent, ReactNode, useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
@@ -98,7 +104,9 @@ interface Asset {
  */
 export default function Biodata() {
   const qc = useQueryClient();
+  const userRole = useAuth((s) => s.user?.role);
   const permissions = useAuth((s) => s.user?.permissions ?? []);
+  const isFamily = userRole === 'family';
   const isSteward = can(permissions, Permission.ACT_ON_BEHALF);
   const isAgent = can(permissions, Permission.AGENCY_MANAGE);
 
@@ -141,6 +149,12 @@ export default function Biodata() {
     try {
       await api.put(`/profiles/${targetId}/details/${section}`, body);
       await qc.invalidateQueries({ queryKey: ['biodata', targetId] });
+      if (section === 'preferences' || section === 'education' || section === 'occupation') {
+        await Promise.all([
+          qc.invalidateQueries({ queryKey: ['suggestions'] }),
+          qc.invalidateQueries({ queryKey: ['recommended'] }),
+        ]);
+      }
 
       // Straight on to the next section. Leaving the page where it was meant
       // scrolling back up to find the next thing, which is where people
@@ -211,7 +225,7 @@ export default function Biodata() {
           filling in his daughter's biodata is not looking at a client, and
           being told he is reads as the platform having mistaken him for one.
         */}
-        {isSteward && (
+        {isSteward && !isFamily && (
           <ProfileSelector
             value={profileId}
             onChange={setProfileId}
@@ -293,6 +307,14 @@ export default function Biodata() {
         )}
       </Accordion>
 
+      <Accordion title="Family Photo" name="family-photo" open={open} setOpen={setOpen}>
+        {targetId ? <div className="space-y-3" key={targetId}>
+          {details.familyPhotoUrl && <img src={details.familyPhotoUrl} alt="Family photo" className="max-h-80 rounded-sm object-contain" />}
+          <PhotoUploader label={details.familyPhotoUrl ? 'Replace family photo' : 'Upload family photo'}
+            onUploaded={async (url) => { await save('family-photo', { url }); }} />
+        </div> : <p className="text-sm text-gray-400">Pick a profile first.</p>}
+      </Accordion>
+
       <Accordion title="Personal details" name="personal" open={open} setOpen={setOpen}>
         <PersonalForm
           // The bride/groom's date of birth belongs to this managed profile and
@@ -360,6 +382,7 @@ export default function Biodata() {
           initial={details}
           siblings={siblings}
           assets={assets}
+          gender={me?.gender ?? data?.gender}
           onSave={(b) => save('family', b)}
           storageKey={`biodata:${targetId}:family`}
           onAddSibling={(b) => mutate(() => api.post(`/profiles/${targetId}/details/siblings`, b))}
@@ -373,11 +396,19 @@ export default function Biodata() {
         />
       </Accordion>
 
-      <Accordion title="Education and occupation" name="education" open={open} setOpen={setOpen}>
+      <Accordion title="Education" name="education" open={open} setOpen={setOpen}>
         <EducationForm
           initial={details}
           onSave={(b) => save('education', b)}
           storageKey={`biodata:${targetId}:education`}
+        />
+      </Accordion>
+
+      <Accordion title="Occupation" name="occupation" open={open} setOpen={setOpen}>
+        <OccupationForm
+          initial={details}
+          onSave={(b) => save('occupation', b)}
+          storageKey={`biodata:${targetId}:occupation`}
         />
       </Accordion>
 
@@ -412,7 +443,8 @@ const SECTION_LABEL: Record<string, string> = {
   horoscope: 'Horoscope',
   marital: 'Marital status',
   family: 'Family',
-  education: 'Education and occupation',
+  education: 'Education',
+  occupation: 'Occupation',
   preferences: 'Partner preferences',
   identity: 'Identity verification',
 };
@@ -425,6 +457,7 @@ const SECTION_ORDER = [
   'marital',
   'family',
   'education',
+  'occupation',
   'preferences',
   'identity',
 ] as const;
@@ -540,7 +573,7 @@ function PersonalForm({
     'firstName',
     'lastName',
     'dateOfBirth',
-    'heightCm',
+    'heightFeet',
     'complexion',
     'communicationAddress',
     'alternateMobile',
@@ -554,7 +587,7 @@ function PersonalForm({
     void submitDraft(
       onSave({
         ...draft,
-        heightCm: Number(draft.heightCm) || undefined,
+        heightFeet: Number(draft.heightFeet) || undefined,
         // null, not undefined: an absent field is left alone by the server,
         // so emptying the box has to be said explicitly.
         alternateMobile: draft.alternateMobile || null,
@@ -598,16 +631,8 @@ function PersonalForm({
             />
           </Field>
         )}
-        <Field label="Height (cm)">
-          <input
-            className="input mt-1"
-            type="number"
-            min={120}
-            max={230}
-            value={String(draft.heightCm ?? '')}
-            onChange={set('heightCm')}
-            required
-          />
+        <Field label="Height (feet)">
+          <HeightInput value={draft.heightFeet} onChange={(value) => set('heightFeet')({ target: { value } })} required />
         </Field>
         <Field label="Complexion">
           <select
@@ -1200,6 +1225,7 @@ function FamilyForm({
   initial,
   siblings,
   assets,
+  gender,
   onSave,
   onAddSibling,
   onRemoveSibling,
@@ -1210,6 +1236,11 @@ function FamilyForm({
   initial: Draft;
   siblings: Sibling[];
   assets: Asset[];
+  /**
+   * The profile's own gender. Groom profiles (male) require a net worth;
+   * bride profiles do not.
+   */
+  gender?: string;
   onSave: (b: Draft) => Promise<boolean>;
   onAddSibling: (b: Draft) => void;
   onRemoveSibling: (id: string) => void;
@@ -1217,6 +1248,7 @@ function FamilyForm({
   onRemoveAsset: (id: string) => void;
   storageKey?: string;
 }) {
+  const isGroom = gender === 'male';
   const father = (initial?.father ?? {}) as Draft;
   const mother = (initial?.mother ?? {}) as Draft;
   // Only an edited draft is written (EZ1-I236); see createDraftGuard.
@@ -1461,13 +1493,21 @@ function FamilyForm({
             than instead of them. Optional, and private unless the family says
             otherwise — the same rule money follows everywhere else here.
           */}
-          <Field label="Family net worth" hint="Rupees. Optional, and hidden unless you say otherwise">
+          <Field
+            label="Family net worth"
+            hint={
+              isGroom
+                ? 'Rupees. Required for groom profiles. Hidden unless you say otherwise.'
+                : 'Rupees. Optional, and hidden unless you say otherwise'
+            }
+          >
             <input
               className="input mt-1"
               type="number"
               min={0}
               value={String(values.familyNetWorth ?? '')}
               onChange={set('familyNetWorth')}
+              required={isGroom}
             />
           </Field>
           <label className="flex items-end gap-2 pb-2 text-sm">
@@ -1676,49 +1716,31 @@ function EducationForm({
   onSave: (b: Draft) => Promise<boolean>;
   storageKey?: string;
 }) {
-  const employment = (initial?.employment ?? {}) as Draft;
-  const business = (initial?.business ?? {}) as Draft;
-  // Only an edited draft is written (EZ1-I236); see createDraftGuard.
   const [guard] = useState(createDraftGuard);
   const stored0 = loadDraft(storageKey);
-  const [status, seedStatus] = useState<OccupationStatus>(
-    stored0
-      ? (stored0.status as OccupationStatus)
-      : ((initial?.occupationStatus as OccupationStatus) ?? 'employed'),
-  );
   const [values, seedValues] = useState<Draft>(stored0 ? ((stored0.values as Draft) ?? {}) : {});
 
   useEffect(() => {
     const stored = loadDraft(storageKey);
     guard.seeded(Boolean(stored));
     if (stored) {
-      seedStatus(stored.status as OccupationStatus);
-      seedValues((stored.values as Draft) ?? {});
+      const draft = (stored.values as Draft) ?? {};
+      seedValues({ ...draft });
       return;
     }
-    seedStatus((initial?.occupationStatus as OccupationStatus) ?? 'employed');
     seedValues({
       highestQualification: initial?.highestQualification ?? '',
       course: initial?.course ?? '',
       institution: initial?.institution ?? '',
       collegePlace: initial?.collegePlace ?? '',
-      company: employment.company ?? '',
-      designation: employment.designation ?? '',
-      workLocation: employment.workLocation ?? '',
-      salary: employment.salary ?? '',
-      businessName: business.businessName ?? '',
-      businessIncome: business.businessIncome ?? '',
-      businessLocation: business.businessLocation ?? '',
-      incomeVisible: initial?.incomeVisible ?? false,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(initial), storageKey]);
 
   useEffect(() => {
-    guard.persist(storageKey, { status, values });
-  }, [guard, storageKey, status, values]);
+    guard.persist(storageKey, { values });
+  }, [guard, storageKey, values]);
 
-  const setStatus = guard.edit(seedStatus);
   const setValues = guard.edit(seedValues);
 
   const set = (k: string) => (e: { target: { value: string } }) =>
@@ -1732,27 +1754,9 @@ function EducationForm({
         const body: Draft = {
           highestQualification: values.highestQualification,
           course: values.course,
-          // null clears; undefined would leave the stored value in place.
           institution: values.institution || null,
           collegePlace: values.collegePlace || null,
-          occupationStatus: status,
-          incomeVisible: Boolean(values.incomeVisible),
         };
-        if (status === 'employed') {
-          body.employment = {
-            company: values.company,
-            designation: values.designation,
-            workLocation: values.workLocation || undefined,
-            salary: values.salary || undefined,
-          };
-        }
-        if (status === 'self_employed') {
-          body.business = {
-            businessName: values.businessName,
-            businessIncome: values.businessIncome || undefined,
-            businessLocation: values.businessLocation || undefined,
-          };
-        }
         void submitDraft(onSave(body), () => guard.clear(storageKey));
       }}
       className="space-y-3"
@@ -1778,6 +1782,104 @@ function EducationForm({
         </Field>
       </div>
 
+      <button className="btn">Save education</button>
+    </form>
+  );
+}
+
+function OccupationForm({
+  initial,
+  onSave,
+  storageKey,
+}: {
+  initial: Draft;
+  onSave: (b: Draft) => Promise<boolean>;
+  storageKey?: string;
+}) {
+  const employment = (initial?.employment ?? {}) as Draft;
+  const business = (initial?.business ?? {}) as Draft;
+  const [guard] = useState(createDraftGuard);
+  const stored0 = loadDraft(storageKey);
+  const [status, seedStatus] = useState<OccupationStatus>(
+    stored0
+      ? (stored0.status as OccupationStatus)
+      : ((initial?.occupationStatus as OccupationStatus) ?? 'employed'),
+  );
+  const [values, seedValues] = useState<Draft>(stored0 ? ((stored0.values as Draft) ?? {}) : {});
+
+  useEffect(() => {
+    const stored = loadDraft(storageKey);
+    guard.seeded(Boolean(stored));
+    if (stored) {
+      seedStatus(stored.status as OccupationStatus);
+      const draft = (stored.values as Draft) ?? {};
+      seedValues({
+        ...draft,
+        otherIncome: draft.otherIncome ?? readOtherIncome(employment),
+        businessEntries: Array.isArray(draft.businessEntries)
+          ? draft.businessEntries
+          : [{ id: crypto.randomUUID(), businessName: draft.businessName ?? '', businessType: draft.businessType ?? '', businessLocation: draft.businessLocation ?? '', businessIncome: draft.businessIncome ?? '' }],
+      });
+      return;
+    }
+    seedStatus((initial?.occupationStatus as OccupationStatus) ?? 'employed');
+    seedValues({
+      company: employment.company ?? '',
+      designation: employment.designation ?? '',
+      workLocation: employment.workLocation ?? '',
+      salary: employment.salary ?? '',
+      otherIncome: readOtherIncome(employment),
+      businessEntries: (readBusinessEntries(business).length ? readBusinessEntries(business) : [{}])
+        .map((entry) => ({ ...entry, id: entry.id ?? crypto.randomUUID() })),
+      incomeVisible: initial?.incomeVisible ?? false,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(initial), storageKey]);
+
+  useEffect(() => {
+    guard.persist(storageKey, { status, values });
+  }, [guard, storageKey, status, values]);
+
+  const setStatus = guard.edit(seedStatus);
+  const setValues = guard.edit(seedValues);
+
+  const set = (k: string) => (e: { target: { value: string } }) =>
+    setValues((v) => ({ ...v, [k]: e.target.value }));
+  const put = (k: string) => (value: string) => setValues((v) => ({ ...v, [k]: value }));
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (status === 'self_employed' && !(values.businessEntries as BusinessEntry[] | undefined)?.length) return;
+        const body: Draft = {
+          occupationStatus: status,
+          incomeVisible: Boolean(values.incomeVisible),
+        };
+        if (status === 'employed') {
+          body.employment = {
+            company: values.company,
+            designation: values.designation,
+            workLocation: values.workLocation || undefined,
+            salary: values.salary || undefined,
+            otherIncome: (values.otherIncome as OtherIncomeEntry[]) ?? [],
+          };
+        }
+        if (status === 'self_employed') {
+          body.business = {
+            entries: (values.businessEntries as BusinessEntry[]).map((entry) => ({
+              id: entry.id,
+              businessName: String(entry.businessName ?? '').trim(),
+              businessType: String(entry.businessType ?? '').trim(),
+              businessLocation: String(entry.businessLocation ?? '').trim(),
+              businessIncome: entry.businessIncome === '' || entry.businessIncome == null ? undefined : String(entry.businessIncome),
+            })),
+          };
+        }
+        void submitDraft(onSave(body), () => guard.clear(storageKey));
+      }}
+      className="space-y-3"
+    >
       <Field label="Occupation">
         <select
           className="input mt-1"
@@ -1801,11 +1903,6 @@ function EducationForm({
             <input className="input mt-1" value={String(values.designation ?? '')} onChange={set('designation')} required />
           </Field>
           <Field label="Work location">
-            {/*
-              A dropdown, not free text — the same shape Partner Preferences
-              already uses for Preferred location, so the two are typed once and
-              spelled the same way. "Other" keeps any city the list omits.
-            */}
             <ChoiceField
               label=""
               value={String(values.workLocation ?? '')}
@@ -1814,11 +1911,6 @@ function EducationForm({
             />
           </Field>
           <Field label="Salary" hint="Numbers only, annual in rupees. Hidden unless you tick the box below">
-            {/*
-              Digits only — a salary is a number, and the field used to take
-              letters and symbols and store them as-is (EZ1-I59). Non-numeric
-              input is dropped as it is typed rather than saved and shown back.
-            */}
             <input
               className="input mt-1"
               inputMode="numeric"
@@ -1832,27 +1924,18 @@ function EducationForm({
         </div>
       )}
 
+      {status === 'employed' && (
+        <OtherIncomeFields
+          entries={(values.otherIncome as OtherIncomeEntry[]) ?? []}
+          onChange={(otherIncome) => setValues((v) => ({ ...v, otherIncome }))}
+        />
+      )}
+
       {status === 'self_employed' && (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Business name">
-            <input className="input mt-1" value={String(values.businessName ?? '')} onChange={set('businessName')} required />
-          </Field>
-          <Field label="Business income" hint="Numbers only, annual in rupees. Hidden unless you tick the box below">
-            {/* Digits only, same as Salary (EZ1-I59). */}
-            <input
-              className="input mt-1"
-              inputMode="numeric"
-              placeholder="e.g. 1500000"
-              value={String(values.businessIncome ?? '')}
-              onChange={(e) =>
-                setValues((v) => ({ ...v, businessIncome: e.target.value.replace(/\D/g, '') }))
-              }
-            />
-          </Field>
-          <Field label="Business location">
-            <input className="input mt-1" value={String(values.businessLocation ?? '')} onChange={set('businessLocation')} />
-          </Field>
-        </div>
+        <BusinessEntriesFields
+          entries={(values.businessEntries as BusinessEntry[]) ?? []}
+          onChange={(businessEntries) => setValues((v) => ({ ...v, businessEntries }))}
+        />
       )}
 
       <label className="flex items-center gap-2 text-sm">
@@ -1864,7 +1947,7 @@ function EducationForm({
         <span>Show income on the biodata</span>
       </label>
 
-      <button className="btn">Save education and occupation</button>
+      <button className="btn">Save occupation</button>
     </form>
   );
 }
@@ -1904,10 +1987,12 @@ function PreferencesForm({
       return;
     }
     seedValues({
+      preferredPackageMin: initial?.preferredPackageMin ?? '',
+      preferredPackageMax: initial?.preferredPackageMax ?? '',
       preferredAgeMin: initial?.preferredAgeMin ?? 24,
       preferredAgeMax: initial?.preferredAgeMax ?? 34,
-      preferredHeightMinCm: initial?.preferredHeightMinCm ?? 150,
-      preferredHeightMaxCm: initial?.preferredHeightMaxCm ?? 190,
+      preferredHeightMinFeet: initial?.preferredHeightMinFeet ?? 4.9,
+      preferredHeightMaxFeet: initial?.preferredHeightMaxFeet ?? 6.2,
       religion: prefs.religion ?? '',
       caste: prefs.caste ?? '',
       education: prefs.education ?? '',
@@ -1941,10 +2026,12 @@ function PreferencesForm({
       onSubmit={(e) => {
         e.preventDefault();
         const sent = onSave({
+          preferredPackageMin: values.preferredPackageMin === '' || values.preferredPackageMin == null ? null : Number(values.preferredPackageMin),
+          preferredPackageMax: values.preferredPackageMax === '' || values.preferredPackageMax == null ? null : Number(values.preferredPackageMax),
           preferredAgeMin: Number(values.preferredAgeMin),
           preferredAgeMax: Number(values.preferredAgeMax),
-          preferredHeightMinCm: Number(values.preferredHeightMinCm),
-          preferredHeightMaxCm: Number(values.preferredHeightMaxCm),
+          preferredHeightMinFeet: Number(values.preferredHeightMinFeet),
+          preferredHeightMaxFeet: Number(values.preferredHeightMaxFeet),
           preferences: {
             religion: values.religion || undefined,
             caste: values.caste || undefined,
@@ -1968,23 +2055,23 @@ function PreferencesForm({
         });
         void submitDraft(sent, () => guard.clear(storageKey));
       }}
-      className="space-y-3"
+      className="space-y-5"
     >
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid gap-5 sm:grid-cols-4">
         <Field label="Age from">
           <input className="input mt-1" type="number" min={18} max={100} value={String(values.preferredAgeMin ?? '')} onChange={set('preferredAgeMin')} required />
         </Field>
         <Field label="Age to">
           <input className="input mt-1" type="number" min={18} max={100} value={String(values.preferredAgeMax ?? '')} onChange={set('preferredAgeMax')} required />
         </Field>
-        <Field label="Height from (cm)">
-          <input className="input mt-1" type="number" min={120} max={230} value={String(values.preferredHeightMinCm ?? '')} onChange={set('preferredHeightMinCm')} required />
+        <Field label="Height from (feet)">
+          <HeightInput value={values.preferredHeightMinFeet} onChange={(value) => set('preferredHeightMinFeet')({ target: { value } })} required />
         </Field>
-        <Field label="Height to (cm)">
-          <input className="input mt-1" type="number" min={120} max={230} value={String(values.preferredHeightMaxCm ?? '')} onChange={set('preferredHeightMaxCm')} required />
+        <Field label="Height to (feet)">
+          <HeightInput value={values.preferredHeightMaxFeet} onChange={(value) => set('preferredHeightMaxFeet')({ target: { value } })} required />
         </Field>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-5 sm:grid-cols-2">
         {/*
           The same vocabulary the profile uses.
 
@@ -2079,13 +2166,20 @@ function PreferencesForm({
         )}
       </div>
 
+      <PackageRangeFields
+        minimum={String(values.preferredPackageMin ?? '')}
+        maximum={String(values.preferredPackageMax ?? '')}
+        onMinimumChange={put('preferredPackageMin')}
+        onMaximumChange={put('preferredPackageMax')}
+      />
+
       {/*
         Horoscope expectations belong here rather than on the chart itself: the
         chart is a fact about you, this is what you are asking of somebody
         else. "No preference" is a real answer and is offered as one — a family
         that does not use horoscopes is not asking anybody to abandon theirs.
       */}
-      <div className="grid gap-3 border-t pt-3 sm:grid-cols-3">
+      <div className="grid gap-5 sm:grid-cols-3">
         <Field label="Horoscope">
           <select
             className="input mt-1"
@@ -2124,7 +2218,7 @@ function PreferencesForm({
         preferred Rashi and Padam from the same lists the chart uses, and Gothram
         as free text since it runs to thousands.
       */}
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-5 sm:grid-cols-3">
         <ChoiceField
           label="Preferred Rashi"
           value={String(values.preferredRashi ?? '')}
@@ -2152,7 +2246,7 @@ function PreferencesForm({
       <Field label="Anything else">
         <textarea className="input mt-1" rows={2} value={String(values.other ?? '')} onChange={set('other')} />
       </Field>
-      <button className="btn">Save preferences</button>
+      <div className="flex justify-end"><button className="btn">Save Preferences</button></div>
     </form>
   );
 }

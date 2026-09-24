@@ -475,10 +475,12 @@ function useNavigationCounts(): Record<string, number> {
  */
 function AccountMenu({
   email,
+  displayName,
   role,
   onSignOut,
 }: {
   email?: string;
+  displayName?: string | null;
   role?: UserRole;
   onSignOut: () => void;
 }) {
@@ -488,7 +490,8 @@ function AccountMenu({
 
   useEffect(() => setOpen(false), [loc.pathname]);
 
-  const initial = (email ?? '?').slice(0, 1).toUpperCase();
+  const labelText = (displayName && displayName.trim() ? displayName : email ?? '?').trim();
+  const initial = labelText.slice(0, 1).toUpperCase();
 
   return (
     <div className="relative">
@@ -507,7 +510,7 @@ function AccountMenu({
         </span>
         <span className="hidden text-left sm:block">
           <span className="block max-w-[13rem] truncate text-[0.8125rem] font-medium text-gray-800">
-            {email}
+            {displayName ?? email}
           </span>
           <span className="block text-[0.6875rem] text-gray-400">
             {role ? (ROLE_LABEL[role] ?? role) : ''}
@@ -598,6 +601,18 @@ function Layout({ children }: { children: ReactNode }) {
   const loc = useLocation();
   const [drawer, setDrawer] = useState(false);
   const reduce = useReducedMotion();
+
+  const { data: profile } = useQuery({
+    queryKey: ['me'],
+    queryFn: async () => (await api.get('/users/me')).data,
+    enabled: Boolean(user),
+    retry: false,
+  });
+
+  const isFamily = user?.role === 'family';
+  const accountDisplayName = isFamily
+    ? (profile?.accountName ?? user?.accountName ?? profile?.displayName)
+    : (profile?.accountName ?? profile?.displayName);
 
   const signOut = async () => {
     try {
@@ -708,7 +723,7 @@ function Layout({ children }: { children: ReactNode }) {
             <div className="flex items-center gap-2">
               {/* Only rendered for an account that holds more than one business. */}
               {canAny(permissions, [Permission.VENDOR_LISTING_MANAGE]) && <BusinessSwitcher />}
-              <AccountMenu email={user?.email} role={user?.role} onSignOut={signOut} />
+              <AccountMenu email={user?.email} displayName={accountDisplayName} role={user?.role} onSignOut={signOut} />
             </div>
           </header>
 
