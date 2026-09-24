@@ -1,13 +1,16 @@
 import { FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { ProfileSilhouette } from '../components/ProfileSilhouette';
 
 /**
  * The public home page, from the matrimony home design template.
  *
  * Shown at `/` to somebody who is not signed in; a signed-in person still
  * lands on their dashboard there. The template's profile cards and couple's
- * story are left out until there is real content for them: members' profiles
- * are private, and a testimonial has to be a real couple's own words.
+ * story are filled with plainly labelled samples: members' profiles are
+ * private, and a testimonial has to be a real couple's own words, so neither
+ * may be dressed up as one. Replace SAMPLE_PROFILES and the story when there
+ * is consented content to show.
  */
 const STEPS = [
   {
@@ -23,6 +26,15 @@ const STEPS = [
     body: 'A conversation opens only once both sides accept. When the match is fixed, the wedding’s vendors and planner are booked here too.',
   },
 ];
+
+/** Stand-ins in the shape of a real card: a role, never a name. */
+const SAMPLE_PROFILES = [
+  { gender: 'female', title: 'Bride, 27', line1: 'Telugu · Hyderabad', line2: 'Software engineer · B.Tech' },
+  { gender: 'male', title: 'Groom, 30', line1: 'Tamil · Chennai', line2: 'Chartered accountant · CA' },
+  { gender: 'female', title: 'Bride, 29', line1: 'Marathi · Pune', line2: 'Architect · M.Arch' },
+];
+
+const NAV_LINK = 'plate text-[0.8125rem] uppercase tracking-[0.16em] text-gray-700 hover:text-brand';
 
 export default function Home() {
   const nav = useNavigate();
@@ -44,10 +56,16 @@ export default function Home() {
             World of Weddingz
           </Link>
           <nav className="flex flex-wrap items-center gap-x-8 gap-y-2">
-            <a href="#how" className="plate text-[0.8125rem] uppercase tracking-[0.16em] text-gray-700 hover:text-brand">
+            <a href="#profiles" className={NAV_LINK}>
+              Profiles
+            </a>
+            <a href="#how" className={NAV_LINK}>
               How it works
             </a>
-            <Link to="/login" className="plate text-[0.8125rem] uppercase tracking-[0.16em] text-gray-700 hover:text-brand">
+            <a href="#stories" className={NAV_LINK}>
+              Stories
+            </a>
+            <Link to="/login" className={NAV_LINK}>
               Sign in
             </Link>
             <Link to="/register" className="btn min-h-[2.875rem]">
@@ -98,7 +116,7 @@ export default function Home() {
           </button>
         </form>
 
-        <section id="how" className="grid gap-10 py-24 md:grid-cols-3 md:py-28">
+        <section id="how" className="grid gap-10 pt-24 md:grid-cols-3 md:pt-28">
           {STEPS.map((step, i) => (
             <article key={step.title} className="flex flex-col gap-3">
               <span className="plate w-fit font-serif text-[2.75rem] leading-none text-gold">
@@ -108,6 +126,49 @@ export default function Home() {
               <p className="plate text-[0.9375rem] leading-[1.75] text-gray-700">{step.body}</p>
             </article>
           ))}
+        </section>
+
+        <section id="profiles" className="flex flex-col gap-7 pt-24 md:pt-28">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+            <div className="flex flex-col gap-2">
+              <h2 className="plate w-fit font-serif text-[2.25rem] font-normal text-brand sm:text-[2.625rem]">
+                Recently joined
+              </h2>
+              <p className="plate eyebrow w-fit tracking-[0.2em]">Sample profiles · members are private until you sign in</p>
+            </div>
+            <Link to="/register" className="plate eyebrow tracking-[0.2em] text-gray-700 hover:text-brand">
+              See all profiles
+            </Link>
+          </div>
+          <div className="grid gap-7 sm:grid-cols-2 lg:grid-cols-3">
+            {SAMPLE_PROFILES.map((p) => (
+              <article key={p.title + p.line1} className="flex flex-col border border-gray-200 bg-surface">
+                <ProfileSilhouette gender={p.gender} className="h-[14.375rem] border-b border-gray-200" />
+                <div className="flex flex-col gap-2 p-6">
+                  <h3 className="font-serif text-[1.625rem] font-normal text-brand">{p.title}</h3>
+                  <p className="text-sm leading-[1.7] text-gray-700">
+                    {p.line1}
+                    <br />
+                    {p.line2}
+                  </p>
+                  <Link
+                    to="/register"
+                    className="mt-2 inline-flex min-h-11 w-fit items-center text-xs uppercase tracking-[0.2em] text-brand hover:text-brand-strong"
+                  >
+                    View profile
+                  </Link>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section id="stories" className="flex flex-col items-center gap-[1.125rem] px-0 py-24 text-center sm:px-20 md:py-28">
+          <span aria-hidden className="block h-px w-16 bg-gold" />
+          <p className="plate font-serif text-[1.75rem] italic leading-[1.5] text-brand sm:text-[2.125rem]">
+            The first story told here will be a real couple’s, in their own words.
+          </p>
+          <p className="plate eyebrow tracking-[0.26em]">Sample · stories are shared with the couple’s consent</p>
         </section>
 
         <section className="flex flex-col items-start justify-between gap-8 border border-gray-200 bg-surface p-8 sm:p-12 md:flex-row md:items-center">

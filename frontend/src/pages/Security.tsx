@@ -94,7 +94,7 @@ export default function Security() {
                 <p className="font-medium">
                   {describeDevice(s.userAgent)}
                   {s.current && (
-                    <span className="ml-2 rounded-full bg-green-50 px-2 py-0.5 text-xs text-green-700">
+                    <span className="ml-2 rounded-sm bg-green-50 px-2 py-0.5 text-xs text-green-700">
                       This device
                     </span>
                   )}
@@ -205,7 +205,7 @@ function TwoFactorCard({
       <div className="flex items-center justify-between">
         <h2 className="section-title">Two-factor authentication</h2>
         <span
-          className={`rounded-full px-2 py-0.5 text-xs ${
+          className={`rounded-sm px-2 py-0.5 text-xs ${
             enabled ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'
           }`}
         >
@@ -477,7 +477,7 @@ function PhoneVerificationCard() {
       <div className="flex items-center justify-between">
         <h2 className="section-title">Mobile number</h2>
         <span
-          className={`rounded-full px-2 py-0.5 text-xs ${
+          className={`rounded-sm px-2 py-0.5 text-xs ${
             verifiedAt ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'
           }`}
         >

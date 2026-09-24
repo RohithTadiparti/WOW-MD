@@ -155,13 +155,13 @@ export default function ProfilePreview({
               )}
               <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                 {data?.profile.identityVerified && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800">
+                  <span className="inline-flex items-center gap-1 rounded-sm bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800">
                     <CheckCircle size={13} weight="fill" aria-hidden />
                     Identity verified
                   </span>
                 )}
                 {active && (
-                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+                  <span className="rounded-sm bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
                     {active}
                   </span>
                 )}
@@ -177,7 +177,7 @@ export default function ProfilePreview({
               ×
             </button>
             {typeof score === 'number' && (
-              <span className="flex items-baseline gap-1 rounded-full bg-brand-soft px-2.5 py-1 text-brand-strong">
+              <span className="flex items-baseline gap-1 rounded-sm bg-brand-soft px-2.5 py-1 text-brand-strong">
                 <span className="font-mono text-sm font-semibold leading-none">{score}%</span>
                 <span className="text-[0.6875rem] opacity-70">match</span>
               </span>

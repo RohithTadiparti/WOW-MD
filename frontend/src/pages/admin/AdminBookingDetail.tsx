@@ -252,9 +252,9 @@ export default function AdminBookingDetail() {
               return (
                 <li
                   key={stage}
-                  className={`rounded-full px-3 py-1 text-xs ${
+                  className={`rounded-sm px-3 py-1 text-xs ${
                     here
-                      ? 'bg-gradient-to-r from-brand to-brand-strong text-brand-fg'
+                      ? 'bg-brand text-brand-fg'
                       : done
                         ? 'bg-positive-bg text-positive-fg'
                         : 'bg-gray-100 text-gray-400'

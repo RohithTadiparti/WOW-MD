@@ -191,7 +191,7 @@ export default function VendorDashboard() {
           {active && (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <span
-                className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                className={`rounded-sm px-2 py-0.5 text-xs font-medium ${
                   STATUS_TONE[active.status] ?? 'bg-amber-50 text-amber-800'
                 }`}
               >

@@ -289,7 +289,7 @@ export default function Events() {
       */}
       {clients.length > 0 && (
         <div className="card flex flex-wrap items-center gap-3">
-          <label className="text-sm text-gray-700" htmlFor="wedding">
+          <label className="label mb-0" htmlFor="wedding">
             Working on
           </label>
           <select
@@ -356,7 +356,7 @@ export default function Events() {
           return (
             <button
               key={value || 'all'}
-              className={`rounded-full border px-3 py-1 text-xs ${
+              className={`rounded-sm border px-3 py-1 text-xs ${
                 statusFilter === value
                   ? 'border-brand bg-brand text-brand-fg'
                   : 'border-gray-300 text-gray-700 hover:border-brand'
@@ -470,7 +470,7 @@ export default function Events() {
                           <span className="flex flex-wrap items-center gap-1">
                             {ev.status && (
                               <span
-                                className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_TONE[ev.status]}`}
+                                className={`rounded-sm px-2 py-0.5 text-[10px] font-medium ${STATUS_TONE[ev.status]}`}
                               >
                                 {STATUS_LABEL[ev.status]}
                               </span>
@@ -478,13 +478,13 @@ export default function Events() {
                             {ev.rsvp &&
                               ev.rsvp.coming + ev.rsvp.notComing + ev.rsvp.noReply > 0 && (
                                 <>
-                                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-800">
+                                  <span className="rounded-sm bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-800">
                                     {ev.rsvp.coming} coming
                                   </span>
-                                  <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] text-amber-800">
+                                  <span className="rounded-sm bg-amber-50 px-2 py-0.5 text-[10px] text-amber-800">
                                     {ev.rsvp.noReply} not answered
                                   </span>
-                                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-600">
+                                  <span className="rounded-sm bg-gray-100 px-2 py-0.5 text-[10px] text-gray-600">
                                     {ev.rsvp.notComing} not coming
                                   </span>
                                 </>

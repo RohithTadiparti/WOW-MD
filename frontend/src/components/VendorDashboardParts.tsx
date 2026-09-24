@@ -145,7 +145,7 @@ export function BookingList({
                   {Number(b.amount) > 0 ? ` · ${rupees(b.amount)}` : ''}
                 </p>
               </div>
-              <span className="shrink-0 rounded-full bg-surface-sunken px-2 py-0.5 text-xs text-gray-600">
+              <span className="shrink-0 rounded-sm bg-surface-sunken px-2 py-0.5 text-xs text-gray-600">
                 {formatShortDate(b.createdAt)}
               </span>
             </li>
