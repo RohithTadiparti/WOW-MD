@@ -247,7 +247,7 @@ export default function AgentClients() {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <span
-                  className={`rounded-full px-2 py-0.5 text-xs ${
+                  className={`rounded-sm px-2 py-0.5 text-xs ${
                     CLAIM_TONE[c.claimStatus] ?? 'bg-gray-100 text-gray-600'
                   }`}
                 >
@@ -261,7 +261,7 @@ export default function AgentClients() {
                 {c.id && (
                   <>
                     <span
-                      className={`rounded-full px-2 py-0.5 text-xs ${
+                      className={`rounded-sm px-2 py-0.5 text-xs ${
                         c.isActive ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'
                       }`}
                     >

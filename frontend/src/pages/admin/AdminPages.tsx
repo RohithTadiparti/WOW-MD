@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiMessage } from '../../lib/api';
@@ -89,15 +89,15 @@ export function AdminUsers() {
               key={t.role}
               onClick={() => setRole(t.role)}
               aria-pressed={isActive}
-              className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+              className={`inline-flex items-center gap-2 rounded-sm px-3 py-1.5 text-sm font-medium transition-colors ${
                 isActive
-                  ? 'bg-gradient-to-r from-brand to-brand-strong text-brand-fg shadow-btn'
+                  ? 'bg-brand text-brand-fg shadow-btn'
                   : 'bg-surface text-gray-600 ring-1 ring-gray-200 hover:bg-gray-100'
               }`}
             >
               <span>{t.label}</span>
               <span
-                className={`rounded-full px-1.5 text-xs tabular-nums ${
+                className={`rounded-sm px-1.5 text-xs tabular-nums ${
                   isActive ? 'bg-white/25 text-brand-fg' : 'bg-gray-100 text-gray-500'
                 }`}
               >
@@ -121,14 +121,30 @@ export function AdminUsers() {
   );
 }
 
+/** The masthead every admin screen opens with, so directory pages match the rest. */
+function Masthead({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div>
+      <h1 className="page-title">{title}</h1>
+      <p className="page-subtitle">{children}</p>
+    </div>
+  );
+}
+
 export function AdminAgents() {
-  return <Directory title="Agents" initialRole="agent" roles={['agent']} detailBase="/admin/agents" />;
+  return (
+    <div className="space-y-4">
+      <Masthead title="Agents">Agencies acting for families, and where each stands on approval.</Masthead>
+      <Directory title="Agent accounts" initialRole="agent" roles={['agent']} detailBase="/admin/agents" />
+    </div>
+  );
 }
 
 export function AdminVendors() {
   return (
     <div className="space-y-6">
-      <Directory title="Vendors" initialRole="vendor" roles={['vendor']} detailBase="/admin/vendors" />
+      <Masthead title="Vendors">The people who sell on the marketplace, and the businesses they hold.</Masthead>
+      <Directory title="Vendor accounts" initialRole="vendor" roles={['vendor']} detailBase="/admin/vendors" />
       <Businesses />
     </div>
   );
@@ -136,12 +152,15 @@ export function AdminVendors() {
 
 export function AdminPlanners() {
   return (
-    <Directory
-      title="Wedding Planners"
-      initialRole="planner"
-      roles={['planner']}
-      detailBase="/admin/planners"
-    />
+    <div className="space-y-4">
+      <Masthead title="Wedding Planners">Planners who run weddings end to end for the families here.</Masthead>
+      <Directory
+        title="Planner accounts"
+        initialRole="planner"
+        roles={['planner']}
+        detailBase="/admin/planners"
+      />
+    </div>
   );
 }
 
@@ -297,7 +316,7 @@ function ServiceAreas({ officerId }: { officerId: string }) {
         {areas.map((a) => (
           <span
             key={a.id}
-            className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${
+            className={`flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs ${
               a.primary ? 'bg-brand/10 text-brand' : 'bg-gray-100 text-gray-600'
             }`}
             title={a.state && !a.city ? 'Whole state' : a.primary ? 'Primary area' : 'Will travel'}
@@ -568,15 +587,15 @@ export function AdminOfficers() {
               key={f.key}
               onClick={() => setFilter(f.key)}
               aria-pressed={isActive}
-              className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+              className={`inline-flex items-center gap-2 rounded-sm px-3 py-1.5 text-sm font-medium transition-colors ${
                 isActive
-                  ? 'bg-gradient-to-r from-brand to-brand-strong text-brand-fg shadow-btn'
+                  ? 'bg-brand text-brand-fg shadow-btn'
                   : 'bg-surface text-gray-600 ring-1 ring-gray-200 hover:bg-gray-100'
               }`}
             >
               <span>{f.label}</span>
               <span
-                className={`rounded-full px-1.5 text-xs tabular-nums ${
+                className={`rounded-sm px-1.5 text-xs tabular-nums ${
                   isActive ? 'bg-white/25 text-brand-fg' : 'bg-gray-100 text-gray-500'
                 }`}
               >
@@ -633,7 +652,7 @@ export function AdminOfficers() {
                           {o.serviceAreas.slice(0, 3).map((a, i) => (
                             <span
                               key={`${a.label}-${i}`}
-                              className={`rounded-full px-2 py-0.5 text-xs ${
+                              className={`rounded-sm px-2 py-0.5 text-xs ${
                                 a.primary
                                   ? 'bg-brand-soft text-brand-strong'
                                   : 'bg-gray-100 text-gray-500'
@@ -727,7 +746,14 @@ export function AdminBookings() {
  * so the merge is a single nav entry pointing at it, not a new component.
  */
 export function AdminServicesCatalog() {
-  return <CatalogAdmin />;
+  return (
+    <div className="space-y-4">
+      <Masthead title="Services & Catalog">
+        The categories, services and questions vendors list against. Configuration, not code.
+      </Masthead>
+      <CatalogAdmin />
+    </div>
+  );
 }
 
 export function AdminReports() {
@@ -956,6 +982,7 @@ export function AdminPayments() {
 
   return (
     <div className="space-y-4">
+      <Masthead title="Payments">Every transaction, and where the money in escrow stands.</Masthead>
       {escrow && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           <EscrowStat label="Held in escrow" value={money(escrow.held)} tone="text-amber-700" />
@@ -1013,7 +1040,7 @@ export function AdminPayments() {
                   <td className="py-2 text-right text-gray-600">{money(t.payoutAmount)}</td>
                   <td className="py-2">
                     <span
-                      className={`rounded-full px-2 py-1 text-xs ${
+                      className={`rounded-sm px-2 py-1 text-xs ${
                         TXN_STATUS_STYLE[t.status] ?? 'bg-gray-100 text-gray-600'
                       }`}
                     >

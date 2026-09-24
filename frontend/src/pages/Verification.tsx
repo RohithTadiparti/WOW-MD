@@ -322,7 +322,7 @@ export const CASE_FILTERS: { key: CaseStatus; label: string }[] = [
 function Pill({ status }: { status: string }) {
   return (
     <span
-      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+      className={`rounded-sm px-2 py-0.5 text-xs font-medium ${
         STATUS_TONE[status] ?? 'bg-gray-100 text-gray-600'
       }`}
     >
@@ -645,7 +645,7 @@ export default function Verification({
                 <button
                   key={section.key}
                   onClick={() => setSection(section.key === section_ ? null : section.key)}
-                  className={`rounded-full border px-3 py-1 text-xs ${
+                  className={`rounded-sm border px-3 py-1 text-xs ${
                     section.key === section_
                       ? 'border-brand bg-brand text-brand-fg'
                       : count > 0
@@ -725,7 +725,7 @@ export default function Verification({
                 <button
                   key={f.key}
                   onClick={() => setCaseFilter(f.key === caseFilter ? null : f.key)}
-                  className={`rounded-full border px-3 py-1 text-xs ${
+                  className={`rounded-sm border px-3 py-1 text-xs ${
                     f.key === caseFilter
                       ? 'border-brand bg-brand text-brand-fg'
                       : count > 0
@@ -786,7 +786,7 @@ function Metric({
     <button
       type="button"
       onClick={onClick}
-      className="card text-left transition hover:border-brand hover:shadow-sm"
+      className="card text-left transition hover:border-brand hover:bg-brand-soft/40"
     >
       {body}
     </button>
@@ -1959,7 +1959,7 @@ function MyAvailability() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="section-title">My availability</h2>
         {data && (
-          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${badgeTone}`}>
+          <span className={`rounded-sm px-2 py-0.5 text-xs font-medium ${badgeTone}`}>
             {AVAILABILITY_LABEL[data.status]}
             {data.status === 'on_leave' && data.leaveFrom && data.leaveTo
               ? ` · ${data.leaveFrom} to ${data.leaveTo}`

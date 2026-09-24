@@ -64,7 +64,7 @@ export function ActivityFeed() {
         {data.map((a) => (
           <div key={`${a.resourceType}-${a.resourceId}-${a.at}`} className="flex gap-3 py-2">
             <span
-              className={`h-fit whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium ${
+              className={`h-fit whitespace-nowrap rounded-sm px-2 py-0.5 text-[10px] font-medium ${
                 KIND_TONE[a.kind] ?? 'bg-gray-100 text-gray-700'
               }`}
             >
@@ -189,7 +189,7 @@ export function Directory({
                 </span>
               </span>
               <span
-                className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs ${
+                className={`whitespace-nowrap rounded-sm px-2 py-0.5 text-xs ${
                   u.isActive ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-800'
                 }`}
               >
@@ -356,7 +356,7 @@ export function Businesses() {
                 {b.city ? ` · ${b.city}` : ''}
               </p>
             </div>
-            <span className="whitespace-nowrap rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
+            <span className="whitespace-nowrap rounded-sm bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
               {labelFrom(BUSINESS_STATUS_LABEL, b.status)}
             </span>
           </div>
@@ -516,15 +516,15 @@ export function AllBookings({ initialStatus = '' }: { initialStatus?: string } =
               key={t.value || 'all'}
               onClick={() => setStatus(t.value)}
               aria-pressed={active}
-              className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+              className={`inline-flex items-center gap-2 rounded-sm px-3 py-1.5 text-sm font-medium transition-colors ${
                 active
-                  ? 'bg-gradient-to-r from-brand to-brand-strong text-brand-fg shadow-btn'
+                  ? 'bg-brand text-brand-fg shadow-btn'
                   : 'bg-surface text-gray-600 ring-1 ring-gray-200 hover:bg-gray-100'
               }`}
             >
               <span>{t.label}</span>
               <span
-                className={`rounded-full px-1.5 text-xs tabular-nums ${
+                className={`rounded-sm px-1.5 text-xs tabular-nums ${
                   active ? 'bg-white/25 text-brand-fg' : 'bg-gray-100 text-gray-500'
                 }`}
               >
@@ -660,7 +660,7 @@ export function Staff() {
             <div key={a.id} className="flex items-center justify-between gap-3 py-2">
               <span className="min-w-0 truncate text-sm text-gray-800">{a.email}</span>
               <span
-                className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs ${
+                className={`whitespace-nowrap rounded-sm px-2 py-0.5 text-xs ${
                   a.isActive ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-800'
                 }`}
               >

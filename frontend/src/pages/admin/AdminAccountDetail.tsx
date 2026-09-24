@@ -948,7 +948,7 @@ function ActionsMenu({ children }: { children: React.ReactNode }) {
           <div className="fixed inset-0 z-10" aria-hidden onClick={() => setOpen(false)} />
           <div
             role="menu"
-            className="absolute right-0 z-20 mt-1 w-52 overflow-hidden rounded-md border border-gray-200 bg-surface py-1 shadow-lg"
+            className="absolute right-0 z-20 mt-1 w-52 overflow-hidden rounded-md border border-gray-200 bg-surface py-1 shadow-pop"
             onClick={() => setOpen(false)}
           >
             {children}

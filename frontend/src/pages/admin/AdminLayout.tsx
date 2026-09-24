@@ -92,7 +92,7 @@ export default function AdminLayout() {
             className={({ isActive }) =>
               `flex items-center gap-2.5 whitespace-nowrap rounded-md px-3 py-2 text-sm transition-colors ${
                 isActive && !external
-                  ? 'bg-gradient-to-r from-brand to-brand-strong font-medium text-brand-fg shadow-btn'
+                  ? 'bg-brand font-medium text-brand-fg shadow-btn'
                   : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
               }`
             }

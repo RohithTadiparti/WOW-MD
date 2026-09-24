@@ -687,7 +687,7 @@ function Layout({ children }: { children: ReactNode }) {
               <span className="lg:hidden">
                 <Wordmark compact />
               </span>
-              <h1 className="hidden truncate text-sm font-semibold text-brand-strong lg:block">
+              <h1 className="hidden truncate text-[0.75rem] font-normal uppercase tracking-[0.18em] text-gray-600 lg:block">
                 {entries.find((e) => e.to === loc.pathname)?.label ?? ''}
               </h1>
             </div>

@@ -77,7 +77,7 @@ export default function AgencyFeeCard() {
                 {pay.isPending ? 'Paying…' : 'Pay Agency Fee'}
               </button>
             ) : (
-              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs capitalize text-gray-600">
+              <span className="rounded-sm bg-gray-100 px-2 py-0.5 text-xs capitalize text-gray-600">
                 {c.status.replace(/_/g, ' ')}
               </span>
             )}

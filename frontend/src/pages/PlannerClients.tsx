@@ -219,7 +219,7 @@ export default function PlannerClients() {
           >
             <div className="flex items-start justify-between gap-2">
               <h2 className="section-title">{c.name}</h2>
-              <span className={`rounded-full px-2 py-0.5 text-xs capitalize ${STATUS_TONE[c.status]}`}>
+              <span className={`rounded-sm px-2 py-0.5 text-xs capitalize ${STATUS_TONE[c.status]}`}>
                 {c.status}
               </span>
             </div>

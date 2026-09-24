@@ -5,6 +5,7 @@ node_modules/
 dist/
 build/
 coverage/
+e2e-results/
 
 # Environment and secrets
 .env
