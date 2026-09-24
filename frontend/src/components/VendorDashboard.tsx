@@ -9,15 +9,17 @@ import {
   Receipt,
   Star,
   Storefront,
+  CheckCircle,
+  Warning,
+  WarningCircle,
 } from '@phosphor-icons/react';
 import { api } from '../lib/api';
 import { useAuth } from '../store/auth';
 import { useBusinesses } from '../store/business';
-import { SELLER_STATUS_LABEL, humanize, partialListNote } from '../lib/labels';
+import { SELLER_STATUS_LABEL, humanize } from '../lib/labels';
 import { formatShortDate, daysAway } from '../lib/dates';
 import { Loading } from './ui/Feedback';
 import GetStarted from './GetStarted';
-import BookingsOverviewChart from './BookingsOverviewChart';
 import {
   BUSINESS_STATUS_LABEL,
   BookingList,
@@ -78,9 +80,20 @@ const TAB_FOR = {
 /** In-flight: everything that is neither finished nor called off. */
 const CLOSED = ['completed', 'cancelled', 'disputed'];
 
-export default function VendorDashboard() {
+export default function VendorDashboard({
+  adminUserId,
+  readOnly = false,
+  adminView = false,
+}: {
+  adminUserId?: string;
+  readOnly?: boolean;
+  adminView?: boolean;
+}) {
+  void readOnly;
+  void adminView;
   const profile = useAuth((s) => s.user);
   const { active, businesses, activeId } = useBusinesses();
+  const adminScope = adminUserId ? { userId: adminUserId, role: 'vendor' } : undefined;
 
   // Poll while open and refetch when the tab regains focus, so a new request or
   // a released payout appears without a manual refresh (EZ1-I147).
@@ -92,52 +105,64 @@ export default function VendorDashboard() {
   };
 
   const counts = useQuery({
-    queryKey: ['incoming-counts'],
-    queryFn: async () => (await api.get('/bookings/incoming/counts')).data as Record<string, number>,
+    queryKey: ['incoming-counts', adminUserId],
+    queryFn: async () => (await api.get('/bookings/incoming/counts', { params: adminScope })).data as Record<string, number>,
     ...live,
   });
 
   const earnings = useQuery({
-    queryKey: ['earnings'],
-    queryFn: async () => (await api.get('/bookings/earnings')).data as Earnings,
+    queryKey: ['earnings', adminUserId],
+    queryFn: async () => (await api.get('/bookings/earnings', { params: adminScope })).data as Earnings,
     ...live,
   });
 
   const incoming = useQuery({
-    queryKey: ['incoming-bookings'],
+    queryKey: ['incoming-bookings', adminUserId],
     queryFn: async () =>
-      (await api.get('/bookings/incoming', { params: { limit: 100 } })).data as {
+      (await api.get('/bookings/incoming', { params: { limit: 100, ...adminScope } })).data as {
         data: IncomingBooking[];
       },
     ...live,
   });
 
   const unread = useQuery({
-    queryKey: ['unread-count'],
-    queryFn: async () => (await api.get('/notifications/unread-count')).data as { unread: number },
+    queryKey: ['unread-count', adminUserId],
+    queryFn: async () => (await api.get('/notifications/unread-count', { params: adminScope })).data as { unread: number },
     ...live,
   });
 
   const vendorRows = useQuery({
-    queryKey: ['vendor-me'],
-    queryFn: async () => (await api.get('/vendors/me')).data as VendorRow[],
+    queryKey: ['vendor-me', adminUserId],
+    queryFn: async () => (await api.get('/vendors/me', { params: adminScope })).data as VendorRow[],
     retry: false,
   });
 
+  const selectedActiveId = activeId ?? vendorRows.data?.[0]?.id;
   const slots = useQuery({
-    queryKey: ['availability-summary', activeId],
+    queryKey: ['availability-summary', selectedActiveId, adminUserId],
     queryFn: async () =>
-      (await api.get(`/vendors/${activeId}/availability/summary`)).data as { openSlots: number },
-    enabled: Boolean(activeId),
+      (await api.get(`/vendors/${selectedActiveId}/availability/summary`, { params: adminScope })).data as { openSlots: number },
+    enabled: Boolean(selectedActiveId),
     refetchOnMount: 'always',
     retry: false,
+  });
+
+  const issues = useQuery({
+    queryKey: ['vendor-dashboard-issues'],
+    queryFn: async () => (await api.get('/vendors/dashboard/issues')).data as {
+      raised: number;
+      pending: number;
+      solved: number;
+      escalated: number;
+    },
+    ...live,
   });
 
   const c = counts.data ?? {};
   const all = c.all ?? 0;
   const completed = c.completed ?? 0;
   const cancelled = c.cancelled ?? 0;
-  const requested = c.requested ?? 0;
+  const requested = c.requests ?? 0;
   const activeCount = Math.max(0, all - completed - cancelled);
 
   const bookings = incoming.data?.data ?? [];
@@ -155,21 +180,13 @@ export default function VendorDashboard() {
 
   // This month's earnings, from the escrow ledger: released payouts confirmed
   // (or, failing a confirmation timestamp, created) in the current month.
-  const now = new Date();
-  const thisMonth = (earnings.data?.ledger ?? []).reduce((sum, p) => {
-    if (p.status !== 'released') return sum;
-    const d = new Date(p.confirmedAt ?? p.createdAt);
-    if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()) {
-      return sum + Number(p.payoutAmount || 0);
-    }
-    return sum;
-  }, 0);
+  const totalEarnings = Number(earnings.data?.released ?? 0);
 
   const activeRow = vendorRows.data?.find((v) => v.id === activeId);
   const ratingAvg = activeRow?.ratingAvg ?? 0;
   const ratingCount = activeRow?.ratingCount ?? 0;
 
-  const failed = counts.isError || earnings.isError || incoming.isError;
+  const failed = counts.isError || earnings.isError || incoming.isError || issues.isError;
   const firstName = (profile?.email ?? '').split('@')[0];
 
   return (
@@ -218,15 +235,17 @@ export default function VendorDashboard() {
           <Loading rows={2} />
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard label="Total bookings" value={all} to="/bookings?tab=all" />
+            <StatCard label="Total bookings" value={all} to="/bookings?tab=all" icon={CalendarBlank} gradient="from-brand-100 to-brand-50" />
             <StatCard
               label="New requests"
               value={requested}
               to={`/bookings?tab=${TAB_FOR.requested}`}
               tone={requested > 0 ? 'text-amber-700' : undefined}
+              icon={Receipt}
+              gradient="from-brand-soft to-surface"
             />
-            <StatCard label="Completed" value={completed} to={`/bookings?tab=${TAB_FOR.completed}`} />
-            <StatCard label="Cancelled" value={cancelled} to={`/bookings?tab=${TAB_FOR.cancelled}`} />
+            <StatCard label="Completed bookings" value={completed} to={`/bookings?tab=${TAB_FOR.completed}`} icon={CheckCircle} gradient="from-positive-bg to-brand-50" />
+            <StatCard label="Cancelled bookings" value={cancelled} to={`/bookings?tab=${TAB_FOR.cancelled}`} icon={WarningCircle} gradient="from-rose-50 to-surface" />
           </div>
         )}
       </section>
@@ -238,19 +257,23 @@ export default function VendorDashboard() {
           <Loading rows={2} />
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard label="Earnings this month" value={rupees(thisMonth)} to="/accounts" icon={Coins} />
+            <StatCard label="Total earnings" value={rupees(totalEarnings)} to="/accounts" icon={Coins} gradient="from-caution-bg to-brand-50" />
             <StatCard
               label="Held in escrow"
               value={rupees(earnings.data?.heldInEscrow ?? 0)}
               to="/accounts"
+              icon={Coins}
+              gradient="from-positive-bg to-surface"
             />
             <StatCard
               label="Pending payouts"
               value={rupees(earnings.data?.pendingPayout ?? 0)}
               to="/accounts"
               tone={Number(earnings.data?.pendingPayout ?? 0) > 0 ? 'text-amber-700' : undefined}
+              icon={Coins}
+              gradient="from-positive-bg to-surface"
             />
-            <StatCard label="Total paid out" value={rupees(earnings.data?.released ?? 0)} to="/accounts" />
+            <StatCard label="Total paid out" value={rupees(earnings.data?.released ?? 0)} to="/accounts" icon={Coins} gradient="from-positive-bg to-brand-50" />
           </div>
         )}
       </section>
@@ -263,12 +286,14 @@ export default function VendorDashboard() {
           hint={ratingCount > 0 ? `${ratingCount} review${ratingCount === 1 ? '' : 's'}` : 'Arrive with completed jobs'}
           to="/my-reviews"
           icon={Star}
+          gradient="from-brand-soft to-brand-50"
         />
         <StatCard
           label="Active bookings"
           value={activeCount}
           to={`/bookings?tab=${TAB_FOR.active}`}
           icon={Receipt}
+          gradient="from-brand-100 to-surface"
         />
         <StatCard
           label="Unread notifications"
@@ -276,54 +301,18 @@ export default function VendorDashboard() {
           to="/notifications"
           icon={Bell}
           tone={(unread.data?.unread ?? 0) > 0 ? 'text-amber-700' : undefined}
+          gradient="from-caution-bg to-surface"
         />
       </section>
 
-      {/* Bookings over a selectable period, drawn from the real request dates. */}
-      {incoming.isLoading ? (
-        <div className="card">
-          <Loading rows={3} />
-        </div>
-      ) : (
-        <>
-          <BookingsOverviewChart bookings={bookings} />
-          {/* The cards above count every booking; the chart and lists below are
-              drawn from the newest hundred, and say so when that is fewer. */}
-          {partialListNote(bookings.length, all) && (
-            <p className="-mt-4 text-xs text-gray-500">
-              {partialListNote(bookings.length, all)} bookings in the chart and lists below.
-            </p>
-          )}
-        </>
-      )}
-
-      {/* Status breakdown — the whole queue by state, each row into that tab. */}
-      <section className="card space-y-3">
-        <h2 className="section-title">Booking status</h2>
-        {counts.isLoading ? (
-          <Loading rows={3} />
-        ) : all === 0 ? (
-          <p className="text-sm text-gray-400">No bookings against your listings yet.</p>
-        ) : (
-          <div className="space-y-2">
-            {Object.entries(SELLER_STATUS_LABEL)
-              .filter(([status]) => (c[status] ?? 0) > 0)
-              .map(([status, label]) => (
-                <div key={status} className="flex items-center gap-3">
-                  <span className="w-40 shrink-0 truncate text-sm text-gray-600">{label}</span>
-                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface-sunken">
-                    <div
-                      className="h-full rounded-full bg-brand"
-                      style={{ width: `${((c[status] ?? 0) / all) * 100}%` }}
-                    />
-                  </div>
-                  <span className="w-8 shrink-0 text-right font-mono text-sm tabular-nums text-gray-800">
-                    {c[status] ?? 0}
-                  </span>
-                </div>
-              ))}
-          </div>
-        )}
+      <section>
+        <h2 className="mb-3 text-sm font-medium text-gray-500">Issues & support</h2>
+        {issues.isLoading ? <Loading rows={2} /> : <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard label="Issues raised" value={issues.data?.raised ?? 0} to="/support?status=raised" icon={Warning} gradient="from-caution-bg to-surface" />
+          <StatCard label="Issues pending" value={issues.data?.pending ?? 0} to="/support?status=pending" icon={WarningCircle} gradient="from-rose-50 to-surface" />
+          <StatCard label="Issues solved" value={issues.data?.solved ?? 0} to="/support?status=resolved" icon={CheckCircle} gradient="from-positive-bg to-brand-50" />
+          <StatCard label="Escalated to Admin" value={issues.data?.escalated ?? 0} to="/support?status=escalated" icon={Lifebuoy} gradient="from-brand-soft to-brand-50" />
+        </div>}
       </section>
 
       <div className="grid gap-6 lg:grid-cols-2">

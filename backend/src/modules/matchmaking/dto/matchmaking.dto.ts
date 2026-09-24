@@ -1,9 +1,11 @@
+import { parseFeetQuery } from '../../../common/util/height';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { StrictBoolean } from '../../../common/decorators/strict-boolean.decorator';
 import {
   IsEnum,
   IsIn,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -11,7 +13,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { MaritalStatus, OccupationStatus } from '../../../common/enums';
 import { MATCH_VIEWS, MatchView } from '../suggestion-views';
@@ -48,6 +50,14 @@ export class SendInterestDto extends ActingProfileDto {
  * person typing it is also one the database can answer.
  */
 export class SuggestionsQueryDto extends PaginationDto {
+  @ApiPropertyOptional({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER, description: 'Minimum annual package in rupees' })
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(Number.MAX_SAFE_INTEGER)
+  packageMin?: number;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER, description: 'Maximum annual package in rupees' })
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(Number.MAX_SAFE_INTEGER)
+  packageMax?: number;
+
   @ApiPropertyOptional({ format: 'uuid' })
   @IsOptional()
   @IsUUID('4')
@@ -61,13 +71,13 @@ export class SuggestionsQueryDto extends PaginationDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(18) @Max(100)
   ageMax?: number;
 
-  @ApiPropertyOptional({ minimum: 120, maximum: 230, description: 'Centimetres' })
-  @IsOptional() @Type(() => Number) @IsInt() @Min(120) @Max(230)
-  heightMinCm?: number;
+  @ApiPropertyOptional({ minimum: 3, maximum: 8, description: 'Decimal feet (one decimal place)' })
+  @IsOptional() @Transform(({ obj, key }) => parseFeetQuery(obj[key])) @IsNumber({ maxDecimalPlaces: 1 }) @Min(3) @Max(8)
+  heightMinFeet?: number;
 
-  @ApiPropertyOptional({ minimum: 120, maximum: 230, description: 'Centimetres' })
-  @IsOptional() @Type(() => Number) @IsInt() @Min(120) @Max(230)
-  heightMaxCm?: number;
+  @ApiPropertyOptional({ minimum: 3, maximum: 8, description: 'Decimal feet (one decimal place)' })
+  @IsOptional() @Transform(({ obj, key }) => parseFeetQuery(obj[key])) @IsNumber({ maxDecimalPlaces: 1 }) @Min(3) @Max(8)
+  heightMaxFeet?: number;
 
   @ApiPropertyOptional({ maxLength: 60 })
   @IsOptional() @IsString() @MaxLength(60)

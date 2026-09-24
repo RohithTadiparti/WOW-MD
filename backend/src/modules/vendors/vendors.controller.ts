@@ -25,6 +25,7 @@ import {
   UpdateVendorDto,
   VendorSearchDto,
 } from './dto/vendor.dto';
+import { PayoutBankService } from './payout-bank.service';
 import {
   AvailabilityQueryDto,
   BlockSlotDto,
@@ -45,8 +46,22 @@ export class VendorsController {
     private readonly availability: AvailabilityService,
     private readonly bookings: BookingsService,
     private readonly lifecycle: BusinessLifecycleService,
+    private readonly payoutBanks: PayoutBankService,
   ) {}
 
+  @ApiBearerAuth()
+  @RequirePermissions(Permission.VENDOR_LISTING_MANAGE)
+  @Get('payout/banks')
+  supportedPayoutBanks(@Query('q') query?: string) {
+    return this.payoutBanks.listSupportedBanks(query);
+  }
+
+  @ApiBearerAuth()
+  @RequirePermissions(Permission.VENDOR_LISTING_MANAGE)
+  @Get('payout/ifsc/:ifsc')
+  lookupPayoutIfsc(@Param('ifsc') ifsc: string, @Query('bankName') bankName?: string) {
+    return this.payoutBanks.lookupIfsc(ifsc, bankName);
+  }
   // ------------------------------------------------------------- calendar
   //
   // Availability runs on a rolling six-month window computed from today, so
@@ -165,9 +180,13 @@ export class VendorsController {
     @CurrentUser() actor: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Query() q: AvailabilityQueryDto,
+    @Query('userId') userId?: string,
   ) {
+    const scopedActor = actor.role === UserRole.ADMIN
+      ? { ...actor, role: UserRole.VENDOR, userId: userId ?? actor.userId }
+      : actor;
     return this.availability.summary(
-      actor,
+      scopedActor,
       ProviderType.VENDOR,
       id, q.from, q.to,
     );
@@ -245,8 +264,17 @@ export class VendorsController {
   @RequirePermissions(Permission.VENDOR_LISTING_MANAGE)
   @ApiOperation({ summary: 'Your own vendor listings' })
   @Get('me')
-  listOwn(@CurrentUser('userId') userId: string) {
-    return this.vendors.listOwn(userId);
+  listOwn(@CurrentUser() actor: AuthUser, @Query('userId') userId?: string) {
+    const selectedUserId = actor.role === UserRole.ADMIN && userId ? userId : actor.userId;
+    return this.vendors.listOwn(selectedUserId);
+  }
+
+  @ApiBearerAuth()
+  @RequirePermissions(Permission.VENDOR_LISTING_MANAGE)
+  @ApiOperation({ summary: 'Live issue buckets for the vendor dashboard' })
+  @Get('dashboard/issues')
+  dashboardIssues(@CurrentUser('userId') userId: string) {
+    return this.vendors.dashboardIssues(userId);
   }
 
   // ---------------------------------------------------- business lifecycle

@@ -43,7 +43,6 @@ const SLOT_TONE: Record<SlotState, Tone> = {
 interface ServiceOption {
   id: string;
   displayName: string | null;
-  concurrentCapacity: number;
   definition: { name: string } | null;
 }
 
@@ -269,7 +268,7 @@ export function NewSlot({
   // Capacity follows the service unless the vendor overrides it for this one
   // window, which is where "five teams, but only three free that Saturday"
   // gets said.
-  const effectiveCapacity = capacity === '' ? (service?.concurrentCapacity ?? 1) : Number(capacity);
+  const effectiveCapacity = capacity === '' ? 1 : Number(capacity);
 
   function submit() {
     if (end <= start) {
@@ -330,7 +329,7 @@ export function NewSlot({
         value={capacity}
         onChangeText={setCapacity}
         keyboardType="number-pad"
-        placeholder={String(service?.concurrentCapacity ?? 1)}
+        placeholder="1"
         hint="How many bookings this window can take at once: five if you can run five teams, one for a hall."
       />
       <Field label="Note" value={note} onChangeText={setNote} placeholder="Morning sitting" />

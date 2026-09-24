@@ -1,3 +1,4 @@
+import { migrateHeightDraft } from './height';
 export type Draft = Record<string, unknown>;
 
 /*
@@ -14,7 +15,7 @@ export function loadDraft(storageKey?: string): Draft | null {
   if (!storageKey) return null;
   try {
     const raw = sessionStorage.getItem(storageKey);
-    return raw ? (JSON.parse(raw) as Draft) : null;
+    return raw ? migrateHeightDraft(JSON.parse(raw) as Draft) : null;
   } catch {
     return null;
   }

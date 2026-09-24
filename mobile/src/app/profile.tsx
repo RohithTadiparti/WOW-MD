@@ -6,7 +6,14 @@ import { api, apiMessage } from '@/lib/api';
 import { formatDate } from '@/shared/dates';
 import { ROLE_LABEL } from '@/shared/permissions';
 import { DetailGrid, DetailRow } from '@/components/chrome';
-import { DateField, SelectField, Textarea } from '@/components/form';
+import {
+  adultDobMaxIso,
+  dobInputToIso,
+  DobField,
+  isoToDobInput,
+  SelectField,
+  Textarea,
+} from '@/components/form';
 import {
   Alert,
   Body,
@@ -58,6 +65,19 @@ const EMPTY = {
 /** The server's own rule, applied in the field so a typo costs no round trip. */
 const MOBILE_10 = /^[6-9]\d{9}$/;
 
+function dobError(value: string): string | undefined {
+  if (!value) return undefined;
+  const iso = dobInputToIso(value);
+  if (!iso) return value.length === 10 ? 'Enter a valid date of birth' : undefined;
+  const now = new Date();
+  const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  if (iso > todayIso) {
+    return 'A date of birth cannot be in the future';
+  }
+  if (iso > adultDobMaxIso()) return 'You must be at least 18 years old.';
+  return undefined;
+}
+
 const GENDERS = [
   { value: 'male', label: 'Male' },
   { value: 'female', label: 'Female' },
@@ -85,7 +105,7 @@ export default function Profile() {
     setForm({
       displayName: data.displayName ?? '',
       gender: data.gender ?? '',
-      dateOfBirth: data.dateOfBirth ?? '',
+      dateOfBirth: isoToDobInput(data.dateOfBirth ?? ''),
       city: data.city ?? '',
       address: data.address ?? '',
       contactPhone: data.contactPhone ?? '',
@@ -100,7 +120,7 @@ export default function Profile() {
       const payload: Record<string, string> = { displayName: form.displayName.trim() };
       for (const key of ['gender', 'dateOfBirth', 'city', 'address', 'contactPhone', 'bio'] as const) {
         const value = form[key].trim();
-        if (value) payload[key] = value;
+        if (value) payload[key] = key === 'dateOfBirth' ? (dobInputToIso(value) ?? value) : value;
       }
       await api.put('/users/me/profile', payload);
     },
@@ -118,6 +138,8 @@ export default function Profile() {
     setError('');
     const errors: Record<string, string> = {};
     if (!form.displayName.trim()) errors.displayName = 'Tell us what to call you';
+    const dateOfBirthError = dobError(form.dateOfBirth);
+    if (dateOfBirthError) errors.dateOfBirth = dateOfBirthError;
     if (form.contactPhone.trim()) {
       const digits = form.contactPhone.replace(/[\s-]/g, '').replace(/^\+91/, '');
       if (!MOBILE_10.test(digits)) errors.contactPhone = 'Enter a 10-digit Indian mobile number';
@@ -132,6 +154,11 @@ export default function Profile() {
     // The mark clears the moment they start fixing the field it is on.
     setFieldErrors((fe) => (fe[key] ? { ...fe, [key]: '' } : fe));
   };
+
+  function setDateOfBirth(value: string) {
+    setForm((f) => ({ ...f, dateOfBirth: value }));
+    setFieldErrors((fe) => ({ ...fe, dateOfBirth: dobError(value) ?? '' }));
+  }
 
   if (isPending) {
     return (
@@ -171,11 +198,11 @@ export default function Profile() {
             options={GENDERS}
             onChange={set('gender')}
           />
-          <DateField
+          <DobField
             label="Date of birth"
             value={form.dateOfBirth}
-            onChange={set('dateOfBirth')}
-            to={new Date().toISOString().slice(0, 10)}
+            onChange={setDateOfBirth}
+            error={fieldErrors.dateOfBirth}
           />
           <Field label="City" value={form.city} onChangeText={set('city')} />
           <Field label="Address" value={form.address} onChangeText={set('address')} />

@@ -204,8 +204,12 @@ export default function BookingConsole({
       return counts?.request_on_date ?? all.filter(isRequestOnDate).length;
     }
     if (!counts) return undefined;
-    if (entry.key === 'all') return counts.all;
-    return entry.statuses.reduce((n, status) => n + (counts[status] ?? 0), 0);
+    if (entry.key === 'all') return counts.all ?? 0;
+    if (entry.key in counts) return counts[entry.key] ?? 0;
+    if (entry.statuses.length > 0) {
+      return entry.statuses.reduce((n, status) => n + (counts[status] ?? 0), 0);
+    }
+    return undefined;
   };
 
   return (

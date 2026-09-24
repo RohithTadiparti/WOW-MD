@@ -22,3 +22,4 @@ e2e-results/
 
 # Local compose secrets
 docker/.env
+.claude

@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from '../auth/entities/user.entity';
 import { Vendor } from '../vendors/entities/vendor.entity';
+import { VendorReview } from '../vendors/entities/vendor-review.entity';
 import { PlannerProfile } from '../wedding-planners/entities/planner-profile.entity';
 import { VendorService } from '../catalog/entities/vendor-service.entity';
 import { ServiceDefinition } from '../catalog/entities/service-definition.entity';
@@ -23,16 +24,21 @@ import { VerificationRequest } from '../verification/entities/verification-reque
 import { SupportCase } from '../verification/entities/support-case.entity';
 import { RefreshSession } from '../auth/entities/refresh-session.entity';
 import { OfficerAvailability } from '../verification/entities/officer-availability.entity';
+import { Notification } from '../notifications/entities/notification.entity';
+import { AuditEvent } from '../../platform/audit/entities/audit-event.entity';
 import { AgentsModule } from '../agents/agents.module';
 import { BookingsModule } from '../bookings/bookings.module';
 import { CatalogModule } from '../catalog/catalog.module';
 import { VerificationModule } from '../verification/verification.module';
+import { AuthModule } from '../auth/auth.module';
 import { AdminService } from './admin.service';
 import { AdminConsoleService } from './admin-console.service';
 import { AdminActivityService } from './admin-activity.service';
 import { AdminAccountsService } from './admin-accounts.service';
 import { AdminBookingsService } from './admin-bookings.service';
 import { AdminReportsService } from './admin-reports.service';
+import { AdminPendingCountsService } from './admin-pending-counts.service';
+import { AdminCountsGateway } from './admin-counts.gateway';
 import { ReportsService } from './reports.service';
 import { AdminController } from './admin.controller';
 
@@ -41,6 +47,7 @@ import { AdminController } from './admin.controller';
     TypeOrmModule.forFeature([
       User,
       Vendor,
+      VendorReview,
       PlannerProfile,
       VendorService,
       ServiceDefinition,
@@ -59,6 +66,8 @@ import { AdminController } from './admin.controller';
       SupportCase,
       RefreshSession,
       OfficerAvailability,
+      Notification,
+      AuditEvent,
       // Read-only: the price on the table while a booking's total is 0.00, and
       // the wedding a planner booking's date and place are read from.
       Quotation,
@@ -75,6 +84,7 @@ import { AdminController } from './admin.controller';
     forwardRef(() => CatalogModule),
     // Approving a planner decides the verification request it raised.
     VerificationModule,
+    AuthModule,
   ],
   providers: [
     AdminService,
@@ -84,6 +94,8 @@ import { AdminController } from './admin.controller';
     AdminBookingsService,
     AdminReportsService,
     ReportsService,
+    AdminPendingCountsService,
+    AdminCountsGateway,
   ],
   controllers: [AdminController],
   exports: [
@@ -93,6 +105,7 @@ import { AdminController } from './admin.controller';
     AdminAccountsService,
     AdminBookingsService,
     AdminReportsService,
+    AdminPendingCountsService,
   ],
 })
 export class AdminModule {}

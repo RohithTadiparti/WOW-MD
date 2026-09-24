@@ -68,6 +68,9 @@ import Planner from './pages/Planner';
 import PlannerClients from './pages/PlannerClients';
 import PlannerClientDetail from './pages/PlannerClientDetail';
 import PlannerEventWorkspace from './pages/PlannerEventWorkspace';
+import MyWeddings from './pages/MyWeddings';
+import PlannerWeddings from './pages/PlannerWeddings';
+import PlannerTasks from './pages/PlannerTasks';
 import Chat from './pages/Chat';
 import Bookings from './pages/Bookings';
 import Genie from './pages/Genie';
@@ -118,6 +121,7 @@ import Availability from './pages/Availability';
 import Accounts from './pages/Accounts';
 import AccountsTransaction from './pages/AccountsTransaction';
 import Escrow from './pages/Escrow';
+import AgentEscrow from './pages/AgentEscrow';
 import MyReviews from './pages/MyReviews';
 import PlannerReviews from './pages/PlannerReviews';
 import Notifications from './pages/Notifications';
@@ -263,6 +267,13 @@ const NAV: NavEntry[] = [
     group: 'clients',
     icon: ShareNetwork,
   },
+  {
+    to: '/agent-escrow',
+    label: 'Escrow',
+    requires: [Permission.AGENCY_MANAGE],
+    group: 'business',
+    icon: Vault,
+  },
   { to: '/pool', label: 'Network Pool', requires: [Permission.NETWORK_POOL_BROWSE], group: 'clients', icon: Graph },
   {
     to: '/interests',
@@ -288,6 +299,9 @@ const NAV: NavEntry[] = [
    * serving both would need a fork at the top of every screen below it.
    */
   { to: '/my-clients', label: 'My Clients', requires: [Permission.PLAN_MANAGE_ENGAGED], group: 'clients', icon: AddressBook },
+  { to: '/my-weddings', label: 'My Weddings', requires: [Permission.PLAN_MANAGE_ENGAGED], group: 'clients', icon: CalendarCheck },
+  { to: '/weddings', label: 'My Weddings', requires: [Permission.PLAN_MANAGE_ENGAGED], group: 'wedding', icon: CalendarCheck },
+  { to: '/tasks', label: 'Tasks', requires: [Permission.PLAN_MANAGE_ENGAGED], group: 'wedding', icon: ClipboardText },
   { to: '/agency', label: 'My Agency', requires: [Permission.AGENCY_MANAGE], group: 'clients', icon: Buildings },
   // Reviews are about how the agency is doing, not what it is, so they get
   // their own entry rather than living inside the agency's details form
@@ -440,6 +454,17 @@ function useUnreadCount(): number {
   return data?.unread ?? 0;
 }
 
+function useNavigationCounts(): Record<string, number> {
+  const { data } = useQuery({
+    queryKey: ['navigation-counts'],
+    queryFn: async () => (await api.get('/users/me/navigation-counts')).data as Record<string, number>,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+    retry: false,
+  });
+  return data ?? {};
+}
+
 
 /**
  * How the account signs out, switches business, and changes theme.
@@ -450,10 +475,12 @@ function useUnreadCount(): number {
  */
 function AccountMenu({
   email,
+  displayName,
   role,
   onSignOut,
 }: {
   email?: string;
+  displayName?: string | null;
   role?: UserRole;
   onSignOut: () => void;
 }) {
@@ -463,7 +490,8 @@ function AccountMenu({
 
   useEffect(() => setOpen(false), [loc.pathname]);
 
-  const initial = (email ?? '?').slice(0, 1).toUpperCase();
+  const labelText = (displayName && displayName.trim() ? displayName : email ?? '?').trim();
+  const initial = labelText.slice(0, 1).toUpperCase();
 
   return (
     <div className="relative">
@@ -482,7 +510,7 @@ function AccountMenu({
         </span>
         <span className="hidden text-left sm:block">
           <span className="block max-w-[13rem] truncate text-[0.8125rem] font-medium text-gray-800">
-            {email}
+            {displayName ?? email}
           </span>
           <span className="block text-[0.6875rem] text-gray-400">
             {role ? (ROLE_LABEL[role] ?? role) : ''}
@@ -574,6 +602,18 @@ function Layout({ children }: { children: ReactNode }) {
   const [drawer, setDrawer] = useState(false);
   const reduce = useReducedMotion();
 
+  const { data: profile } = useQuery({
+    queryKey: ['me'],
+    queryFn: async () => (await api.get('/users/me')).data,
+    enabled: Boolean(user),
+    retry: false,
+  });
+
+  const isFamily = user?.role === 'family';
+  const accountDisplayName = isFamily
+    ? (profile?.accountName ?? user?.accountName ?? profile?.displayName)
+    : (profile?.accountName ?? profile?.displayName);
+
   const signOut = async () => {
     try {
       await api.post('/auth/logout');
@@ -585,7 +625,20 @@ function Layout({ children }: { children: ReactNode }) {
 
   const permissions = user?.permissions ?? [];
   const isAdmin = user?.role === 'admin';
+  const portal =
+    user?.role === 'admin'
+      ? 'admin'
+      : user?.role === 'in_person'
+        ? 'verification'
+        : user?.role === 'vendor'
+          ? 'vendor'
+          : user?.role === 'planner'
+            ? 'planner'
+            : user?.role === 'agent'
+              ? 'agent'
+              : 'individual';
   const unread = useUnreadCount();
+  const navCounts = useNavigationCounts();
 
   /*
    * For an administrator the left rail *is* the admin portal navigation
@@ -608,7 +661,7 @@ function Layout({ children }: { children: ReactNode }) {
         label: n.label,
         icon: n.icon,
         group: 'main',
-        badge: n.to === '/admin/notifications' ? unread : undefined,
+        badge: n.to === '/admin/notifications' ? Math.max(unread, navCounts[n.to] ?? 0) : navCounts[n.to] ?? undefined,
       }))
     : NAV.filter(
         (n) =>
@@ -619,7 +672,10 @@ function Layout({ children }: { children: ReactNode }) {
         label: (user && n.labelFor?.[user.role]) ?? n.label,
         icon: n.icon,
         group: n.group,
-        badge: n.to === '/notifications' ? unread : undefined,
+        badge:
+          n.to === '/notifications'
+            ? Math.max(unread, navCounts[n.to] ?? 0)
+            : navCounts[n.to] ?? undefined,
       }));
 
   const groups = isAdmin ? [{ key: 'main', title: null }] : NAV_GROUPS;
@@ -629,24 +685,24 @@ function Layout({ children }: { children: ReactNode }) {
   useEffect(() => setDrawer(false), [loc.pathname]);
 
   return (
-    <div className="min-h-[100dvh]">
+    <div className="portal-shell min-h-[100dvh]" data-portal={portal}>
       {/*
         Two columns above `lg`, one below. The rail is sticky and scrolls
         independently, so a long navigation never pushes the page down and the
         content column keeps its own scroll position.
       */}
       <div className="mx-auto flex w-full max-w-content gap-8 px-4 sm:px-6 lg:px-8">
-        <aside className="sticky top-0 hidden h-[100dvh] w-[15.5rem] shrink-0 flex-col gap-5 py-5 lg:flex">
+        <aside className="sticky top-0 hidden h-[100dvh] w-[13rem] shrink-0 flex-col gap-5 border-r border-gold/35 bg-surface/55 py-5 pr-4 lg:flex">
           <Wordmark />
           <div className="-mr-2 flex-1 overflow-y-auto pr-2">
-            <Sidebar entries={entries} groups={groups} filled={isAdmin} />
+            <Sidebar entries={entries} groups={groups} />
           </div>
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header
-            className="sticky top-0 z-20 -mx-4 flex h-16 items-center justify-between gap-3
-              border-b border-gray-200 bg-canvas/80 px-4 backdrop-blur-xl sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0"
+            className="portal-header sticky top-0 z-20 -mx-4 flex h-16 items-center justify-between gap-3
+              border-b border-brand/12 bg-canvas/90 px-4 backdrop-blur-xl sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0"
           >
             <div className="flex min-w-0 items-center gap-3">
               <button
@@ -667,13 +723,13 @@ function Layout({ children }: { children: ReactNode }) {
             <div className="flex items-center gap-2">
               {/* Only rendered for an account that holds more than one business. */}
               {canAny(permissions, [Permission.VENDOR_LISTING_MANAGE]) && <BusinessSwitcher />}
-              <AccountMenu email={user?.email} role={user?.role} onSignOut={signOut} />
+              <AccountMenu email={user?.email} displayName={accountDisplayName} role={user?.role} onSignOut={signOut} />
             </div>
           </header>
 
           {user && !user.isVerified && (
-            <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-caution-fg/25 bg-caution-bg px-4 py-3 text-sm text-caution-fg">
-              <Warning size={17} className="mt-0.5 shrink-0" aria-hidden />
+            <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-gold/75 bg-surface-sunken px-4 py-3 text-sm text-gray-800">
+              <Warning size={17} className="mt-0.5 shrink-0 text-gold-deep" aria-hidden />
               <p>
                 Please confirm your email address.{' '}
                 <Link className="font-medium underline underline-offset-2" to="/security">
@@ -701,7 +757,7 @@ function Layout({ children }: { children: ReactNode }) {
             initial={reduce ? false : { opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-            className="flex-1 py-6 pb-20"
+            className="flex-1 py-8 pb-20"
           >
             {/*
               Keyed on the path, so leaving a screen that failed clears the
@@ -729,14 +785,12 @@ function Layout({ children }: { children: ReactNode }) {
             initial={reduce ? false : { x: '-100%' }}
             animate={{ x: 0 }}
             transition={{ type: 'spring', stiffness: 380, damping: 36 }}
-            className="absolute inset-y-0 left-0 flex w-[17rem] flex-col gap-5 overflow-y-auto
-              border-r border-gray-200 bg-surface p-5"
+            className="absolute inset-y-0 left-0 flex w-[15rem] flex-col gap-5 overflow-y-auto border-r border-gold/35 bg-surface p-5"
           >
             <Wordmark />
             <Sidebar
               entries={entries}
               groups={groups}
-              filled={isAdmin}
               onNavigate={() => setDrawer(false)}
             />
           </motion.div>
@@ -754,12 +808,12 @@ function Layout({ children }: { children: ReactNode }) {
  * as the first heading on the page. No drawn logo: an invented glyph would be a decoration standing in
  * for an identity the brand has not decided on yet.
  */
-function Wordmark({ compact = false }: { compact?: boolean }) {
+function Wordmark({ compact = false, light = false }: { compact?: boolean; light?: boolean }) {
   return (
     <Link to="/" className="flex items-baseline gap-2 px-3 py-1">
-      <span className="font-serif text-[1.5rem] uppercase tracking-[0.18em] text-brand">WOW</span>
+      <span className={`font-serif text-[1.5rem] uppercase tracking-[0.18em] ${light ? 'text-brand-fg' : 'text-brand'}`}>WOW</span>
       {!compact && (
-        <span className="text-[0.625rem] uppercase tracking-[0.22em] text-gray-500">
+        <span className={`text-[0.625rem] uppercase tracking-[0.22em] ${light ? 'text-brand-fg/65' : 'text-gray-500'}`}>
           World of Weddingz
         </span>
       )}
@@ -1061,6 +1115,30 @@ export default function App() {
         }
       />
       <Route
+        path="/my-weddings"
+        element={
+          <Protected requires={[Permission.PLAN_MANAGE_ENGAGED]}>
+            <MyWeddings />
+          </Protected>
+        }
+      />
+      <Route
+        path="/weddings"
+        element={
+          <Protected requires={[Permission.PLAN_MANAGE_ENGAGED]}>
+            <PlannerWeddings />
+          </Protected>
+        }
+      />
+      <Route
+        path="/tasks"
+        element={
+          <Protected requires={[Permission.PLAN_MANAGE_ENGAGED]}>
+            <PlannerTasks />
+          </Protected>
+        }
+      />
+      <Route
         path="/my-clients/:userId"
         element={
           <Protected requires={[Permission.PLAN_MANAGE_ENGAGED]}>
@@ -1165,6 +1243,14 @@ export default function App() {
         }
       />
       <Route
+        path="/agent-escrow"
+        element={
+          <Protected requires={[Permission.AGENCY_MANAGE]}>
+            <AgentEscrow />
+          </Protected>
+        }
+      />
+      <Route
         path="/accounts/transactions/:id"
         element={
           <Protected requires={[Permission.BOOKING_READ_INCOMING]}>
@@ -1227,14 +1313,15 @@ export default function App() {
           routes render one component keyed by the account id.
         */}
         <Route path="clients/:id" element={<AdminAccountDetail kind="client" />} />
+        <Route path="clients/:clientId" element={<AdminAccountDetail kind="client" />} />
         <Route path="agents" element={<AdminAgents />} />
-        <Route path="agents/:id" element={<AdminAccountDetail kind="agent" />} />
+        <Route path="agents/:agentId" element={<AdminAccountDetail kind="agent" />} />
         <Route path="vendors" element={<AdminVendors />} />
-        <Route path="vendors/:id" element={<AdminAccountDetail kind="vendor" />} />
+        <Route path="vendors/:vendorId" element={<AdminAccountDetail kind="vendor" />} />
         <Route path="officers" element={<AdminOfficers />} />
-        <Route path="officers/:id" element={<AdminAccountDetail kind="officer" />} />
+        <Route path="officers/:officerId" element={<AdminAccountDetail kind="officer" />} />
         <Route path="planners" element={<AdminPlanners />} />
-        <Route path="planners/:id" element={<AdminAccountDetail kind="planner" />} />
+        <Route path="planners/:plannerId" element={<AdminAccountDetail kind="planner" />} />
         {/* Drill-downs from an account: one profile, one business, in full (EZ1-I185/I188). */}
         <Route path="profiles/:id" element={<AdminProfileDetail />} />
         <Route path="businesses/:id" element={<AdminBusinessDetail />} />

@@ -79,6 +79,57 @@ interface BookingRow {
   quotation?: { amount: string; currency?: string; stage?: string } | null;
 }
 
+interface AgentDashboard {
+  totalClients: number;
+  matchesFixed: number;
+  remainingClients: number;
+  interestsReceived: number;
+  interestsSent: number;
+  escrow: string;
+  issuesPending: number;
+  issuesSolved: number;
+  issuesEscalated: number;
+  clients: { id: string; userId: string | null; displayName: string; profileCode: string; city: string | null; profileCompleted: boolean; lifecycle: string; createdAt: string }[];
+  matches: InterestRow[];
+  interestsReceivedRows: InterestRow[];
+  interestsSentRows: InterestRow[];
+  payments: EscrowRow[];
+  pendingIssues: IssueRow[];
+  solvedIssues: IssueRow[];
+  escalatedIssues: IssueRow[];
+}
+
+interface InterestRow {
+  id: string;
+  fromProfileId: string;
+  toProfileId: string;
+  status: string;
+  matchFixedState: string;
+  matchFixedAt: string | null;
+  createdAt: string;
+}
+
+interface EscrowRow {
+  id: string;
+  bookingId: string;
+  amount: string;
+  currency: string;
+  status: string;
+  milestone: string;
+  providerRef: string | null;
+  createdAt: string;
+}
+
+interface IssueRow {
+  id: string;
+  title: string;
+  category: string | null;
+  status: string;
+  description: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface AccountDetail {
   user: AccountUser;
   profiles: { id: string; displayName: string; lifecycle: string; city: string | null }[];
@@ -116,6 +167,7 @@ interface AccountDetail {
     history: { id: string; amount: string; status: string; milestone: string; createdAt: string }[];
   };
   agency: { clients: RelatedAccount[]; charges: { id: string; amount: string; status: string; createdAt: string }[] } | null;
+  agentDashboard: AgentDashboard | null;
   officer: {
     assigned: number;
     open: number;
@@ -130,12 +182,55 @@ interface AccountDetail {
       createdAt: string;
     }[];
   } | null;
+  metrics: {
+    provider: { bookings: number; inEscrow: string; released: string };
+    agent: { clients: number; bookings: number } | null;
+    officer: Record<string, number> | null;
+  };
+}
+
+interface VendorActivity {
+  at: string;
+  kind: string;
+  summary: string;
+  resourceType: string;
+  resourceId: string;
 }
 
 const money = (v: string) => `₹${Number(v ?? 0).toLocaleString('en-IN')}`;
 
+export function buildSummaryCards(kind: Kind, data: AccountDetail, accountId: string) {
+  const providerId = data.businesses[0]?.id ?? data.plannerBusinesses[0]?.id;
+
+  if (kind === 'agent') {
+    return [
+      { label: 'Total clients', value: data.metrics.agent?.clients ?? 0, to: `/admin/users?role=bride&agentId=${accountId}` },
+      { label: 'Bookings placed', value: data.metrics.agent?.bookings ?? 0, to: `/admin/bookings?userId=${accountId}` },
+      { label: 'Interests sent', value: data.matchmaking?.sent ?? 0, to: undefined },
+      { label: 'Matches fixed', value: data.matchmaking?.fixed ?? 0, to: undefined },
+    ];
+  }
+
+  if (kind === 'officer') {
+    return [
+      { label: 'Assigned cases', value: data.officer?.assigned ?? 0, to: `/admin/support?tab=cases&assignee=${accountId}` },
+      { label: 'Open queue', value: data.officer?.open ?? 0, to: undefined },
+      { label: 'Overdue', value: data.officer?.overdue ?? 0, to: undefined },
+      { label: 'Service areas', value: data.officer?.serviceAreas.length ?? 0, to: undefined },
+    ];
+  }
+
+  return [
+    { label: 'Total bookings', value: data.metrics.provider.bookings, to: providerId ? `/admin/bookings?providerId=${providerId}` : undefined },
+    { label: 'Amount in escrow', value: money(data.metrics.provider.inEscrow), to: providerId ? `/admin/payments?providerId=${providerId}` : undefined },
+    { label: 'Amount released', value: money(data.metrics.provider.released), to: providerId ? `/admin/payments?providerId=${providerId}` : undefined },
+    { label: 'Recent payments', value: data.payments.history.length, to: undefined },
+  ];
+}
+
 export default function AdminAccountDetail({ kind }: { kind: Kind }) {
-  const { id = '' } = useParams();
+  const { id, vendorId, agentId, plannerId, officerId, clientId } = useParams();
+  const accountId = id ?? vendorId ?? agentId ?? plannerId ?? officerId ?? clientId ?? '';
   const navigate = useNavigate();
   const qc = useQueryClient();
   const meta = KIND[kind];
@@ -143,9 +238,20 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
   const [busy, setBusy] = useState(false);
 
   const { data, isLoading, error } = useQuery<AccountDetail>({
-    queryKey: ['admin-account-detail', id],
-    queryFn: async () => (await api.get(`/admin/accounts/${id}`)).data,
+    queryKey: ['admin-account-detail', accountId],
+    queryFn: async () => (await api.get(`/admin/accounts/${accountId}`)).data,
+    // The agent dashboard is operational data. Poll while the detail page is
+    // open so assignments, matches and case actions are reflected without an
+    // administrator needing to reload it.
+    refetchInterval: kind === 'agent' ? 15_000 : false,
     retry: false,
+  });
+
+  const { data: activity = [] } = useQuery<VendorActivity[]>({
+    queryKey: ['admin-vendor-activity', id],
+    queryFn: async () => (await api.get('/admin/activity', { params: { limit: 100 } })).data,
+    enabled: Boolean(data && kind === 'vendor'),
+    refetchInterval: 60000,
   });
 
   // Suspend or reinstate — an admin management action the backend already
@@ -156,7 +262,7 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
     setActionError('');
     setBusy(true);
     try {
-      await api.put(`/admin/users/${id}/status`, { isActive: active });
+      await api.put(`/admin/users/${accountId}/status`, { isActive: active });
       for (const k of ['admin-account-detail', 'analytics', 'audit'])
         qc.invalidateQueries({ queryKey: [k] });
     } catch (err) {
@@ -164,6 +270,22 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
     } finally {
       setBusy(false);
     }
+  }
+
+  function handleAdminAction(action: 'suspend' | 'deactivate' | 'delete') {
+    const label = action === 'delete' ? 'delete this account' : action === 'deactivate' ? 'deactivate this account' : 'suspend this account';
+    const prompt = action === 'delete'
+      ? `This is a destructive admin action. Type in the account email to confirm deletion for ${name}.`
+      : `Are you sure you want to ${label}?`;
+
+    if (!window.confirm(prompt)) return;
+
+    if (action === 'delete') {
+      setActionError('Delete account is not available in the current backend workflow. The account should be suspended or deactivated instead.');
+      return;
+    }
+
+    setActive(false);
   }
 
   const back = (
@@ -188,19 +310,70 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
 
   const { user } = data;
   const name = data.profiles[0]?.displayName || user.email;
+  const businessName = data.businesses[0]?.name ?? data.plannerBusinesses[0]?.name ?? 'No business recorded';
+  const portalLabel =
+    kind === 'vendor' ? 'Vendor Portal' :
+    kind === 'agent' ? 'Agent Portal' :
+    kind === 'planner' ? 'Wedding Planner Portal' :
+    kind === 'officer' ? 'Verification Officer Portal' :
+    'Account Portal';
+  const adminAccountActions = [
+    {
+      label: user.isActive ? 'Suspend account' : 'Reinstate account',
+      action: () => setActive(!user.isActive),
+      tone: 'default',
+      disabled: busy,
+    },
+    {
+      label: 'Deactivate account',
+      action: () => handleAdminAction('deactivate'),
+      tone: 'default',
+      disabled: busy || !user.isActive,
+    },
+    {
+      label: 'Delete account',
+      action: () => handleAdminAction('delete'),
+      tone: 'danger',
+      disabled: busy,
+    },
+  ];
+
+  const metricCards = buildSummaryCards(kind, data, accountId);
+  const activityIds = new Set([
+    user.id,
+    ...data.businesses.map((business) => business.id),
+    ...data.providerBookings.map((booking) => booking.id),
+    ...data.bookings.map((booking) => booking.id),
+    ...data.payments.history.map((payment) => payment.id),
+    ...data.verifications.map((verification) => verification.id),
+    ...data.casesRaised.map((supportCase) => supportCase.id),
+  ]);
+  const vendorActivity = activity.filter((item) => activityIds.has(item.resourceId));
 
   return (
     <div className="space-y-5">
       {back}
 
-      <div className="card">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="card overflow-hidden border border-brand/10 bg-gradient-to-br from-brand-soft via-surface to-surface-raised shadow-lifted">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <span className="inline-flex items-center rounded-full border border-brand/20 bg-brand/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-strong">
+            ADMIN VIEW • READ ONLY
+          </span>
+          <span className="text-xs uppercase tracking-[0.18em] text-gray-500">{portalLabel}</span>
+        </div>
+
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-xs uppercase tracking-wide text-brand-strong">{meta.title}</p>
-            <h1 className="page-title truncate">{name}</h1>
-            <p className="page-subtitle">{user.email}</p>
+            <p className="text-xs uppercase tracking-[0.2em] text-gray-500">{meta.title}</p>
+            <h1 className="page-title mt-1 truncate text-[2rem] leading-tight">{name}</h1>
+            <p className="mt-1 text-base font-medium text-gray-700">{businessName}</p>
+            <div className="mt-3 space-y-1 text-sm text-gray-600">
+              <p>{user.email}</p>
+              <p>{user.phone ?? 'Phone not provided'}</p>
+            </div>
           </div>
-          <div className="flex flex-col items-end gap-2">
+
+          <div className="flex flex-col items-end gap-3">
             <div className="flex flex-wrap gap-2">
               <span className={`pill ${user.isActive ? 'bg-positive-bg text-positive-fg' : 'bg-critical-bg text-critical-fg'}`}>
                 {user.isActive ? 'Active' : 'Suspended'}
@@ -209,7 +382,8 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
                 {user.isVerified ? 'Verified' : 'Unverified'}
               </span>
             </div>
-            <div className="flex items-center gap-2">
+
+            <div className="flex flex-wrap items-center justify-end gap-2">
               {data.profiles[0] && (
                 <Link className="btn btn-sm" to={`/admin/profiles/${data.profiles[0].id}`}>
                   View full profile
@@ -224,18 +398,21 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
                 >
                   {user.isActive ? 'Suspend account' : 'Reinstate account'}
                 </button>
-                {/*
-                  Hard deletion is deliberately not offered (EZ1-I194): consent,
-                  circulation and agency records have to outlive the account, so
-                  suspend is the terminal action. Shown disabled to say so.
-                */}
                 <button
                   role="menuitem"
-                  className="block w-full cursor-not-allowed px-3 py-2 text-left text-sm text-gray-400"
-                  disabled
-                  title="Deletion is not available; suspend the account instead."
+                  className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-brand-soft/40 disabled:opacity-50"
+                  disabled={busy || !user.isActive}
+                  onClick={() => handleAdminAction('deactivate')}
                 >
-                  Delete account (unavailable)
+                  Deactivate account
+                </button>
+                <button
+                  role="menuitem"
+                  className="block w-full px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50 disabled:opacity-50"
+                  disabled={busy}
+                  onClick={() => handleAdminAction('delete')}
+                >
+                  Delete account
                 </button>
               </ActionsMenu>
             </div>
@@ -244,8 +421,12 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
         {actionError && <p className="alert-critical mt-3">{actionError}</p>}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Section title="Overview">
+      {kind === 'agent' && data.agentDashboard && (
+        <AgentDashboardCards dashboard={data.agentDashboard} />
+      )}
+
+      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+        <Section title={kind === 'vendor' ? 'Business overview' : kind === 'agent' ? 'Client book overview' : kind === 'planner' ? 'Wedding operations overview' : 'Verification workload overview'}>
           <Row label="Account ID">
             <span className="font-mono text-xs">{user.id.slice(0, 8)}</span>
           </Row>
@@ -260,30 +441,47 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
           )}
         </Section>
 
-        <Section title="Money">
-          <Row label="Paid in total">{money(data.payments.total)}</Row>
-          <Row label="Held in escrow">{money(data.payments.inEscrow)}</Row>
-          <Row label="Released">{money(data.payments.released)}</Row>
-          <Row label="Refunded">{money(data.payments.refunded)}</Row>
+        <Section title="Admin actions">
+          <div className="space-y-2">
+            {adminAccountActions.map((action) => (
+              <button
+                key={action.label}
+                type="button"
+                className={`block w-full rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                  action.tone === 'danger'
+                    ? 'text-red-700 hover:bg-red-50'
+                    : 'text-gray-700 hover:bg-brand-soft/40'
+                } disabled:cursor-not-allowed disabled:opacity-50`}
+                disabled={action.disabled}
+                onClick={action.action}
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
         </Section>
-
-        {data.matchmaking && (
-          <Section title="Matchmaking">
-            <Row label="Interests sent">{String(data.matchmaking.sent)}</Row>
-            <Row label="Received">{String(data.matchmaking.received)}</Row>
-            <Row label="Accepted">{String(data.matchmaking.accepted)}</Row>
-            <Row label="Match fixed">{data.matchmaking.fixed > 0 ? 'Yes' : 'No'}</Row>
-          </Section>
-        )}
-
-        {data.officer && (
-          <Section title="Verification workload">
-            <Row label="Allocated">{String(data.officer.assigned)}</Row>
-            <Row label="Still open">{String(data.officer.open)}</Row>
-            <Row label="Past the deadline">{String(data.officer.overdue)}</Row>
-          </Section>
-        )}
       </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {metricCards.map((card) => (
+          card.to ? (
+            <Link key={card.label} to={card.to} className="card transition-colors hover:border-brand hover:bg-brand-soft/30">
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-gray-500">{card.label}</p>
+              <p className="mt-2 text-2xl font-semibold tabular-nums text-gray-900">{card.value}</p>
+              <p className="mt-1 text-xs text-brand-strong">View filtered records</p>
+            </Link>
+          ) : (
+            <div key={card.label} className="card">
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-gray-500">{card.label}</p>
+              <p className="mt-2 text-2xl font-semibold tabular-nums text-gray-900">{card.value}</p>
+            </div>
+          )
+        ))}
+      </div>
+
+      {kind === 'agent' && data.agentDashboard && (
+        <AgentDashboardDetails dashboard={data.agentDashboard} />
+      )}
 
       {/* An agency's book: the accounts they brought on, each clickable (EZ1-I171). */}
       {data.agency && (
@@ -567,7 +765,111 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
           )}
         />
       )}
+
+      {kind === 'vendor' && (
+        <ListSection
+          title="Recent activity"
+          empty="No recent activity recorded."
+          rows={vendorActivity}
+          render={(item) => (
+            <div key={`${item.resourceType}-${item.resourceId}-${item.at}`} className="flex items-center justify-between gap-3 py-2">
+              <span className="text-sm text-gray-800">{item.summary}</span>
+              <span className="whitespace-nowrap text-xs text-gray-500">{new Date(item.at).toLocaleString()}</span>
+            </div>
+          )}
+        />
+      )}
     </div>
+  );
+}
+
+function AgentDashboardCards({ dashboard }: { dashboard: AgentDashboard }) {
+  const cards = [
+    ['Total clients', String(dashboard.totalClients), 'agent-clients'],
+    ['Matches fixed', String(dashboard.matchesFixed), 'agent-matches'],
+    ['Remaining clients', String(dashboard.remainingClients), 'agent-remaining'],
+    ['Interests received', String(dashboard.interestsReceived), 'agent-interests-received'],
+    ['Interests sent', String(dashboard.interestsSent), 'agent-interests-sent'],
+    ['Escrow', money(dashboard.escrow), 'agent-escrow'],
+    ['Issues pending', String(dashboard.issuesPending), 'agent-issues-pending'],
+    ['Issues solved', String(dashboard.issuesSolved), 'agent-issues-solved'],
+    ['Issues escalated', String(dashboard.issuesEscalated), 'agent-issues-escalated'],
+  ] as const;
+  return (
+    <section aria-label="Agent activity dashboard">
+      <div className="mb-2 flex items-baseline justify-between gap-3">
+        <h2 className="section-title">Agent activity</h2>
+        <p className="text-xs text-gray-500">Live totals — select a card to review records</p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {cards.map(([label, value, target]) => (
+          <a
+            key={target}
+            href={`#${target}`}
+            className="card group block border border-transparent transition hover:border-brand-strong hover:bg-brand-soft/30 focus:outline-none focus:ring-2 focus:ring-brand-strong"
+          >
+            <span className="block text-sm font-medium text-gray-600">{label}</span>
+            <span className="mt-1 block text-2xl font-semibold tabular-nums text-gray-900">{value}</span>
+            <span className="mt-2 block text-xs text-brand-strong group-hover:underline">View details →</span>
+          </a>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function AgentDashboardDetails({ dashboard }: { dashboard: AgentDashboard }) {
+  const profile = (id: string) => `/admin/profiles/${id}`;
+  const interestRow = (interest: InterestRow) => (
+    <div key={interest.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+      <span className="min-w-0 text-gray-700">
+        <Link className="font-medium text-brand-strong hover:underline" to={profile(interest.fromProfileId)}>Sender</Link>
+        {' → '}
+        <Link className="font-medium text-brand-strong hover:underline" to={profile(interest.toProfileId)}>Recipient</Link>
+        <span className="block text-xs text-gray-500">{formatDate(interest.createdAt)}</span>
+      </span>
+      <span className="pill bg-gray-100 text-gray-600">{humanize(interest.status)}</span>
+    </div>
+  );
+  const issueRow = (issue: IssueRow) => (
+    <div key={issue.id} className="border-b border-gray-100 py-2 last:border-0">
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <span className="truncate font-medium text-gray-800">{issue.title}</span>
+        <span className="pill bg-gray-100 text-gray-600">{labelFrom(CASE_STATUS_LABEL, issue.status)}</span>
+      </div>
+      <p className="mt-1 line-clamp-2 text-xs text-gray-500">
+        {issue.category ? `${humanize(issue.category)} · ` : ''}{issue.description}
+      </p>
+      <p className="mt-1 text-xs text-gray-400">#{issue.id.slice(0, 8)} · updated {formatDate(issue.updatedAt)}</p>
+    </div>
+  );
+  return (
+    <section className="space-y-4" aria-label="Agent activity details">
+      <ListSection id="agent-clients" title="Agent clients" empty="No clients are assigned to this agent." rows={dashboard.clients}
+        render={(client) => (
+          <Link key={client.id} to={profile(client.id)} className="flex items-center justify-between gap-3 rounded-md px-2 py-2 hover:bg-brand-soft/40">
+            <span className="min-w-0"><span className="block truncate text-sm font-medium text-gray-900">{client.displayName}</span><span className="text-xs text-gray-500">{client.profileCode}{client.city ? ` · ${client.city}` : ''} · assigned {formatDate(client.createdAt)}</span></span>
+            <span className="pill bg-gray-100 text-gray-600">{client.profileCompleted ? 'Profile complete' : 'Profile incomplete'}</span>
+          </Link>
+        )}
+      />
+      <ListSection id="agent-matches" title="Matches fixed" empty="No matches have been fixed for this agent's clients." rows={dashboard.matches} render={interestRow} />
+      <ListSection id="agent-remaining" title="Clients with match not fixed" empty="Every current client has a fixed match." rows={dashboard.clients.filter((client) => !dashboard.matches.some((match) => match.fromProfileId === client.id || match.toProfileId === client.id))}
+        render={(client) => <Link key={client.id} to={profile(client.id)} className="block rounded-md px-2 py-2 text-sm font-medium text-brand-strong hover:bg-brand-soft/40 hover:underline">{client.displayName} <span className="font-normal text-gray-500">· {client.profileCode}</span></Link>}
+      />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ListSection id="agent-interests-received" title="Interests received" empty="No received interests." rows={dashboard.interestsReceivedRows} render={interestRow} />
+        <ListSection id="agent-interests-sent" title="Interests sent" empty="No sent interests." rows={dashboard.interestsSentRows} render={interestRow} />
+      </div>
+      <ListSection id="agent-escrow" title="Escrow transactions" empty="No escrow transactions for this agent's clients." rows={dashboard.payments}
+        render={(payment) => <Link key={payment.id} to={`/admin/bookings/${payment.bookingId}`} className="flex items-center justify-between gap-3 rounded-md px-2 py-2 hover:bg-brand-soft/40"><span className="text-sm text-gray-700">{milestoneLabel(payment.milestone)} · #{payment.id.slice(0, 8)}<span className="block text-xs text-gray-500">{formatDate(payment.createdAt)} · {payment.providerRef ?? 'No reference'}</span></span><span className="text-right"><span className="block text-sm font-medium text-gray-900">{money(payment.amount)}</span><span className="text-xs text-gray-500">{paymentStatusLabel(payment.status, 'admin')}</span></span></Link>}
+      />
+      <div className="grid gap-4 lg:grid-cols-3">
+        <ListSection id="agent-issues-pending" title="Issues pending" empty="No pending issues." rows={dashboard.pendingIssues} render={issueRow} />
+        <ListSection id="agent-issues-solved" title="Issues solved" empty="No solved issues." rows={dashboard.solvedIssues} render={issueRow} />
+        <ListSection id="agent-issues-escalated" title="Issues escalated to admin" empty="No escalated issues." rows={dashboard.escalatedIssues} render={issueRow} />
+      </div>
+    </section>
   );
 }
 
@@ -625,18 +927,20 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 }
 
 function ListSection<T>({
+  id,
   title,
   rows,
   render,
   empty,
 }: {
+  id?: string;
   title: string;
   rows: T[];
   render: (row: T) => React.ReactNode;
   empty: string;
 }) {
   return (
-    <div className="card">
+    <div id={id} className="card scroll-mt-5">
       <h2 className="section-title mb-1">{title}</h2>
       {rows.length === 0 ? (
         <p className="py-2 text-sm text-gray-400">{empty}</p>

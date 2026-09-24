@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiMessage } from '../lib/api';
 import { Loading } from './ui/Feedback';
@@ -25,7 +25,6 @@ interface Definition {
   allowedPricingModels: string[];
   availabilityModel: string;
   packagesAllowed: boolean;
-  defaultCapacity: number;
 }
 
 interface Offering {
@@ -49,7 +48,6 @@ interface VendorService {
   displayName: string | null;
   description: string | null;
   attributes: Answers;
-  concurrentCapacity: number;
   active: boolean;
   bookable: boolean;
   definition: Definition | null;
@@ -94,7 +92,13 @@ export function priceLabel(
  * it is sold as a package at all. Nothing here is written per vendor type,
  * which is what lets an administrator add a trade without a deployment.
  */
-export default function VendorServices({ vendorId }: { vendorId: string }) {
+export default function VendorServices({
+  vendorId,
+  selectedCategories,
+}: {
+  vendorId: string;
+  selectedCategories: string[];
+}) {
   const qc = useQueryClient();
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -122,7 +126,11 @@ export default function VendorServices({ vendorId }: { vendorId: string }) {
     }
   }
 
-  const takenDefinitionIds = useMemo(() => services.map((s) => s.definitionId), [services]);
+  const visibleServices = useMemo(
+    () => services.filter((service) => service.category?.slug && selectedCategories.includes(service.category.slug)),
+    [services, selectedCategories],
+  );
+  const takenDefinitionIds = useMemo(() => visibleServices.map((s) => s.definitionId), [visibleServices]);
 
   return (
     <div className="space-y-4">
@@ -130,8 +138,7 @@ export default function VendorServices({ vendorId }: { vendorId: string }) {
         <div>
           <h2 className="section-title">Services you offer</h2>
           <p className="text-sm text-gray-600">
-            What you sell, what it costs, and how many you can run at once. Clients see these, and
-            the questions they are asked come from the service they pick.
+            What you sell, what it costs, and the questions clients are asked when they pick a service.
           </p>
         </div>
         <button className="btn" onClick={() => setAdding(!adding)}>
@@ -145,6 +152,7 @@ export default function VendorServices({ vendorId }: { vendorId: string }) {
       {adding && (
         <AddService
           taken={takenDefinitionIds}
+          selectedCategories={selectedCategories}
           onAdd={async (body) => {
             const ok = await act(
               () => api.post(`/vendors/${vendorId}/services`, body),
@@ -158,13 +166,13 @@ export default function VendorServices({ vendorId }: { vendorId: string }) {
       {isLoading && <div className="card">
           <Loading rows={2} />
         </div>}
-      {!isLoading && services.length === 0 && !adding && (
+      {!isLoading && visibleServices.length === 0 && !adding && (
         <p className="card text-sm text-gray-400">
           Nothing listed yet. Add a service to start taking requests.
         </p>
       )}
 
-      {services.map((service) => (
+      {visibleServices.map((service) => (
         <div key={service.id} className="card space-y-3">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0">
@@ -174,8 +182,6 @@ export default function VendorServices({ vendorId }: { vendorId: string }) {
               <p className="text-xs text-gray-500">
                 {service.category?.name}
                 {service.definition ? ` · ${service.definition.name}` : ''}
-                {' · '}
-                up to {service.concurrentCapacity} at once
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -273,17 +279,37 @@ export default function VendorServices({ vendorId }: { vendorId: string }) {
   );
 }
 
-function AddService({ taken, onAdd }: { taken: string[]; onAdd: (b: unknown) => void }) {
+function AddService({
+  taken,
+  selectedCategories,
+  onAdd,
+}: {
+  taken: string[];
+  selectedCategories: string[];
+  onAdd: (b: unknown) => void;
+}) {
   const [categoryId, setCategoryId] = useState('');
   const [definitionId, setDefinitionId] = useState('');
   const [answers, setAnswers] = useState<Answers>({});
-  const [capacity, setCapacity] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ['catalog-categories'],
     queryFn: async () => (await api.get('/catalog/categories')).data,
   });
+
+  const availableCategories = useMemo(
+    () => categories.filter((category) => selectedCategories.includes(category.slug)),
+    [categories, selectedCategories],
+  );
+
+  useEffect(() => {
+    if (categoryId && !availableCategories.some((category) => category.id === categoryId)) {
+      setCategoryId('');
+      setDefinitionId('');
+      setAnswers({});
+    }
+  }, [availableCategories, categoryId]);
 
   const { data: definitions = [] } = useQuery<Definition[]>({
     queryKey: ['catalog-definitions', categoryId],
@@ -307,7 +333,6 @@ function AddService({ taken, onAdd }: { taken: string[]; onAdd: (b: unknown) => 
     onAdd({
       definitionId,
       attributes: cleanAnswers(fields, answers),
-      concurrentCapacity: capacity ? Number(capacity) : undefined,
     });
   }
 
@@ -327,7 +352,7 @@ function AddService({ taken, onAdd }: { taken: string[]; onAdd: (b: unknown) => 
             required
           >
             <option value="">Choose…</option>
-            {categories.map((c) => (
+            {availableCategories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
@@ -363,21 +388,6 @@ function AddService({ taken, onAdd }: { taken: string[]; onAdd: (b: unknown) => 
             <p className="text-sm text-gray-600">{described.definition.description}</p>
           )}
           <DynamicForm fields={fields} answers={answers} errors={errors} onChange={(k, v) => setAnswers((a) => ({ ...a, [k]: v }))} />
-          <label className="block text-sm sm:max-w-xs">
-            <span className="font-medium text-gray-700">How many at once?</span>
-            <input
-              className="input mt-1"
-              type="number"
-              min={1}
-              placeholder={String(described.definition.defaultCapacity)}
-              value={capacity}
-              onChange={(e) => setCapacity(e.target.value)}
-            />
-            <span className="mt-1 block text-xs text-gray-500">
-              How many of these you can run simultaneously. Five if you have five teams, one for a
-              hall. This seeds the capacity of every window you publish.
-            </span>
-          </label>
           <button className="btn">Add this service</button>
         </>
       )}
@@ -397,7 +407,6 @@ function EditService({
   const [displayName, setDisplayName] = useState(service.displayName ?? '');
   const [description, setDescription] = useState(service.description ?? '');
   const [answers, setAnswers] = useState<Answers>(service.attributes);
-  const [capacity, setCapacity] = useState(String(service.concurrentCapacity));
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   function submit(e: FormEvent) {
@@ -410,7 +419,6 @@ function EditService({
       displayName: displayName.trim(),
       description: description.trim(),
       attributes: cleanAnswers(service.serviceForm, answers),
-      concurrentCapacity: Number(capacity) || 1,
     });
   }
 
@@ -424,16 +432,6 @@ function EditService({
             placeholder={service.definition?.name ?? ''}
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
-          />
-        </label>
-        <label className="text-sm">
-          <span className="font-medium text-gray-700">How many at once?</span>
-          <input
-            className="input mt-1"
-            type="number"
-            min={1}
-            value={capacity}
-            onChange={(e) => setCapacity(e.target.value)}
           />
         </label>
       </div>

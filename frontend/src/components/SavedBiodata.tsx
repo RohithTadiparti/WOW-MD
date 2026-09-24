@@ -1,3 +1,6 @@
+import { formatHeight } from '../lib/height';
+import { readBusinessEntries } from '../lib/business-entries';
+import { OTHER_INCOME_LABELS, readOtherIncome } from '../lib/other-income';
 import { ReactNode } from 'react';
 import { formatDate } from '../lib/dates';
 
@@ -87,17 +90,18 @@ export default function SavedBiodata({
     return v === null || v === undefined || v === '' ? null : String(v);
   };
 
-  const height = num('heightCm');
+  const height = num('heightFeet');
   const father = bag('father');
   const mother = bag('mother');
 
   return (
     <div className="space-y-5 text-sm">
+      {str('familyPhotoUrl') && <Group title="Family Photo"><img src={str('familyPhotoUrl')!} alt="Family photo" className="max-h-80 rounded-sm object-contain" /></Group>}
       <Group title="Personal">
         <Row label="Name">
           {[str('firstName'), str('lastName')].filter(Boolean).join(' ') || null}
         </Row>
-        <Row label="Height">{height ? `${height} cm` : null}</Row>
+        <Row label="Height">{height ? formatHeight(height) : null}</Row>
         <Row label="Complexion">{str('complexion')}</Row>
         <Row label="Alternate mobile">{str('alternateMobile')}</Row>
         <Row label="Address">{str('communicationAddress')}</Row>
@@ -185,17 +189,21 @@ export default function SavedBiodata({
         )}
       </Group>
 
-      <Group title="Education and occupation">
+      <Group title="Education">
         <Row label="Qualification">{str('highestQualification')}</Row>
         <Row label="Course">{str('course')}</Row>
         <Row label="Institution">{str('institution')}</Row>
+        <Row label="College Place">{str('collegePlace')}</Row>
+      </Group>
+
+      <Group title="Occupation">
         <Row label="Occupation">{str('occupationStatus')?.replace(/_/g, ' ')}</Row>
         <Row label="Employer">
-          {inBag('employment', 'company') ?? inBag('business', 'businessName')}
+          {inBag('employment', 'company')}
         </Row>
         <Row label="Role">{inBag('employment', 'designation')}</Row>
         <Row label="Where">
-          {inBag('employment', 'workLocation') ?? inBag('business', 'businessLocation')}
+          {inBag('employment', 'workLocation')}
         </Row>
         {/*
           Income is shown only when the profile has chosen to publish it. It is
@@ -204,7 +212,7 @@ export default function SavedBiodata({
         */}
         {details.incomeVisible ? (
           <Row label="Income">
-            {inBag('employment', 'salary') ?? inBag('business', 'businessIncome')}
+            {inBag('employment', 'salary')}
           </Row>
         ) : (
           <Row label="Income">
@@ -213,15 +221,39 @@ export default function SavedBiodata({
         )}
       </Group>
 
+      {details.occupationStatus === 'employed' && readOtherIncome(bag('employment')).length > 0 && (
+        <Group title="Other Income (annual rupees)">
+          {readOtherIncome(bag('employment')).map((entry) => (
+            <Row key={entry.id} label={OTHER_INCOME_LABELS[entry.source]}>
+              {details.incomeVisible ? String(entry.amount) : 'Kept private'}
+            </Row>
+          ))}
+        </Group>
+      )}
+
+      {details.occupationStatus === 'self_employed' && readBusinessEntries(bag('business')).map((entry, index) => (
+        <Group key={String(entry.id ?? index)} title={`Business ${index + 1}`}>
+          <Row label="Business Name">{String(entry.businessName ?? '') || null}</Row>
+          <Row label="Business Type">{String(entry.businessType ?? '') || null}</Row>
+          <Row label="Business Location">{String(entry.businessLocation ?? '') || null}</Row>
+          <Row label="Business Income (annual rupees)">{details.incomeVisible ? String(entry.businessIncome ?? '') || null : 'Kept private'}</Row>
+        </Group>
+      ))}
+
       <Group title="Partner preferences">
+        <Row label="Package Range (annual rupees)">
+          {num('preferredPackageMin') != null || num('preferredPackageMax') != null
+            ? `${num('preferredPackageMin')?.toLocaleString('en-IN') ?? 'No minimum'} ? ${num('preferredPackageMax')?.toLocaleString('en-IN') ?? 'No maximum'}`
+            : 'No preference'}
+        </Row>
         <Row label="Age">
           {num('preferredAgeMin') && num('preferredAgeMax')
             ? `${num('preferredAgeMin')} – ${num('preferredAgeMax')}`
             : null}
         </Row>
         <Row label="Height">
-          {num('preferredHeightMinCm') && num('preferredHeightMaxCm')
-            ? `${num('preferredHeightMinCm')} – ${num('preferredHeightMaxCm')} cm`
+          {num('preferredHeightMinFeet') && num('preferredHeightMaxFeet')
+            ? `${formatHeight(num('preferredHeightMinFeet'))} – ${formatHeight(num('preferredHeightMaxFeet'))}`
             : null}
         </Row>
       </Group>

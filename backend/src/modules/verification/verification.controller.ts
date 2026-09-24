@@ -155,6 +155,23 @@ export class VerificationController {
   }
 
   @RequirePermissions(Permission.VERIFICATION_PROCESS)
+  @ApiOperation({ summary: 'Live workload summary for the signed-in officer' })
+  @Get('officer-dashboard')
+  async officerDashboard(@CurrentUser('userId') userId: string) {
+    const [verification, issues] = await Promise.all([
+      this.verification.officerDashboard(userId),
+      this.cases.metrics(userId),
+    ]);
+    return {
+      ...verification,
+      escalated: issues.escalated ?? 0,
+      openIssues: Object.entries(issues)
+        .filter(([status]) => !['resolved', 'rejected', 'closed'].includes(status))
+        .reduce((total, [, count]) => total + count, 0),
+    };
+  }
+
+  @RequirePermissions(Permission.VERIFICATION_PROCESS)
   @Get('requests/:id')
   findOne(@CurrentUser() actor: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.verification.findOne(actor, id);

@@ -158,7 +158,7 @@ const TAB_DEFS: { key: string; label: string; statuses: string[] }[] = [
     statuses: ['in_progress', 'completed_pending_final_payment'],
   },
   { key: 'completed', label: 'Completed', statuses: ['completed'] },
-  { key: 'cancelled', label: 'Cancelled', statuses: ['cancelled'] },
+  { key: 'cancelled', label: 'Cancelled', statuses: ['cancelled', 'disputed'] },
 ];
 
 /** A plain-English line under the technical status, per status (EZ1-I167). */
@@ -253,17 +253,11 @@ export default function Bookings() {
     enabled: canBuy,
   });
 
-  // The dashboard's own tally, so "All", "Completed" and "Cancelled" read the
-  // same number here as on the tiles that link to them.
+  // The dashboard & tab tally from server database
   const { data: serverCounts } = useQuery({
     queryKey: ['my-booking-counts'],
     queryFn: async () =>
-      (await api.get('/bookings/counts')).data as {
-        all: number;
-        active: number;
-        cancelled: number;
-        completed: number;
-      },
+      (await api.get('/bookings/counts')).data as Record<string, number>,
     enabled: canBuy,
     retry: false,
   });
@@ -273,6 +267,7 @@ export default function Bookings() {
     try {
       await fn();
       qc.invalidateQueries({ queryKey: ['bookings'] });
+      qc.invalidateQueries({ queryKey: ['my-booking-counts'] });
       qc.invalidateQueries({ queryKey: ['quotations'] });
       qc.invalidateQueries({ queryKey: ['milestones'] });
       qc.invalidateQueries({ queryKey: ['booking-addons'] });
@@ -316,24 +311,28 @@ export default function Bookings() {
   }
 
   const allBookings: Booking[] = data?.data ?? [];
-  const matchesTab = (b: Booking, tab: string): boolean => {
-    if (tab === '') return true;
-    if (tab === 'active') return b.status !== 'cancelled' && b.status !== 'completed';
-    // A curated tab matches its group of statuses; an exact-status deep link
-    // (EZ1-I75) still falls through to a direct match.
-    const def = TAB_DEFS.find((t) => t.key === tab);
-    return def ? def.statuses.includes(b.status) : b.status === tab;
+  const matchesTab = (b: Booking, tabKey: string): boolean => {
+    const s = (b.status ?? '').toLowerCase().trim();
+    if (tabKey === '') return true;
+    if (tabKey === 'active') return s !== 'cancelled' && s !== 'completed' && s !== 'disputed';
+    const def = TAB_DEFS.find((t) => t.key === tabKey);
+    if (def && def.statuses.length > 0) {
+      return def.statuses.map((x) => x.toLowerCase()).includes(s);
+    }
+    return s === tabKey.toLowerCase().trim();
   };
   const bookings: Booking[] = allBookings.filter((b) => matchesTab(b, status));
-  // The tabs the dashboard also counts take the server's figure; the finer
-  // buckets are counted from the rows, which is every booking up to a hundred.
-  const countFor = (tab: string) => {
+
+  const countFor = (tabKey: string) => {
     if (serverCounts) {
-      if (tab === '') return serverCounts.all;
-      if (tab === 'completed') return serverCounts.completed;
-      if (tab === 'cancelled') return serverCounts.cancelled;
+      if (tabKey === '') return serverCounts.all ?? 0;
+      if (tabKey in serverCounts) return serverCounts[tabKey] ?? 0;
+      const def = TAB_DEFS.find((t) => t.key === tabKey);
+      if (def && def.statuses.length > 0) {
+        return def.statuses.reduce((sum, s) => sum + (serverCounts[s] ?? 0), 0);
+      }
     }
-    return allBookings.filter((b) => matchesTab(b, tab)).length;
+    return allBookings.filter((b) => matchesTab(b, tabKey)).length;
   };
   const partialNote = partialListNote(
     allBookings.length,

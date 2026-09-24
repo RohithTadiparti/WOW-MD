@@ -9,6 +9,7 @@ import { User } from '../auth/entities/user.entity';
 import { Interest } from '../matchmaking/entities/interest.entity';
 import { ProfileDetailsService } from './profile-details.service';
 import { ProfileDetailsController } from './profile-details.controller';
+import { CasteCatalogController } from './caste-catalog.controller';
 import { AadhaarService } from './aadhaar.service';
 import { AadhaarController } from './aadhaar.controller';
 import {
@@ -36,7 +37,7 @@ import {
     LicensedAadhaarProvider,
     aadhaarProviderFactory,
   ],
-  controllers: [ProfileDetailsController, AadhaarController],
+  controllers: [ProfileDetailsController, AadhaarController, CasteCatalogController],
   exports: [ProfileDetailsService],
 })
 export class ProfileDetailsModule {}

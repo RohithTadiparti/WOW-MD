@@ -4,6 +4,7 @@ import { ProfileDetailsService } from './profile-details.service';
 import {
   AssetDto,
   EducationDetailsDto,
+  OccupationDetailsDto,
   FamilyDetailsDto,
   HoroscopeDetailsDto,
   MaritalDetailsDto,
@@ -117,6 +118,15 @@ export class ProfileDetailsController {
     return this.details.saveEducation(actor, id, dto);
   }
 
+  @Put('details/occupation')
+  occupation(
+    @CurrentUser() actor: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: OccupationDetailsDto,
+  ) {
+    return this.details.saveOccupation(actor, id, dto);
+  }
+
   @Put('details/preferences')
   preferences(
     @CurrentUser() actor: AuthUser,
@@ -161,6 +171,15 @@ export class ProfileDetailsController {
     @Body() dto: ProfilePhotoDto,
   ) {
     return this.details.addPhoto(actor, id, dto.url);
+  }
+
+  @Put('details/family-photo')
+  familyPhoto(
+    @CurrentUser() actor: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ProfilePhotoDto,
+  ) {
+    return this.details.setFamilyPhoto(actor, id, dto.url);
   }
 
   @Delete('details/photos')

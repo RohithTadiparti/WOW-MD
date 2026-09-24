@@ -2,13 +2,10 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useAuth } from '../store/auth';
-import { navDenied } from '../lib/nav-access';
 import { useBusinesses } from '../store/business';
 import {
   Permission,
-  PermissionValue,
   ROLE_LABEL,
-  UserRole,
   VERIFICATION_LABEL,
   canAny,
 } from '../lib/permissions';
@@ -19,23 +16,29 @@ import ClaimRequests from '../components/ClaimRequests';
 import GetStarted from '../components/GetStarted';
 import VendorDashboard from '../components/VendorDashboard';
 import IndividualDashboard from '../components/IndividualDashboard';
-import { motion, useReducedMotion } from 'motion/react';
 import { ArrowRight } from '@phosphor-icons/react';
-
-interface Tile {
-  to: string;
-  title: string;
-  desc: string;
-  requires: PermissionValue[];
-  /** Mirrors the navbar: a role that holds the capability but not the entry. */
-  hideFor?: UserRole[];
-}
+import {
+  Bell,
+  CalendarCheck,
+  CheckCircle,
+  Coins,
+  ClipboardText,
+  Hourglass,
+  Lifebuoy,
+  Prohibit,
+  UserCircle,
+  UserPlus,
+  UsersThree,
+  Vault,
+  Warning,
+  WarningCircle,
+} from '@phosphor-icons/react';
 
 /**
  * One tile catalogue for every persona; each tile declares what it needs, and
  * the dashboard renders only the ones the signed-in account can actually use.
  */
-const TILES: Tile[] = [
+const TILES = [
   {
     to: '/profile',
     title: 'Your Profile',
@@ -68,48 +71,6 @@ const TILES: Tile[] = [
     desc: 'Who has asked about you, who you have asked, and what came of it',
     requires: [Permission.MATCH_BROWSE, Permission.ACT_ON_BEHALF],
     hideFor: ['vendor', 'planner', 'in_person'],
-  },
-  {
-    to: '/clients',
-    title: 'My Clients',
-    desc: 'Accounts created when a client accepted your invitation',
-    requires: [Permission.CLIENT_READ],
-  },
-  {
-    to: '/agency',
-    title: 'My Agency',
-    desc: 'Your registration details and approval status',
-    requires: [Permission.AGENCY_MANAGE],
-  },
-  {
-    to: '/biodata',
-    title: 'Biodata',
-    desc: 'The details every family asks about, section by section',
-    requires: [Permission.MATCH_BROWSE, Permission.MANAGED_PROFILE_MANAGE],
-  },
-  {
-    to: '/matches',
-    title: 'Find Matches',
-    desc: 'Discover compatible partners',
-    requires: [Permission.MATCH_BROWSE],
-  },
-  {
-    to: '/chat',
-    title: 'Messages',
-    desc: 'Talk to matches, providers and agents',
-    requires: [Permission.CHAT_INQUIRE, Permission.CHAT_MATCH],
-    // Kept in step with the nav table: a planner's and an officer's
-    // conversations belong to the job or the case they are about.
-    hideFor: ['vendor', 'planner', 'in_person'],
-  },
-  {
-    to: '/vendors',
-    title: 'Vendors',
-    desc: 'Browse venues, catering, photography and more',
-    // The same pair the nav entry and the route guard use. Gating the tile on
-    // BOOKING_CREATE alone dropped this row for a planner, who was being
-    // offered Vendors in the sidebar on the same screen (council round 2).
-    requires: [Permission.BOOKING_CREATE, Permission.PLANNER_LISTING_MANAGE],
   },
   {
     to: '/wedding-planners',
@@ -187,27 +148,43 @@ const TILES: Tile[] = [
   },
 ];
 
-export default function Dashboard() {
+void TILES;
+
+export default function Dashboard({
+  adminUserId,
+  readOnly = false,
+  adminView = false,
+  roleOverride,
+}: {
+  adminUserId?: string;
+  readOnly?: boolean;
+  adminView?: boolean;
+  roleOverride?: 'agent' | 'vendor' | 'planner' | 'officer';
+}) {
+  void readOnly;
+  void adminView;
+  const adminScope = adminUserId ? { userId: adminUserId, role: roleOverride } : undefined;
   const user = useAuth((s) => s.user);
   // Read reactively: the Overdue tasks tile links back into this same page with
   // ?tasks=overdue, so the panel below has to notice the change (EZ1-I230).
   const [taskParams] = useSearchParams();
   const permissions = user?.permissions ?? [];
 
-  const isProvider = canAny(permissions, [Permission.BOOKING_READ_INCOMING]);
+  const isProvider = roleOverride === 'vendor' || roleOverride === 'planner' || canAny(permissions, [Permission.BOOKING_READ_INCOMING]);
   const isBuyer = canAny(permissions, [Permission.BOOKING_READ_OWN]);
 
   const { data: profile } = useQuery({
     queryKey: ['me'],
     queryFn: async () => (await api.get('/users/me')).data,
     retry: false,
+    enabled: !adminUserId,
   });
 
   // A dashboard that only links to other pages tells you nothing you did not
   // already know. These are the three numbers each persona opens the app for.
   const { data: unread } = useQuery({
     queryKey: ['unread-count'],
-    queryFn: async () => (await api.get('/notifications/unread-count')).data,
+    queryFn: async () => (await api.get('/notifications/unread-count', { params: adminScope })).data,
     retry: false,
   });
 
@@ -226,7 +203,7 @@ export default function Dashboard() {
   };
   const { data: incoming } = useQuery({
     queryKey: ['incoming-bookings-count'],
-    queryFn: async () => (await api.get('/bookings/incoming', { params: { limit: 1 } })).data,
+    queryFn: async () => (await api.get('/bookings/incoming', { params: { limit: 1, ...adminScope } })).data,
     ...liveCount,
   });
 
@@ -236,13 +213,13 @@ export default function Dashboard() {
   const { data: newRequests } = useQuery({
     queryKey: ['new-requests-count'],
     queryFn: async () =>
-      (await api.get('/bookings/incoming', { params: { limit: 1, status: 'requested' } })).data,
+      (await api.get('/bookings/incoming', { params: { limit: 1, status: 'requested', ...adminScope } })).data,
     ...liveCount,
   });
 
   const { data: earnings } = useQuery({
     queryKey: ['earnings'],
-    queryFn: async () => (await api.get('/bookings/earnings')).data,
+    queryFn: async () => (await api.get('/bookings/earnings', { params: adminScope })).data,
     retry: false,
     enabled: isProvider,
     refetchOnMount: 'always',
@@ -250,7 +227,7 @@ export default function Dashboard() {
 
   // A vendor's own summary, for the business the header switcher has selected.
   // Everything here is a number they would otherwise open three pages to find.
-  const isVendor = canAny(permissions, [Permission.VENDOR_LISTING_MANAGE]);
+  const isVendor = roleOverride === 'vendor' || canAny(permissions, [Permission.VENDOR_LISTING_MANAGE]);
   const { active, businesses } = useBusinesses();
 
   const { data: quoted } = useQuery({
@@ -273,11 +250,11 @@ export default function Dashboard() {
   // A wedding planner is a provider who is not a vendor. Their dashboard opens
   // onto their clients rather than a shop window, so it carries an "action
   // required" band of the things waiting on them (EZ1-I39).
-  const isPlanner = isProvider && !isVendor;
+  const isPlanner = roleOverride === 'planner' || (isProvider && !isVendor);
   const { data: plannerBook } = useQuery({
     queryKey: ['planner-clients-summary'],
     queryFn: async () =>
-      (await api.get('/planner/clients')).data as {
+      (await api.get('/planner/clients', { params: adminScope })).data as {
         clients: {
           userId: string;
           planId: string;
@@ -285,6 +262,7 @@ export default function Dashboard() {
           status: string;
           weddingDate: string | null;
           location: string | null;
+          nextEvent?: { id: string; name: string; date: string } | null;
         }[];
         requests: unknown[];
         upcomingTasks?: {
@@ -298,6 +276,9 @@ export default function Dashboard() {
       },
     retry: false,
     enabled: isPlanner,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    refetchInterval: 30_000,
   });
   // The counters come off the same engagement My Clients is built from, so a
   // wedding on the screen can never sit beside a zero count, and escrow reads
@@ -306,7 +287,7 @@ export default function Dashboard() {
   const { data: plannerOverview } = useQuery({
     queryKey: ['planner-overview'],
     queryFn: async () =>
-      (await api.get('/planner/overview')).data as {
+      (await api.get('/planner/overview', { params: adminScope })).data as {
         weddings: number;
         active: number;
         upcoming: number;
@@ -320,74 +301,99 @@ export default function Dashboard() {
     retry: false,
     enabled: isPlanner,
     refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    refetchInterval: 30_000,
   });
   const plannerClients = plannerBook?.clients ?? [];
   const activeClients = plannerOverview?.active ?? 0;
   const upcomingClients = plannerOverview?.upcoming ?? 0;
   const plannerRequests = plannerBook?.requests?.length ?? 0;
+  const plannerUpcomingEvents = plannerClients.filter((client) => client.nextEvent).length;
+  const plannerPendingTasks = Math.max(
+    0,
+    (plannerOverview?.tasks.total ?? 0) - (plannerOverview?.tasks.done ?? 0),
+  );
+  const overdueOnly = taskParams.get('tasks') === 'overdue';
+  const completedPlanIds = new Set(
+    plannerClients.filter((client) => client.status === 'completed').map((client) => client.planId),
+  );
+  const upcomingTasks = (plannerBook?.upcomingTasks ?? []).filter(
+    (task) => !completedPlanIds.has(task.planId),
+  );
+  const shownTasks = overdueOnly ? upcomingTasks.filter((task) => task.overdue) : upcomingTasks;
   // The next few weddings by date, so the band leads with what is coming rather
   // than only how many there are (EZ1-I52).
   const upcomingWeddings = plannerClients
     .filter((c) => c.weddingDate)
     .sort((a, b) => new Date(a.weddingDate!).getTime() - new Date(b.weddingDate!).getTime())
     .slice(0, 4);
-  // Drop tasks that belong to weddings that have already happened: their
-  // leftover to-dos are not the planner's live deadlines, and showing them as
-  // overdue was the stale-overdue noise EZ1-I184 set out to clear.
-  const completedPlanIds = new Set(
-    plannerClients.filter((c) => c.status === 'completed').map((c) => c.planId),
-  );
-  const upcomingTasks = (plannerBook?.upcomingTasks ?? []).filter(
-    (t) => !completedPlanIds.has(t.planId),
-  );
-  /*
-    Whether the deadlines panel is showing everything or only what is late.
 
-    Driven by the query string so the Overdue tasks tile above can link to it,
-    which is what that tile now does instead of navigating away to the client
-    list (EZ1-I230). The full list is one click back.
-  */
-  const overdueOnly = taskParams.get('tasks') === 'overdue';
-  const shownTasks = overdueOnly ? upcomingTasks.filter((t) => t.overdue) : upcomingTasks;
-
-  // A marriage agent opens the app to see their book at a glance (EZ1-I79):
-  // how many clients, how many are matched, how many are still open, and the
-  // interests their profiles have taken part in.
-  const isAgent = canAny(permissions, [Permission.AGENCY_MANAGE]);
+  // A marriage agent opens the app to see their book at a glance.
+  const isAgent = roleOverride === 'agent' || canAny(permissions, [Permission.AGENCY_MANAGE]);
   const { data: agentStats } = useQuery({
-    queryKey: ['agent-stats'],
-    queryFn: async () =>
-      (await api.get('/agents/stats')).data as {
-        totalClients: number;
-        matchesFixed: number;
-        remainingClients: number;
-        totalInterests: number;
-      },
+    queryKey: ['agent-dashboard', adminUserId],
+    queryFn: async () => (await api.get('/agents/dashboard', { params: adminScope })).data as {
+      totalClients: number;
+      matchesFixed: number;
+      remainingClients: number;
+      totalInterests: number;
+      newInterests: number;
+      pendingClientActions: number;
+      issuesPending: number;
+      escrow: { total: string; pending: string; released: string; refunded: string; currency: string };
+    },
     retry: false,
     enabled: isAgent,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    refetchInterval: 30_000,
   });
 
   // A verification officer opens the app to see the work waiting on them
   // (EZ1-I92): how many verifications are new, in progress or submitted, and
   // which have a deadline coming up. VERIFICATION_FIELDWORK is held by officers
   // and never by an administrator, so it identifies the persona cleanly.
-  const isOfficer = canAny(permissions, [Permission.VERIFICATION_FIELDWORK]);
+  const isOfficer = roleOverride === 'officer' || canAny(permissions, [Permission.VERIFICATION_FIELDWORK]);
   const { data: officerQueue } = useQuery({
     queryKey: ['officer-queue'],
     queryFn: async () =>
-      (await api.get('/verification/requests', { params: { limit: 100 } })).data as {
+      (await api.get('/verification/requests', { params: { limit: 100, ...adminScope } })).data as {
         data: Visit[];
       },
     retry: false,
     enabled: isOfficer,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    refetchInterval: 30_000,
+  });
+  const { data: officerSummary } = useQuery({
+    queryKey: ['officer-dashboard'],
+    queryFn: async () => (await api.get('/verification/officer-dashboard')).data as {
+      today: number;
+      assigned: number;
+      pending: number;
+      inProgress: number;
+      submitted: number;
+      needsAnotherLook: number;
+      completed: number;
+      approved: number;
+      rejected: number;
+      escalated: number;
+      openIssues: number;
+    },
+    retry: false,
+    enabled: isOfficer,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    refetchInterval: 30_000,
   });
   const officerRequests: Visit[] = officerQueue?.data ?? [];
   const officerCounts = {
-    assigned: officerRequests.filter((r) => r.status === 'assigned').length,
-    inProgress: officerRequests.filter((r) => r.status === 'in_progress').length,
-    submitted: officerRequests.filter((r) => r.status === 'submitted').length,
-    additional: officerRequests.filter((r) => r.status === 'additional_review').length,
-    today: officerRequests.filter(isTodayVisit).length,
+    assigned: officerSummary?.assigned ?? officerRequests.filter((r) => r.status === 'assigned').length,
+    inProgress: officerSummary?.inProgress ?? officerRequests.filter((r) => r.status === 'in_progress').length,
+    submitted: officerSummary?.submitted ?? officerRequests.filter((r) => r.status === 'submitted').length,
+    additional: officerSummary?.needsAnotherLook ?? officerRequests.filter((r) => r.status === 'additional_review').length,
+    today: officerSummary?.today ?? officerRequests.filter(isTodayVisit).length,
   };
   // Today's schedule, soonest first, for the section below the overview.
   const todaysVisits = officerRequests
@@ -398,17 +404,11 @@ export default function Dashboard() {
         (b.slaDeadline ? new Date(b.slaDeadline).getTime() : Infinity),
     );
 
-  const reduce = useReducedMotion();
-  const firstName = (profile?.displayName ?? '').trim().split(' ')[0];
-
-  // The same question the sidebar asks, from the same place. This list used to
-  // carry its own hideFor, which is how a planner ended up with no Chat in the
-  // rail and a Messages tile on their dashboard pointing at it.
-  const tiles = TILES.filter(
-    (t) =>
-      !(user && navDenied(t, user.role)) &&
-      (t.requires.length === 0 || canAny(permissions, t.requires)),
-  );
+  const isFamily = user?.role === 'family';
+  const accountName = isFamily
+    ? (profile?.accountName ?? user?.accountName ?? profile?.displayName)
+    : (profile?.accountName ?? profile?.displayName);
+  const firstName = (accountName ?? '').trim().split(' ')[0];
 
   // The vendor's home is a dedicated, backend-driven dashboard (EZ1-I147). All
   // the hooks above still run so the hook order is stable across a role change;
@@ -426,17 +426,19 @@ export default function Dashboard() {
         and the one part of it that is actionable, an unfinished profile, gets
         to be a control instead of a sentence.
       */}
-      <header>
-        <p className="text-sm text-gray-500">
+      <header className="relative overflow-hidden rounded-lg border border-brand/35 bg-gradient-to-br from-brand-strong via-brand to-brand-rose px-6 py-6 text-brand-fg shadow-lifted sm:px-8">
+        <span aria-hidden className="absolute -right-8 -top-10 h-32 w-32 rounded-full border border-gold/60" />
+        <span aria-hidden className="absolute -bottom-16 right-20 h-28 w-28 rounded-full border border-gold-lit/50" />
+        <p className="relative text-sm text-brand-fg/75">
           Signed in as {user ? (ROLE_LABEL[user.role] ?? user.role) : ''}
           {user?.managedByAgentId ? ', represented by an agent' : ''}
         </p>
-        <h1 className="page-title mt-1">
+        <h1 className="relative mt-1 border-0 pl-0 font-serif text-[2.25rem] font-normal leading-[1.1] text-brand-fg sm:text-[3rem]">
           {greeting()}
           {firstName ? `, ${firstName}` : ''}
         </h1>
         {profile && !profile.profileCompleted && (
-          <div className="mt-5 flex flex-wrap items-center gap-4 rounded-lg border border-gray-200 bg-surface p-4">
+          <div className="relative mt-5 flex flex-wrap items-center gap-4 rounded-md border border-gold/60 bg-surface-raised/95 p-4 text-gray-900">
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-gray-900">Your profile is not finished</p>
               <p className="mt-0.5 text-sm text-gray-500">
@@ -511,34 +513,28 @@ export default function Dashboard() {
               All visits
             </Link>
           </div>
-          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            <Counter
-              label="Assigned Visits"
-              value={officerCounts.assigned}
-              to="/visits?status=assigned"
-              tone={officerCounts.assigned > 0 ? 'text-amber-700' : undefined}
-            />
-            <Counter
-              label="Today's Visits"
-              value={officerCounts.today}
-              to="/visits?view=today"
-              tone={officerCounts.today > 0 ? 'text-amber-700' : undefined}
-            />
-            <Counter
-              label="In Progress"
-              value={officerCounts.inProgress}
-              to="/visits?status=in_progress"
-            />
-            <Counter
-              label="Submitted"
-              value={officerCounts.submitted}
-              to="/visits?status=submitted"
-            />
-            <Counter
-              label="Needs Another Look"
-              value={officerCounts.additional}
-              to="/visits?status=additional_review"
-            />
+          <div className="space-y-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Today's work</p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <OfficerMetric label="Unread notifications" value={unread?.unread ?? 0} to="/notifications" icon={Bell} gradient="from-brand-soft to-surface" />
+              <OfficerMetric label="Today's visits" value={officerCounts.today} to="/visits?view=today" icon={CalendarCheck} gradient="from-brand-100 to-brand-50" />
+              <OfficerMetric label="Pending visits" value={officerSummary?.pending ?? officerCounts.assigned} to="/visits?status=assigned" icon={Hourglass} gradient="from-caution-bg to-surface" />
+              <OfficerMetric label="In progress" value={officerCounts.inProgress} to="/visits?status=in_progress" icon={WarningCircle} gradient="from-positive-bg to-surface" />
+            </div>
+            <p className="pt-2 text-xs font-medium uppercase tracking-wide text-gray-500">Verification workload</p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <OfficerMetric label="Assigned visits" value={officerCounts.assigned} to="/visits?status=assigned" icon={ClipboardText} gradient="from-brand-100 to-surface" />
+              <OfficerMetric label="Submitted" value={officerCounts.submitted} to="/visits?status=submitted" icon={ClipboardText} gradient="from-brand-soft to-brand-50" />
+              <OfficerMetric label="Needs another look" value={officerCounts.additional} to="/visits?status=additional_review" icon={Warning} gradient="from-caution-bg to-surface" />
+              <OfficerMetric label="Completed visits" value={officerSummary?.completed ?? 0} to="/visits?view=completed" icon={CheckCircle} gradient="from-positive-bg to-brand-50" />
+            </div>
+            <p className="pt-2 text-xs font-medium uppercase tracking-wide text-gray-500">Verification outcomes</p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <OfficerMetric label="Approved" value={officerSummary?.approved ?? 0} to="/visits?status=approved" icon={CheckCircle} gradient="from-positive-bg to-brand-50" />
+              <OfficerMetric label="Rejected" value={officerSummary?.rejected ?? 0} to="/visits?status=rejected" icon={Prohibit} gradient="from-rose-50 to-surface" />
+              <OfficerMetric label="Escalated" value={officerSummary?.escalated ?? 0} to="/support?status=escalated" icon={Warning} gradient="from-brand-soft to-rose-50" />
+              <OfficerMetric label="Open issues" value={officerSummary?.openIssues ?? 0} to="/support?status=open" icon={Lifebuoy} gradient="from-rose-50 to-surface" />
+            </div>
           </div>
 
           {/*
@@ -580,21 +576,35 @@ export default function Dashboard() {
         counters above because these are about the clients they run.
       */}
       {isAgent && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Counter label="Total clients" value={agentStats?.totalClients ?? 0} to="/clients" />
-          <Counter
+        <section className="space-y-4">
+          <h2 className="section-title">Action required</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <AgentMetric label="Unread notifications" value={unread?.unread ?? 0} to="/notifications" icon={Bell} gradient="from-brand-100 to-brand-50" />
+            <AgentMetric label="New interests" value={agentStats?.newInterests ?? 0} to="/interests?status=pending" icon={UserPlus} gradient="from-brand-soft to-surface" />
+            <AgentMetric label="Pending client actions" value={agentStats?.pendingClientActions ?? 0} to="/clients?status=incomplete" icon={UserCircle} gradient="from-caution-bg to-surface" />
+            <AgentMetric label="Issues pending" value={agentStats?.issuesPending ?? 0} to="/support?status=open" icon={Warning} gradient="from-rose-50 to-surface" />
+          </div>
+          <h2 className="section-title pt-2">Clients & matchmaking</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <AgentMetric label="Total clients" value={agentStats?.totalClients ?? 0} to="/clients" icon={UsersThree} gradient="from-brand-100 to-surface" />
+            <AgentMetric
             label="Matches fixed"
             value={agentStats?.matchesFixed ?? 0}
             to="/matches"
-            tone={(agentStats?.matchesFixed ?? 0) > 0 ? 'text-emerald-700' : undefined}
-          />
-          <Counter
-            label="Remaining clients"
-            value={agentStats?.remainingClients ?? 0}
-            to="/clients"
-          />
-          <Counter label="Total interests" value={agentStats?.totalInterests ?? 0} to="/interests" />
-        </div>
+            icon={CheckCircle}
+            gradient="from-positive-bg to-brand-50"
+            />
+            <AgentMetric label="Remaining clients" value={agentStats?.remainingClients ?? 0} to="/clients?status=remaining" icon={UsersThree} gradient="from-caution-bg to-surface" />
+            <AgentMetric label="Total interests" value={agentStats?.totalInterests ?? 0} to="/interests" icon={UserPlus} gradient="from-brand-soft to-brand-50" />
+          </div>
+          <h2 className="section-title pt-2">Escrow & financial</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <AgentMetric label="Total escrow" value={money(agentStats?.escrow.total, agentStats?.escrow.currency)} to="/agent-escrow" icon={Vault} gradient="from-caution-bg to-brand-50" />
+            <AgentMetric label="Escrow pending" value={money(agentStats?.escrow.pending, agentStats?.escrow.currency)} to="/agent-escrow?status=pending" icon={Coins} gradient="from-positive-bg to-surface" />
+            <AgentMetric label="Escrow released" value={money(agentStats?.escrow.released, agentStats?.escrow.currency)} to="/agent-escrow?status=released" icon={CheckCircle} gradient="from-positive-bg to-brand-50" />
+            <AgentMetric label="Escrow refunded" value={money(agentStats?.escrow.refunded, agentStats?.escrow.currency)} to="/agent-escrow?status=refunded" icon={Lifebuoy} gradient="from-rose-50 to-surface" />
+          </div>
+        </section>
       )}
 
       {/*
@@ -642,8 +652,34 @@ export default function Dashboard() {
         borrowing a number from an unrelated listing.
       */}
       {isPlanner && (
+        <section className="space-y-4">
+          <h2 className="section-title">Action required</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <PlannerMetric label="New quotation requests" value={plannerRequests} to="/bookings?status=requested" tone="from-brand-soft to-surface" />
+            <PlannerMetric label="Pending tasks" value={plannerPendingTasks} to="/tasks?status=pending" tone="from-caution-bg to-surface" />
+            <PlannerMetric label="Overdue tasks" value={plannerOverview?.tasks.overdue ?? 0} to="/tasks?status=overdue" tone="from-rose-50 to-surface" />
+            <PlannerMetric label="Upcoming events" value={plannerUpcomingEvents} to="/events" tone="from-positive-bg to-brand-50" />
+          </div>
+          <h2 className="section-title pt-2">Wedding portfolio</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <PlannerMetric label="Active weddings" value={activeClients} to="/weddings?status=active" tone="from-brand-100 to-brand-50" />
+            <PlannerMetric label="Upcoming weddings" value={upcomingClients} to="/weddings?status=upcoming" tone="from-brand-soft to-surface" />
+            <PlannerMetric label="Completed weddings" value={plannerOverview?.completed ?? 0} to="/weddings?status=completed" tone="from-positive-bg to-brand-50" />
+            <PlannerMetric label="Client weddings" value={plannerOverview?.weddings ?? 0} to="/weddings" tone="from-brand-100 to-surface" />
+          </div>
+          <h2 className="section-title pt-2">Bookings & escrow</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <PlannerMetric label="Planner bookings" value={plannerOverview?.bookings.total ?? 0} to="/bookings" tone="from-brand-soft to-brand-50" />
+            <PlannerMetric label="Pending payment milestones" value={plannerOverview?.bookings.pending ?? 0} to="/bookings?status=payment_pending" tone="from-caution-bg to-surface" />
+            <PlannerMetric label="Amount in escrow" value={`₹${Number(plannerOverview?.escrowHeld ?? 0).toLocaleString('en-IN')}`} to="/accounts" tone="from-positive-bg to-brand-50" />
+            <PlannerMetric label="Tasks completed" value={plannerOverview?.tasks.done ?? 0} to="/tasks?status=done" tone="from-positive-bg to-surface" />
+          </div>
+        </section>
+      )}
+
+      {false && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Counter label="Weddings" value={plannerOverview?.weddings ?? 0} to="/my-clients" />
+          <Counter label="Weddings" value={plannerOverview?.weddings ?? 0} to="/weddings" />
           {/*
             To the bookings, not to the client list.
 
@@ -675,7 +711,7 @@ export default function Dashboard() {
           <Counter
             label="Overdue tasks"
             value={plannerOverview?.tasks.overdue ?? 0}
-            to="/?tasks=overdue#planner-tasks"
+            to="/tasks?status=overdue"
             tone={(plannerOverview?.tasks.overdue ?? 0) > 0 ? 'text-red-600' : undefined}
           />
         </div>
@@ -697,21 +733,21 @@ export default function Dashboard() {
               to="/bookings"
               tone={plannerRequests > 0 ? 'text-amber-700' : undefined}
             />
-            <Counter label="Active weddings" value={activeClients} to="/my-clients" />
-            <Counter label="Upcoming weddings" value={upcomingClients} to="/my-clients" />
+            <Counter label="Active weddings" value={activeClients} to="/weddings?status=active" />
+            <Counter label="Upcoming weddings" value={upcomingClients} to="/weddings?status=upcoming" />
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
             <Link className="btn" to="/bookings">
               Review requests
             </Link>
-            <Link className="btn-outline" to="/my-clients">
-              Manage clients &amp; tasks
+            <Link className="btn-outline" to="/tasks">
+              Manage tasks
             </Link>
             <Link className="btn-outline" to="/availability">
               Set availability
             </Link>
-            <Link className="btn-outline" to="/events">
-              View events
+            <Link className="btn-outline" to="/my-clients">
+              View clients
             </Link>
           </div>
 
@@ -719,7 +755,12 @@ export default function Dashboard() {
               planner opens the app to see, not just their counts (EZ1-I52). */}
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
             <div className="card">
-              <h3 className="section-title text-sm">Upcoming weddings</h3>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h3 className="section-title text-sm">Upcoming weddings</h3>
+                <Link className="text-xs text-brand-dark hover:underline" to="/my-weddings">
+                  Open weddings
+                </Link>
+              </div>
               {upcomingWeddings.length === 0 ? (
                 <p className="mt-1 text-sm text-gray-500">No dated weddings yet.</p>
               ) : (
@@ -781,43 +822,6 @@ export default function Dashboard() {
         </section>
       )}
 
-      {/*
-        Where to go next.
-
-        Rows, not a grid of identical cards. Equal boxes side by side give every
-        destination the same weight and stop being scannable at about the sixth
-        one; a divided column reads top to bottom the way a list of choices is
-        actually read, and keeps each description on one line instead of
-        wrapping it into a paragraph nobody finishes.
-      */}
-      <section>
-        <h2 className="mb-3 text-sm font-medium text-gray-500">Where to go next</h2>
-        <ul className="divide-y divide-gray-200 overflow-hidden rounded-lg border border-gray-200 bg-surface">
-          {tiles.map((t, i) => (
-            <motion.li
-              key={t.to}
-              initial={reduce ? false : { opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: Math.min(i, 8) * 0.035, ease: [0.16, 1, 0.3, 1] }}
-            >
-              <Link
-                to={t.to}
-                className="group flex items-center gap-4 px-5 py-4 transition-colors hover:bg-gray-100"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium text-gray-900">{t.title}</p>
-                  <p className="mt-0.5 truncate text-sm text-gray-500">{t.desc}</p>
-                </div>
-                <ArrowRight
-                  size={17}
-                  className="shrink-0 text-gray-300 transition-[transform,color] duration-200 group-hover:translate-x-0.5 group-hover:text-brand-strong"
-                  aria-hidden
-                />
-              </Link>
-            </motion.li>
-          ))}
-        </ul>
-      </section>
     </div>
   );
 }
@@ -887,6 +891,83 @@ function Counter({
       >
         {value}
       </p>
+    </Link>
+  );
+}
+
+function PlannerMetric({
+  label,
+  value,
+  to,
+  tone,
+}: {
+  label: string;
+  value: ReactNode;
+  to: string;
+  tone: string;
+}) {
+  return (
+    <Link
+      to={to}
+      className={`group rounded-lg border border-gray-200 bg-gradient-to-br ${tone} p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-card`}
+    >
+      <p className="truncate text-[0.8125rem] font-medium text-gray-600">{label}</p>
+      <p className="mt-2 font-mono text-[1.75rem] font-medium leading-none text-gray-900">{value}</p>
+    </Link>
+  );
+}
+
+function OfficerMetric({
+  label,
+  value,
+  to,
+  icon: Icon,
+  gradient,
+}: {
+  label: string;
+  value: ReactNode;
+  to: string;
+  icon: typeof Bell;
+  gradient: string;
+}) {
+  return (
+    <Link
+      to={to}
+      className={`group rounded-lg border border-gray-200 bg-gradient-to-br ${gradient} p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-card`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <p className="truncate text-[0.8125rem] font-medium text-gray-600">{label}</p>
+        <Icon size={20} weight="duotone" className="shrink-0 text-brand-dark" aria-hidden />
+      </div>
+      <p className="mt-2 font-mono text-[1.75rem] font-medium leading-none text-gray-900">{value}</p>
+    </Link>
+  );
+}
+
+function money(value?: string, currency = 'INR') {
+  return `${currency === 'INR' ? '₹' : ''}${Number(value ?? 0).toLocaleString('en-IN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function AgentMetric({ label, value, to, icon: Icon, gradient }: {
+  label: string;
+  value: ReactNode;
+  to: string;
+  icon: any;
+  gradient: string;
+}) {
+  return (
+    <Link
+      to={to}
+      className={`group rounded-lg border border-gray-200 bg-gradient-to-br ${gradient} p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-card`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <p className="truncate text-[0.8125rem] font-medium text-gray-600">{label}</p>
+        <Icon size={20} weight="duotone" className="shrink-0 text-brand-dark" aria-hidden />
+      </div>
+      <p className="mt-2 font-mono text-[1.75rem] font-medium leading-none text-gray-900">{value}</p>
     </Link>
   );
 }

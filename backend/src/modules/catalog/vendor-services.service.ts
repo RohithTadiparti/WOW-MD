@@ -91,6 +91,8 @@ export class VendorServicesService {
    * form to know what to ask.
    */
   async listForVendor(vendorId: string, activeOnly = false) {
+    const vendor = await this.vendors.findOne({ where: { id: vendorId } });
+    if (!vendor) throw new NotFoundException('Business not found');
     const services = await this.services.find({
       where: activeOnly ? { vendorId, active: true } : { vendorId },
       order: { createdAt: 'ASC' },
@@ -112,8 +114,14 @@ export class VendorServicesService {
     });
     const categoryById = new Map(categories.map((c) => [c.id, c]));
     const definitionById = new Map(definitions.map((d) => [d.id, d]));
+    const selectedCategories = new Set(vendor.categories ?? []);
+    const selectedServices = services.filter((service) => {
+      const definition = definitionById.get(service.definitionId);
+      const category = definition ? categoryById.get(definition.categoryId) : null;
+      return Boolean(category && selectedCategories.has(category.slug));
+    });
 
-    return services.map((service) => {
+    return selectedServices.map((service) => {
       const definition = definitionById.get(service.definitionId) ?? null;
       const attributes = attributesByDefinition.get(service.definitionId) ?? [];
       const mine = offerings.filter((o) => o.vendorServiceId === service.id);
@@ -147,6 +155,7 @@ export class VendorServicesService {
     }
 
     const definition = await this.catalog.getDefinition(dto.definitionId);
+    await this.assertSelectedCategory(vendor, definition.categoryId);
     if (!definition.active) {
       throw new BadRequestException('That service is no longer offered in the catalog');
     }
@@ -170,10 +179,6 @@ export class VendorServicesService {
         displayName: dto.displayName ?? null,
         description: dto.description ?? null,
         attributes: validated,
-        // The definition's default is the sensible starting point — a venue
-        // definition says one, a catering definition says however many teams
-        // the business usually runs.
-        concurrentCapacity: dto.concurrentCapacity ?? definition.defaultCapacity,
         active: dto.active ?? true,
       }),
     );
@@ -186,6 +191,9 @@ export class VendorServicesService {
     dto: UpsertVendorServiceDto,
   ): Promise<VendorService> {
     const service = await this.ownedService(actor, vendorId, id);
+    const vendor = await this.assertOwner(actor, vendorId);
+    const definition = await this.catalog.getDefinition(service.definitionId);
+    await this.assertSelectedCategory(vendor, definition.categoryId);
 
     // The definition is what all the validation hangs off, so it is not
     // something an update may quietly swap. Changing it means a new service.
@@ -202,10 +210,16 @@ export class VendorServicesService {
 
     if (dto.displayName !== undefined) service.displayName = dto.displayName || null;
     if (dto.description !== undefined) service.description = dto.description || null;
-    if (dto.concurrentCapacity !== undefined) service.concurrentCapacity = dto.concurrentCapacity;
     if (dto.active !== undefined) service.active = dto.active;
 
     return this.services.save(service);
+  }
+
+  private async assertSelectedCategory(vendor: Vendor, categoryId: string): Promise<void> {
+    const category = await this.categories.findOne({ where: { id: categoryId } });
+    if (!category || !(vendor.categories ?? []).includes(category.slug)) {
+      throw new BadRequestException('Choose a service under one of your selected categories');
+    }
   }
 
   /**

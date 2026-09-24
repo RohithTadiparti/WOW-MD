@@ -38,6 +38,7 @@ export default {
         brand: {
           ...ramp('rose'),
           DEFAULT: channel('brand'),
+          rose: channel('rose-500'),
           strong: channel('brand-strong'),
           soft: channel('brand-soft'),
           // What sits on top of the accent. White on the light-mode rose,
@@ -47,6 +48,24 @@ export default {
           // Retained so pre-existing markup keeps working while it is swept.
           dark: channel('brand-strong'),
           light: channel('brand-soft'),
+        },
+
+        // Official WOW palette. This is intentionally a top-level family so
+        // every portal can use the approved tokens directly (`bg-wow-primary`,
+        // `text-wow-text-main`, etc.) without coupling brand semantics to an
+        // unrelated colour scale.
+        wow: {
+          primary: channel('wow-primary'),
+          'primary-light': channel('wow-primary-light'),
+          'accent-gold': channel('wow-accent-gold'),
+          'accent-warm': channel('wow-accent-warm'),
+          'bg-main': channel('wow-bg-main'),
+          'bg-secondary': channel('wow-bg-secondary'),
+          surface: channel('wow-surface'),
+          'text-main': channel('wow-text-main'),
+          'text-muted': channel('wow-text-muted'),
+          success: channel('wow-success'),
+          error: channel('wow-error'),
         },
 
         // The template's struck gold, for ornament: numerals, rules, hearts.
@@ -73,6 +92,7 @@ export default {
          * than leaving a light-mode alert glowing on a dark page.
          */
         positive: { fg: channel('positive-fg'), bg: channel('positive-bg') },
+        info: { fg: channel('info-fg'), bg: channel('info-bg') },
         caution: { fg: channel('caution-fg'), bg: channel('caution-bg') },
         critical: { fg: channel('critical-fg'), bg: channel('critical-bg') },
 
@@ -109,8 +129,32 @@ export default {
           900: channel('caution-fg'),
         },
         blue: {
+          50: channel('info-bg'),
+          200: channel('rose-200'),
+          700: channel('info-fg'),
+          800: channel('info-fg'),
+          900: channel('info-fg'),
+        },
+        sky: {
+          50: channel('info-bg'),
+          200: channel('rose-200'),
+          300: channel('rose-300'),
+          700: channel('info-fg'),
+          800: channel('info-fg'),
+          900: channel('info-fg'),
+        },
+        rose: {
           50: channel('brand-soft'),
-          800: channel('brand-strong'),
+          100: channel('brand-soft'),
+          300: channel('rose-300'),
+          500: channel('rose-500'),
+          600: channel('rose-600'),
+          700: channel('rose-700'),
+          800: channel('rose-800'),
+        },
+        violet: {
+          50: channel('info-bg'),
+          800: channel('info-fg'),
         },
       },
 

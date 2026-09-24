@@ -10,50 +10,36 @@ export interface SidebarEntry {
   badge?: number;
 }
 
-/**
- * The application's navigation.
- *
- * It was a horizontal row of up to twenty-five pills with `flex-wrap`, which at
- * any real window width became two or three stacked lines. A wrapped navigation
- * is not a style problem: the row height changes as the account's permissions
- * change, the page content moves down with it, and nothing is where it was the
- * last time you looked.
- *
- * A vertical rail solves the wrap and buys the thing a long list actually needs,
- * which is grouping. Nobody scans twenty-five labels; everybody scans five
- * headings and then four labels. Entries are filtered by capability before they
- * reach here, so most accounts see three or four groups.
- */
 export default function Sidebar({
   entries,
   groups,
   onNavigate,
-  filled = false,
+  gradient = false,
+  rail = false,
 }: {
   entries: SidebarEntry[];
   groups: { key: string; title: string | null }[];
-  /** Closes the drawer on mobile. Absent on desktop, where nothing closes. */
   onNavigate?: () => void;
-  /**
-   * A solid maroon active state, opt-in per caller (EZ1-I177). Only the Admin
-   * Portal turns it on; every other role keeps the soft blush highlight, so
-   * this stays a presentation change scoped to one surface.
-   */
-  filled?: boolean;
+  gradient?: boolean;
+  rail?: boolean;
 }) {
   const { pathname } = useLocation();
   const reduce = useReducedMotion();
 
   return (
-    <nav aria-label="Main" className="flex flex-col gap-6 py-1">
+    <nav aria-label="Main" className="flex flex-col gap-7 py-1">
       {groups.map(({ key, title }) => {
-        const items = entries.filter((e) => e.group === key);
+        const items = entries.filter((entry) => entry.group === key);
         if (items.length === 0) return null;
 
         return (
           <div key={key}>
             {title && (
-              <h2 className="mb-2 w-fit bg-canvas px-3 text-[0.625rem] font-normal uppercase tracking-[0.24em] text-gray-500">
+              <h2
+                className={`mb-2 w-fit px-3 text-[0.625rem] font-semibold uppercase tracking-[0.16em] ${
+                  rail ? 'text-brand-fg/55' : 'bg-canvas text-gray-400'
+                }`}
+              >
                 {title}
               </h2>
             )}
@@ -68,31 +54,23 @@ export default function Sidebar({
                       to={entry.to}
                       onClick={onNavigate}
                       aria-current={active ? 'page' : undefined}
-                      className={`group relative flex items-center gap-3 rounded-md px-3 py-2 text-sm
-                        transition-colors duration-150 ${
-                          active
-                            ? filled
-                              ? 'text-brand-fg'
-                              : 'text-brand-strong'
-                            : // The ground colour, so the heart field never runs behind a label.
-                              'bg-canvas text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                        }`}
+                      className={`group relative flex items-center gap-3 rounded-lg border-l-2 px-3 py-2.5 text-sm transition-colors duration-150 ${
+                        active
+                          ? gradient
+                            ? 'border-gold-lit text-brand-fg'
+                            : 'border-brand text-brand-strong'
+                          : rail
+                            ? 'border-transparent text-brand-fg/80 hover:border-gold-lit/60 hover:bg-brand-fg/10 hover:text-brand-fg'
+                            : 'border-transparent bg-canvas text-gray-600 hover:border-brand/40 hover:bg-brand/8 hover:text-brand-strong'
+                      }`}
                     >
-                      {/*
-                        The active background is a shared layout element rather
-                        than a class on each row, so moving between pages slides
-                        one shape instead of cross-fading two. It is the only
-                        piece of choreography in the navigation, and it earns
-                        its place by making the current location legible while
-                        it changes.
-                      */}
                       {active && (
                         <motion.span
                           layoutId="nav-active"
                           className={`absolute inset-0 -z-10 rounded-md ${
-                            filled
-                              ? 'bg-brand'
-                              : 'bg-brand-soft'
+                            gradient
+                              ? 'bg-gradient-to-r from-brand to-brand-rose shadow-btn'
+                              : 'bg-brand/10'
                           }`}
                           transition={
                             reduce
@@ -110,8 +88,7 @@ export default function Sidebar({
                       <span className="truncate">{entry.label}</span>
                       {entry.badge !== undefined && entry.badge > 0 && (
                         <span
-                          className="ml-auto shrink-0 rounded-sm bg-brand px-1.5 py-0.5 font-mono
-                            text-[0.625rem] font-semibold leading-none text-brand-fg"
+                          className="ml-auto shrink-0 rounded-full bg-brand px-1.5 py-0.5 font-mono text-[0.625rem] font-semibold leading-none text-brand-fg"
                           aria-label={`${entry.badge} unread`}
                         >
                           {entry.badge > 99 ? '99+' : entry.badge}

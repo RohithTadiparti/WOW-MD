@@ -1,3 +1,5 @@
+import { ValidationPipe } from '@nestjs/common';
+import { SuggestionsQueryDto } from '../matchmaking/dto/matchmaking.dto';
 import { Repository } from 'typeorm';
 import { ProfileDetailsService } from './profile-details.service';
 import { ProfileDetails } from './entities/profile-details.entity';
@@ -18,6 +20,7 @@ import {
 } from '../../common/enums';
 import {
   EducationDetailsDto,
+  OccupationDetailsDto,
   FamilyDetailsDto,
   HoroscopeDetailsDto,
   MaritalDetailsDto,
@@ -80,7 +83,7 @@ describe('ProfileDetailsService section saves', () => {
     ({
       firstName: 'Bhavana',
       lastName: 'Rao',
-      heightCm: 160,
+      heightFeet: 5.2,
       complexion: Complexion.WHEATISH,
       communicationAddress: '12 Test Road, Hyderabad',
       ...over,
@@ -89,7 +92,7 @@ describe('ProfileDetailsService section saves', () => {
   const PERSONAL = {
     firstName: 'Bhavana',
     lastName: 'Rao',
-    heightCm: 160,
+    heightFeet: 5.2,
     complexion: Complexion.WHEATISH,
     communicationAddress: '12 Test Road, Hyderabad',
     alternateMobile: '+919876543210',
@@ -107,6 +110,49 @@ describe('ProfileDetailsService section saves', () => {
       photos: ['a.jpg', 'b.jpg', 'c.jpg'],
       preferences: {},
     } as unknown as Profile;
+  });
+
+  it.each([UserRole.BRIDE, UserRole.FAMILY])('persists package preferences for %s', async (role) => {
+    const actor = { ...owner, role };
+    if (role === UserRole.FAMILY) {
+      profile.userId = null;
+      profile.managedByUserId = actor.userId;
+    }
+    const result = await service.savePreferences(actor, 'p1', {
+      preferredAgeMin: 24, preferredAgeMax: 34,
+      preferredHeightMinFeet: 4.9, preferredHeightMaxFeet: 6.2,
+      preferredPackageMin: 1000000, preferredPackageMax: 2000000,
+    });
+    expect(result).toMatchObject({ preferredPackageMin: 1000000, preferredPackageMax: 2000000 });
+    expect(await details.findOne({ where: { profileId: 'p1' } })).toMatchObject({ preferredPackageMin: 1000000, preferredPackageMax: 2000000 });
+  });
+
+  it('validates package API bodies and converts query bounds', async () => {
+    const pipe = new ValidationPipe({ transform: true, whitelist: true });
+    const base = { preferredAgeMin: 24, preferredAgeMax: 34, preferredHeightMinFeet: 4.9, preferredHeightMaxFeet: 6.2 };
+    for (const value of [-1, 1.5, 'bad', Number.MAX_SAFE_INTEGER + 1]) {
+      await expect(pipe.transform({ ...base, preferredPackageMin: value }, { type: 'body', metatype: PartnerPreferencesDto })).rejects.toThrow();
+      await expect(pipe.transform({ packageMax: value }, { type: 'query', metatype: SuggestionsQueryDto })).rejects.toThrow();
+    }
+    expect(await pipe.transform({ ...base, preferredPackageMin: null, preferredPackageMax: 0 }, { type: 'body', metatype: PartnerPreferencesDto }))
+      .toMatchObject({ preferredPackageMin: null, preferredPackageMax: 0 });
+    expect(await pipe.transform({ packageMin: '0', packageMax: '2000000' }, { type: 'query', metatype: SuggestionsQueryDto }))
+      .toMatchObject({ packageMin: 0, packageMax: 2000000 });
+  });
+
+  it('saves, preserves, edits and clears package bounds without losing other sections', async () => {
+    stored = { profileId: 'p1', religion: 'Hindu' };
+    const base = { preferredAgeMin: 24, preferredAgeMax: 34, preferredHeightMinFeet: 4.9, preferredHeightMaxFeet: 6.2 };
+    await service.savePreferences(owner, 'p1', { ...base, preferredPackageMin: 0, preferredPackageMax: 1200000 });
+    expect(stored).toMatchObject({ preferredPackageMin: 0, preferredPackageMax: 1200000, religion: 'Hindu' });
+    await service.savePreferences(owner, 'p1', base);
+    expect(stored).toMatchObject({ preferredPackageMin: 0, preferredPackageMax: 1200000 });
+    await expect(service.savePreferences(owner, 'p1', { ...base, preferredPackageMin: 1200001 })).rejects.toThrow('minimum package');
+    await service.savePreferences(owner, 'p1', { ...base, preferredPackageMin: 500000 });
+    expect(stored).toMatchObject({ preferredPackageMin: 500000, preferredPackageMax: 1200000 });
+    await service.savePreferences(owner, 'p1', { ...base, preferredPackageMin: null, preferredPackageMax: null });
+    expect(stored).toMatchObject({ preferredPackageMin: null, preferredPackageMax: null, religion: 'Hindu' });
+    expect(redis.raw.keys).toHaveBeenCalledWith('match:suggestions:*');
   });
 
   it('keeps the personal section intact while every other section is saved', async () => {
@@ -145,8 +191,8 @@ describe('ProfileDetailsService section saves', () => {
     await service.savePreferences(owner, 'p1', {
       preferredAgeMin: 25,
       preferredAgeMax: 32,
-      preferredHeightMinCm: 165,
-      preferredHeightMaxCm: 190,
+      preferredHeightMinFeet: 5.4,
+      preferredHeightMaxFeet: 6.2,
     } as PartnerPreferencesDto);
 
     expect(stored).toMatchObject(PERSONAL);
@@ -157,10 +203,10 @@ describe('ProfileDetailsService section saves', () => {
     stored = { profileId: 'p1', ...PERSONAL };
 
     // What the web form sends: it has no residence field at all.
-    await service.savePersonal(owner, 'p1', personal({ heightCm: 162 }));
+    await service.savePersonal(owner, 'p1', personal({ heightFeet: 5.3 }));
 
     expect(stored).toMatchObject({
-      heightCm: 162,
+      heightFeet: 5.3,
       residence: PERSONAL.residence,
       alternateMobile: PERSONAL.alternateMobile,
     });
@@ -204,5 +250,56 @@ describe('ProfileDetailsService section saves', () => {
     } as EducationDetailsDto);
     expect(stored?.institution).toBeNull();
     expect(stored?.collegePlace).toBe('Delhi');
+  });
+
+  it('saves occupation details separately from education details', async () => {
+    stored = { profileId: 'p1', highestQualification: 'B.Tech', course: 'CSE' };
+
+    await service.saveOccupation(owner, 'p1', {
+      occupationStatus: OccupationStatus.EMPLOYED,
+      employment: { company: 'Google', designation: 'Software Engineer' },
+      incomeVisible: true,
+    } as OccupationDetailsDto);
+
+    expect(stored).toMatchObject({
+      highestQualification: 'B.Tech',
+      course: 'CSE',
+      occupationStatus: OccupationStatus.EMPLOYED,
+      incomeVisible: true,
+    });
+  });
+
+  it('requires family net worth for a groom profile (male gender)', async () => {
+    profile.gender = 'male';
+
+    await expect(
+      service.saveFamily(owner, 'p1', {
+        father: { name: 'Ravi Rao' },
+        mother: { name: 'Lata Rao' },
+        familyType: FamilyType.NUCLEAR,
+        familyStatus: 'middle_class',
+        brothers: 0,
+        sisters: 1,
+        // familyNetWorth deliberately omitted
+      } as unknown as FamilyDetailsDto),
+    ).rejects.toThrow('Family net worth is required for a groom profile');
+  });
+
+  it('accepts a family section save without net worth for a bride profile (female gender)', async () => {
+    profile.gender = 'female';
+
+    await expect(
+      service.saveFamily(owner, 'p1', {
+        father: { name: 'Ravi Rao' },
+        mother: { name: 'Lata Rao' },
+        familyType: FamilyType.NUCLEAR,
+        familyStatus: 'middle_class',
+        brothers: 2,
+        sisters: 0,
+        // familyNetWorth deliberately omitted — must not throw
+      } as unknown as FamilyDetailsDto),
+    ).resolves.toBeDefined();
+
+    expect(stored).toMatchObject({ familyType: FamilyType.NUCLEAR });
   });
 });

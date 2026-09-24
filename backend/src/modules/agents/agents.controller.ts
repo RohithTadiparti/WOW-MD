@@ -31,6 +31,7 @@ import {
 import { AuthUser, CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { Permission } from '../../common/authz/permissions';
+import { UserRole } from '../../common/enums';
 
 @ApiTags('agents')
 @ApiBearerAuth()
@@ -129,6 +130,18 @@ export class AgentsController {
   @Get('profiles/actable')
   actable(@CurrentUser() actor: AuthUser) {
     return this.managed.actableProfiles(actor);
+  }
+
+  @RequirePermissions(Permission.AGENCY_MANAGE)
+  @Get('dashboard')
+  dashboard(@CurrentUser('userId') agentId: string) {
+    return this.agents.dashboard(agentId);
+  }
+
+  @RequirePermissions(Permission.AGENCY_MANAGE)
+  @Get('escrow')
+  escrow(@CurrentUser('userId') agentId: string, @Query('status') status?: string, @Query('search') search?: string) {
+    return this.agents.escrow(agentId, { status, search });
   }
 
   @RequirePermissions(Permission.MANAGED_PROFILE_MANAGE)
@@ -315,8 +328,9 @@ export class AgentsController {
   @RequirePermissions(Permission.CLIENT_READ)
   @ApiOperation({ summary: 'Headline counts for the agent dashboard' })
   @Get('stats')
-  stats(@CurrentUser('userId') agentId: string) {
-    return this.agents.stats(agentId);
+  stats(@CurrentUser() actor: AuthUser, @Query('userId') userId?: string) {
+    const selectedUserId = actor.role === UserRole.ADMIN && userId ? userId : actor.userId;
+    return this.agents.stats(selectedUserId);
   }
 
   @RequirePermissions(Permission.CLIENT_READ)

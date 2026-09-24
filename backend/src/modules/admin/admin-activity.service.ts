@@ -1,22 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, In, IsNull, Not, Repository } from 'typeorm';
+import { Between, In, Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
-import { Vendor } from '../vendors/entities/vendor.entity';
-import { Booking } from '../bookings/entities/booking.entity';
-import { Payment } from '../bookings/entities/payment.entity';
-import { PlannerProfile } from '../wedding-planners/entities/planner-profile.entity';
-import { SupportCase } from '../verification/entities/support-case.entity';
-import { VerificationRequest } from '../verification/entities/verification-request.entity';
-import { Dispute } from './entities/dispute.entity';
-import { WeddingEvent } from '../events/entities/event.entity';
-import { MONEY_TAKEN } from './reports.service';
 import { ActivityQueryDto } from './dto/console.dto';
-import { UserRole, VerificationStatus, isIndividual } from '../../common/enums';
-import { bookingContextOf } from '../bookings/booking-venue';
+import { AuditEvent } from '../../platform/audit/entities/audit-event.entity';
 
 /** One line in the activity feed. Deliberately uniform across every source. */
 export interface ActivityItem {
+  id: string;
   at: Date;
   /** What happened, in the platform's own vocabulary. */
   kind: string;
@@ -24,6 +15,10 @@ export interface ActivityItem {
   summary: string;
   resourceType: string;
   resourceId: string;
+  actorUserId: string | null;
+  actorName: string | null;
+  actorRole: string | null;
+  metadata: Record<string, unknown>;
 }
 
 /**
@@ -36,26 +31,8 @@ export interface ActivityItem {
 export class AdminActivityService {
   constructor(
     @InjectRepository(User) private readonly users: Repository<User>,
-    @InjectRepository(Vendor) private readonly vendors: Repository<Vendor>,
-    @InjectRepository(Booking) private readonly bookings: Repository<Booking>,
-    @InjectRepository(Payment) private readonly payments: Repository<Payment>,
-    @InjectRepository(PlannerProfile) private readonly planners: Repository<PlannerProfile>,
-    @InjectRepository(SupportCase) private readonly cases: Repository<SupportCase>,
-    @InjectRepository(VerificationRequest)
-    private readonly verifications: Repository<VerificationRequest>,
-    // Read-only, for disputes raised in the activity feed (EZ1-I242).
-    @InjectRepository(Dispute) private readonly disputes: Repository<Dispute>,
-    // Read-only: a booking's date is its linked function's date.
-    @InjectRepository(WeddingEvent) private readonly events: Repository<WeddingEvent>,
+    @InjectRepository(AuditEvent) private readonly auditEvents: Repository<AuditEvent>,
   ) {}
-
-  /** Who raised a dispute, by the side they are on. */
-  private static disputeRaiser(role: UserRole | undefined): string {
-    if (!role) return 'Somebody';
-    if (isIndividual(role) || role === UserRole.AGENT) return 'A customer';
-    if (role === UserRole.VENDOR || role === UserRole.PLANNER) return 'A provider';
-    return 'Support';
-  }
 
   /**
    * What has been happening, across the whole platform.
@@ -77,190 +54,44 @@ export class AdminActivityService {
     const take = q.limit;
 
     /*
-     * An optional window over each event's own timestamp -- a booking cancelled
-     * today belongs to today even though it was placed last month (EZ1-I242).
-     * Without one, every source is simply its newest rows.
+     * Recent Activity is an audit view, not a UI-created event stream. This
+     * gives every row its immutable action id, authenticated actor, affected
+     * record and before/after metadata — the facts needed for a meaningful
+     * drill-down instead of only a friendly sentence.
      */
-    let range: ReturnType<typeof Between<Date>> | undefined;
+    let auditRange: ReturnType<typeof Between<Date>> | undefined;
     if (q.from || q.to) {
-      const to = q.to ? new Date(q.to) : new Date();
+      const fromDate = q.from;
+      const toDate = q.to;
+      const to = new Date(toDate ?? Date.now());
       to.setHours(23, 59, 59, 999);
-      const from = q.from ? new Date(q.from) : new Date(0);
-      range = Between(from, to);
+      auditRange = Between(new Date(fromDate ?? 0), to);
     }
-    const on = (column: string) => (range ? { [column]: range } : {});
-    const happened = (column: string) =>
-      range ? { [column]: range } : { [column]: Not(IsNull()) };
+    const auditRows = await this.auditEvents.find({
+      where: auditRange ? { createdAt: auditRange } : {},
+      order: { createdAt: 'DESC' },
+      take,
+    });
+    const actorIds = auditRows
+      .map((row) => row.actorUserId)
+      .filter((id): id is string => Boolean(id));
+    const actors = actorIds.length
+      ? await this.users.find({ where: { id: In([...new Set(actorIds)]) }, select: ['id', 'email', 'phone'] })
+      : [];
+    const actorById = new Map(actors.map((actor) => [actor.id, actor]));
+    const actionText = (action: string) => action.replace(/[._]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    return auditRows.map((row) => ({
+      id: row.id,
+      at: row.createdAt,
+      kind: row.action,
+      summary: actionText(row.action),
+      resourceType: row.resourceType ?? 'platform',
+      resourceId: row.resourceId ?? '',
+      actorUserId: row.actorUserId,
+      actorName: row.actorUserId ? (actorById.get(row.actorUserId)?.email ?? actorById.get(row.actorUserId)?.phone ?? null) : null,
+      actorRole: row.actorRole,
+      metadata: row.metadata ?? {},
+    }));
 
-    const [
-      users,
-      listings,
-      bookings,
-      cases,
-      verifications,
-      clients,
-      planners,
-      completed,
-      cancelled,
-      decided,
-      resolved,
-      disputes,
-      payments,
-    ] = await Promise.all([
-      this.users.find({
-        where: on('createdAt'),
-        order: { createdAt: 'DESC' },
-        take,
-        select: ['id', 'role', 'createdAt'],
-      }),
-      this.vendors.find({ where: on('createdAt'), order: { createdAt: 'DESC' }, take }),
-      this.bookings.find({ where: on('createdAt'), order: { createdAt: 'DESC' }, take }),
-      this.cases.find({ where: on('createdAt'), order: { createdAt: 'DESC' }, take }),
-      this.verifications.find({ where: on('createdAt'), order: { createdAt: 'DESC' }, take }),
-      this.users.find({
-        where: { managedByAgentId: Not(IsNull()), ...on('createdAt') },
-        order: { createdAt: 'DESC' },
-        take,
-        select: ['id', 'createdAt'],
-      }),
-      this.planners.find({ where: on('createdAt'), order: { createdAt: 'DESC' }, take }),
-      this.bookings.find({ where: happened('completedAt'), order: { completedAt: 'DESC' }, take }),
-      this.bookings.find({ where: happened('cancelledAt'), order: { cancelledAt: 'DESC' }, take }),
-      this.verifications.find({
-        where: {
-          ...happened('decidedAt'),
-          status: In([VerificationStatus.APPROVED, VerificationStatus.REJECTED]),
-        },
-        order: { decidedAt: 'DESC' },
-        take,
-      }),
-      this.cases.find({ where: happened('resolvedAt'), order: { resolvedAt: 'DESC' }, take }),
-      this.disputes.find({ where: on('createdAt'), order: { createdAt: 'DESC' }, take }),
-      this.payments.find({
-        where: { ...on('createdAt'), status: In([...MONEY_TAKEN]) },
-        order: { createdAt: 'DESC' },
-        take,
-      }),
-    ]);
-
-    // The day a booking is for, read the way the booking itself reads it: the
-    // linked function's date, else the booking's, else the form's. And who
-    // raised each dispute, because providers raise them too.
-    const eventIds = [...new Set(bookings.map((b) => b.eventId).filter(Boolean))] as string[];
-    const [linkedEvents, raisers] = await Promise.all([
-      eventIds.length ? this.events.find({ where: { id: In(eventIds) } }) : Promise.resolve([]),
-      disputes.length
-        ? this.users.find({
-            where: { id: In([...new Set(disputes.map((d) => d.raisedBy))]) },
-            select: ['id', 'role'],
-          })
-        : Promise.resolve([]),
-    ]);
-    const eventById = new Map(linkedEvents.map((e) => [e.id, e]));
-    const roleOf = new Map(raisers.map((u) => [u.id, u.role]));
-    const dayOf = (b: Booking) =>
-      bookingContextOf(b, b.eventId ? eventById.get(b.eventId) : null).eventDate;
-
-    const items: ActivityItem[] = [
-      ...users.map((u) => ({
-        at: u.createdAt,
-        kind: 'account.registered',
-        summary: `A ${u.role.replace(/_/g, ' ')} account was created`,
-        resourceType: 'user',
-        resourceId: u.id,
-      })),
-      ...listings.map((v) => ({
-        at: v.createdAt,
-        kind: 'business.created',
-        summary: `${v.name} was listed under ${v.category}`,
-        resourceType: 'vendor',
-        resourceId: v.id,
-      })),
-      ...bookings.map((b) => ({
-        at: b.createdAt,
-        kind: 'booking.placed',
-        summary: `A booking was placed${dayOf(b) ? ` for ${dayOf(b)}` : ''}`,
-        resourceType: 'booking',
-        resourceId: b.id,
-      })),
-      ...cases.map((c) => ({
-        at: c.createdAt,
-        kind: 'case.raised',
-        // The title is what the complainant wrote, so it is quoted rather than
-        // paraphrased — a feed that summarises complaints in its own words is
-        // a feed nobody trusts.
-        summary: `Case raised: ${c.title}`,
-        resourceType: 'support_case',
-        resourceId: c.id,
-      })),
-      ...verifications.map((v) => ({
-        at: v.createdAt,
-        kind: 'verification.raised',
-        summary: `A ${v.applicantType} verification entered the queue`,
-        resourceType: 'verification_request',
-        resourceId: v.id,
-      })),
-      ...clients.map((c) => ({
-        at: c.createdAt,
-        kind: 'client.onboarded',
-        summary: 'An agency took on a client',
-        resourceType: 'agent_client',
-        resourceId: c.id,
-      })),
-      ...planners.map((p) => ({
-        at: p.createdAt,
-        kind: 'planner.registered',
-        summary: `${p.agencyName} registered as a wedding planner`,
-        resourceType: 'planner',
-        resourceId: p.id,
-      })),
-      ...completed.map((b) => ({
-        at: b.completedAt as Date,
-        kind: 'booking.completed',
-        summary: 'A booking was marked complete',
-        resourceType: 'booking',
-        resourceId: b.id,
-      })),
-      ...cancelled.map((b) => ({
-        at: b.cancelledAt as Date,
-        kind: 'booking.cancelled',
-        summary: 'A booking was cancelled',
-        resourceType: 'booking',
-        resourceId: b.id,
-      })),
-      ...decided.map((v) => ({
-        at: v.decidedAt as Date,
-        kind:
-          v.status === VerificationStatus.APPROVED
-            ? 'verification.approved'
-            : 'verification.rejected',
-        summary: `A ${v.applicantType} verification was ${v.status === VerificationStatus.APPROVED ? 'approved' : 'rejected'}`,
-        resourceType: 'verification_request',
-        resourceId: v.id,
-      })),
-      ...resolved.map((c) => ({
-        at: c.resolvedAt as Date,
-        kind: 'case.resolved',
-        summary: `Case resolved: ${c.title}`,
-        resourceType: 'support_case',
-        resourceId: c.id,
-      })),
-      ...disputes.map((d) => ({
-        at: d.createdAt,
-        kind: 'dispute.raised',
-        summary: `${AdminActivityService.disputeRaiser(roleOf.get(d.raisedBy))} raised a dispute on a booking`,
-        resourceType: 'dispute',
-        resourceId: d.id,
-      })),
-      ...payments.map((p) => ({
-        at: p.createdAt,
-        kind: 'payment.received',
-        summary: `${p.milestone} payment of ${Number(p.amount).toLocaleString('en-IN')} taken into escrow`,
-        resourceType: 'payment',
-        resourceId: p.id,
-      })),
-    ];
-
-    return items.sort((a, b) => b.at.getTime() - a.at.getTime()).slice(0, take);
   }
 }

@@ -383,6 +383,7 @@ export class SupportCasesService {
               // A listing that was filed under "Other" has not chosen a category
               // yet (EZ1-I263).
               category: vendor.category ?? 'uncategorised',
+              categories: vendor.categories ?? [],
               city: vendor.city ?? null,
               status: vendor.status,
               isApproved: vendor.isApproved,
