@@ -224,7 +224,7 @@ export default function Biodata() {
             {formatDate(full?.dateOfBirth ?? text('dateOfBirth'), '—')}
           </DetailRow>
           <DetailRow label="Height">
-            {typeof d.heightCm === 'number' ? `${d.heightCm} cm` : '—'}
+            {typeof d.heightFeet === 'number' ? `${d.heightFeet} feet` : '—'}
           </DetailRow>
           <DetailRow label="Complexion">{labelFor(COMPLEXION_LABEL, d.complexion) ?? '—'}</DetailRow>
           <DetailRow label="Religion">{text('religion') ?? '—'}</DetailRow>

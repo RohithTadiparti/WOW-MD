@@ -27,7 +27,7 @@ export default function PhotoUploader({
   label = 'Upload a photo',
   kind = 'photo',
 }: {
-  onUploaded: (url: string) => void;
+  onUploaded: (url: string) => void | Promise<void>;
   label?: string;
   /**
    * What is being attached.
@@ -99,7 +99,7 @@ export default function PhotoUploader({
       // claimed to be, before anything is attached to it.
       await api.post('/media/complete', { key: data.key });
 
-      onUploaded(data.publicUrl);
+      await onUploaded(data.publicUrl);
     } catch (err) {
       setError(apiMessage(err, 'That photo could not be uploaded.'));
     } finally {

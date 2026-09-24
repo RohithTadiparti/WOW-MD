@@ -1,3 +1,4 @@
+import { businessEntries } from '../../profile-details/business-entries';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Profile, ProfilePreferences } from '../entities/profile.entity';
 import { ProfileClaimStatus, ProfileVisibility } from '../../../common/enums';
@@ -97,7 +98,7 @@ export class PublicProfileView {
 }
 
 export interface ProfileCardFacts {
-  heightCm: number | null;
+  heightFeet: number | null;
   religion: string | null;
   caste: string | null;
   motherTongue: string | null;
@@ -131,7 +132,7 @@ export interface ProfileCardFacts {
  * the profile somebody has chosen to open, not on a card in a grid of forty.
  */
 export function toCardFacts(details: {
-  heightCm: number | null;
+  heightFeet: number | null;
   religion: string | null;
   caste: string | null;
   motherTongue: string | null;
@@ -157,7 +158,7 @@ export function toCardFacts(details: {
     padam: text(chart.padam),
     gothram: text(chart.gothram),
     kujaDosham: text(chart.kujaDosham),
-    heightCm: details.heightCm,
+    heightFeet: details.heightFeet,
     religion: details.religion,
     caste: details.caste,
     motherTongue: details.motherTongue,
@@ -168,7 +169,7 @@ export function toCardFacts(details: {
       text(details.employment?.role) ??
       text(details.employment?.designation) ??
       text(details.employment?.company) ??
-      text(details.business?.name) ??
+      text(businessEntries(details.business).map((entry) => entry.businessName ?? entry.name).filter(Boolean).join(', ')) ??
       null,
   };
 }
@@ -187,11 +188,16 @@ export function toCardFacts(details: {
  * `idVerifiedByUserId` names the officer who confirmed the document, which is
  * an internal audit fact rather than something the subject is owed.
  */
-export type OwnProfileView = Omit<Profile, 'governmentIdHash' | 'idVerifiedByUserId'>;
+export type OwnProfileView = Omit<Profile, 'governmentIdHash' | 'idVerifiedByUserId'> & {
+  accountName?: string | null;
+};
 
-export function toOwnProfile(profile: Profile): OwnProfileView {
+export function toOwnProfile(profile: Profile, accountName?: string | null): OwnProfileView {
   const { governmentIdHash: _hash, idVerifiedByUserId: _officer, ...rest } = profile;
-  return rest;
+  return {
+    ...rest,
+    accountName: accountName ?? null,
+  };
 }
 
 /**

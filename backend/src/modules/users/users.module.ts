@@ -15,12 +15,15 @@ import { Interest } from '../matchmaking/entities/interest.entity';
 import { Booking } from '../bookings/entities/booking.entity';
 import { Invitation } from '../invitations/entities/invitation.entity';
 
+import { AgentProfile } from '../agents/entities/agent-profile.entity';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       Profile,
       User,
       ProfileDetails,
+      AgentProfile,
       ProfileSibling,
       ProfileAsset,
       ProfileConsent,

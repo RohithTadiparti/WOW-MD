@@ -3,7 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Profile } from './entities/profile.entity';
 import { CreateProfileDto, UpdateProfileDto } from './dto/profile.dto';
-import { ProfileClaimStatus } from '../../common/enums';
+import { ProfileClaimStatus, UserRole } from '../../common/enums';
+import { User } from '../auth/entities/user.entity';
+import { ProfileDetails } from '../profile-details/entities/profile-details.entity';
+import { AgentProfile } from '../agents/entities/agent-profile.entity';
 
 /**
  * The account holder's own profile.
@@ -33,6 +36,9 @@ import { ProfileClaimStatus } from '../../common/enums';
 export class UsersService {
   constructor(
     @InjectRepository(Profile) private readonly profiles: Repository<Profile>,
+    @InjectRepository(User) private readonly users: Repository<User>,
+    @InjectRepository(ProfileDetails) private readonly details: Repository<ProfileDetails>,
+    @InjectRepository(AgentProfile) private readonly agencies: Repository<AgentProfile>,
   ) {}
 
   async upsert(userId: string, dto: CreateProfileDto | UpdateProfileDto): Promise<Profile> {
@@ -56,6 +62,41 @@ export class UsersService {
     const profile = await this.profiles.findOne({ where: { userId } });
     if (!profile) throw new NotFoundException('Profile not found');
     return profile;
+  }
+
+  async resolveAccountName(userId: string, profile: Profile): Promise<string | null> {
+    const user = await this.users.findOne({ where: { id: userId } });
+    if (!user) return profile.displayName;
+
+    if (user.role === UserRole.FAMILY) {
+      const details = await this.details.findOne({ where: { profileId: profile.id } });
+      const rel = (profile.stewardRelation ?? '').trim().toLowerCase();
+
+      if (rel === 'father' && details?.father && typeof details.father === 'object' && (details.father as { name: string }).name) {
+        return (details.father as { name: string }).name;
+      }
+      if (rel === 'mother' && details?.mother && typeof details.mother === 'object' && (details.mother as { name: string }).name) {
+        return (details.mother as { name: string }).name;
+      }
+      if (rel === 'guardian' && details && 'guardian' in details && details.guardian && typeof details.guardian === 'object' && (details.guardian as { name: string }).name) {
+        return (details.guardian as { name: string }).name;
+      }
+
+      if (!profile.managingFor && profile.displayName) {
+        return profile.displayName;
+      }
+      if (user.email) {
+        return user.email.split('@')[0];
+      }
+      return profile.displayName;
+    }
+
+    if (user.role === UserRole.AGENT) {
+      const agency = await this.agencies.findOne({ where: { ownerUserId: user.id } });
+      if (agency?.agencyName) return agency.agencyName;
+    }
+
+    return profile.displayName;
   }
 
   private isComplete(p: Profile): boolean {

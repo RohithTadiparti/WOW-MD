@@ -1,3 +1,6 @@
+import HeightInput from '../components/HeightInput';
+import { formatHeight, parseHeight } from '../lib/height';
+import PackageRangeFields from '../components/PackageRangeFields';
 import { useEffect, useState } from 'react';
 import { X } from '@phosphor-icons/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -75,10 +78,12 @@ interface MatchStatus {
 
 interface Filters {
   q: string;
+  packageMin: string;
+  packageMax: string;
   ageMin: string;
   ageMax: string;
-  heightMinCm: string;
-  heightMaxCm: string;
+  heightMinFeet: string;
+  heightMaxFeet: string;
   religion: string;
   caste: string;
   motherTongue: string;
@@ -102,10 +107,12 @@ interface Filters {
 
 const NO_FILTERS: Filters = {
   q: '',
+  packageMin: '',
+  packageMax: '',
   ageMin: '',
   ageMax: '',
-  heightMinCm: '',
-  heightMaxCm: '',
+  heightMinFeet: '',
+  heightMaxFeet: '',
   religion: '',
   caste: '',
   motherTongue: '',
@@ -148,10 +155,12 @@ const SORTS: { value: string; label: string }[] = [
  */
 const FILTER_LABEL: Partial<Record<keyof Filters, string>> = {
   q: 'Search',
+  packageMin: 'Package minimum',
+  packageMax: 'Package maximum',
   ageMin: 'Age from',
   ageMax: 'Age to',
-  heightMinCm: 'Height from',
-  heightMaxCm: 'Height to',
+  heightMinFeet: 'Height from',
+  heightMaxFeet: 'Height to',
   religion: 'Religion',
   caste: 'Community',
   motherTongue: 'Mother tongue',
@@ -187,7 +196,9 @@ const PAGE_SIZE = 12;
  */
 export default function Matches() {
   const qc = useQueryClient();
+  const userRole = useAuth((s) => s.user?.role);
   const permissions = useAuth((s) => s.user?.permissions ?? []);
+  const isFamily = userRole === 'family';
   const isSteward = can(permissions, Permission.ACT_ON_BEHALF);
   const isAgent = can(permissions, Permission.AGENCY_MANAGE);
   const canFix = can(permissions, Permission.MATCH_FIX);
@@ -252,13 +263,16 @@ export default function Matches() {
   // A profile with a fixed match, or one not yet filled in, is refused
   // suggestions by the server; asking anyway was a 403 on every visit. The
   // status says which, and the page already explains it.
+  const validHeightFilters = [filters.heightMinFeet, filters.heightMaxFeet]
+    .every((value) => value === '' || parseHeight(value) !== null)
+    && (!filters.heightMinFeet || !filters.heightMaxFeet || Number(filters.heightMinFeet) <= Number(filters.heightMaxFeet));
   const canBrowse = ready && Boolean(status) && !matchmakingGate(status);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error: suggestionsError } = useQuery({
     queryKey: ['suggestions', profileId, JSON.stringify(filters), view, pages],
     queryFn: async () => (await api.get('/matches/suggestions', { params: searchParams })).data,
     retry: false,
-    enabled: canBrowse,
+    enabled: canBrowse && validHeightFilters,
   });
 
   // The engine's own shortlist, unfiltered — it answers a different question
@@ -340,9 +354,9 @@ export default function Matches() {
     num(filters.ageMax) !== null &&
     (num(filters.ageMin) as number) > (num(filters.ageMax) as number);
   const heightInverted =
-    num(filters.heightMinCm) !== null &&
-    num(filters.heightMaxCm) !== null &&
-    (num(filters.heightMinCm) as number) > (num(filters.heightMaxCm) as number);
+    num(filters.heightMinFeet) !== null &&
+    num(filters.heightMaxFeet) !== null &&
+    (num(filters.heightMinFeet) as number) > (num(filters.heightMaxFeet) as number);
 
   // What a chip says after its label — codes read as their labels, and the two
   // "within N days" and "N%" filters carry their unit so the chip stands alone.
@@ -351,7 +365,8 @@ export default function Matches() {
     if (key === 'occupationStatus') return OCCUPATION_LABEL[value as OccupationStatus] ?? value;
     if (key === 'minScore') return `${value}%`;
     if (key === 'addedWithinDays') return `${value} days`;
-    if (key === 'heightMinCm' || key === 'heightMaxCm') return `${value} cm`;
+    if (key === 'packageMin' || key === 'packageMax') return `${Number(value) / 100000} Lakhs (INR)`;
+    if (key === 'heightMinFeet' || key === 'heightMaxFeet') return formatHeight(value);
     return value;
   };
 
@@ -406,7 +421,7 @@ export default function Matches() {
             .
           </p>
         </div>
-        {isSteward && (
+        {isSteward && !isFamily && (
           <ProfileSelector
             value={profileId}
             onChange={setProfileId}
@@ -582,18 +597,12 @@ export default function Matches() {
                     a value the list omits.
                   */}
                   <ChoiceField label="City" value={filters.city} onChange={setField('city')} options={CITIES} />
-                  <Filter
-                    label="Height from (cm)"
-                    value={filters.heightMinCm}
-                    onChange={setField('heightMinCm')}
-                    type="number"
-                  />
-                  <Filter
-                    label="Height to (cm)"
-                    value={filters.heightMaxCm}
-                    onChange={setField('heightMaxCm')}
-                    type="number"
-                  />
+                  <label className="block text-sm">Height from (feet)
+                    <HeightInput value={filters.heightMinFeet} onChange={setField('heightMinFeet')} />
+                  </label>
+                  <label className="block text-sm">Height to (feet)
+                    <HeightInput value={filters.heightMaxFeet} onChange={setField('heightMaxFeet')} />
+                  </label>
                   {heightInverted && (
                     <p className="text-xs text-red-600">
                       Height from must be less than or equal to height to.
@@ -660,6 +669,13 @@ export default function Matches() {
                     </select>
                   </label>
 
+                  <PackageRangeFields
+                    minimum={filters.packageMin}
+                    maximum={filters.packageMax}
+                    onMinimumChange={setField('packageMin')}
+                    onMaximumChange={setField('packageMax')}
+                    hint="Leave a limit blank to use your saved partner preference."
+                  />
                   {/*
                     Horoscope filters (EZ1-I163), off the same lists the biodata
                     chart was filled from — so a filter matches the value a
@@ -796,8 +812,9 @@ export default function Matches() {
                       disabledReason={gate}
                     />
                   ))}
+                  {suggestionsError && <p role="alert" className="text-sm text-red-600">{apiMessage(suggestionsError, 'Unable to load matches.')}</p>}
                   {isLoading && <Loading rows={3} />}
-                  {!isLoading && suggestions.length === 0 && view !== 'all' && (
+                  {!isLoading && !suggestionsError && suggestions.length === 0 && view !== 'all' && (
                     <div className="rounded-sm border border-dashed border-gray-300 p-4 text-sm">
                       <p className="font-medium text-gray-700">Nobody under {viewLabel} right now.</p>
                       <button className="btn-outline mt-3 text-xs" onClick={() => setView('all')}>
@@ -805,7 +822,7 @@ export default function Matches() {
                       </button>
                     </div>
                   )}
-                  {!isLoading && suggestions.length === 0 && view === 'all' && (
+                  {!isLoading && !suggestionsError && suggestions.length === 0 && view === 'all' && (
                     <EmptyState
                       hasFilters={activeFilterCount > 0}
                       onClear={() => setFilters(NO_FILTERS)}

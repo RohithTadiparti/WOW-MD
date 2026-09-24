@@ -1,3 +1,5 @@
+import { formatHeight } from '../lib/height';
+import { readBusinessEntries } from '../lib/business-entries';
 import { useState } from 'react';
 import { CheckCircle } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
@@ -119,10 +121,10 @@ export default function ProfilePreview({
   })();
 
   const name = data?.profile.displayName ?? 'Profile';
-  const heightCm = str('heightCm');
+  const heightFeet = str('heightFeet');
   const facts = [
     age ? `${age} years` : data?.profile.ageRange || null,
-    heightCm ? `${heightCm} cm` : null,
+    heightFeet ? formatHeight(heightFeet) : null,
     data?.profile.city || null,
   ].filter(Boolean) as string[];
 
@@ -232,13 +234,18 @@ export default function ProfilePreview({
               <Row label="Mother tongue">{str('motherTongue')}</Row>
             </Group>
 
-            <Group title="Education and occupation">
+            <Group title="Education">
               <Row label="Qualification">{str('highestQualification')}</Row>
-              <Row label="Occupation">{str('occupationStatus')?.replace(/_/g, ' ')}</Row>
               {!data.limited && <Row label="Course">{str('course')}</Row>}
+              {!data.limited && <Row label="Institution">{str('institution')}</Row>}
+              {!data.limited && <Row label="College Place">{str('collegePlace')}</Row>}
+            </Group>
+
+            <Group title="Occupation">
+              <Row label="Occupation">{str('occupationStatus')?.replace(/_/g, ' ')}</Row>
               {!data.limited && (
                 <Row label="Employer">
-                  {String(bag('employment').company ?? bag('business').businessName ?? '') || null}
+                  {String(bag('employment').company ?? readBusinessEntries(bag('business')).map((entry) => [entry.businessName, entry.businessType, entry.businessLocation].filter(Boolean).join(' - ')).join('; ')) || null}
                 </Row>
               )}
             </Group>

@@ -1,3 +1,4 @@
+import { feetTransformer } from '../../../common/util/height';
 import {
   Column,
   CreateDateColumn,
@@ -41,10 +42,10 @@ export class ProfileDetails {
   @Column({ type: 'varchar', length: 80, nullable: true })
   lastName: string | null;
 
-  /** Centimetres. A number, so "at least 165" is a comparison and not a parse. */
+  /** Decimal feet, matching the API and existing migrated databases. */
   @Index()
-  @Column({ type: 'int', nullable: true })
-  heightCm: number | null;
+  @Column({ type: 'numeric', precision: 3, scale: 1, nullable: true, transformer: feetTransformer })
+  heightFeet: number | null;
 
   @Column({ type: 'varchar', length: 40, nullable: true })
   complexion: string | null;
@@ -238,9 +239,12 @@ export class ProfileDetails {
 
   /** Company, designation, role, office and work location — when employed. */
   @Column({ type: 'jsonb', default: {} })
-  employment: Record<string, unknown>;
+  employment: Record<string, unknown> & {
+    /** Optional additional annual income; stored in the existing JSONB column. */
+    otherIncome?: { id: string; source: string; amount: string }[];
+  };
 
-  /** Business name, income and location — when self-employed. */
+  /** Repeatable business entries; first-entry fields preserve the legacy API contract. */
   @Column({ type: 'jsonb', default: {} })
   business: Record<string, unknown>;
 
@@ -253,17 +257,25 @@ export class ProfileDetails {
 
   // --------------------------------------------------- partner preferences
 
+  /** Annual package in rupees; null means no bound. */
+  @Column({ type: 'double precision', nullable: true })
+  preferredPackageMin: number | null;
+
+  @Column({ type: 'double precision', nullable: true })
+  preferredPackageMax: number | null;
+
+
   @Column({ type: 'int', nullable: true })
   preferredAgeMin: number | null;
 
   @Column({ type: 'int', nullable: true })
   preferredAgeMax: number | null;
 
-  @Column({ type: 'int', nullable: true })
-  preferredHeightMinCm: number | null;
+  @Column({ type: 'numeric', precision: 3, scale: 1, nullable: true, transformer: feetTransformer })
+  preferredHeightMinFeet: number | null;
 
-  @Column({ type: 'int', nullable: true })
-  preferredHeightMaxCm: number | null;
+  @Column({ type: 'numeric', precision: 3, scale: 1, nullable: true, transformer: feetTransformer })
+  preferredHeightMaxFeet: number | null;
 
   /**
    * Religion, caste, education, profession, complexion and the locations they
@@ -277,6 +289,9 @@ export class ProfileDetails {
   /** The photo shown first. One of `profiles.photos`. */
   @Column({ type: 'varchar', nullable: true })
   primaryPhotoUrl: string | null;
+
+  @Column({ type: 'varchar', length: 2000, nullable: true })
+  familyPhotoUrl: string | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
