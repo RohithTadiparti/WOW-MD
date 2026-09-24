@@ -60,6 +60,11 @@ export class UsersController {
     return toOwnProfile(await this.users.getByUserId(userId));
   }
 
+  @Get('me/navigation-counts')
+  async navigationCounts(@CurrentUser() actor: AuthUser) {
+    return this.users.navigationCounts(actor);
+  }
+
   @Put('me/profile')
   async upsert(@CurrentUser('userId') userId: string, @Body() dto: CreateProfileDto) {
     return toOwnProfile(await this.users.upsert(userId, dto));

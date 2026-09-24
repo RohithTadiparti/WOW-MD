@@ -5,6 +5,7 @@ import { Vendor } from './entities/vendor.entity';
 import { User } from '../auth/entities/user.entity';
 import { Profile } from '../users/entities/profile.entity';
 import { PlannerProfile } from '../wedding-planners/entities/planner-profile.entity';
+import { SupportCase } from '../verification/entities/support-case.entity';
 import { VendorService } from '../catalog/entities/vendor-service.entity';
 import { ServiceOffering } from '../catalog/entities/service-offering.entity';
 import { BusinessLifecycleService } from './business-lifecycle.service';
@@ -39,6 +40,7 @@ import { CatalogModule } from '../catalog/catalog.module';
       Profile,
       // Read-only, so availability can ask whether a planner listing is yours.
       PlannerProfile,
+      SupportCase,
     ]),
     forwardRef(() => BookingsModule),
     forwardRef(() => CatalogModule),

@@ -50,6 +50,24 @@ export default {
           light: channel('brand-soft'),
         },
 
+        // Official WOW palette. This is intentionally a top-level family so
+        // every portal can use the approved tokens directly (`bg-wow-primary`,
+        // `text-wow-text-main`, etc.) without coupling brand semantics to an
+        // unrelated colour scale.
+        wow: {
+          primary: channel('wow-primary'),
+          'primary-light': channel('wow-primary-light'),
+          'accent-gold': channel('wow-accent-gold'),
+          'accent-warm': channel('wow-accent-warm'),
+          'bg-main': channel('wow-bg-main'),
+          'bg-secondary': channel('wow-bg-secondary'),
+          surface: channel('wow-surface'),
+          'text-main': channel('wow-text-main'),
+          'text-muted': channel('wow-text-muted'),
+          success: channel('wow-success'),
+          error: channel('wow-error'),
+        },
+
         // The template's struck gold, for ornament: numerals, rules, hearts.
         gold: {
           DEFAULT: channel('gold'),
@@ -124,6 +142,15 @@ export default {
           700: channel('info-fg'),
           800: channel('info-fg'),
           900: channel('info-fg'),
+        },
+        rose: {
+          50: channel('brand-soft'),
+          100: channel('brand-soft'),
+          300: channel('rose-300'),
+          500: channel('rose-500'),
+          600: channel('rose-600'),
+          700: channel('rose-700'),
+          800: channel('rose-800'),
         },
         violet: {
           50: channel('info-bg'),

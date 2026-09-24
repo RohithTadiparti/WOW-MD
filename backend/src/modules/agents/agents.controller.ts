@@ -132,6 +132,18 @@ export class AgentsController {
     return this.managed.actableProfiles(actor);
   }
 
+  @RequirePermissions(Permission.AGENCY_MANAGE)
+  @Get('dashboard')
+  dashboard(@CurrentUser('userId') agentId: string) {
+    return this.agents.dashboard(agentId);
+  }
+
+  @RequirePermissions(Permission.AGENCY_MANAGE)
+  @Get('escrow')
+  escrow(@CurrentUser('userId') agentId: string, @Query('status') status?: string, @Query('search') search?: string) {
+    return this.agents.escrow(agentId, { status, search });
+  }
+
   @RequirePermissions(Permission.MANAGED_PROFILE_MANAGE)
   @Get('profiles/:id')
   getProfile(@CurrentUser() actor: AuthUser, @Param('id', ParseUUIDPipe) id: string) {

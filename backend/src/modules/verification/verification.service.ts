@@ -774,6 +774,31 @@ export class VerificationService {
     return paginate(await this.withIdentity(data), total, q.page, q.limit);
   }
 
+  /** Counts for the officer dashboard, always restricted to that officer's workload. */
+  async officerDashboard(officerUserId: string) {
+    const requests = await this.requests.find({
+      where: { assignedToUserId: officerUserId },
+      select: ['status', 'slaDeadline'],
+    });
+    const today = new Date().toISOString().slice(0, 10);
+    const statusCount = (status: VerificationStatus) =>
+      requests.filter((request) => request.status === status).length;
+
+    return {
+      today: requests.filter(
+        (request) => request.slaDeadline && request.slaDeadline.toISOString().slice(0, 10) === today,
+      ).length,
+      assigned: statusCount(VerificationStatus.ASSIGNED),
+      pending: statusCount(VerificationStatus.ASSIGNED),
+      inProgress: statusCount(VerificationStatus.IN_PROGRESS),
+      submitted: statusCount(VerificationStatus.SUBMITTED),
+      needsAnotherLook: statusCount(VerificationStatus.ADDITIONAL_REVIEW),
+      approved: statusCount(VerificationStatus.APPROVED),
+      rejected: statusCount(VerificationStatus.REJECTED),
+      completed: statusCount(VerificationStatus.APPROVED) + statusCount(VerificationStatus.REJECTED),
+    };
+  }
+
   /**
    * Puts a name on each row.
    *

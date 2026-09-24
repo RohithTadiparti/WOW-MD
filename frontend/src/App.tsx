@@ -6,7 +6,6 @@ import { api, bootstrapSession } from './lib/api';
 import { Permission, PermissionValue, ROLE_LABEL, UserRole, canAny } from './lib/permissions';
 import { navDenied } from './lib/nav-access';
 import { UNREAD_POLL_MS } from './lib/notification-copy';
-import { useAdminPendingCounts } from './lib/admin-pending-counts';
 import type { Icon } from '@phosphor-icons/react';
 import {
   AddressBook,
@@ -70,6 +69,8 @@ import PlannerClients from './pages/PlannerClients';
 import PlannerClientDetail from './pages/PlannerClientDetail';
 import PlannerEventWorkspace from './pages/PlannerEventWorkspace';
 import MyWeddings from './pages/MyWeddings';
+import PlannerWeddings from './pages/PlannerWeddings';
+import PlannerTasks from './pages/PlannerTasks';
 import Chat from './pages/Chat';
 import Bookings from './pages/Bookings';
 import Genie from './pages/Genie';
@@ -121,6 +122,7 @@ import Availability from './pages/Availability';
 import Accounts from './pages/Accounts';
 import AccountsTransaction from './pages/AccountsTransaction';
 import Escrow from './pages/Escrow';
+import AgentEscrow from './pages/AgentEscrow';
 import MyReviews from './pages/MyReviews';
 import PlannerReviews from './pages/PlannerReviews';
 import Notifications from './pages/Notifications';
@@ -266,6 +268,13 @@ const NAV: NavEntry[] = [
     group: 'clients',
     icon: ShareNetwork,
   },
+  {
+    to: '/agent-escrow',
+    label: 'Escrow',
+    requires: [Permission.AGENCY_MANAGE],
+    group: 'business',
+    icon: Vault,
+  },
   { to: '/pool', label: 'Network Pool', requires: [Permission.NETWORK_POOL_BROWSE], group: 'clients', icon: Graph },
   {
     to: '/interests',
@@ -292,6 +301,8 @@ const NAV: NavEntry[] = [
    */
   { to: '/my-clients', label: 'My Clients', requires: [Permission.PLAN_MANAGE_ENGAGED], group: 'clients', icon: AddressBook },
   { to: '/my-weddings', label: 'My Weddings', requires: [Permission.PLAN_MANAGE_ENGAGED], group: 'clients', icon: CalendarCheck },
+  { to: '/weddings', label: 'My Weddings', requires: [Permission.PLAN_MANAGE_ENGAGED], group: 'wedding', icon: CalendarCheck },
+  { to: '/tasks', label: 'Tasks', requires: [Permission.PLAN_MANAGE_ENGAGED], group: 'wedding', icon: ClipboardText },
   { to: '/agency', label: 'My Agency', requires: [Permission.AGENCY_MANAGE], group: 'clients', icon: Buildings },
   // Reviews are about how the agency is doing, not what it is, so they get
   // their own entry rather than living inside the agency's details form
@@ -444,6 +455,17 @@ function useUnreadCount(): number {
   return data?.unread ?? 0;
 }
 
+function useNavigationCounts(): Record<string, number> {
+  const { data } = useQuery({
+    queryKey: ['navigation-counts'],
+    queryFn: async () => (await api.get('/users/me/navigation-counts')).data as Record<string, number>,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+    retry: false,
+  });
+  return data ?? {};
+}
+
 
 /**
  * How the account signs out, switches business, and changes theme.
@@ -589,8 +611,20 @@ function Layout({ children }: { children: ReactNode }) {
 
   const permissions = user?.permissions ?? [];
   const isAdmin = user?.role === 'admin';
+  const portal =
+    user?.role === 'admin'
+      ? 'admin'
+      : user?.role === 'in_person'
+        ? 'verification'
+        : user?.role === 'vendor'
+          ? 'vendor'
+          : user?.role === 'planner'
+            ? 'planner'
+            : user?.role === 'agent'
+              ? 'agent'
+              : 'individual';
   const unread = useUnreadCount();
-  const { counts: pendingCounts } = useAdminPendingCounts(isAdmin);
+  const navCounts = useNavigationCounts();
 
   /*
    * For an administrator the left rail *is* the admin portal navigation
@@ -613,30 +647,7 @@ function Layout({ children }: { children: ReactNode }) {
         label: n.label,
         icon: n.icon,
         group: 'main',
-        badge:
-          n.to === '/admin/users'
-            ? pendingCounts.users
-            : n.to === '/admin/agents'
-              ? pendingCounts.agents
-              : n.to === '/admin/vendors'
-                ? pendingCounts.vendors
-                : n.to === '/admin/officers'
-                  ? pendingCounts.verificationOfficers
-                  : n.to === '/admin/planners'
-                    ? pendingCounts.weddingPlanners
-                    : n.to === '/admin/bookings'
-                      ? pendingCounts.bookings
-                      : n.to === '/admin/payments'
-                        ? pendingCounts.payments
-                        : n.to === '/verification'
-                          ? pendingCounts.verification
-                          : n.to === '/admin/support'
-                            ? pendingCounts.support
-                            : n.to === '/admin/notifications'
-                              ? pendingCounts.notifications
-                              : n.to === '/admin/reports'
-                                ? pendingCounts.reports
-                                : undefined,
+        badge: n.to === '/admin/notifications' ? Math.max(unread, navCounts[n.to] ?? 0) : navCounts[n.to] ?? undefined,
       }))
     : NAV.filter(
         (n) =>
@@ -647,7 +658,10 @@ function Layout({ children }: { children: ReactNode }) {
         label: (user && n.labelFor?.[user.role]) ?? n.label,
         icon: n.icon,
         group: n.group,
-        badge: n.to === '/notifications' ? unread : undefined,
+        badge:
+          n.to === '/notifications'
+            ? Math.max(unread, navCounts[n.to] ?? 0)
+            : navCounts[n.to] ?? undefined,
       }));
 
   const groups = isAdmin ? [{ key: 'main', title: null }] : NAV_GROUPS;
@@ -657,7 +671,7 @@ function Layout({ children }: { children: ReactNode }) {
   useEffect(() => setDrawer(false), [loc.pathname]);
 
   return (
-    <div className="min-h-[100dvh]">
+    <div className="portal-shell min-h-[100dvh]" data-portal={portal}>
       {/*
         Two columns above `lg`, one below. The rail is sticky and scrolls
         independently, so a long navigation never pushes the page down and the
@@ -1097,6 +1111,22 @@ export default function App() {
         }
       />
       <Route
+        path="/weddings"
+        element={
+          <Protected requires={[Permission.PLAN_MANAGE_ENGAGED]}>
+            <PlannerWeddings />
+          </Protected>
+        }
+      />
+      <Route
+        path="/tasks"
+        element={
+          <Protected requires={[Permission.PLAN_MANAGE_ENGAGED]}>
+            <PlannerTasks />
+          </Protected>
+        }
+      />
+      <Route
         path="/my-clients/:userId"
         element={
           <Protected requires={[Permission.PLAN_MANAGE_ENGAGED]}>
@@ -1197,6 +1227,14 @@ export default function App() {
         element={
           <Protected requires={[Permission.BOOKING_READ_INCOMING]}>
             <Accounts />
+          </Protected>
+        }
+      />
+      <Route
+        path="/agent-escrow"
+        element={
+          <Protected requires={[Permission.AGENCY_MANAGE]}>
+            <AgentEscrow />
           </Protected>
         }
       />
