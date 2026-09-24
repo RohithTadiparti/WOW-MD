@@ -13,6 +13,13 @@ export type ThemeChoice = 'light' | 'dark' | 'system';
  *  reading either codebase should not have to wonder whether they match. */
 const STORAGE_KEY = 'wow-theme';
 
+/**
+ * Off while the product runs on the matrimony home template alone, which is
+ * light only — the same switch as the web app's. The dark palette and the
+ * stored choice are kept, so turning this back on is the whole of the work.
+ */
+export const DARK_MODE_ENABLED = false;
+
 interface ThemeState {
   choice: ThemeChoice;
   /** False until the stored choice has been read back, so nothing renders the
@@ -53,7 +60,7 @@ export const useThemeChoice = create<ThemeState>((set) => ({
 export function useTheme(): Theme {
   const choice = useThemeChoice((s) => s.choice);
   const system = useColorScheme();
-  const dark = choice === 'dark' || (choice === 'system' && system === 'dark');
+  const dark = DARK_MODE_ENABLED && (choice === 'dark' || (choice === 'system' && system === 'dark'));
   return dark ? darkTheme : lightTheme;
 }
 

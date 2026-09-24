@@ -30,7 +30,15 @@ import {
   SectionTitle,
 } from '@/components/ui';
 import { useAuth } from '@/store/auth';
-import { radius, rgb, space, useTheme, useThemeChoice, type ThemeChoice } from '@/theme';
+import {
+  DARK_MODE_ENABLED,
+  radius,
+  rgb,
+  space,
+  useTheme,
+  useThemeChoice,
+  type ThemeChoice,
+} from '@/theme';
 
 /**
  * More: the account, and nothing the tab bar already holds.
@@ -147,9 +155,11 @@ export default function More() {
         ) : null}
       </Group>
 
-      <Group title="App settings">
-        <Appearance />
-      </Group>
+      {DARK_MODE_ENABLED ? (
+        <Group title="App settings">
+          <Appearance />
+        </Group>
+      ) : null}
 
       <Group title="Other">
         <Row icon={Info} label="About" hint="Version, build and what this app is" to="/about" />
