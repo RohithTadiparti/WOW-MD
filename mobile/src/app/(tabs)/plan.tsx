@@ -1,33 +1,320 @@
-import { Alert as NativeAlert, Pressable, View } from 'react-native';
+import { type ComponentType } from 'react';
+import { Pressable, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
-import { Briefcase, CalendarBlank, Camera, Heart, Suitcase } from 'phosphor-react-native';
+import {
+  Briefcase,
+  CalendarBlank,
+  CaretRight,
+  Heart,
+  Receipt,
+  type IconProps,
+} from 'phosphor-react-native';
 
-import { api, apiMessage } from '@/lib/api';
-import { rupees } from '@/lib/format';
-import { Card, Caption, EmptyState, Loading, PageSubtitle, PageTitle, Screen, SectionTitle } from '@/components/ui';
+import { apiMessage } from '@/lib/api';
+import { shortDate } from '@/lib/format';
+import {
+  categoryLabel,
+  fetchPlans,
+  fetchWeddingDashboard,
+  type WeddingDashboard,
+} from '@/lib/wedding-plan';
+import { NotificationBell } from '@/components/home/notification-bell';
+import { Badge } from '@/components/chrome';
+import {
+  Body,
+  Caption,
+  Card,
+  EmptyState,
+  Loading,
+  Screen,
+  SectionTitle,
+} from '@/components/ui';
 import { rgb, space, useTheme } from '@/theme';
+import { Txt } from '@/theme/fonts';
 
-type Dashboard = { journey: { total: number; done: number; percent: number }; budget: { budgeted: string; committed: string }; countdown: { weddingDate: string | null; daysAway: number | null } };
-type Plan = { id: string };
-// Bookings is null on purpose: /bookings is the seller incoming queue, not a
-// couple's own bookings. Until a buyer bookings screen exists, the tile must
-// not dump couples onto a vendor console.
-const actions = [
-  ['Vendors', 'Find trusted vendors', Briefcase, '/vendors'],
-  ['Hire a Planner', 'Get expert guidance', Heart, null],
-  ['Bookings', 'Manage your bookings', CalendarBlank, null],
-  ['Events', 'Create and track events', CalendarBlank, '/events'],
-  ['Honeymoon', 'Plan your dream trip', Suitcase, null],
-  ['Media', 'Save your memories', Camera, null],
-] as const;
+type Action = {
+  title: string;
+  hint: string;
+  icon: ComponentType<IconProps>;
+  to: string;
+};
 
-export default function PlanOverview() {
-  const theme = useTheme(); const router = useRouter();
-  const dashboard = useQuery({ queryKey: ['wedding-dashboard'], queryFn: async () => (await api.get('/planner/dashboard')).data as Dashboard, retry: false });
-  const plans = useQuery({ queryKey: ['plans'], queryFn: async () => (await api.get('/planner/plans')).data as Plan[], retry: false });
-  if (dashboard.isPending || plans.isPending) return <Screen><Loading rows={5} /></Screen>;
-  if (dashboard.error || plans.error) return <Screen><EmptyState title="Your plan could not be loaded">{apiMessage(dashboard.error ?? plans.error, 'Please try again shortly.')}</EmptyState></Screen>;
-  const data = dashboard.data; const plan = plans.data?.[0]; const percent = data?.journey.percent ?? 0; const remaining = Math.max(0, (data?.journey.total ?? 0) - (data?.journey.done ?? 0));
-  return <Screen><View style={{ gap: space(1) }}><PageTitle>My Wedding Plan</PageTitle><PageSubtitle>Turn your dream wedding into reality</PageSubtitle></View><Pressable disabled={!plan} onPress={() => plan && router.push({ pathname: '/plan/[id]', params: { id: plan.id } })}><Card style={{ gap: space(3), borderRadius: 16 }}><View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><SectionTitle>Overall Progress</SectionTitle><SectionTitle style={{ color: rgb(theme.brand) }}>{percent}%</SectionTitle></View><View style={{ height: 7, borderRadius: 4, backgroundColor: rgb(theme.surfaceSunken) }}><View style={{ height: 7, borderRadius: 4, width: `${percent}%`, backgroundColor: rgb(theme.brand) }} /></View><Caption>{remaining} task{remaining === 1 ? '' : 's'} left to tick off</Caption></Card></Pressable><Card style={{ borderRadius: 16, backgroundColor: rgb(theme.brandSoft) }}><SectionTitle style={{ color: rgb(theme.brandStrong) }}>A well-planned wedding is a happy beginning</SectionTitle><Caption>{data?.countdown.weddingDate ? `${data.countdown.daysAway ?? 0} days to your celebration` : 'Start by setting your wedding date and checklist.'}</Caption></Card><View style={{ gap: space(2) }}><SectionTitle>Plan Your Wedding</SectionTitle><View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2) }}>{actions.map(([title, hint, Icon, route]) => <Pressable key={title} disabled={!route} onPress={() => route && router.push(route as never)} style={{ width: '48.7%', opacity: route ? 1 : 0.5 }}><Card style={{ minHeight: 100, padding: space(3), borderRadius: 14 }}><Icon size={22} color={rgb(theme.brand)} /><Caption style={{ fontWeight: '700', color: rgb(theme.ink[800]) }}>{title}</Caption><Caption tone="faint" style={{ fontSize: 11 }}>{hint}</Caption></Card></Pressable>)}</View></View>{data?.budget.budgeted ? <Card><Caption>Total wedding budget</Caption><SectionTitle>{rupees(data.budget.budgeted)}</SectionTitle><Caption>{rupees(data.budget.committed)} committed so far</Caption></Card> : null}{!plan ? <EmptyState title="Start your wedding plan">Create your first plan on the web to add tasks and a wedding date.</EmptyState> : null}</Screen>;
+const ACTIONS: Action[] = [
+  { title: 'Vendors', hint: 'Find trusted vendors', icon: Briefcase, to: '/vendors' },
+  { title: 'Hire a Planner', hint: 'Get expert guidance', icon: Heart, to: '/planners' },
+  { title: 'Events', hint: 'Create and track events', icon: CalendarBlank, to: '/events' },
+  { title: 'Bookings', hint: 'Manage your bookings', icon: Receipt, to: '/plan/bookings' },
+];
+
+export default function PlanHome() {
+  const theme = useTheme();
+  const router = useRouter();
+
+  const dashboard = useQuery({
+    queryKey: ['wedding-dashboard'],
+    queryFn: fetchWeddingDashboard,
+    retry: false,
+  });
+  const plans = useQuery({
+    queryKey: ['plans'],
+    queryFn: fetchPlans,
+    retry: false,
+  });
+  const bookings = useQuery({
+    queryKey: ['my-bookings', 'upcoming'],
+    queryFn: async () =>
+      (await import('@/lib/api')).api.get('/bookings', { params: { limit: 5 } }).then(
+        (r) => r.data as { data?: BookingRow[] } | BookingRow[],
+      ),
+    retry: false,
+  });
+
+  if (dashboard.isPending || plans.isPending) {
+    return (
+      <Screen>
+        <Loading rows={5} />
+      </Screen>
+    );
+  }
+
+  if (dashboard.error || plans.error) {
+    return (
+      <Screen>
+        <EmptyState title="Your plan could not be loaded">
+          {apiMessage(dashboard.error ?? plans.error, 'Please try again shortly.')}
+        </EmptyState>
+      </Screen>
+    );
+  }
+
+  const data = dashboard.data as WeddingDashboard;
+  const plan = plans.data?.[0];
+  const percent = data.journey.percent ?? 0;
+  const location =
+    data.upcoming.find((e) => e.venue)?.venue ??
+    data.upcoming[0]?.venue ??
+    null;
+  const guestCount = data.guests.expectedHeadcount || data.guests.onList || 0;
+  const bookingRows: BookingRow[] = Array.isArray(bookings.data)
+    ? bookings.data
+    : (bookings.data?.data ?? []);
+  const upcomingBookings = bookingRows
+    .filter((b) => b.status !== 'cancelled' && b.status !== 'completed')
+    .slice(0, 3);
+
+  return (
+    <Screen>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Txt serif style={{ fontSize: 30, fontWeight: '600', color: rgb(theme.brand) }}>
+          WOW
+        </Txt>
+        <NotificationBell />
+      </View>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Open my wedding plan"
+        onPress={() =>
+          router.push({
+            pathname: '/plan/[id]',
+            params: { id: plan?.id ?? 'new' },
+          })
+        }
+      >
+        <Card style={{ gap: space(3), borderRadius: 16 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <SectionTitle>My Wedding Plan</SectionTitle>
+            {plan ? (
+              <Caption tone="brand" style={{ fontWeight: '600' }}>
+                View <CaretRight size={12} color={rgb(theme.brandStrong)} />
+              </Caption>
+            ) : null}
+          </View>
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(4) }}>
+            <ProgressRing percent={percent} />
+            <View style={{ flex: 1, gap: space(1.5) }}>
+              <Fact label="Wedding Day" value={data.countdown.weddingDate ? shortDate(data.countdown.weddingDate) : 'Not set'} />
+              <Fact label="Location" value={location ?? 'Not set'} />
+              <Fact label="Guest Count" value={guestCount ? `${guestCount} Guests` : 'Not set'} />
+            </View>
+          </View>
+        </Card>
+      </Pressable>
+
+      <View style={{ gap: space(2) }}>
+        <SectionTitle>Quick Actions</SectionTitle>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2) }}>
+          {ACTIONS.map((action) => (
+            <Pressable
+              key={action.title}
+              onPress={() => router.push(action.to as never)}
+              style={{ width: '48.5%' }}
+            >
+              <Card style={{ minHeight: 96, padding: space(3), borderRadius: 14, gap: space(1) }}>
+                <View
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 18,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: rgb(theme.brandSoft),
+                  }}
+                >
+                  <action.icon size={18} color={rgb(theme.brandStrong)} />
+                </View>
+                <Body style={{ fontWeight: '700', fontSize: 14 }}>{action.title}</Body>
+                <Caption tone="faint" numberOfLines={1}>
+                  {action.hint}
+                </Caption>
+              </Card>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+
+      <View style={{ gap: space(2) }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <SectionTitle>Upcoming Events</SectionTitle>
+          <Pressable onPress={() => router.push('/events')}>
+            <Caption tone="brand" style={{ fontWeight: '600' }}>
+              See All
+            </Caption>
+          </Pressable>
+        </View>
+        {data.upcoming.length === 0 ? (
+          <Card>
+            <Caption tone="muted">No upcoming events yet. Add one from Events.</Caption>
+          </Card>
+        ) : (
+          data.upcoming.slice(0, 3).map((event) => (
+            <Pressable
+              key={event.id}
+              onPress={() => router.push('/events')}
+            >
+              <Card style={{ gap: space(1), borderRadius: 14 }}>
+                <Body style={{ fontWeight: '700' }}>{event.name}</Body>
+                <Caption tone="muted">
+                  {[shortDate(event.eventDate), event.venue].filter(Boolean).join(' · ')}
+                </Caption>
+                <Caption tone="brand">{event.daysAway === 0 ? 'Today' : `${event.daysAway} days away`}</Caption>
+              </Card>
+            </Pressable>
+          ))
+        )}
+      </View>
+
+      <View style={{ gap: space(2) }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <SectionTitle>Upcoming Bookings</SectionTitle>
+          <Pressable onPress={() => router.push('/plan/bookings')}>
+            <Caption tone="brand" style={{ fontWeight: '600' }}>
+              See All
+            </Caption>
+          </Pressable>
+        </View>
+        {bookings.isPending ? (
+          <Loading rows={1} />
+        ) : upcomingBookings.length === 0 ? (
+          <Card>
+            <Caption tone="muted">No bookings yet. Request one from a vendor or planner.</Caption>
+          </Card>
+        ) : (
+          upcomingBookings.map((row) => (
+            <Pressable key={row.id} onPress={() => router.push('/plan/bookings')}>
+              <Card style={{ gap: space(1), borderRadius: 14 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: space(2) }}>
+                  <Body style={{ fontWeight: '700', flex: 1 }} numberOfLines={1}>
+                    {row.providerName ?? row.serviceName ?? 'Booking'}
+                  </Body>
+                  <Badge tone={row.status === 'confirmed' ? 'positive' : 'caution'}>
+                    {categoryLabel(row.status)}
+                  </Badge>
+                </View>
+                <Caption tone="muted">
+                  {[row.serviceName, row.eventDate ? shortDate(row.eventDate) : null]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </Caption>
+              </Card>
+            </Pressable>
+          ))
+        )}
+      </View>
+
+      {!plan ? (
+        <EmptyState title="Start your wedding plan">
+          Tap My Wedding Plan above to set your wedding date and open the full plan.
+        </EmptyState>
+      ) : null}
+
+      <Pressable onPress={() => router.push('/plan/more')} style={{ alignItems: 'center', paddingVertical: space(2) }}>
+        <Caption tone="brand" style={{ fontWeight: '600' }}>
+          Plan settings & more
+        </Caption>
+      </Pressable>
+    </Screen>
+  );
+}
+
+interface BookingRow {
+  id: string;
+  providerName?: string | null;
+  serviceName?: string | null;
+  status: string;
+  eventDate?: string | null;
+}
+
+function Fact({ label, value }: { label: string; value: string }) {
+  return (
+    <View>
+      <Caption tone="faint" style={{ fontSize: 11 }}>
+        {label}
+      </Caption>
+      <Caption style={{ fontWeight: '600' }} numberOfLines={1}>
+        {value}
+      </Caption>
+    </View>
+  );
+}
+
+function ProgressRing({ percent }: { percent: number }) {
+  const theme = useTheme();
+  const clamped = Math.min(100, Math.max(0, percent));
+  return (
+    <View
+      style={{
+        width: 88,
+        height: 88,
+        borderRadius: 44,
+        borderWidth: 8,
+        borderColor: rgb(theme.brandSoft),
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: rgb(theme.surface),
+      }}
+    >
+      <View
+        style={{
+          position: 'absolute',
+          width: 88,
+          height: 88,
+          borderRadius: 44,
+          borderWidth: 8,
+          borderColor: 'transparent',
+          borderTopColor: rgb(theme.brand),
+          borderRightColor: clamped >= 50 ? rgb(theme.brand) : 'transparent',
+          transform: [{ rotate: `${(clamped / 100) * 360 - 90}deg` }],
+        }}
+      />
+      <Txt style={{ fontSize: 18, fontWeight: '700', color: rgb(theme.brandStrong) }}>
+        {clamped}%
+      </Txt>
+      <Caption tone="faint" style={{ fontSize: 10 }}>
+        Progress
+      </Caption>
+    </View>
+  );
 }

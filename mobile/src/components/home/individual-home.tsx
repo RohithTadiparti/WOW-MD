@@ -151,13 +151,20 @@ export function IndividualHome({ profileId }: { profileId: string | null }) {
             {unread?.unread ? (
               <View style={{
                 position: 'absolute',
-                top: 4,
-                right: 4,
-                width: 8,
-                height: 8,
-                borderRadius: 4,
+                top: -4,
+                right: -8,
+                minWidth: 18,
+                height: 18,
+                borderRadius: 9,
+                paddingHorizontal: 4,
+                alignItems: 'center',
+                justifyContent: 'center',
                 backgroundColor: rgb(theme.criticalFg)
-              }} />
+              }}>
+                <Caption tone="onBrand" style={{ fontSize: 10, lineHeight: 14, fontWeight: '700' }}>
+                  {unread.unread > 99 ? '99+' : unread.unread}
+                </Caption>
+              </View>
             ) : null}
           </View>
         </Pressable>

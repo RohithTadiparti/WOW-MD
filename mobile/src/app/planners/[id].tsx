@@ -4,17 +4,15 @@ import {
   Image,
   Pressable,
   ScrollView,
-  Share,
   View,
   useWindowDimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Heart, MapPin, SealCheck, ShareNetwork, Star } from 'phosphor-react-native';
+import { ArrowLeft, Heart, MapPin, SealCheck, Star } from 'phosphor-react-native';
 
 import { api, apiMessage } from '@/lib/api';
-import { rupees } from '@/lib/format';
-import { loadVendorShortlist, toggleVendorShortlist } from '@/lib/plan-shortlist';
+import { loadPlannerShortlist, togglePlannerShortlist } from '@/lib/plan-shortlist';
 import { DateField } from '@/components/form';
 import {
   Alert,
@@ -29,41 +27,35 @@ import {
 } from '@/components/ui';
 import { rgb, space, useTheme } from '@/theme';
 
-type Tab = 'overview' | 'photos' | 'reviews' | 'packages';
+type Tab = 'about' | 'services' | 'reviews' | 'gallery';
 
-type Vendor = {
+type Planner = {
   id: string;
-  name: string;
-  category: string | null;
-  categories: string[];
-  city: string;
-  description: string;
+  agencyName: string;
+  city?: string;
+  bio?: string;
+  yearsExperience: number;
   ratingAvg: number;
   ratingCount: number;
-  portfolio: string[];
-  startingPrice: number | null;
-  verifiedAt: string | null;
-};
-
-type Service = {
-  id: string;
-  name: string;
-  description?: string | null;
-  offerings?: { id: string; name: string; price: string | null }[];
+  portfolio?: string[];
+  packages?: { name: string; price: number; includes?: string[] }[];
+  contactPerson?: string | null;
+  website?: string | null;
 };
 
 type Review = {
   id: string;
   rating: number;
   comment?: string | null;
+  createdAt?: string;
 };
 
-export default function VendorDetail() {
+export default function PlannerDetail() {
   const theme = useTheme();
   const router = useRouter();
   const { width } = useWindowDimensions();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [tab, setTab] = useState<Tab>('overview');
+  const [tab, setTab] = useState<Tab>('about');
   const [shortlist, setShortlist] = useState<Set<string>>(new Set());
   const [requesting, setRequesting] = useState(false);
   const [eventDate, setEventDate] = useState('');
@@ -73,27 +65,22 @@ export default function VendorDetail() {
   const [notice, setNotice] = useState('');
 
   useEffect(() => {
-    void loadVendorShortlist().then(setShortlist);
+    void loadPlannerShortlist().then(setShortlist);
   }, []);
 
   const query = useQuery({
-    queryKey: ['vendor', id],
-    queryFn: async () => (await api.get(`/vendors/${id}`)).data as Vendor,
+    queryKey: ['planner', id],
+    queryFn: async () => (await api.get(`/wedding-planners/${id}`)).data as Planner,
     enabled: Boolean(id),
     retry: false,
   });
 
-  const services = useQuery({
-    queryKey: ['vendor-services', id],
-    queryFn: async () => (await api.get(`/vendors/${id}/services`)).data as Service[],
-    enabled: Boolean(id) && (tab === 'packages' || requesting),
-    retry: false,
-  });
-
   const reviews = useQuery({
-    queryKey: ['vendor-reviews', id],
+    queryKey: ['planner-reviews', id],
     queryFn: async () =>
-      (await api.get(`/vendors/${id}/reviews`)).data as { data?: Review[] } | Review[],
+      (await api.get(`/wedding-planners/${id}/reviews`)).data as
+        | { data?: Review[] }
+        | Review[],
     enabled: Boolean(id) && tab === 'reviews',
     retry: false,
   });
@@ -101,7 +88,7 @@ export default function VendorDetail() {
   const request = useMutation({
     mutationFn: async () => {
       await api.post('/bookings', {
-        providerType: 'vendor',
+        providerType: 'planner',
         providerId: id,
         ...(eventDate ? { eventDate } : {}),
         ...(budget ? { expectedBudget: Number(budget) } : {}),
@@ -110,7 +97,7 @@ export default function VendorDetail() {
     },
     onSuccess: () => {
       setRequesting(false);
-      setNotice('Booking request sent.');
+      setNotice('Planner request sent.');
       setError('');
     },
     onError: (err) => setError(apiMessage(err, 'That request could not be sent.')),
@@ -127,20 +114,19 @@ export default function VendorDetail() {
   if (query.error || !query.data) {
     return (
       <View style={{ flex: 1, padding: space(4) }}>
-        <EmptyState title="Vendor unavailable">
+        <EmptyState title="Planner unavailable">
           {apiMessage(query.error, 'This listing may no longer be available.')}
         </EmptyState>
       </View>
     );
   }
 
-  const vendor = query.data;
-  const photos = vendor.portfolio ?? [];
-  const saved = shortlist.has(vendor.id);
+  const planner = query.data;
+  const photos = planner.portfolio ?? [];
+  const saved = shortlist.has(planner.id);
   const reviewRows: Review[] = Array.isArray(reviews.data)
     ? reviews.data
     : (reviews.data?.data ?? []);
-  const serviceRows = Array.isArray(services.data) ? services.data : [];
 
   return (
     <View style={{ flex: 1, backgroundColor: rgb(theme.canvas) }}>
@@ -164,36 +150,25 @@ export default function VendorDetail() {
           >
             <ArrowLeft size={20} color={rgb(theme.ink[800])} />
           </Pressable>
-          <View
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Shortlist planner"
+            onPress={() => void togglePlannerShortlist(planner.id).then(setShortlist)}
             style={{
               position: 'absolute',
               top: space(5),
               right: space(3),
-              flexDirection: 'row',
-              gap: space(2),
+              padding: space(2),
+              borderRadius: 22,
+              backgroundColor: rgb(theme.surface),
             }}
           >
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Shortlist vendor"
-              onPress={() => void toggleVendorShortlist(vendor.id).then(setShortlist)}
-              style={{ padding: space(2), borderRadius: 22, backgroundColor: rgb(theme.surface) }}
-            >
-              <Heart
-                size={20}
-                weight={saved ? 'fill' : 'regular'}
-                color={rgb(theme.brand)}
-              />
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Share vendor"
-              onPress={() => void Share.share({ message: vendor.name })}
-              style={{ padding: space(2), borderRadius: 22, backgroundColor: rgb(theme.surface) }}
-            >
-              <ShareNetwork size={20} color={rgb(theme.brand)} />
-            </Pressable>
-          </View>
+            <Heart
+              size={20}
+              weight={saved ? 'fill' : 'regular'}
+              color={rgb(theme.brand)}
+            />
+          </Pressable>
           {photos.length > 0 ? (
             <View
               style={{
@@ -214,31 +189,29 @@ export default function VendorDetail() {
         <View style={{ padding: space(4), gap: space(4) }}>
           <View style={{ gap: space(1) }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(1) }}>
-              <SectionTitle>{vendor.name}</SectionTitle>
-              {vendor.verifiedAt ? (
-                <SealCheck size={18} color={rgb(theme.positiveFg)} weight="fill" />
-              ) : null}
+              <SectionTitle>{planner.agencyName}</SectionTitle>
+              <SealCheck size={18} color={rgb(theme.positiveFg)} weight="fill" />
             </View>
             <Caption>
               <Star size={13} color={rgb(theme.brand)} weight="fill" />{' '}
-              {vendor.ratingAvg.toFixed(1)} · {vendor.ratingCount} reviews
+              {planner.ratingAvg.toFixed(1)} · {planner.ratingCount} reviews
             </Caption>
             <Caption>
               <MapPin size={13} color={rgb(theme.ink[400])} />{' '}
-              {vendor.city || 'Location on request'}
+              {planner.city || 'Location on request'}
             </Caption>
           </View>
 
           {notice ? <Alert tone="positive">{notice}</Alert> : null}
           {error ? <Alert tone="critical">{error}</Alert> : null}
 
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2) }}>
+          <View style={{ flexDirection: 'row', gap: space(2) }}>
             {(
               [
-                ['overview', 'Overview'],
-                ['photos', 'Photos'],
+                ['about', 'About'],
+                ['services', 'Services'],
                 ['reviews', 'Reviews'],
-                ['packages', 'Packages'],
+                ['gallery', 'Gallery'],
               ] as const
             ).map(([key, label]) => {
               const active = tab === key;
@@ -266,48 +239,46 @@ export default function VendorDetail() {
             })}
           </View>
 
-          {tab === 'overview' ? (
-            <>
-              {vendor.description ? (
-                <Card>
-                  <SectionTitle>About</SectionTitle>
-                  <Caption>{vendor.description}</Caption>
-                </Card>
+          {tab === 'about' ? (
+            <Card>
+              <SectionTitle>About</SectionTitle>
+              <Caption>
+                {planner.bio ||
+                  `${planner.agencyName} is a wedding planner${
+                    planner.yearsExperience ? ` with ${planner.yearsExperience} years of experience` : ''
+                  }.`}
+              </Caption>
+              {planner.contactPerson ? (
+                <Caption tone="muted">Contact: {planner.contactPerson}</Caption>
               ) : null}
-              {vendor.startingPrice !== null ? (
-                <Card>
-                  <Caption>Starting Price</Caption>
-                  <SectionTitle>{rupees(vendor.startingPrice)}</SectionTitle>
-                  <Pressable onPress={() => setTab('packages')}>
-                    <Caption tone="brand" style={{ fontWeight: '600', marginTop: space(1) }}>
-                      View Packages
-                    </Caption>
-                  </Pressable>
-                </Card>
-              ) : null}
-            </>
+            </Card>
           ) : null}
 
-          {tab === 'photos' ? (
-            photos.length <= 1 ? (
-              <EmptyState title="No more photos">This vendor has not added a full gallery yet.</EmptyState>
-            ) : (
-              <Pressable
-                onPress={() =>
-                  router.push({ pathname: '/vendors/[id]/gallery', params: { id: vendor.id } })
-                }
-              >
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2) }}>
-                  {photos.map((photo) => (
-                    <Image
-                      key={photo}
-                      source={{ uri: photo }}
-                      style={{ width: (width - space(10)) / 3, height: 92, borderRadius: 10 }}
-                    />
-                  ))}
-                </View>
-              </Pressable>
-            )
+          {tab === 'services' ? (
+            <Card style={{ gap: space(2) }}>
+              <SectionTitle>Services</SectionTitle>
+              {(planner.packages ?? []).length === 0 ? (
+                <Caption tone="muted">Packages are quoted on request.</Caption>
+              ) : (
+                planner.packages?.map((pkg) => (
+                  <View
+                    key={pkg.name}
+                    style={{
+                      gap: space(1),
+                      paddingVertical: space(2),
+                      borderBottomWidth: 1,
+                      borderBottomColor: rgb(theme.border),
+                    }}
+                  >
+                    <Body style={{ fontWeight: '600' }}>{pkg.name}</Body>
+                    <Caption tone="brand">₹{Number(pkg.price).toLocaleString('en-IN')}</Caption>
+                    {pkg.includes?.length ? (
+                      <Caption tone="faint">{pkg.includes.join(' · ')}</Caption>
+                    ) : null}
+                  </View>
+                ))
+              )}
+            </Card>
           ) : null}
 
           {tab === 'reviews' ? (
@@ -327,41 +298,27 @@ export default function VendorDetail() {
             )
           ) : null}
 
-          {tab === 'packages' ? (
-            services.isPending ? (
-              <Loading rows={2} />
-            ) : serviceRows.length === 0 ? (
-              <EmptyState title="No packages listed">Ask the vendor when you request a booking.</EmptyState>
+          {tab === 'gallery' ? (
+            photos.length === 0 ? (
+              <EmptyState title="No photos yet">This planner has not added a gallery.</EmptyState>
             ) : (
-              serviceRows.map((service) => (
-                <Card key={service.id} style={{ gap: space(2) }}>
-                  <Body style={{ fontWeight: '700' }}>{service.name}</Body>
-                  {service.description ? <Caption>{service.description}</Caption> : null}
-                  {(service.offerings ?? []).map((offering) => (
-                    <View
-                      key={offering.id}
-                      style={{
-                        flexDirection: 'row',
-                        justifyContent: 'space-between',
-                        gap: space(2),
-                      }}
-                    >
-                      <Caption style={{ flex: 1 }}>{offering.name}</Caption>
-                      <Caption tone="brand">
-                        {offering.price ? rupees(offering.price) : 'On request'}
-                      </Caption>
-                    </View>
-                  ))}
-                </Card>
-              ))
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2) }}>
+                {photos.map((photo) => (
+                  <Image
+                    key={photo}
+                    source={{ uri: photo }}
+                    style={{ width: (width - space(10)) / 3, height: 92, borderRadius: 10 }}
+                  />
+                ))}
+              </View>
             )
           ) : null}
 
           {requesting ? (
             <Card style={{ gap: space(3) }}>
-              <SectionTitle>Request Booking</SectionTitle>
+              <SectionTitle>Request Planner</SectionTitle>
               <DateField
-                label="Event date"
+                label="Wedding / event date"
                 value={eventDate}
                 onChange={setEventDate}
                 from={new Date().toISOString().slice(0, 10)}
@@ -371,6 +328,7 @@ export default function VendorDetail() {
                 value={budget}
                 onChangeText={setBudget}
                 keyboardType="number-pad"
+                placeholder="Leave blank to ask for a quote"
               />
               <Field
                 label="Notes"
@@ -407,8 +365,8 @@ export default function VendorDetail() {
             variant="outline"
             onPress={() =>
               NativeAlert.alert(
-                'Chat with this vendor',
-                'Vendor inquiries open from Chat once a conversation exists. Browse your conversations from the Chat tab.',
+                'Chat with this planner',
+                'Planner chat opens from Chat once a conversation exists. Browse your conversations from the Chat tab.',
                 [
                   { text: 'Cancel', style: 'cancel' },
                   { text: 'Open Chat', onPress: () => router.push('/chat') },
@@ -418,7 +376,7 @@ export default function VendorDetail() {
             style={{ flex: 1 }}
           />
           <Button
-            label="Request Booking"
+            label="Request Planner"
             onPress={() => {
               setRequesting(true);
               setNotice('');

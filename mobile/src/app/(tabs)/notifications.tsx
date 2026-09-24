@@ -1,49 +1,81 @@
-import { FlatList, Pressable, RefreshControl, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, View, Text } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CaretRight } from 'phosphor-react-native';
+import { CaretRight, Heart, Users, FileText, CalendarBlank, Bell, Sparkle, ChatCircle, Briefcase, SealCheck, ClipboardText } from 'phosphor-react-native';
+import { Image } from 'expo-image';
 
 import { HeartBackdrop } from '@/components/heart-field';
 import { api } from '@/lib/api';
 import { routeFor } from '@/lib/notification-route';
 import { formatDate } from '@/shared/dates';
-import { ACTION_LABEL, TYPE_LABEL, describe, type Notification } from '@/shared/notification-copy';
+import { describe, type Notification } from '@/shared/notification-copy';
 import { Permission, can, canAny } from '@/shared/permissions';
-import { Body, Caption, Card, EmptyState, Loading, PageSubtitle, PageTitle } from '@/components/ui';
+import { Body, Caption, Loading, SectionTitle } from '@/components/ui';
+import { NotificationBell } from '@/components/home/notification-bell';
 import { useAuth } from '@/store/auth';
 import { radius, rgb, space, useTheme } from '@/theme';
+import { ProfileSilhouette } from '@/components/profile-silhouette';
+import { typeface } from '@/theme/fonts';
 
-/**
- * Notifications.
- *
- * The wording is the web app's, imported rather than rewritten (see
- * src/shared/notification-copy). What is different here is the reading of an
- * item: tapping a row marks it read, because on a phone that is what tapping a
- * notification means, and a separate "mark as read" control beside every row
- * would be a column of buttons nobody presses.
- *
- * Tapping also opens the thing the notification is about — the booking, the
- * visit, the case — and which thing that is comes from the server, which writes
- * a target module, action and id on every row (EZ1-I254). A row this app has no
- * screen for still reads and still marks itself read; it simply does not
- * pretend to lead anywhere, because opening the wrong screen is worse than
- * opening none.
- */
+function getNotificationIcon(type: string, theme: any, isRead: boolean) {
+  const color = isRead ? rgb(theme.ink[400]) : rgb(theme.brand);
+  const weight = 'fill';
+  if (type.startsWith('match_interest') || type.includes('liked')) return <Heart size={20} color={color} weight={weight} />;
+  if (type.startsWith('match_')) return <Users size={20} color={color} weight={weight} />;
+  if (type.startsWith('booking_')) return <Briefcase size={20} color={color} weight={weight} />;
+  if (type.startsWith('event_')) return <CalendarBlank size={20} color={color} weight={weight} />;
+  if (type.startsWith('verification_')) return <SealCheck size={20} color={color} weight={weight} />;
+  if (type.startsWith('new_message') || type === 'chat') return <ChatCircle size={20} color={color} weight={weight} />;
+  if (type === 'task_reminder') return <ClipboardText size={20} color={color} weight={weight} />;
+  return <FileText size={20} color={color} weight={weight} />;
+}
+
+function getAvatarOrIcon(item: Notification, theme: any) {
+  const payload = item.payload || {};
+  const photoUrl = payload.photoUrl || payload.counterpartImage || payload.image;
+  const gender = payload.gender as string | undefined;
+
+  if (photoUrl && typeof photoUrl === 'string') {
+    return (
+      <Image
+        source={{ uri: photoUrl }}
+        style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: rgb(theme.surfaceSunken) }}
+        contentFit="cover"
+      />
+    );
+  }
+
+  // If it's a person-related notification but no photo, show silhouette
+  if (item.type.startsWith('match_interest') || item.type === 'new_message' || item.type.includes('liked')) {
+    return <ProfileSilhouette gender={gender} style={{ width: 48, height: 48, borderRadius: 24 }} />;
+  }
+
+  // System/Event notification fallback
+  let IconCmp = FileText;
+  if (item.type.startsWith('event_')) IconCmp = CalendarBlank;
+  else if (item.type.startsWith('match_')) IconCmp = Users;
+  else if (item.type.startsWith('booking_')) IconCmp = Briefcase;
+
+  return (
+    <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: rgb(theme.brandSoft), alignItems: 'center', justifyContent: 'center' }}>
+      <IconCmp size={24} color={rgb(theme.brandStrong)} weight="regular" />
+    </View>
+  );
+}
+
 export default function Notifications() {
   const theme = useTheme();
   const qc = useQueryClient();
   const router = useRouter();
   const permissions = useAuth((s) => s.user?.permissions ?? []);
-  // Only a seller has the bookings queue a booking notification opens.
+
   const canReadIncoming = can(permissions, Permission.BOOKING_READ_INCOMING);
-  // Staff read a case on the Cases queue; everybody else reads their own on
-  // Support. The same split the web app makes.
   const canVerify = canAny(permissions, [
     Permission.VERIFICATION_PROCESS,
     Permission.VERIFICATION_ALLOCATE,
   ]);
 
-  const { data, isPending, refetch, isRefetching } = useQuery({
+  const { data, isPending, isError, refetch, isRefetching } = useQuery({
     queryKey: ['notifications'],
     queryFn: async () => (await api.get('/notifications')).data as Notification[],
     retry: false,
@@ -66,104 +98,188 @@ export default function Notifications() {
   });
 
   const items = data ?? [];
-  const unread = items.filter((n) => !n.isRead).length;
 
   const header = (
-    <View style={{ gap: space(1), marginTop: space(4), marginBottom: space(2) }}>
-      <PageTitle>Notifications</PageTitle>
+    <View style={{ gap: space(4), paddingHorizontal: space(4), paddingTop: space(6), paddingBottom: space(4) }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <PageSubtitle>
-          {unread > 0 ? `${unread} waiting on you.` : 'Everything here has been read.'}
-        </PageSubtitle>
-        {unread > 0 ? (
-          <Pressable onPress={() => markAll.mutate()} hitSlop={8} accessibilityRole="button">
-            <Caption tone="brand">Mark all read</Caption>
-          </Pressable>
-        ) : null}
+        <View>
+          <Text style={[typeface({ fontSize: 28, fontWeight: '700' }), { color: rgb(theme.brandStrong), letterSpacing: -0.5 }]}>
+            WOW
+          </Text>
+          <Text style={[typeface({ fontSize: 12, fontWeight: '500' }), { color: rgb(theme.brandStrong), opacity: 0.8 }]}>
+            Where Families Find Forever
+          </Text>
+        </View>
+        <NotificationBell />
       </View>
     </View>
   );
 
   if (isPending) {
     return (
-      <View style={{ flex: 1, padding: space(4), gap: space(4) }}>
+      <View style={{ flex: 1, backgroundColor: rgb(theme.canvas) }}>
         {header}
-        <Loading rows={4} />
+        <View style={{ padding: space(4) }}>
+          <Loading rows={4} />
+        </View>
+      </View>
+    );
+  }
+
+  if (isError) {
+    return (
+      <View style={{ flex: 1, backgroundColor: rgb(theme.canvas) }}>
+        {header}
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: space(6), gap: space(4) }}>
+          <SectionTitle>Unable to load notifications</SectionTitle>
+          <Body tone="muted">Please try again.</Body>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => refetch()}
+            style={({ pressed }) => [
+              {
+                backgroundColor: rgb(theme.brand),
+                paddingVertical: space(2),
+                paddingHorizontal: space(4),
+                borderRadius: radius.md,
+              },
+              pressed && { opacity: 0.8 },
+            ]}
+          >
+            <Text style={[typeface({ fontWeight: '600' }), { color: '#fff' }]}>Try Again</Text>
+          </Pressable>
+        </View>
       </View>
     );
   }
 
   return (
-    <HeartBackdrop>
-      <FlatList
-        data={items}
-        keyExtractor={(n) => n.id}
-        contentContainerStyle={{ padding: space(4), gap: space(2), paddingBottom: space(12) }}
-        ListHeaderComponent={header}
-        refreshControl={
-          // Pull to refresh, because a notification list is the one screen people
-          // pull on by reflex.
-          <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={rgb(theme.ink[400])} />
-        }
-        ListEmptyComponent={
-          <EmptyState title="Nothing to catch up on">
-            Interests, bookings and verification decisions all land here.
-          </EmptyState>
-        }
-        renderItem={({ item }) => {
-          const route = routeFor(item, { canVerify, canReadIncoming });
-          return (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`${TYPE_LABEL[item.type] ?? 'Update'}. ${describe(item)}`}
-            onPress={() => {
-              // Read first, then open: a row that navigates before it marks
-              // itself read comes back unread when the person returns.
-              if (!item.isRead) markRead.mutate(item.id);
-              if (route) router.push(route);
-            }}
-            style={({ pressed }) => [pressed && { opacity: 0.7 }]}
-          >
-            <Card style={{ gap: space(1.5) }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(2) }}>
-                {/*
-                  A dot rather than bold text for the unread state. Bolding the
-                  whole row makes a list of unread items look like a list of
-                  headings, and the moment two are read the column goes ragged.
-                */}
-                {!item.isRead ? (
-                  <View
-                    style={{
-                      width: 7,
-                      height: 7,
-                      borderRadius: radius.sm,
-                      backgroundColor: rgb(theme.brand),
-                    }}
-                  />
-                ) : null}
-                <Caption tone={item.isRead ? 'faint' : 'brand'} style={{ flex: 1 }} numberOfLines={1}>
-                  {TYPE_LABEL[item.type] ?? 'Update'}
-                </Caption>
-                <Caption tone="faint">{formatDate(item.createdAt)}</Caption>
-              </View>
-              <Body tone={item.isRead ? 'muted' : 'default'}>
-                {describe(item) || 'Something has changed on your account.'}
-              </Body>
-              {/* What pressing this does, said rather than implied — and nothing
-                  at all on a row that has nowhere to go. */}
-              {route ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(1) }}>
-                  <Caption tone="brand">
-                    {(item.targetAction && ACTION_LABEL[item.targetAction]) ?? 'Open'}
-                  </Caption>
-                  <CaretRight size={12} color={rgb(theme.brandStrong)} />
-                </View>
+    <View style={{ flex: 1, backgroundColor: rgb(theme.canvas) }}>
+      {header}
+
+      <View style={{ flex: 1, backgroundColor: rgb(theme.surface), borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 3 }}>
+        <FlatList
+          data={items}
+          keyExtractor={(n) => n.id}
+          contentContainerStyle={{ paddingBottom: space(12) }}
+          refreshControl={
+            <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={rgb(theme.ink[400])} />
+          }
+          ListHeaderComponent={
+            <View style={{ padding: space(4), paddingBottom: space(2), flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <SectionTitle style={{ fontSize: 18, color: rgb(theme.ink[900]) }}>Notifications</SectionTitle>
+              {items.some(n => !n.isRead) ? (
+                <Pressable onPress={() => markAll.mutate()} hitSlop={8} accessibilityRole="button">
+                  <Caption tone="brand">Mark all as read</Caption>
+                </Pressable>
               ) : null}
-            </Card>
-          </Pressable>
-          );
-        }}
-      />
-    </HeartBackdrop>
+            </View>
+          }
+          ListEmptyComponent={
+            <View style={{ padding: space(6), alignItems: 'center', justifyContent: 'center', gap: space(2) }}>
+              <SectionTitle>No notifications yet</SectionTitle>
+              <Body tone="muted" style={{ textAlign: 'center' }}>We'll let you know when something important happens.</Body>
+            </View>
+          }
+          ListFooterComponent={
+            items.length > 0 ? (
+              <View style={{ padding: space(4) }}>
+                <Pressable
+                  accessibilityRole="button"
+                  style={({ pressed }) => [
+                    {
+                      backgroundColor: rgb(theme.brandSoft),
+                      paddingVertical: space(3),
+                      borderRadius: radius.md,
+                      alignItems: 'center',
+                    },
+                    pressed && { opacity: 0.8 },
+                  ]}
+                >
+                  <Text style={[typeface({ fontWeight: '600', fontSize: 14 }), { color: rgb(theme.brandStrong) }]}>
+                    View All Notifications
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null
+          }
+          renderItem={({ item, index }) => {
+            const route = routeFor(item, { canVerify, canReadIncoming });
+            const isLast = index === items.length - 1;
+
+            // Try to extract bold name from description if possible (e.g. "Priya Sharma liked your profile")
+            const desc = describe(item) || 'Something has changed on your account.';
+            const payload = item.payload || {};
+            let title = payload.counterpartName as string || payload.subjectName as string || payload.clientName as string || '';
+            let restDesc = desc;
+
+            if (title && desc.startsWith(title)) {
+              restDesc = desc.substring(title.length).trim();
+            } else if (!title) {
+              // Simple heuristic to split first few words as title for system notifications
+              const parts = desc.split(/([.!])/);
+              if (parts.length > 1) {
+                title = parts[0] + (parts[1] || '');
+                restDesc = parts.slice(2).join('').trim();
+              } else {
+                title = desc;
+                restDesc = '';
+              }
+            }
+
+            return (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  if (!item.isRead) markRead.mutate(item.id);
+                  if (route) router.push(route);
+                }}
+                style={({ pressed }) => [
+                  {
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingVertical: space(3),
+                    paddingHorizontal: space(4),
+                    borderBottomWidth: isLast ? 0 : 1,
+                    borderBottomColor: rgb(theme.border),
+                    backgroundColor: item.isRead ? rgb(theme.surface) : rgb(theme.surfaceSunken)
+                  },
+                  pressed && { opacity: 0.7 }
+                ]}
+              >
+                <View style={{ width: 32, alignItems: 'center', justifyContent: 'center', marginRight: space(2) }}>
+                  {getNotificationIcon(item.type, theme, item.isRead)}
+                </View>
+
+                <View style={{ marginRight: space(3) }}>
+                  {getAvatarOrIcon(item, theme)}
+                </View>
+
+                <View style={{ flex: 1, gap: 2 }}>
+                  {title ? (
+                    <Text style={[typeface({ fontWeight: '700', fontSize: 14 }), { color: rgb(theme.ink[900]) }]}>
+                      {title}
+                    </Text>
+                  ) : null}
+                  {restDesc ? (
+                    <Text style={[typeface({ fontWeight: '400', fontSize: 14 }), { color: item.isRead ? rgb(theme.ink[500]) : rgb(theme.ink[700]) }]}>
+                      {restDesc}
+                    </Text>
+                  ) : null}
+                  <Caption tone="faint" style={{ marginTop: 2 }}>{formatDate(item.createdAt)}</Caption>
+                </View>
+
+                {route ? (
+                  <View style={{ paddingLeft: space(2) }}>
+                    <CaretRight size={16} color={rgb(theme.ink[400])} />
+                  </View>
+                ) : null}
+              </Pressable>
+            );
+          }}
+        />
+      </View>
+    </View>
   );
 }
+
