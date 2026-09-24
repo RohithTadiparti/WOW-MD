@@ -82,7 +82,6 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminBookingDetail from './pages/admin/AdminBookingDetail';
 import AdminPaymentDetail from './pages/admin/AdminPaymentDetail';
 import AdminAccountDetail from './pages/admin/AdminAccountDetail';
-import AdminRoleDashboard from './pages/admin/AdminRoleDashboard';
 import AdminProfileDetail from './pages/admin/AdminProfileDetail';
 import AdminBusinessDetail from './pages/admin/AdminBusinessDetail';
 import AdminSupport from './pages/admin/AdminSupport';
@@ -1301,17 +1300,13 @@ export default function App() {
         <Route path="clients/:id" element={<AdminAccountDetail kind="client" />} />
         <Route path="clients/:clientId" element={<AdminAccountDetail kind="client" />} />
         <Route path="agents" element={<AdminAgents />} />
-        <Route path="agents/:id" element={<AdminRoleDashboard role="agent" />} />
-        <Route path="agents/:agentId" element={<AdminRoleDashboard role="agent" />} />
+        <Route path="agents/:agentId" element={<AdminAccountDetail kind="agent" />} />
         <Route path="vendors" element={<AdminVendors />} />
-        <Route path="vendors/:id" element={<AdminRoleDashboard role="vendor" />} />
-        <Route path="vendors/:vendorId" element={<AdminRoleDashboard role="vendor" />} />
+        <Route path="vendors/:vendorId" element={<AdminAccountDetail kind="vendor" />} />
         <Route path="officers" element={<AdminOfficers />} />
-        <Route path="officers/:id" element={<AdminRoleDashboard role="officer" />} />
-        <Route path="officers/:officerId" element={<AdminRoleDashboard role="officer" />} />
+        <Route path="officers/:officerId" element={<AdminAccountDetail kind="officer" />} />
         <Route path="planners" element={<AdminPlanners />} />
-        <Route path="planners/:id" element={<AdminRoleDashboard role="planner" />} />
-        <Route path="planners/:plannerId" element={<AdminRoleDashboard role="planner" />} />
+        <Route path="planners/:plannerId" element={<AdminAccountDetail kind="planner" />} />
         {/* Drill-downs from an account: one profile, one business, in full (EZ1-I185/I188). */}
         <Route path="profiles/:id" element={<AdminProfileDetail />} />
         <Route path="businesses/:id" element={<AdminBusinessDetail />} />
