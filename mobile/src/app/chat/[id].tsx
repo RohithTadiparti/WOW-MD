@@ -1,33 +1,470 @@
-import { useEffect, useRef, useState } from 'react';
-import { Alert as NativeAlert, FlatList, KeyboardAvoidingView, Linking, Platform, Pressable, TextInput, View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Image } from 'expo-image';
-import { ArrowLeft, DotsThreeVertical, Paperclip, PaperPlaneRight, Phone, Smiley, VideoCamera } from 'phosphor-react-native';
+import { useEffect, useRef, useState } from "react";
+import {
+  Alert as NativeAlert,
+  FlatList,
+  KeyboardAvoidingView,
+  Linking,
+  Platform,
+  Pressable,
+  TextInput,
+  View,
+} from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Image } from "expo-image";
+import {
+  ArrowLeft,
+  DotsThreeVertical,
+  Paperclip,
+  PaperPlaneRight,
+  Phone,
+  Smiley,
+  VideoCamera,
+} from "phosphor-react-native";
 
-import { Sheet } from '@/components/sheet';
-import { documentName, reachable } from '@/components/uploader';
-import { Alert, Body, Button, Caption, Loading } from '@/components/ui';
-import { api, apiMessage } from '@/lib/api';
-import { dateTime } from '@/lib/format';
-import { isChartImage } from '@/shared/horoscope';
-import { radius, rgb, space, useTheme } from '@/theme';
+import { Sheet } from "@/components/sheet";
+import { documentName, reachable, PhotoPicker } from "@/components/uploader";
+import { Alert, Body, Button, Caption, Loading } from "@/components/ui";
+import { api, apiMessage } from "@/lib/api";
+import { dateTime } from "@/lib/format";
+import { isChartImage } from "@/shared/horoscope";
+import { radius, rgb, space, useTheme } from "@/theme";
 
-interface Message { id: string; senderId: string; body: string; mediaUrl: string | null; readAt: string | null; createdAt: string; }
-export default function Thread() {
-  const theme = useTheme(); const router = useRouter(); const qc = useQueryClient(); const list = useRef<FlatList<Message>>(null); const marked = useRef(false); const { id, name = 'Conversation', photo, online } = useLocalSearchParams<{ id: string; name?: string; photo?: string; online?: string }>(); const [draft, setDraft] = useState(''); const [error, setError] = useState(''); const [more, setMore] = useState(false);
-  const history = useQuery({ queryKey: ['chat-history', id], queryFn: async () => (await api.get('/chat/messages', { params: { withUserId: id, page: 1, limit: 50 } })).data as { data: Message[] }, enabled: Boolean(id), retry: false, refetchInterval: 5_000 });
-  const read = useMutation({ mutationFn: () => api.put('/chat/messages/read', {}, { params: { withUserId: id } }), onSuccess: () => { void qc.invalidateQueries({ queryKey: ['conversations'] }); void qc.invalidateQueries({ queryKey: ['unread-count'] }); } });
-  useEffect(() => { if (id && !history.isPending && !marked.current) { marked.current = true; read.mutate(); } }, [id, history.isPending, read]);
-  const send = useMutation({ mutationFn: (body: string) => api.post('/chat/messages', { toUserId: id, body }), onSuccess: () => { setDraft(''); setError(''); void qc.invalidateQueries({ queryKey: ['chat-history', id] }); void qc.invalidateQueries({ queryKey: ['conversations'] }); }, onError: (e) => setError(apiMessage(e, 'That message could not be sent.')) });
-  const mute = useMutation({ mutationFn: () => api.put('/chat/mute', { withUserId: id, muted: true }), onSuccess: () => setMore(false), onError: (e) => setError(apiMessage(e, 'Conversation could not be muted.')) });
-  const clear = useMutation({ mutationFn: () => api.put('/chat/clear', { withUserId: id }), onSuccess: () => { setMore(false); void qc.invalidateQueries({ queryKey: ['chat-history', id] }); }, onError: (e) => setError(apiMessage(e, 'Conversation could not be cleared.')) });
-  if (history.isPending) return <View style={{ flex: 1, padding: space(4), backgroundColor: rgb(theme.canvas) }}><Loading rows={5} /></View>;
-  const messages = history.data?.data ?? [];
-  const unsupportedCall = (type: string) => NativeAlert.alert(`${type} unavailable`, 'Calls are supported by WOW’s server signalling, but this mobile client does not yet provide a call screen.');
-  return <KeyboardAvoidingView style={{ flex: 1, backgroundColor: rgb(theme.canvas) }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><Header name={name} photo={photo} online={online === 'true'} onBack={() => router.back()} onCall={() => unsupportedCall('Voice call')} onVideo={() => unsupportedCall('Video call')} onMore={() => setMore(true)} /><FlatList ref={list} inverted data={messages} keyExtractor={(item) => item.id} contentContainerStyle={{ padding: space(4), gap: space(2) }} ListEmptyComponent={<Caption tone="faint" style={{ textAlign: 'center' }}>No messages yet. Say hello.</Caption>} renderItem={({ item }) => <Bubble message={item} mine={item.senderId !== id} />} />{error ? <View style={{ paddingHorizontal: space(3) }}><Alert tone="critical">{error}</Alert></View> : null}<Composer value={draft} onChange={setDraft} onSend={() => send.mutate(draft.trim())} busy={send.isPending} onAttachment={() => NativeAlert.alert('Attachments', 'This chat API accepts uploaded media URLs, but the mobile chat uploader has not been connected yet.')} /><Sheet visible={more} title="Conversation" onClose={() => setMore(false)}><Button label="Mute conversation" variant="outline" onPress={() => mute.mutate()} busy={mute.isPending} /><Button label="Clear messages" variant="outline" onPress={() => clear.mutate()} busy={clear.isPending} /><Caption tone="faint">Share Profile and scheduling are not exposed by the current chat API.</Caption></Sheet></KeyboardAvoidingView>;
+interface Message {
+  id: string;
+  senderId: string;
+  body: string;
+  mediaUrl: string | null;
+  readAt: string | null;
+  createdAt: string;
 }
-function Header({ name, photo, online, onBack, onCall, onVideo, onMore }: { name: string; photo?: string; online: boolean; onBack: () => void; onCall: () => void; onVideo: () => void; onMore: () => void }) { const theme = useTheme(); return <View style={{ paddingHorizontal: space(3), paddingTop: space(5), paddingBottom: space(2), flexDirection: 'row', alignItems: 'center', gap: space(2), borderBottomWidth: 1, borderColor: rgb(theme.border), backgroundColor: rgb(theme.surface) }}><Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={onBack}><ArrowLeft size={22} color={rgb(theme.ink[800])} /></Pressable>{photo ? <Image source={{ uri: photo }} style={{ width: 42, height: 42, borderRadius: 21 }} /> : <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: rgb(theme.surfaceSunken) }} />}<View style={{ flex: 1 }}><Caption numberOfLines={1} style={{ fontSize: 16, fontWeight: '700', color: rgb(theme.ink[900]) }}>{name}</Caption><View style={{ flexDirection: 'row', gap: space(1), alignItems: 'center' }}>{online ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: rgb(theme.positiveFg) }} /> : null}<Caption tone="faint">{online ? 'Online' : 'Offline'}</Caption></View></View><Pressable accessibilityRole="button" accessibilityLabel="Voice call" onPress={onCall}><Phone size={22} color={rgb(theme.brand)} /></Pressable><Pressable accessibilityRole="button" accessibilityLabel="Video call" onPress={onVideo}><VideoCamera size={23} color={rgb(theme.brand)} /></Pressable><Pressable accessibilityRole="button" accessibilityLabel="More options" onPress={onMore}><DotsThreeVertical size={22} color={rgb(theme.ink[700])} weight="bold" /></Pressable></View>; }
-function Composer({ value, onChange, onSend, busy, onAttachment }: { value: string; onChange: (value: string) => void; onSend: () => void; busy: boolean; onAttachment: () => void }) { const theme = useTheme(); return <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(2), padding: space(3), borderTopWidth: 1, borderColor: rgb(theme.border), backgroundColor: rgb(theme.surface) }}><Pressable accessibilityRole="button" accessibilityLabel="Attach file" onPress={onAttachment}><Paperclip size={23} color={rgb(theme.ink[500])} /></Pressable><View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', borderRadius: 24, backgroundColor: rgb(theme.surfaceSunken) }}><TextInput value={value} onChangeText={onChange} placeholder="Type a message..." placeholderTextColor={rgb(theme.ink[400])} style={{ flex: 1, minHeight: 46, maxHeight: 110, paddingHorizontal: space(3), color: rgb(theme.ink[900]), fontSize: 16 }} multiline maxLength={4000} /><Pressable accessibilityRole="button" accessibilityLabel="Add emoji" onPress={() => onChange(`${value}🙂`)}><Smiley size={22} color={rgb(theme.ink[500])} /></Pressable></View><Pressable accessibilityRole="button" accessibilityLabel="Send" disabled={!value.trim() || busy} onPress={onSend} style={{ width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', backgroundColor: rgb(value.trim() ? theme.brand : theme.surfaceSunken) }}><PaperPlaneRight size={20} weight="fill" color={rgb(value.trim() ? theme.brandFg : theme.ink[400])} /></Pressable></View>; }
-function Bubble({ message, mine }: { message: Message; mine: boolean }) { const theme = useTheme(); return <View style={{ alignItems: mine ? 'flex-end' : 'flex-start' }}><View style={{ maxWidth: '82%', borderRadius: 16, paddingHorizontal: space(3), paddingVertical: space(2), backgroundColor: rgb(mine ? theme.brandSoft : theme.surface) }}>{message.mediaUrl ? <Attachment url={message.mediaUrl} /> : null}{message.body ? <Body>{message.body}</Body> : null}</View><Caption tone="faint" style={{ marginTop: 2 }}>{dateTime(message.createdAt)}{mine ? message.readAt ? ' · read' : ' · sent' : ''}</Caption></View>; }
-function Attachment({ url }: { url: string }) { const theme = useTheme(); const uri = reachable(url); return isChartImage(url) ? <Pressable onPress={() => void Linking.openURL(uri)}><Image source={{ uri }} style={{ width: 190, height: 190, borderRadius: radius.md }} /></Pressable> : <Pressable onPress={() => void Linking.openURL(uri)} style={{ flexDirection: 'row', gap: space(1), alignItems: 'center' }}><Paperclip size={16} color={rgb(theme.ink[600])} /><Caption numberOfLines={1} style={{ maxWidth: 180 }}>{documentName(url)}</Caption></Pressable>; }
+export default function Thread() {
+  const theme = useTheme();
+  const router = useRouter();
+  const qc = useQueryClient();
+  const list = useRef<FlatList<Message>>(null);
+  const marked = useRef(false);
+  const {
+    id,
+    name = "Conversation",
+    photo,
+    online,
+  } = useLocalSearchParams<{
+    id: string;
+    name?: string;
+    photo?: string;
+    online?: string;
+  }>();
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState("");
+  const [more, setMore] = useState(false);
+  const [attachmentOpen, setAttachmentOpen] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const history = useQuery({
+    queryKey: ["chat-history", id],
+    queryFn: async () =>
+      (
+        await api.get("/chat/messages", {
+          params: { withUserId: id, page: 1, limit: 50 },
+        })
+      ).data as { data: Message[] },
+    enabled: Boolean(id),
+    retry: false,
+    refetchInterval: 5_000,
+  });
+  const read = useMutation({
+    mutationFn: () =>
+      api.put("/chat/messages/read", {}, { params: { withUserId: id } }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["conversations"] });
+      void qc.invalidateQueries({ queryKey: ["unread-count"] });
+    },
+  });
+  useEffect(() => {
+    if (id && !history.isPending && !marked.current) {
+      marked.current = true;
+      read.mutate();
+    }
+  }, [id, history.isPending, read]);
+  const send = useMutation({
+    mutationFn: ({ body, mediaUrl }: { body: string; mediaUrl?: string }) =>
+      api.post("/chat/messages", { toUserId: id, body, mediaUrl }),
+    onSuccess: () => {
+      setDraft("");
+      setError("");
+      void qc.invalidateQueries({ queryKey: ["chat-history", id] });
+      void qc.invalidateQueries({ queryKey: ["conversations"] });
+    },
+    onError: (e) => setError(apiMessage(e, "That message could not be sent.")),
+  });
+  const mute = useMutation({
+    mutationFn: () => api.put("/chat/mute", { withUserId: id, muted: !isMuted }),
+    onSuccess: () => {
+      setIsMuted(!isMuted);
+      setMore(false);
+    },
+    onError: (e) => setError(apiMessage(e, "Conversation could not be muted.")),
+  });
+  const clear = useMutation({
+    mutationFn: () => api.put("/chat/clear", { withUserId: id }),
+    onSuccess: () => {
+      setMore(false);
+      void qc.invalidateQueries({ queryKey: ["chat-history", id] });
+    },
+    onError: (e) =>
+      setError(apiMessage(e, "Conversation could not be cleared.")),
+  });
+  const confirmClear = () => {
+    NativeAlert.alert("Clear this conversation?", "", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Clear",
+        style: "destructive",
+        onPress: () => clear.mutate(),
+      },
+    ]);
+  };
+  if (history.isPending)
+    return (
+      <View
+        style={{
+          flex: 1,
+          padding: space(4),
+          backgroundColor: rgb(theme.canvas),
+        }}
+      >
+        <Loading rows={5} />
+      </View>
+    );
+  const messages = history.data?.data ?? [];
+  const unsupportedCall = (type: string) =>
+    NativeAlert.alert(
+      `${type} unavailable`,
+      `${type}ing is not available yet.`,
+    );
+  return (
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: rgb(theme.canvas) }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <Header
+        name={name}
+        photo={photo}
+        online={online === "true"}
+        onBack={() => router.back()}
+        onCall={() => unsupportedCall("Voice call")}
+        onVideo={() => unsupportedCall("Video call")}
+        onMore={() => setMore(true)}
+      />
+      <FlatList
+        ref={list}
+        inverted
+        data={messages}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={{ padding: space(4), gap: space(2) }}
+        ListEmptyComponent={
+          <Caption tone="faint" style={{ textAlign: "center" }}>
+            No messages yet. Say hello.
+          </Caption>
+        }
+        renderItem={({ item }) => (
+          <Bubble message={item} mine={item.senderId !== id} />
+        )}
+      />
+      {history.error ? (
+        <View style={{ paddingHorizontal: space(3) }}>
+          <Alert tone="critical">{apiMessage(history.error, "Could not load messages.")}</Alert>
+        </View>
+      ) : null}
+      {error ? (
+        <View style={{ paddingHorizontal: space(3) }}>
+          <Alert tone="critical">{error}</Alert>
+        </View>
+      ) : null}
+      <Composer
+        value={draft}
+        onChange={setDraft}
+        onSend={() => send.mutate({ body: draft.trim() })}
+        busy={send.isPending}
+        onAttachment={() => setAttachmentOpen(true)}
+      />
+      <Sheet visible={more} title="Conversation" onClose={() => setMore(false)}>
+        <Button
+          label={isMuted ? "Unmute conversation" : "Mute conversation"}
+          variant="outline"
+          onPress={() => mute.mutate()}
+          busy={mute.isPending}
+        />
+        <Button
+          label="Clear messages"
+          variant="outline"
+          onPress={confirmClear}
+          busy={clear.isPending}
+        />
+      </Sheet>
+      <Sheet
+        visible={attachmentOpen}
+        title="Send Attachment"
+        onClose={() => setAttachmentOpen(false)}
+      >
+        <PhotoPicker
+          kind="attachment"
+          onUploaded={(url) => {
+            setAttachmentOpen(false);
+            send.mutate({ body: draft.trim(), mediaUrl: url });
+          }}
+        />
+      </Sheet>
+    </KeyboardAvoidingView>
+  );
+}
+function Header({
+  name,
+  photo,
+  online,
+  onBack,
+  onCall,
+  onVideo,
+  onMore,
+}: {
+  name: string;
+  photo?: string;
+  online: boolean;
+  onBack: () => void;
+  onCall: () => void;
+  onVideo: () => void;
+  onMore: () => void;
+}) {
+  const theme = useTheme();
+  return (
+    <View
+      style={{
+        paddingHorizontal: space(3),
+        paddingTop: space(5),
+        paddingBottom: space(2),
+        flexDirection: "row",
+        alignItems: "center",
+        gap: space(2),
+        borderBottomWidth: 1,
+        borderColor: rgb(theme.border),
+        backgroundColor: rgb(theme.surface),
+      }}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Back"
+        onPress={onBack}
+      >
+        <ArrowLeft size={22} color={rgb(theme.ink[800])} />
+      </Pressable>
+      {photo ? (
+        <Image
+          source={{ uri: photo }}
+          style={{ width: 42, height: 42, borderRadius: 21 }}
+        />
+      ) : (
+        <View
+          style={{
+            width: 42,
+            height: 42,
+            borderRadius: 21,
+            backgroundColor: rgb(theme.surfaceSunken),
+          }}
+        />
+      )}
+      <View style={{ flex: 1 }}>
+        <Caption
+          numberOfLines={1}
+          style={{
+            fontSize: 16,
+            fontWeight: "700",
+            color: rgb(theme.ink[900]),
+          }}
+        >
+          {name}
+        </Caption>
+        <View
+          style={{ flexDirection: "row", gap: space(1), alignItems: "center" }}
+        >
+          {online ? (
+            <View
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 4,
+                backgroundColor: rgb(theme.positiveFg),
+              }}
+            />
+          ) : null}
+          <Caption tone="faint">{online ? "Online" : "Offline"}</Caption>
+        </View>
+      </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Voice call"
+        onPress={onCall}
+      >
+        <Phone size={22} color={rgb(theme.brand)} />
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Video call"
+        onPress={onVideo}
+      >
+        <VideoCamera size={23} color={rgb(theme.brand)} />
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="More options"
+        onPress={onMore}
+      >
+        <DotsThreeVertical
+          size={22}
+          color={rgb(theme.ink[700])}
+          weight="bold"
+        />
+      </Pressable>
+    </View>
+  );
+}
+function Composer({
+  value,
+  onChange,
+  onSend,
+  busy,
+  onAttachment,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onSend: () => void;
+  busy: boolean;
+  onAttachment: () => void;
+}) {
+  const theme = useTheme();
+  const inputRef = useRef<TextInput>(null);
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        gap: space(2),
+        padding: space(3),
+        borderTopWidth: 1,
+        borderColor: rgb(theme.border),
+        backgroundColor: rgb(theme.surface),
+      }}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Attach file"
+        onPress={onAttachment}
+      >
+        <Paperclip size={23} color={rgb(theme.ink[500])} />
+      </Pressable>
+      <View
+        style={{
+          flex: 1,
+          flexDirection: "row",
+          alignItems: "center",
+          borderRadius: 24,
+          backgroundColor: rgb(theme.surfaceSunken),
+        }}
+      >
+        <TextInput
+          ref={inputRef}
+          value={value}
+          onChangeText={onChange}
+          placeholder="Type a message..."
+          placeholderTextColor={rgb(theme.ink[400])}
+          style={{
+            flex: 1,
+            minHeight: 46,
+            maxHeight: 110,
+            paddingHorizontal: space(3),
+            color: rgb(theme.ink[900]),
+            fontSize: 16,
+          }}
+          multiline
+          maxLength={4000}
+        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Add emoji"
+          onPress={() => {
+            inputRef.current?.focus();
+            NativeAlert.alert("Emoji", "Use your device's native keyboard to insert emojis.");
+          }}
+        >
+          <Smiley size={22} color={rgb(theme.ink[500])} />
+        </Pressable>
+      </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Send"
+        disabled={!value.trim() || busy}
+        onPress={onSend}
+        style={{
+          width: 46,
+          height: 46,
+          borderRadius: 23,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: rgb(
+            value.trim() ? theme.brand : theme.surfaceSunken,
+          ),
+        }}
+      >
+        <PaperPlaneRight
+          size={20}
+          weight="fill"
+          color={rgb(value.trim() ? theme.brandFg : theme.ink[400])}
+        />
+      </Pressable>
+    </View>
+  );
+}
+function Bubble({ message, mine }: { message: Message; mine: boolean }) {
+  const theme = useTheme();
+  return (
+    <View style={{ alignItems: mine ? "flex-end" : "flex-start" }}>
+      <View
+        style={{
+          maxWidth: "82%",
+          borderRadius: 16,
+          paddingHorizontal: space(3),
+          paddingVertical: space(2),
+          backgroundColor: rgb(mine ? theme.brandSoft : theme.surface),
+        }}
+      >
+        {message.mediaUrl ? <Attachment url={message.mediaUrl} /> : null}
+        {message.body ? <Body>{message.body}</Body> : null}
+      </View>
+      <Caption tone="faint" style={{ marginTop: 2 }}>
+        {dateTime(message.createdAt)}
+        {mine ? (message.readAt ? " · read" : " · sent") : ""}
+      </Caption>
+    </View>
+  );
+}
+function Attachment({ url }: { url: string }) {
+  const theme = useTheme();
+  const uri = reachable(url);
+  return isChartImage(url) ? (
+    <Pressable onPress={() => void Linking.openURL(uri)}>
+      <Image
+        source={{ uri }}
+        style={{ width: 190, height: 190, borderRadius: radius.md }}
+      />
+    </Pressable>
+  ) : (
+    <Pressable
+      onPress={() => void Linking.openURL(uri)}
+      style={{ flexDirection: "row", gap: space(1), alignItems: "center" }}
+    >
+      <Paperclip size={16} color={rgb(theme.ink[600])} />
+      <Caption numberOfLines={1} style={{ maxWidth: 180 }}>
+        {documentName(url)}
+      </Caption>
+    </Pressable>
+  );
+}
