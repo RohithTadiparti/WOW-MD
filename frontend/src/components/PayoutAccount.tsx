@@ -212,7 +212,6 @@ function PayoutAccount({
             </button>
           </div>
         </div>
-
         {status === 'Verified' ? (
           <>
             <div className="rounded-xl border border-slate-200 bg-white p-4">

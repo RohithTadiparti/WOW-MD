@@ -405,7 +405,7 @@ export default function Availability() {
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <span
-                      className={`rounded-full px-2 py-1 text-xs ${SLOT_STATE_STYLE[slot.state]}`}
+                      className={`rounded-sm px-2 py-1 text-xs ${SLOT_STATE_STYLE[slot.state]}`}
                     >
                       {SLOT_STATE_LABEL[slot.state]}
                     </span>

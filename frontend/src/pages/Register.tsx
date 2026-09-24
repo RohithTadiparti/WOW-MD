@@ -26,13 +26,6 @@ interface AccountTypeOption {
   roles?: string[];
 }
 
-/** Presentation only — the server owns the list, we own how it looks. */
-const TYPE_ICONS: Record<string, string> = {
-  individual: '💍',
-  agent: '🤝',
-  vendor: '🏛️',
-  planner: '📋',
-};
 
 const ROLE_LABELS: Record<string, string> = {
   bride: 'Bride',
@@ -174,7 +167,7 @@ export default function Register() {
             </p>
           )}
           <div className="grid gap-3 sm:grid-cols-2">
-            {accountTypes.map((opt) => {
+            {accountTypes.map((opt, i) => {
               const active = opt.type === accountType;
               return (
                 <button
@@ -191,10 +184,10 @@ export default function Register() {
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
                 >
-                  <span className="text-lg" aria-hidden>
-                    {TYPE_ICONS[opt.type] ?? '•'}
+                  <span className="font-serif text-[1.75rem] leading-none text-gold" aria-hidden>
+                    {String(i + 1).padStart(2, '0')}
                   </span>
-                  <p className="font-medium text-gray-900">{opt.label}</p>
+                  <p className="mt-2 font-serif text-[1.375rem] leading-tight text-brand">{opt.label}</p>
                   <p className="mt-0.5 text-xs text-gray-500">{opt.description}</p>
                 </button>
               );

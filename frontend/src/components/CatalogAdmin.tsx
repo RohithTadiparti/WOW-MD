@@ -188,7 +188,7 @@ export default function CatalogAdmin() {
                 setCategoryId(c.id === categoryId ? '' : c.id);
                 setDefinitionId('');
               }}
-              className={`rounded-full border px-3 py-1 text-sm ${
+              className={`rounded-sm border px-3 py-1 text-sm ${
                 c.id === categoryId
                   ? 'border-brand bg-brand text-brand-fg'
                   : c.active
@@ -259,7 +259,7 @@ export default function CatalogAdmin() {
               <button
                 key={d.id}
                 onClick={() => setDefinitionId(d.id === definitionId ? '' : d.id)}
-                className={`rounded-full border px-3 py-1 text-sm ${
+                className={`rounded-sm border px-3 py-1 text-sm ${
                   d.id === definitionId
                     ? 'border-brand bg-brand text-brand-fg'
                     : d.active
@@ -549,7 +549,7 @@ function DefinitionForm({
                 key={m}
                 type="button"
                 onClick={() => setModels(on ? models.filter((x) => x !== m) : [...models, m])}
-                className={`rounded-full border px-3 py-1 text-xs ${
+                className={`rounded-sm border px-3 py-1 text-xs ${
                   on
                     ? 'border-brand bg-brand text-brand-fg'
                     : 'border-gray-300 text-gray-700 hover:border-brand'

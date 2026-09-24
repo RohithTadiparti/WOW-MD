@@ -288,11 +288,14 @@ export default function AdminAuditLogs() {
   const events: AuditEvent[] = data?.data ?? [];
 
   return (
-    <div className="card">
-      <h1 className="section-title mb-1">Audit trail</h1>
-      <p className="mb-3 text-sm text-gray-500">
-        Append-only record of privileged and money-moving actions. Most recent 100. Click a row for the full detail.
-      </p>
+    <div className="space-y-4">
+      <div>
+        <h1 className="page-title">Audit trail</h1>
+        <p className="page-subtitle">
+          Append-only record of privileged and money-moving actions. Most recent 100. Click a row for the full detail.
+        </p>
+      </div>
+      <div className="card">
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead className="text-xs uppercase tracking-wide text-gray-400">
@@ -360,6 +363,7 @@ export default function AdminAuditLogs() {
         </table>
       </div>
       {events.length === 0 && <p className="text-sm text-gray-400">No events recorded yet.</p>}
+      </div>
     </div>
   );
 }

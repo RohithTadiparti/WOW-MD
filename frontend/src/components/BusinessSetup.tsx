@@ -134,7 +134,7 @@ export default function BusinessSetup({ businessId }: { businessId: string }) {
           <h2 className="section-title">Getting this listing live</h2>
           <p className="text-sm text-gray-600">{rules.note}</p>
         </div>
-        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_TONE[status]}`}>
+        <span className={`rounded-sm px-2.5 py-1 text-xs font-medium ${STATUS_TONE[status]}`}>
           {STATUS_LABEL[status]}
         </span>
       </div>

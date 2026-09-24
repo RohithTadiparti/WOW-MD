@@ -227,7 +227,7 @@ function VendorBusinessWizard({
                 type="button"
                 disabled={disabled}
                 onClick={() => go(i)}
-                className={`rounded-full px-3 py-1 text-xs font-medium ${tone} ${
+                className={`rounded-sm px-3 py-1 text-xs font-medium ${tone} ${
                   disabled ? 'cursor-not-allowed opacity-50' : ''
                 }`}
               >
@@ -263,7 +263,7 @@ function VendorBusinessWizard({
                 {current.correctionFields.map((f) => (
                   <li
                     key={f}
-                    className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900"
+                    className="rounded-sm bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900"
                   >
                     {CORRECTION_FIELD_LABELS[f] ?? f}
                   </li>
@@ -758,7 +758,7 @@ function VendorListingForm({
           </div>
           <div className="flex items-center gap-2">
             <span
-              className={`rounded-full px-2 py-1 text-xs ${
+              className={`rounded-sm px-2 py-1 text-xs ${
                 current.isApproved
                   ? 'bg-emerald-50 text-emerald-800'
                   : 'bg-amber-50 text-amber-800'
@@ -1405,7 +1405,7 @@ function PlannerListingForm({ existing }: { existing?: PlannerListing }) {
         */}
         {existing && (
           <span
-            className={`rounded-full px-2 py-0.5 text-xs ${
+            className={`rounded-sm px-2 py-0.5 text-xs ${
               existing.isApproved
                 ? 'bg-emerald-50 text-emerald-800'
                 : rejected

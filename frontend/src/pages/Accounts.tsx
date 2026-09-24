@@ -266,7 +266,7 @@ export default function Accounts() {
                     <td className="py-2 text-right font-medium">{money(row.payoutAmount)}</td>
                     <td className="py-2">
                       <span
-                        className={`rounded-full px-2 py-1 text-xs ${
+                        className={`rounded-sm px-2 py-1 text-xs ${
                           STATUS_STYLE[row.status] ?? 'bg-gray-100 text-gray-600'
                         }`}
                       >

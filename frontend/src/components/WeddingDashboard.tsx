@@ -79,7 +79,7 @@ export default function WeddingDashboard() {
           {countdown.weddingDate ? (
             <>
               <p
-                className={`text-3xl font-bold tabular-nums ${
+                className={`font-serif text-[2.25rem] font-normal leading-none tabular-nums ${
                   countdown.passed ? 'text-gray-500' : 'text-brand'
                 }`}
               >

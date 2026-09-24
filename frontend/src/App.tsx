@@ -639,7 +639,7 @@ function Layout({ children }: { children: ReactNode }) {
         <aside className="sticky top-0 hidden h-[100dvh] w-[15.5rem] shrink-0 flex-col gap-5 py-5 lg:flex">
           <Wordmark />
           <div className="-mr-2 flex-1 overflow-y-auto pr-2">
-            <Sidebar entries={entries} groups={groups} gradient={isAdmin} />
+            <Sidebar entries={entries} groups={groups} filled={isAdmin} />
           </div>
         </aside>
 
@@ -659,7 +659,7 @@ function Layout({ children }: { children: ReactNode }) {
               <span className="lg:hidden">
                 <Wordmark compact />
               </span>
-              <h1 className="hidden truncate text-sm font-medium text-gray-500 lg:block">
+              <h1 className="hidden truncate text-[0.75rem] font-normal uppercase tracking-[0.18em] text-gray-600 lg:block">
                 {entries.find((e) => e.to === loc.pathname)?.label ?? ''}
               </h1>
             </div>
@@ -736,7 +736,7 @@ function Layout({ children }: { children: ReactNode }) {
             <Sidebar
               entries={entries}
               groups={groups}
-              gradient={isAdmin}
+              filled={isAdmin}
               onNavigate={() => setDrawer(false)}
             />
           </motion.div>

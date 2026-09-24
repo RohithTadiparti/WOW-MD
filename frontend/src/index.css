@@ -114,47 +114,50 @@
      */
     --scrim: 14 8 11;
 
-    /* Near-square, as the template draws everything: ruled, not rounded. */
-    --radius-sm: 0.125rem; /* inputs, chips */
-    --radius-md: 0.125rem; /* buttons */
-    --radius-lg: 0.25rem; /* cards, panels */
+    /* Square, as the template draws everything: ruled, not rounded. The scale
+     * is kept so the one place that ever needs a corner can take it. */
+    --radius-sm: 0; /* inputs, chips */
+    --radius-md: 0; /* buttons */
+    --radius-lg: 0; /* cards, panels */
 
     color-scheme: light;
   }
 
   /*
-   * Dark mode swaps tier 1 and a handful of tier 2. Nothing below this block
-   * knows which mode it is in, which is the entire point: a component that
-   * hard-codes a dark colour is a component that will be wrong in one mode.
+   * Dark mode is the same template by candlelight: the ground turns to a deep
+   * plum, panels take the template's own ink (#241017), running text is its
+   * ivory, and the accent passes from maroon to struck gold — the one pairing
+   * of the palette that holds its contrast on a dark ground. Nothing below
+   * this block knows which mode it is in.
    *
-   * The ramp is inverted but not mirrored. A straight inversion produces muddy
-   * mid-tones and a washed accent; these are hand-set so hierarchy survives.
+   * The accent ramp runs maroon → gold in dark mode: its low steps are the
+   * soft backgrounds (maroon tints, where the light theme has blush), its high
+   * steps the foregrounds (gold, then pale gold). Hand-set, not inverted, so
+   * hierarchy survives.
    */
   .dark {
-    --ink-50: 30 21 23;
-    --ink-100: 40 29 32;
-    --ink-200: 55 42 45;
-    --ink-300: 80 64 67;
-    --ink-400: 117 100 101;
-    --ink-500: 155 139 137;
-    --ink-600: 186 172 167;
-    --ink-700: 212 201 193;
-    --ink-800: 232 224 214;
-    --ink-900: 245 239 229;
-    --ink-950: 250 246 239;
+    --ink-50: 36 18 25;
+    --ink-100: 46 24 32;
+    --ink-200: 64 38 47;
+    --ink-300: 88 60 68;
+    --ink-400: 126 100 105;
+    --ink-500: 162 140 141;
+    --ink-600: 192 175 172;
+    --ink-700: 218 206 198;
+    --ink-800: 237 229 219;
+    --ink-900: 250 246 239;
+    --ink-950: 255 252 247;
 
-    /* The accent lifts rather than inverting: maroon on a near-black ground is
-     * a smear, so it to a readable rose on the dark ground. */
-    --rose-50: 45 17 24;
-    --rose-100: 60 21 31;
-    --rose-200: 84 28 42;
-    --rose-300: 118 38 58;
-    --rose-400: 168 66 88;
-    --rose-500: 214 122 138;
-    --rose-600: 230 152 165;
-    --rose-700: 240 182 191;
-    --rose-800: 246 210 215;
-    --rose-900: 250 230 233;
+    --rose-50: 54 15 27;
+    --rose-100: 72 19 35;
+    --rose-200: 98 25 45;
+    --rose-300: 138 18 48;
+    --rose-400: 190 146 74;
+    --rose-500: 217 180 95;
+    --rose-600: 232 204 138;
+    --rose-700: 240 219 170;
+    --rose-800: 246 233 202;
+    --rose-900: 251 244 226;
 
     --gold: 201 164 86;
     --gold-lit: 232 200 128;
@@ -167,17 +170,18 @@
     --critical-fg: 250 160 146;
     --critical-bg: 64 26 22;
 
-    --canvas: 20 13 15;
-    --surface: 30 21 23;
-    --surface-raised: 38 27 30;
-    --surface-sunken: 24 16 18;
-    --border: 52 40 42;
-    --border-strong: 72 57 59;
+    --canvas: 26 11 17;
+    --surface: 36 16 23;
+    --surface-raised: 44 21 29;
+    --surface-sunken: 30 13 20;
+    --border: 64 38 47;
+    --border-strong: 88 60 68;
 
     --brand: var(--rose-500);
     --brand-strong: var(--rose-600);
-    --brand-soft: var(--rose-100);
-    --brand-fg: 30 8 14;
+    --brand-soft: var(--rose-50);
+    /* Gold carries plum type, as ivory type sits on the light theme's maroon. */
+    --brand-fg: 26 11 17;
 
     --focus: var(--rose-400);
     --shadow-color: 0 0 0;
@@ -238,6 +242,9 @@
    * Cormorant at those sizes turns spindly. */
   .font-serif {
     letter-spacing: 0;
+    /* Cormorant's default figures are old-style, where 1 reads as I and 0 as
+     * O — fine in running prose, wrong on a count or a price. */
+    font-variant-numeric: lining-nums;
   }
 
   /* One visible focus treatment for the whole app. Keyboard users get a ring
@@ -272,19 +279,21 @@
    * to make a considered page look assembled.
    */
 
+  /* The template's buttons: 12px Karla at 500, capitals tracked 0.18em, a
+   * 46px target, square and flat. */
   .btn {
-    @apply inline-flex select-none items-center justify-center gap-2 whitespace-nowrap
-      rounded-[--radius-md] bg-brand px-5 py-2.5 text-xs font-medium uppercase tracking-[0.16em] text-brand-fg
+    @apply inline-flex min-h-[2.875rem] select-none items-center justify-center gap-2 whitespace-nowrap
+      rounded-[--radius-md] bg-brand px-6 py-2.5 text-xs font-medium uppercase tracking-[0.18em] text-brand-fg
       shadow-btn transition-[transform,background-color,box-shadow] duration-150
       hover:bg-brand-strong active:translate-y-px active:shadow-none
       disabled:pointer-events-none disabled:opacity-45;
   }
 
   .btn-outline {
-    @apply inline-flex select-none items-center justify-center gap-2 whitespace-nowrap
-      rounded-[--radius-md] border border-gray-300 bg-surface px-5 py-2.5 text-xs
-      font-medium uppercase tracking-[0.16em] text-gray-700 transition-[transform,background-color,border-color] duration-150
-      hover:border-gray-400 hover:bg-gray-100 active:translate-y-px
+    @apply inline-flex min-h-[2.875rem] select-none items-center justify-center gap-2 whitespace-nowrap
+      rounded-[--radius-md] border border-brand bg-transparent px-6 py-2.5 text-xs
+      font-medium uppercase tracking-[0.18em] text-brand transition-[transform,background-color,border-color] duration-150
+      hover:bg-brand-soft active:translate-y-px
       disabled:pointer-events-none disabled:opacity-45;
   }
 
@@ -304,12 +313,14 @@
    * repeated, and repetition is what decides how loud a control should be.
    */
   .btn-sm {
-    @apply px-3 py-1.5 text-[0.6875rem] tracking-[0.12em];
+    @apply min-h-[2.25rem] px-3.5 py-1.5 text-[0.6875rem] tracking-[0.14em];
   }
 
+  /* The template's fields: 48px tall, a hairline at the ink's 28%, 15px text
+   * on the panel colour, square. */
   .input {
-    @apply w-full rounded-[--radius-sm] border border-gray-300 bg-surface px-3 py-2.5
-      text-sm text-gray-900 transition-[border-color,box-shadow] duration-150
+    @apply min-h-12 w-full rounded-[--radius-sm] border border-gray-300 bg-surface px-3 py-2.5
+      text-[0.9375rem] text-gray-900 transition-[border-color,box-shadow] duration-150
       placeholder:text-gray-400
       focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/12
       disabled:opacity-55;
@@ -317,7 +328,7 @@
 
   select.input {
     @apply cursor-pointer appearance-none bg-[length:1.1em] bg-[right_0.6rem_center] bg-no-repeat pr-9;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238A9894' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237C6B6E' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   }
 
   .card {
@@ -329,8 +340,19 @@
     @apply rounded-[--radius-lg] border border-gray-200 bg-surface-raised p-5 shadow-lifted;
   }
 
+  /* The template's field label: 11px capitals tracked 0.22em, above the field. */
   .label {
-    @apply mb-1.5 block text-[0.8125rem] font-medium text-gray-700;
+    @apply mb-2 block text-[0.6875rem] font-normal uppercase tracking-[0.22em] text-gray-600;
+  }
+
+  /*
+   * The other way fields are written here: a <label> wrapping its caption in a
+   * <span> and the control after it. Forty-odd forms use that shape, so the
+   * caption takes the template's label from the shape rather than from a class
+   * each of them would have to remember.
+   */
+  label:has(.input) > span:first-child {
+    @apply mb-1 block text-[0.6875rem] font-normal uppercase tracking-[0.22em] text-gray-600;
   }
 
   /* A page title and its one-line explanation, used at the top of every
@@ -365,11 +387,10 @@
     @apply plate mt-1 w-fit max-w-[65ch] text-sm leading-relaxed text-gray-500;
   }
 
-  /* Status pills. Fully round, which is the documented exception to the
-   * radius scale: a pill reads as a state, a rounded rectangle reads as a
-   * control you can press. */
+  /* Status tags. Square like everything else in the template; what tells a
+   * state from a control is that it has no border and no hover. */
   .pill {
-    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;
+    @apply inline-flex items-center gap-1.5 rounded-[--radius-sm] px-2.5 py-1 text-xs font-medium tracking-[0.02em];
   }
   .pill-neutral {
     @apply pill bg-gray-100 text-gray-600;
@@ -424,7 +445,7 @@
    * a shape. This is the quieter one.
    */
   .section-title {
-    @apply text-base font-semibold tracking-[-0.014em] text-gray-900;
+    @apply font-serif text-[1.5rem] font-normal leading-[1.15] tracking-normal text-brand;
   }
 
   /* The line under a section heading. Same relationship as the page subtitle. */

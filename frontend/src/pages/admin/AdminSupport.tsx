@@ -209,7 +209,7 @@ export default function AdminSupport() {
             <button
               key={f.key}
               onClick={() => setCaseFilter(f.key === caseFilter ? null : f.key)}
-              className={`rounded-full border px-3 py-1 text-xs ${
+              className={`rounded-sm border px-3 py-1 text-xs ${
                 f.key === caseFilter
                   ? 'border-brand bg-brand text-brand-fg'
                   : count > 0
@@ -338,7 +338,7 @@ function DisputesPanel({
                 {d.booking?.eventDate ? ` · event ${formatDate(d.booking.eventDate)}` : ''}
               </p>
             </div>
-            <span className={`rounded-full px-2 py-1 text-xs ${DISPUTE_TONE[d.status]}`}>
+            <span className={`rounded-sm px-2 py-1 text-xs ${DISPUTE_TONE[d.status]}`}>
               {labelFrom(DISPUTE_STATUS_LABEL, d.status)}
             </span>
           </div>
