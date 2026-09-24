@@ -162,7 +162,7 @@ export default function VendorDashboard({
   const all = c.all ?? 0;
   const completed = c.completed ?? 0;
   const cancelled = c.cancelled ?? 0;
-  const requested = c.requested ?? 0;
+  const requested = c.requests ?? 0;
   const activeCount = Math.max(0, all - completed - cancelled);
 
   const bookings = incoming.data?.data ?? [];
