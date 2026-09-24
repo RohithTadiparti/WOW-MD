@@ -1697,10 +1697,32 @@ export class BookingsService {
       .groupBy('b.status')
       .getRawMany<{ status: string; count: string }>();
 
-    const counts: Record<string, number> = { all: 0 };
+    const counts: Record<string, number> = {
+      all: 0,
+      requests: 0,
+      confirmed: 0,
+      in_progress: 0,
+      completed: 0,
+      cancelled: 0,
+    };
+
     for (const row of rows) {
-      counts[row.status] = Number(row.count);
-      counts.all += Number(row.count);
+      const s = (row.status ?? '').toLowerCase().trim();
+      const n = Number(row.count) || 0;
+      counts.all += n;
+      counts[s] = (counts[s] ?? 0) + n;
+
+      if (s === 'requested' || s === 'quotation_sent' || s === 'quotation_accepted') {
+        counts.requests += n;
+      } else if (s === 'payment_pending' || s === 'pending' || s === 'confirmed') {
+        counts.confirmed += n;
+      } else if (s === 'in_progress' || s === 'completed_pending_final_payment') {
+        counts.in_progress += n;
+      } else if (s === 'completed') {
+        counts.completed += n;
+      } else if (s === 'cancelled' || s === 'disputed') {
+        counts.cancelled += n;
+      }
     }
 
     // Not a status, so not in the tally above. Counted with the same rule as
@@ -1712,18 +1734,17 @@ export class BookingsService {
       .where('b."providerId" IN (:...ids)', { ids: providerIds })
       .andWhere('b."slotId" IS NULL')
       .andWhere('(b."eventDate" IS NOT NULL OR e."eventDate" IS NOT NULL)')
-      .andWhere('b.status IN (:...statuses)', { statuses: REQUEST_STATUSES })
+      .andWhere('LOWER(b.status) IN (:...statuses)', { statuses: REQUEST_STATUSES.map((s) => s.toLowerCase()) })
       .getCount();
+
     return counts;
   }
 
   /**
-   * Buyer-side status buckets for the individual dashboard tiles (EZ1-I75):
-   * total, active, cancelled and completed. Active is everything still in
-   * flight — neither cancelled nor completed — so the three buckets add up to
-   * the total. Scoped exactly like listForBuyer so the numbers match the list.
+   * Buyer-side status buckets for the individual dashboard tiles & status tabs:
+   * total, active, cancelled, completed, and status breakdown.
    */
-  async buyerCounts(actor: AuthUser): Promise<{
+  async buyerCounts(actor: AuthUser): Promise<Record<string, number> & {
     all: number;
     active: number;
     cancelled: number;
@@ -1733,9 +1754,7 @@ export class BookingsService {
       .createQueryBuilder('b')
       .select('b.status', 'status')
       .addSelect('COUNT(*)', 'count');
-    // Match-fixed couples share one wedding (EZ1-I160), so the tiles count
-    // both sides' bookings — the same scope as listForBuyer, so the numbers
-    // match the list. Null partner keeps this the caller's own rows.
+
     const partnerUserId = await this.matchmaking.fixedPartnerUserId(actor.userId);
     if (partnerUserId) {
       qb.where('b."userId" IN (:...ids)', { ids: [actor.userId, partnerUserId] });
@@ -1744,16 +1763,56 @@ export class BookingsService {
     }
     const rows = await qb.groupBy('b.status').getRawMany<{ status: string; count: string }>();
 
-    let all = 0;
-    let cancelled = 0;
-    let completed = 0;
+    const counts: Record<string, number> & {
+      all: number;
+      active: number;
+      cancelled: number;
+      completed: number;
+    } = {
+      all: 0,
+      active: 0,
+      cancelled: 0,
+      completed: 0,
+      requested: 0,
+      quotation: 0,
+      payment: 0,
+      confirmed: 0,
+      in_progress: 0,
+      disputed: 0,
+    };
+
     for (const row of rows) {
-      const n = Number(row.count);
-      all += n;
-      if (row.status === BookingStatus.CANCELLED) cancelled += n;
-      else if (row.status === BookingStatus.COMPLETED) completed += n;
+      const s = (row.status ?? '').toLowerCase().trim();
+      const n = Number(row.count) || 0;
+      counts.all += n;
+      counts[s] = (counts[s] ?? 0) + n;
+
+      if (s === 'requested') {
+        counts.requested += n;
+        counts.active += n;
+      } else if (s === 'quotation_sent' || s === 'quotation_accepted') {
+        counts.quotation += n;
+        counts.active += n;
+      } else if (s === 'payment_pending' || s === 'pending') {
+        counts.payment += n;
+        counts.active += n;
+      } else if (s === 'confirmed') {
+        counts.confirmed += n;
+        counts.active += n;
+      } else if (s === 'in_progress' || s === 'completed_pending_final_payment') {
+        counts.in_progress += n;
+        counts.active += n;
+      } else if (s === 'completed') {
+        counts.completed += n;
+      } else if (s === 'cancelled' || s === 'disputed') {
+        counts.cancelled += n;
+        if (s === 'disputed') counts.disputed += n;
+      } else {
+        counts.active += n;
+      }
     }
-    return { all, active: all - cancelled - completed, cancelled, completed };
+
+    return counts;
   }
 
   /**

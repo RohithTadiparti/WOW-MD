@@ -36,38 +36,35 @@
    * neutral ramp leans warm toward both, so the greys read as chosen.
    */
   :root {
-    /* Warm plum-brown, from the template's text colours: #241017 at the top,
-     * #4F3B40 for running text, and hairlines that are that ink at 14%. */
-    --ink-50: 247 242 234;
-    --ink-100: 241 234 224;
-    --ink-200: 226 217 208;
-    --ink-300: 205 193 188;
-    --ink-400: 160 145 145;
-    --ink-500: 124 107 110;
-    --ink-600: 98 80 85;
-    --ink-700: 79 59 64;
-    --ink-800: 56 37 43;
-    --ink-900: 36 16 23;
-    --ink-950: 24 10 15;
+    /* Warm-white surfaces, readable rose-gray text, and pink borders. */
+    --ink-50: 255 249 251;
+    --ink-100: 255 241 246;
+    --ink-200: 246 182 203;
+    --ink-300: 246 182 203;
+    --ink-400: 194 137 157;
+    --ink-500: 138 101 115;
+    --ink-600: 138 101 115;
+    --ink-700: 107 59 80;
+    --ink-800: 90 38 56;
+    --ink-900: 90 38 56;
+    --ink-950: 64 24 41;
 
-    /* The accent ramp keeps its old name, rose, so no utility changes. The
-     * template's maroon, #6E1026, at 600; #8A1230 at 500. */
-    --rose-50: 248 236 233;
-    --rose-100: 240 220 214;
-    --rose-200: 227 188 188;
-    --rose-300: 204 139 148;
-    --rose-400: 170 72 92;
-    --rose-500: 138 18 48;
-    --rose-600: 110 16 38;
-    --rose-700: 88 12 30;
-    --rose-800: 68 9 23;
-    --rose-900: 50 7 17;
+    /* Vibrant pink carries actions; blush steps carry selected surfaces. */
+    --rose-50: 255 249 251;
+    --rose-100: 255 241 246;
+    --rose-200: 255 228 238;
+    --rose-300: 255 214 230;
+    --rose-400: 246 182 203;
+    --rose-500: 255 45 114;
+    --rose-600: 233 30 99;
+    --rose-700: 179 18 75;
+    --rose-800: 140 14 58;
+    --rose-900: 90 38 56;
 
-    /* Struck gold: the numerals, rules and heart outlines. Ornament only,
-     * never text on the ground, where it is too light to read. */
-    --gold: 169 131 47;
-    --gold-lit: 217 180 95;
-    --gold-deep: 122 90 28;
+    /* Decorative legacy gold utilities now stay within the pink system. */
+    --gold: 255 45 114;
+    --gold-lit: 255 214 230;
+    --gold-deep: 179 18 75;
 
     /* Semantic hues, deliberately separate from the accent. A status colour
      * that doubles as the brand colour cannot signal anything. */
@@ -81,26 +78,24 @@
     /* ---------------------------------------------------------- tier 2 --
      * Semantic tokens. Components only ever read these.
      */
-    /* Ivory and white: the ground is warm so white panels read as panels. */
-    --canvas: 250 246 239;
+    /* Warm white and blush give the portal equal room for pink and white. */
+    --canvas: 255 241 246;
     --surface: 255 255 255;
     --surface-raised: 255 255 255;
-    --surface-sunken: 246 239 228;
+    --surface-sunken: 255 241 246;
     --border: var(--ink-200);
     --border-strong: var(--ink-300);
 
     --brand: var(--rose-600);
     --brand-strong: var(--rose-700);
-    --brand-soft: var(--rose-50);
-    /* What sits ON the accent. The ivory ground here, near-black in dark mode,
-     * because the accent lifts in dark mode and light text on it fails. */
-    --brand-fg: 250 246 239;
+    --brand-soft: var(--rose-200);
+    --brand-fg: 255 255 255;
 
-    --focus: var(--rose-400);
+    --focus: var(--rose-500);
 
     /* Shadows tinted to the ground rather than pure black. A black shadow on a
      * pink-white canvas reads as a hole punched in the page. */
-    --shadow-color: 36 16 23;
+    --shadow-color: 179 18 75;
 
     /*
      * The one colour that does not invert.
@@ -114,11 +109,10 @@
      */
     --scrim: 14 8 11;
 
-    /* Square, as the template draws everything: ruled, not rounded. The scale
-     * is kept so the one place that ever needs a corner can take it. */
-    --radius-sm: 0; /* inputs, chips */
-    --radius-md: 0; /* buttons */
-    --radius-lg: 0; /* cards, panels */
+    /* Soft, consistent corners keep panels elegant without looking playful. */
+    --radius-sm: 0.375rem; /* inputs, chips */
+    --radius-md: 0.5rem; /* buttons */
+    --radius-lg: 0.75rem; /* cards, panels */
 
     color-scheme: light;
   }
@@ -136,32 +130,32 @@
    * hierarchy survives.
    */
   .dark {
-    --ink-50: 36 18 25;
-    --ink-100: 46 24 32;
-    --ink-200: 64 38 47;
-    --ink-300: 88 60 68;
-    --ink-400: 126 100 105;
-    --ink-500: 162 140 141;
-    --ink-600: 192 175 172;
-    --ink-700: 218 206 198;
-    --ink-800: 237 229 219;
-    --ink-900: 250 246 239;
-    --ink-950: 255 252 247;
+    --ink-50: 57 27 43;
+    --ink-100: 70 34 52;
+    --ink-200: 95 50 70;
+    --ink-300: 126 76 98;
+    --ink-400: 164 116 138;
+    --ink-500: 194 153 171;
+    --ink-600: 216 187 201;
+    --ink-700: 232 211 221;
+    --ink-800: 244 231 238;
+    --ink-900: 252 244 248;
+    --ink-950: 255 250 253;
 
-    --rose-50: 54 15 27;
-    --rose-100: 72 19 35;
-    --rose-200: 98 25 45;
-    --rose-300: 138 18 48;
-    --rose-400: 190 146 74;
-    --rose-500: 217 180 95;
-    --rose-600: 232 204 138;
-    --rose-700: 240 219 170;
-    --rose-800: 246 233 202;
-    --rose-900: 251 244 226;
+    --rose-50: 72 20 45;
+    --rose-100: 91 24 55;
+    --rose-200: 119 31 70;
+    --rose-300: 158 43 88;
+    --rose-400: 211 99 139;
+    --rose-500: 233 145 177;
+    --rose-600: 244 181 204;
+    --rose-700: 249 204 220;
+    --rose-800: 252 223 233;
+    --rose-900: 255 237 245;
 
-    --gold: 201 164 86;
-    --gold-lit: 232 200 128;
-    --gold-deep: 150 116 48;
+    --gold: 211 99 139;
+    --gold-lit: 244 181 204;
+    --gold-deep: 158 43 88;
 
     --positive-fg: 126 214 186;
     --positive-bg: 17 48 40;
@@ -170,21 +164,20 @@
     --critical-fg: 250 160 146;
     --critical-bg: 64 26 22;
 
-    --canvas: 26 11 17;
-    --surface: 36 16 23;
-    --surface-raised: 44 21 29;
-    --surface-sunken: 30 13 20;
-    --border: 64 38 47;
-    --border-strong: 88 60 68;
+    --canvas: 48 18 36;
+    --surface: 54 21 40;
+    --surface-raised: 65 27 48;
+    --surface-sunken: 45 17 34;
+    --border: 95 50 70;
+    --border-strong: 126 76 98;
 
     --brand: var(--rose-500);
     --brand-strong: var(--rose-600);
     --brand-soft: var(--rose-50);
-    /* Gold carries plum type, as ivory type sits on the light theme's maroon. */
-    --brand-fg: 26 11 17;
+    --brand-fg: 38 15 29;
 
     --focus: var(--rose-400);
-    --shadow-color: 0 0 0;
+    --shadow-color: 12 4 9;
 
     color-scheme: dark;
   }
@@ -279,8 +272,7 @@
    * to make a considered page look assembled.
    */
 
-  /* The template's buttons: 12px Karla at 500, capitals tracked 0.18em, a
-   * 46px target, square and flat. */
+  /* Rose buttons: 12px Karla at 500, capitals tracked 0.18em, a 46px target. */
   .btn {
     @apply inline-flex min-h-[2.875rem] select-none items-center justify-center gap-2 whitespace-nowrap
       rounded-[--radius-md] bg-brand px-6 py-2.5 text-xs font-medium uppercase tracking-[0.18em] text-brand-fg
@@ -328,16 +320,17 @@
 
   select.input {
     @apply cursor-pointer appearance-none bg-[length:1.1em] bg-[right_0.6rem_center] bg-no-repeat pr-9;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237C6B6E' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23684958' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   }
 
   .card {
-    @apply rounded-[--radius-lg] border border-gray-200 bg-surface p-5 shadow-card;
+    @apply rounded-[--radius-lg] border border-brand/20 bg-surface p-5 shadow-card;
   }
 
   /* For the one or two places that genuinely need to sit above a card. */
   .card-raised {
-    @apply rounded-[--radius-lg] border border-gray-200 bg-surface-raised p-5 shadow-lifted;
+    @apply rounded-[--radius-lg] border border-brand/20 bg-surface-raised p-5 shadow-lifted;
+    background: linear-gradient(135deg, rgb(var(--surface)), rgb(var(--rose-100)));
   }
 
   /* The template's field label: 11px capitals tracked 0.22em, above the field. */
@@ -358,7 +351,7 @@
   /* A page title and its one-line explanation, used at the top of every
    * screen. Written once so the app has a single masthead rhythm. */
   .page-title {
-    @apply plate w-fit font-serif text-[2rem] font-normal leading-[1.1] text-brand sm:text-[2.5rem];
+    @apply plate w-fit font-serif text-[2rem] font-normal leading-[1.1] text-brand-strong sm:text-[2.5rem];
   }
 
   /* Clears the heart field from behind a run of text: a patch of the ground
@@ -445,7 +438,11 @@
    * a shape. This is the quieter one.
    */
   .section-title {
-    @apply font-serif text-[1.5rem] font-normal leading-[1.15] tracking-normal text-brand;
+    @apply font-serif text-[1.5rem] font-normal leading-[1.15] tracking-normal text-brand-strong;
+  }
+
+  .card > button .font-serif {
+    color: rgb(var(--brand-strong));
   }
 
   /* The line under a section heading. Same relationship as the page subtitle. */

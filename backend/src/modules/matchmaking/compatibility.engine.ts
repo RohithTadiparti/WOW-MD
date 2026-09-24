@@ -3,6 +3,16 @@ import { AppConfigService } from '../../config/app-config.service';
 import { Profile } from '../users/entities/profile.entity';
 import { ProfileDetails } from '../profile-details/entities/profile-details.entity';
 
+/** Reuse the annual salary already recorded in employment; unknown is not zero. */
+export function matchesPackageRange(details: ProfileDetails | null | undefined, min?: number | null, max?: number | null): boolean {
+  if (min == null && max == null) return true;
+  const raw = details?.employment?.salary;
+  const salary = typeof raw === 'number' ? raw
+    : typeof raw === 'string' && /^\d+$/.test(raw.trim()) ? Number(raw) : NaN;
+  return Number.isSafeInteger(salary) && salary >= 0
+    && (min == null || salary >= min) && (max == null || salary <= max);
+}
+
 export interface MatchWeights {
   weightAge: number;
   weightLocation: number;
@@ -163,15 +173,20 @@ export function scoreProfiles(
    */
   const satisfied: boolean[] = [];
   const checkWindow = (viewer: ScoringSubject, other: ScoringSubject) => {
+    const packageMin = viewer.details?.preferredPackageMin;
+    const packageMax = viewer.details?.preferredPackageMax;
+    if (packageMin != null || packageMax != null) {
+      satisfied.push(matchesPackageRange(other.details, packageMin, packageMax));
+    }
     const otherAge = ageFromDob(other.profile.dateOfBirth);
     const { min, max } = preferredAgeOf(viewer);
     if (otherAge !== null && min !== null && max !== null) {
       satisfied.push(otherAge >= min && otherAge <= max);
     }
 
-    const otherHeight = num(other.details?.heightCm);
-    const minH = num(viewer.details?.preferredHeightMinCm);
-    const maxH = num(viewer.details?.preferredHeightMaxCm);
+    const otherHeight = num(other.details?.heightFeet);
+    const minH = num(viewer.details?.preferredHeightMinFeet);
+    const maxH = num(viewer.details?.preferredHeightMaxFeet);
     if (otherHeight !== null && minH !== null && maxH !== null) {
       satisfied.push(otherHeight >= minH && otherHeight <= maxH);
     }

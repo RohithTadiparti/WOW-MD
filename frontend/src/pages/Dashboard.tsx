@@ -399,7 +399,11 @@ export default function Dashboard() {
     );
 
   const reduce = useReducedMotion();
-  const firstName = (profile?.displayName ?? '').trim().split(' ')[0];
+  const isFamily = user?.role === 'family';
+  const accountName = isFamily
+    ? (profile?.accountName ?? user?.accountName ?? profile?.displayName)
+    : (profile?.accountName ?? profile?.displayName);
+  const firstName = (accountName ?? '').trim().split(' ')[0];
 
   // The same question the sidebar asks, from the same place. This list used to
   // carry its own hideFor, which is how a planner ended up with no Chat in the

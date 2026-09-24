@@ -1,3 +1,4 @@
+import { formatHeight } from '../lib/height';
 import { useState } from 'react';
 import { MARITAL_LABEL, MaritalStatus, OCCUPATION_LABEL, OccupationStatus } from '../lib/permissions';
 import { BookmarkSimple, CheckCircle } from '@phosphor-icons/react';
@@ -22,7 +23,7 @@ export interface PublicProfile {
   verified: boolean;
   lastActiveAt: string | null;
   card?: {
-    heightCm: number | null;
+    heightFeet: number | null;
     religion: string | null;
     caste: string | null;
     motherTongue: string | null;
@@ -187,7 +188,7 @@ export default function MatchCard({
       : [
           p.ageRange ? `${p.ageRange} yrs` : null,
           p.city,
-          card?.heightCm ? `${card.heightCm} cm` : null,
+          card?.heightFeet ? formatHeight(card.heightFeet) : null,
           card?.profession,
           card?.highestQualification,
           card?.maritalStatus

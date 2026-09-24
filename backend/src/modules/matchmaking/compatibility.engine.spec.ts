@@ -1,4 +1,4 @@
-import { scoreProfiles, MatchWeights, ScoringSubject } from './compatibility.engine';
+import { scoreProfiles, MatchWeights, ScoringSubject, matchesPackageRange } from './compatibility.engine';
 import { Profile } from '../users/entities/profile.entity';
 import { ProfileDetails } from '../profile-details/entities/profile-details.entity';
 import { ProfileVisibility } from '../../common/enums';
@@ -22,11 +22,11 @@ const makeDetails = (overrides: Partial<ProfileDetails>): ProfileDetails =>
     caste: null,
     motherTongue: null,
     highestQualification: null,
-    heightCm: null,
+    heightFeet: null,
     preferredAgeMin: null,
     preferredAgeMax: null,
-    preferredHeightMinCm: null,
-    preferredHeightMaxCm: null,
+    preferredHeightMinFeet: null,
+    preferredHeightMaxFeet: null,
     partnerPreferences: {},
     residence: {},
     ...overrides,
@@ -57,6 +57,27 @@ const makeProfile = (overrides: Partial<Profile>): Profile =>
   }) as Profile;
 
 describe('scoreProfiles (compatibility engine)', () => {
+  it.each([
+    ['1000000', 1000000, 1000000, true],
+    [0, 0, 0, true],
+    [999999, 1000000, null, false],
+    [1000001, null, 1000000, false],
+    ['', 0, null, false],
+    [null, 0, null, false],
+    ['unknown', null, 1000000, false],
+    [-1, 0, null, false],
+    [undefined, null, null, true],
+  ])('matches salary %s against %s–%s', (salary, min, max, expected) => {
+    expect(matchesPackageRange(makeDetails({ employment: { salary } }), min, max)).toBe(expected);
+  });
+
+  it('scores package preferences in both directions without exposing income', () => {
+    const a = { profile: makeProfile({}), details: makeDetails({ preferredPackageMin: 1000000 }) };
+    const b = { profile: makeProfile({}), details: makeDetails({ employment: { salary: '1000000' }, incomeVisible: false }) };
+    const unknown = { ...b, details: makeDetails({ employment: {} }) };
+    expect(scoreProfiles(a, b, weights).score).toBe(scoreProfiles(b, a, weights).score);
+    expect(scoreProfiles(a, b, weights).score).toBeGreaterThan(scoreProfiles(a, unknown, weights).score);
+  });
   it('scores a perfect match at or near 100', () => {
     const a = makeProfile({
       dateOfBirth: dobForAge(28),
@@ -198,18 +219,18 @@ describe('scoreProfiles (compatibility engine)', () => {
         details: makeDetails({
           preferredAgeMin: 24,
           preferredAgeMax: 30,
-          preferredHeightMinCm: 150,
-          preferredHeightMaxCm: 170,
+          preferredHeightMinFeet: 4.9,
+          preferredHeightMaxFeet: 5.6,
           partnerPreferences: { religion: 'Hindu' },
         }),
       };
       const met: ScoringSubject = {
         profile: bare(27, 'Hyderabad'),
-        details: makeDetails({ heightCm: 160, religion: 'Hindu' }),
+        details: makeDetails({ heightFeet: 5.2, religion: 'Hindu' }),
       };
       const unmet: ScoringSubject = {
         profile: bare(27, 'Hyderabad'),
-        details: makeDetails({ heightCm: 185, religion: 'Christian' }),
+        details: makeDetails({ heightFeet: 6.1, religion: 'Christian' }),
       };
 
       expect(scoreProfiles(seeker, met, weights).breakdown.preferences).toBeGreaterThan(
