@@ -31,6 +31,7 @@ import { OfficerAvailability, isOnLeaveNow } from './entities/officer-availabili
 import {
   AllocateCaseDto,
   CaseQueryDto,
+  GrantBusinessChangeAccessDto,
   RaiseCaseDto,
   RecordFindingsDto,
   ReviewCaseDto,
@@ -62,6 +63,7 @@ import {
  * settle path and the side-effect in applyDecision have to agree on the string.
  */
 const UNLOCK_LISTING = 'unlock_listing';
+const BUSINESS_CHANGE_CATEGORY = 'business_change';
 
 /**
  * Issues and disputes, and the investigation that settles them.
@@ -416,6 +418,17 @@ export class SupportCasesService {
   }
 
   async raise(actor: AuthUser, dto: RaiseCaseDto): Promise<SupportCase> {
+    if (dto.subjectType === CaseSubject.VENDOR) {
+      if (!dto.subjectId) throw new BadRequestException('Choose the business whose details need changing');
+      const business = await this.vendors.findOne({ where: { id: dto.subjectId } });
+      if (!business) throw new NotFoundException('Business not found');
+      if (business.ownerUserId !== actor.userId && actor.role !== UserRole.ADMIN) {
+        throw new ForbiddenException('That business is not yours');
+      }
+      if (!dto.requestedFields?.length) {
+        throw new BadRequestException('Choose at least one business detail to change');
+      }
+    }
     // Read where the booking stands before freezing it, so the settlement can
     // put it back rather than guess.
     //
@@ -436,6 +449,8 @@ export class SupportCasesService {
         description: dto.description,
         milestone: dto.milestone ?? null,
         evidence: dto.evidence ?? [],
+        category: dto.subjectType === CaseSubject.VENDOR ? BUSINESS_CHANGE_CATEGORY : null,
+        requestedFields: dto.subjectType === CaseSubject.VENDOR ? dto.requestedFields ?? null : null,
         status: CaseStatus.OPEN,
         bookingPreviousStatus: frozen?.status ?? null,
         history: [
@@ -466,6 +481,56 @@ export class SupportCasesService {
       message: `A ${dto.subjectType} case was raised: ${dto.title}`,
     });
     return created;
+  }
+
+  /**
+   * The administrator's first decision on a business change.  This deliberately
+   * does not allocate an officer: verification starts only after the vendor has
+   * supplied the changed values.
+   */
+  async grantBusinessChangeAccess(
+    actor: AuthUser,
+    caseId: string,
+    dto: GrantBusinessChangeAccessDto,
+  ): Promise<SupportCase> {
+    if (actor.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Only an administrator can grant business edit access');
+    }
+    const item = await this.loadOrFail(caseId);
+    if (item.subjectType !== CaseSubject.VENDOR || item.category !== BUSINESS_CHANGE_CATEGORY || !item.subjectId) {
+      throw new BadRequestException('This is not a vendor business-details change request');
+    }
+    if (item.assignedToUserId) {
+      throw new BadRequestException('Edit access must be granted before an officer is assigned');
+    }
+    if (item.status !== CaseStatus.OPEN && item.status !== CaseStatus.TRIAGED) {
+      throw new BadRequestException('Edit access has already been granted or this request is no longer actionable');
+    }
+
+    await this.lifecycle.requireCorrection(
+      item.subjectId,
+      dto.note?.trim() || item.description,
+      dto.fields,
+      actor,
+    );
+    item.status = CaseStatus.WAITING_FOR_INFORMATION;
+    item.category = BUSINESS_CHANGE_CATEGORY;
+    item.requestedFields = dto.fields;
+    this.pushHistory(item, {
+      at: new Date().toISOString(),
+      byUserId: actor.userId,
+      status: CaseStatus.WAITING_FOR_INFORMATION,
+      note: `Edit access granted for: ${dto.fields.join(', ')}`,
+    });
+    const saved = await this.cases.save(item);
+    await this.notifications.create(item.raisedByUserId, NotificationType.VERIFICATION_DECIDED, {
+      businessId: item.subjectId,
+      caseId: item.id,
+      status: 'edit_access_granted',
+      fields: dto.fields,
+      message: 'Edit access has been granted. Update the approved fields and submit them for review.',
+    });
+    return saved;
   }
 
   /**
@@ -645,6 +710,11 @@ export class SupportCasesService {
 
   async allocate(actor: AuthUser, caseId: string, dto: AllocateCaseDto): Promise<SupportCase> {
     const item = await this.loadOrFail(caseId);
+    if (item.subjectType === CaseSubject.VENDOR && item.category === BUSINESS_CHANGE_CATEGORY) {
+      throw new BadRequestException(
+        'Do not allocate an officer for a business change request. Grant edit access first; allocation happens after the vendor submits updated details.',
+      );
+    }
     const officerUserId = dto.officerUserId ?? (await this.lightestOfficer());
     if (!officerUserId) {
       throw new BadRequestException('There are no active verification officers to allocate this to');

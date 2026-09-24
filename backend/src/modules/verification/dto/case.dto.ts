@@ -70,6 +70,32 @@ export class RaiseCaseDto {
   @MinLength(10, { message: 'Describe the issue in at least 10 characters' })
   @MaxLength(4000)
   description: string;
+
+  /**
+   * Required for a vendor business-details change request.  Keeping the field
+   * list structured lets the administrator grant edit access to exactly what
+   * was requested; it must never be inferred from prose in `description`.
+   */
+  @ApiPropertyOptional({ type: [String], maxItems: 20 })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  requestedFields?: string[];
+}
+
+export class GrantBusinessChangeAccessDto {
+  @ApiProperty({ type: [String], minItems: 1, maxItems: 20 })
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  fields: string[];
+
+  @ApiPropertyOptional({ maxLength: 1000 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  note?: string;
 }
 
 /**

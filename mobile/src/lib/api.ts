@@ -1,4 +1,5 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 
@@ -19,7 +20,25 @@ import { useAuth, type AuthUser } from '@/store/auth';
  * statuses count as a token problem — is the same reasoning as the web client,
  * and the comments there are worth reading alongside these.
  */
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://192.168.0.9:3000/api';
+/**
+ * Prefer the deployment's explicit API URL. During local Expo development,
+ * use the host serving Expo so a phone reaches the API on the developer's
+ * machine instead of trying to reach its own localhost. A production build
+ * should always provide EXPO_PUBLIC_API_URL.
+ */
+function defaultApiUrl(): string {
+  const hostUri = Constants.expoConfig?.hostUri;
+  if (!hostUri) return 'http://192.168.0.9:3000/api';
+
+  try {
+    const host = new URL(`http://${hostUri}`).hostname;
+    return `http://${host}:3000/api`;
+  } catch {
+    return 'http://localhost:3000/api';
+  }
+}
+
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || defaultApiUrl();
 
 /** Alphanumerics, dot, dash and underscore only: SecureStore rejects the rest. */
 const REFRESH_KEY = 'wow.refreshToken';
@@ -198,3 +217,4 @@ api.interceptors.response.use(
 );
 
 export { apiMessage } from '@/shared/api-errors';
+

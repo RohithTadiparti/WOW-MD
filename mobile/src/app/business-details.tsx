@@ -66,6 +66,13 @@ type Errors = Partial<Record<keyof Form | 'categories' | 'portfolio' | 'complian
 
 const MOBILE = /^(\+91)?[6-9]\d{9}$/;
 
+function validateBusinessDescription(description: string): string | undefined {
+  if (!description.trim()) return 'Description is required.';
+  if (description.length > 1000) return 'Description cannot exceed 1,000 characters.';
+  if (description.trim().length < 50) return 'Description must contain at least 50 characters.';
+  return undefined;
+}
+
 /**
  * The route, for either kind of provider.
  *
@@ -139,7 +146,15 @@ function BusinessDetails() {
   /** Field-level, and specific about what is wrong rather than "invalid". */
   function validate(): Errors {
     const found: Errors = {};
-    if (!form.name.trim()) found.name = 'Your business needs a name';
+    const descriptionError = validateBusinessDescription(form.description);
+    if (descriptionError) found.description = descriptionError;
+    const businessName = form.name.trim();
+    if (!businessName) found.name = 'Business name is required.';
+    else if (businessName.length < 2 || businessName.length > 100) {
+      found.name = 'Business name must be between 2 and 100 characters.';
+    } else if (!/^(?=.*[\p{L}\p{N}])[\p{L}\p{N} .&'-]+$/u.test(businessName)) {
+      found.name = 'Please enter a valid business name.';
+    }
     // Category, city, registered address, a portfolio image and a compliance
     // document are all mandatory to submit a listing for verification — an
     // officer cannot verify a business that has named none of them.
@@ -180,6 +195,8 @@ function BusinessDetails() {
   /** The lighter check for a verified/live listing: only what is on screen. */
   function validatePresentational(): Errors {
     const found: Errors = {};
+    const descriptionError = validateBusinessDescription(form.description);
+    if (descriptionError) found.description = descriptionError;
     if (portfolio.length === 0) found.portfolio = 'Add at least one portfolio photo';
     if (!form.contactPhone.trim()) {
       found.contactPhone = 'A contact mobile number is required';
@@ -320,6 +337,7 @@ function BusinessDetails() {
             value={form.name}
             onChangeText={set('name')}
             error={errors.name}
+            maxLength={100}
             autoCapitalize="words"
           />
           <CategoryPicker value={categories} onChange={setCategories} error={errors.categories} />
@@ -340,8 +358,10 @@ function BusinessDetails() {
           value={form.description}
           onChange={set('description')}
           rows={4}
-          maxLength={2000}
+          maxLength={1000}
+          error={errors.description}
         />
+        <Caption tone="faint">{form.description.length}/1,000</Caption>
         {presentationalOnly && (
           <Field
             label="Contact number"
