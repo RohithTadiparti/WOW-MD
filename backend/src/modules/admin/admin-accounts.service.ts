@@ -24,6 +24,10 @@ import {
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
 import { AdminBookingsService } from './admin-bookings.service';
 
+function uniqueById<T extends { id: string }>(rows: T[]): T[] {
+  return [...new Map(rows.map((row) => [row.id, row])).values()];
+}
+
 /**
  * The admin directory, and one account or profile in full.
  *
@@ -135,7 +139,8 @@ export class AdminAccountsService {
       this.verifications.find({ where: { applicantUserId: userId } }),
     ]);
 
-    const profileIds = profiles.map((p) => p.id);
+    const distinctProfiles = uniqueById(profiles);
+    const profileIds = distinctProfiles.map((p) => p.id);
 
     /*
      * The provider side (EZ1-I172).
@@ -146,15 +151,15 @@ export class AdminAccountsService {
      * page is actually about. Fetched here so the same read serves both.
      */
     const plannerBusinesses = await this.planners.find({ where: { ownerUserId: userId } });
-    const providerIds = [...listings.map((v) => v.id), ...plannerBusinesses.map((p) => p.id)];
+    const providerIds = [...new Set([...listings.map((v) => v.id), ...plannerBusinesses.map((p) => p.id)])];
     const providerBookings = providerIds.length
-      ? await this.adminBookings.attachParties(
+      ? uniqueById(await this.adminBookings.attachParties(
           await this.bookings.find({
             where: { providerId: In(providerIds) },
             order: { createdAt: 'DESC' },
             take: 20,
           }),
-        )
+        ))
       : [];
 
     // Aggregates use the complete relationships; the arrays above remain
@@ -254,22 +259,41 @@ export class AdminAccountsService {
 
     // The matchmaking story as counts, because fifty interest rows is not an
     // answer to "where is this person up to".
+    const distinctInterests = uniqueById(interests);
+    const distinctMoney = uniqueById(money);
+    const distinctRaised = uniqueById(raised);
+    const distinctAssigned = uniqueById(against);
+    const distinctVerifications = uniqueById(verifications);
+    const distinctOfficerLoad = uniqueById(officerLoad);
+    const distinctOfficerDecisions = uniqueById(officerDecisions);
+    const paymentSum = (status?: PaymentStatus) => {
+      const query = this.payments
+        .createQueryBuilder('p')
+        .select('COALESCE(SUM(p.amount), 0)', 'total')
+        .where('p.userId = :userId', { userId });
+      if (status) query.andWhere('p.status = :status', { status });
+      return query.getRawOne<{ total: string }>().then((row) => row?.total ?? '0');
+    };
+    const [paymentTotal, paymentEscrow, paymentReleased, paymentRefunded] = await Promise.all([
+      paymentSum(),
+      paymentSum(PaymentStatus.HELD_IN_ESCROW),
+      paymentSum(PaymentStatus.RELEASED),
+      paymentSum(PaymentStatus.REFUNDED),
+    ]);
+
     const matchmaking = profileIds.length
       ? {
-          sent: interests.filter((i) => profileIds.includes(i.fromProfileId)).length,
-          received: interests.filter((i) => profileIds.includes(i.toProfileId)).length,
-          accepted: interests.filter((i) => i.status === InterestStatus.ACCEPTED).length,
-          fixed: interests.filter((i) => i.matchFixedState === MatchFixedState.CONFIRMED).length,
-          history: interests.slice(0, 20),
+          sent: distinctInterests.filter((i) => profileIds.includes(i.fromProfileId)).length,
+          received: distinctInterests.filter((i) => profileIds.includes(i.toProfileId)).length,
+          accepted: distinctInterests.filter((i) => i.status === InterestStatus.ACCEPTED).length,
+          fixed: distinctInterests.filter((i) => i.matchFixedState === MatchFixedState.CONFIRMED).length,
+          history: distinctInterests.slice(0, 20),
         }
       : null;
 
-    const sum = (rows: { amount: string }[]) =>
-      rows.reduce((n, r) => n + Number(r.amount ?? 0), 0).toFixed(2);
-
     return {
       user,
-      profiles: profiles.map((p) => ({
+      profiles: distinctProfiles.map((p) => ({
         id: p.id,
         displayName: p.displayName,
         lifecycle: p.lifecycle,
@@ -285,7 +309,7 @@ export class AdminAccountsService {
       })),
       // Named the same way as `providerBookings`: buyer, provider, service,
       // what has been paid and the quotation on the table.
-      bookings: await this.adminBookings.attachParties(placed),
+      bookings: uniqueById(await this.adminBookings.attachParties(placed)),
       /** Bookings made *with* this account (vendor/planner), newest first. */
       providerBookings,
       metrics: {
@@ -317,19 +341,19 @@ export class AdminAccountsService {
         ratingAvg: p.ratingAvg,
         ratingCount: p.ratingCount,
       })),
-      casesRaised: raised,
-      casesAssigned: against,
-      verifications,
+      casesRaised: distinctRaised,
+      casesAssigned: distinctAssigned,
+      verifications: distinctVerifications,
 
       matchmaking,
 
       /** What this account has paid, and what state it is in. */
       payments: {
-        total: sum(money),
-        inEscrow: sum(money.filter((p) => p.status === PaymentStatus.HELD_IN_ESCROW)),
-        released: sum(money.filter((p) => p.status === PaymentStatus.RELEASED)),
-        refunded: sum(money.filter((p) => p.status === PaymentStatus.REFUNDED)),
-        history: money.slice(0, 20),
+        total: paymentTotal,
+        inEscrow: paymentEscrow,
+        released: paymentReleased,
+        refunded: paymentRefunded,
+        history: distinctMoney.slice(0, 20),
       },
 
       /** Only for an agency: the accounts they brought on. */
@@ -355,13 +379,13 @@ export class AdminAccountsService {
       officer:
         user.role === UserRole.IN_PERSON
           ? {
-              assigned: officerLoad.length,
-              open: officerLoad.filter((v) => !['approved', 'rejected'].includes(String(v.status)))
+              assigned: distinctOfficerLoad.length,
+              open: distinctOfficerLoad.filter((v) => !['approved', 'rejected'].includes(String(v.status)))
                 .length,
-              overdue: officerLoad.filter(
+              overdue: distinctOfficerLoad.filter(
                 (v) => v.slaBreachedAt || (v.slaDeadline && new Date(v.slaDeadline) < new Date()),
               ).length,
-              queue: officerLoad.slice(0, 20),
+              queue: distinctOfficerLoad.slice(0, 20),
               /** The regions this officer will actually travel to (EZ1-I188). */
               serviceAreas: officerAreas.map((a) => ({
                 id: a.id,
@@ -371,7 +395,7 @@ export class AdminAccountsService {
                 primary: a.primary,
               })),
               /** Visits this officer has closed out — the record behind the queue. */
-              decisions: officerDecisions.map((v) => ({
+              decisions: distinctOfficerDecisions.map((v) => ({
                 id: v.id,
                 applicantType: v.applicantType,
                 status: v.status,
@@ -384,10 +408,10 @@ export class AdminAccountsService {
   }
 
   private async agentDashboard(agentId: string) {
-    const clients = await this.profiles.find({
+    const clients = uniqueById(await this.profiles.find({
       where: { managedByUserId: agentId, archivedAt: IsNull() },
       order: { createdAt: 'DESC' },
-    });
+    }));
     const clientProfileIds = clients.map((client) => client.id);
     const clientUserIds = clients
       .map((client) => client.userId)
@@ -417,20 +441,24 @@ export class AdminAccountsService {
         : Promise.resolve([]),
     ]);
 
+    const distinctInterests = uniqueById(agentInterests);
+    const distinctPayments = uniqueById(payments);
+    const distinctAssignedCases = uniqueById(assignedCases);
+    const distinctClientCases = uniqueById(clientCases);
     const fixedClientIds = new Set<string>();
-    for (const interest of agentInterests) {
+    for (const interest of distinctInterests) {
       if (interest.matchFixedState !== MatchFixedState.CONFIRMED) continue;
       if (clientProfileIds.includes(interest.fromProfileId)) fixedClientIds.add(interest.fromProfileId);
       if (clientProfileIds.includes(interest.toProfileId)) fixedClientIds.add(interest.toProfileId);
     }
-    const issues = [...new Map([...assignedCases, ...clientCases].map((issue) => [issue.id, issue])).values()];
+    const issues = [...new Map([...distinctAssignedCases, ...distinctClientCases].map((issue) => [issue.id, issue])).values()];
     const openStatuses = new Set([
       'open', 'triaged', 'allocated', 'in_progress', 'waiting_for_information', 'resolution_submitted', 'reassigned',
     ]);
     const pendingIssues = issues.filter((issue) => openStatuses.has(String(issue.status)));
     const solvedIssues = issues.filter((issue) => String(issue.status) === 'resolved');
     const escalatedIssues = issues.filter((issue) => String(issue.status) === 'escalated');
-    const escrow = payments
+    const escrow = distinctPayments
       .filter((payment) => [PaymentStatus.HELD_IN_ESCROW, PaymentStatus.DISPUTED].includes(payment.status))
       .reduce((total, payment) => total + Number(payment.amount ?? 0), 0)
       .toFixed(2);
@@ -439,8 +467,8 @@ export class AdminAccountsService {
       totalClients: clients.length,
       matchesFixed: fixedClientIds.size,
       remainingClients: clients.length - fixedClientIds.size,
-      interestsReceived: agentInterests.filter((interest) => clientProfileIds.includes(interest.toProfileId)).length,
-      interestsSent: agentInterests.filter((interest) => clientProfileIds.includes(interest.fromProfileId)).length,
+      interestsReceived: distinctInterests.filter((interest) => clientProfileIds.includes(interest.toProfileId)).length,
+      interestsSent: distinctInterests.filter((interest) => clientProfileIds.includes(interest.fromProfileId)).length,
       escrow,
       issuesPending: pendingIssues.length,
       issuesSolved: solvedIssues.length,
@@ -450,10 +478,10 @@ export class AdminAccountsService {
         profileCode: client.profileCode, city: client.city, profileCompleted: client.profileCompleted,
         lifecycle: client.lifecycle, createdAt: client.createdAt,
       })),
-      matches: agentInterests.filter((interest) => interest.matchFixedState === MatchFixedState.CONFIRMED),
-      interestsReceivedRows: agentInterests.filter((interest) => clientProfileIds.includes(interest.toProfileId)),
-      interestsSentRows: agentInterests.filter((interest) => clientProfileIds.includes(interest.fromProfileId)),
-      payments,
+      matches: distinctInterests.filter((interest) => interest.matchFixedState === MatchFixedState.CONFIRMED),
+      interestsReceivedRows: distinctInterests.filter((interest) => clientProfileIds.includes(interest.toProfileId)),
+      interestsSentRows: distinctInterests.filter((interest) => clientProfileIds.includes(interest.fromProfileId)),
+      payments: distinctPayments,
       pendingIssues,
       solvedIssues,
       escalatedIssues,
