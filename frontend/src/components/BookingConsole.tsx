@@ -223,8 +223,8 @@ export default function BookingConsole({
               onClick={() => setTab(entry.key)}
               className={
                 tab === entry.key
-                  ? 'rounded-full bg-brand px-3 py-1 text-xs font-medium text-brand-fg'
-                  : 'rounded-full bg-surface-sunken px-3 py-1 text-xs text-gray-600 hover:bg-gray-100'
+                  ? 'rounded-sm bg-brand px-3 py-1 text-xs font-medium text-brand-fg'
+                  : 'rounded-sm bg-surface-sunken px-3 py-1 text-xs text-gray-600 hover:bg-gray-100'
               }
             >
               {entry.label}
@@ -326,7 +326,7 @@ export default function BookingConsole({
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="rounded-full bg-surface-sunken px-2 py-0.5 text-xs text-gray-700">
+                  <span className="rounded-sm bg-surface-sunken px-2 py-0.5 text-xs text-gray-700">
                     {statusLabels[booking.status] ?? booking.status.replace(/_/g, ' ')}
                   </span>
                   {/* Marked on the row as well as gathered under its own tab, so
@@ -334,28 +334,28 @@ export default function BookingConsole({
                       (EZ1-I227). */}
                   {isRequestOnDate(booking) && (
                     <span
-                      className="rounded-full bg-caution-bg px-2 py-0.5 text-xs text-caution-fg"
+                      className="rounded-sm bg-caution-bg px-2 py-0.5 text-xs text-caution-fg"
                       title="The customer asked for a date you have not published. Check it before quoting."
                     >
                       Request on date
                     </span>
                   )}
                   {booking.status === 'confirmed' && booking.collectedMilestones?.includes('advance') && (
-                    <span className="rounded-full bg-positive-bg px-2 py-0.5 text-xs text-positive-fg">Advance received</span>
+                    <span className="rounded-sm bg-positive-bg px-2 py-0.5 text-xs text-positive-fg">Advance received</span>
                   )}
                   {/* A declined, withdrawn or revised offer is not a new request,
                       and the row says so (EZ1-I264). */}
                   {booking.quotation &&
                     ['requested', 'quotation_sent'].includes(booking.status) && (
                       <span
-                        className={`rounded-full px-2 py-0.5 text-xs ${QUOTATION_STAGE_TONE[booking.quotation.stage]}`}
+                        className={`rounded-sm px-2 py-0.5 text-xs ${QUOTATION_STAGE_TONE[booking.quotation.stage]}`}
                       >
                         {QUOTATION_STAGE_LABEL[booking.quotation.stage]}
                       </span>
                     )}
                   {booking.paymentStatus && (
                     <span
-                      className={`rounded-full px-2 py-0.5 text-xs ${
+                      className={`rounded-sm px-2 py-0.5 text-xs ${
                         PAYMENT_TONE[booking.paymentStatus] ?? 'bg-surface-sunken text-gray-600'
                       }`}
                     >

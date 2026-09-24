@@ -94,7 +94,7 @@ export default function BiodataCard({
           </p>
         </div>
         {profile.managed && !print && (
-          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
+          <span className="rounded-sm bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
             Via an agent
           </span>
         )}

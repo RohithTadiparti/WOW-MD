@@ -86,7 +86,7 @@ export default function ActivityTable({ d, limit }: { d: ReportsData; limit?: nu
                     {new Date(a.at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
                   </td>
                   <td className="py-2 pr-4">
-                    <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${kind?.tone ?? 'bg-surface-sunken text-gray-700'}`}>
+                    <span className={`whitespace-nowrap rounded-sm px-2 py-0.5 text-xs font-medium ${kind?.tone ?? 'bg-surface-sunken text-gray-700'}`}>
                       {kind?.label ?? a.kind}
                     </span>
                   </td>

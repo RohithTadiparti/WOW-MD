@@ -562,7 +562,7 @@ export default function Matches() {
                 {activeFilters.map(([key, value]) => (
                   <button
                     key={key}
-                    className="inline-flex items-center gap-1 rounded-full bg-brand-light px-2 py-0.5 text-xs text-brand-dark hover:bg-brand-light/70"
+                    className="inline-flex items-center gap-1 rounded-sm bg-brand-light px-2 py-0.5 text-xs text-brand-dark hover:bg-brand-light/70"
                     onClick={() => {
                       clearField(key);
                       setPages(1);
@@ -754,7 +754,7 @@ export default function Matches() {
                 onClick={() => setShowShortlist((s) => !s)}
               >
                 <span className="font-semibold text-gray-900">Shortlist</span>
-                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+                <span className="rounded-sm bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
                   {shortlistRows.length}
                 </span>
               </button>
@@ -887,7 +887,7 @@ export default function Matches() {
               </p>
             </div>
             {status.matchFixedState === 'pending_confirmation' && (
-              <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800">
+              <span className="rounded-sm bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800">
                 {status.awaitingOtherSide
                   ? 'Waiting on the other side to confirm'
                   : 'They have confirmed, your turn'}
@@ -942,7 +942,7 @@ export default function Matches() {
                   </div>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
-                  <span className="rounded-full bg-brand-light px-2 py-0.5 text-sm font-semibold text-brand-dark">
+                  <span className="rounded-sm bg-brand-light px-2 py-0.5 text-sm font-semibold text-brand-dark">
                     {m.score}% match
                   </span>
                   <FixedBadge match={m} />
@@ -1021,8 +1021,8 @@ export default function Matches() {
 /** A filter chip, on or off. */
 function pill(active: boolean): string {
   return active
-    ? 'rounded-full border border-brand bg-brand-light px-3 py-1 text-sm text-brand-dark'
-    : 'rounded-full border border-gray-200 px-3 py-1 text-sm text-gray-600 hover:bg-gray-50';
+    ? 'rounded-sm border border-brand bg-brand-light px-3 py-1 text-sm text-brand-dark'
+    : 'rounded-sm border border-gray-200 px-3 py-1 text-sm text-gray-600 hover:bg-gray-50';
 }
 
 /**
@@ -1083,27 +1083,27 @@ function ConfirmProgress({ match }: { match: AcceptedMatch }) {
 function FixedBadge({ match }: { match: AcceptedMatch }) {
   if (match.matchFixedState === 'confirmed') {
     return (
-      <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-800">
+      <span className="rounded-sm bg-emerald-50 px-2 py-0.5 text-xs text-emerald-800">
         Match fixed
       </span>
     );
   }
   if (match.confirmedByYouAt) {
     return (
-      <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800">
+      <span className="rounded-sm bg-amber-50 px-2 py-0.5 text-xs text-amber-800">
         Waiting on them
       </span>
     );
   }
   if (match.confirmedByThemAt) {
     return (
-      <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800">
+      <span className="rounded-sm bg-amber-50 px-2 py-0.5 text-xs text-amber-800">
         Your turn to confirm
       </span>
     );
   }
   return (
-    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+    <span className="rounded-sm bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
       Neither side has confirmed
     </span>
   );

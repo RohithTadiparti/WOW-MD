@@ -363,7 +363,7 @@ export default function Bookings() {
             <button
               key={t.key || 'all'}
               onClick={() => setStatus(t.key)}
-              className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-sm transition-colors ${
+              className={`shrink-0 whitespace-nowrap rounded-sm border px-3 py-1 text-sm transition-colors ${
                 activeTab
                   ? 'border-brand bg-brand-light text-brand-dark'
                   : 'border-gray-200 text-gray-600 hover:border-gray-300'
@@ -441,7 +441,7 @@ export default function Bookings() {
                       account's wedding view (EZ1-I160). Service/offering already
                       read on the category/extras lines below (EZ1-I167). */}
                   {b.sharedFromPartner && (
-                    <span className="ml-2 rounded-full bg-brand-light px-2 py-0.5 align-middle text-xs font-normal text-brand-dark">
+                    <span className="ml-2 rounded-sm bg-brand-light px-2 py-0.5 align-middle text-xs font-normal text-brand-dark">
                       Booked by {b.clientName || 'your partner'}
                     </span>
                   )}
@@ -465,11 +465,11 @@ export default function Bookings() {
             {/* Current status in plain English, with the payment status beside it. */}
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
+                <span className="rounded-sm bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
                   {balancePaid ? 'Balance paid' : (BOOKING_STATUS_LABEL[b.status] ?? b.status)}
                 </span>
                 {b.paymentStatus && (
-                  <span className="rounded-full bg-brand-soft px-2 py-0.5 text-xs text-brand-strong">
+                  <span className="rounded-sm bg-brand-soft px-2 py-0.5 text-xs text-brand-strong">
                     {paymentStatusLabel(b.paymentStatus, 'buyer')}
                   </span>
                 )}
@@ -865,7 +865,7 @@ function BookingProgress({ status }: { status: string }) {
   if (status === 'cancelled' || status === 'disputed') {
     return (
       <span
-        className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+        className={`rounded-sm px-2 py-0.5 text-xs font-medium ${
           status === 'cancelled' ? 'bg-gray-100 text-gray-600' : 'bg-red-50 text-red-700'
         }`}
       >
@@ -880,7 +880,7 @@ function BookingProgress({ status }: { status: string }) {
       {LIFECYCLE.map((s, i) => (
         <span key={s.key} className="flex items-center gap-1">
           <span
-            className={`rounded-full px-2 py-0.5 ${
+            className={`rounded-sm px-2 py-0.5 ${
               i === at
                 ? 'bg-brand text-white'
                 : i < at
@@ -1122,7 +1122,7 @@ function BookingDetail({
                   </p>
                 </div>
                 {m.status ? (
-                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
+                  <span className="rounded-sm bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
                     {paymentStatusLabel(m.status, 'buyer')}
                   </span>
                 ) : canPay && dueNow === m.milestone ? (
@@ -1312,7 +1312,7 @@ function BuyerAddOns({
                   {a.quantity > 1 && <span className="text-gray-500"> × {a.quantity}</span>}
                 </p>
                 <span
-                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${ADDON_STATUS_STYLE[a.status]}`}
+                  className={`rounded-sm px-2 py-0.5 text-xs font-medium ${ADDON_STATUS_STYLE[a.status]}`}
                 >
                   {ADDON_STATUS_LABEL[a.status]}
                 </span>

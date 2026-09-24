@@ -26,13 +26,6 @@ const CHIP: Record<Accent, string> = {
   critical: 'bg-critical-bg text-critical-fg',
 };
 
-export const GRADIENT: Record<Accent, string> = {
-  brand: 'from-brand-100 to-brand-50',
-  positive: 'from-positive-bg to-surface',
-  caution: 'from-caution-bg to-surface',
-  critical: 'from-critical-bg to-surface',
-};
-
 export const BAR: Record<Accent, string> = {
   brand: 'bg-brand',
   positive: 'bg-positive-fg',
@@ -82,7 +75,7 @@ export function KpiTile({
         // Never a 0. Zero means nothing happened; this means we could not find out.
         <p className="mt-3 text-sm font-medium text-critical-fg">Unavailable</p>
       ) : (
-        <p className="mt-3 text-[1.75rem] font-semibold leading-none tracking-[-0.02em] tabular-nums text-gray-900">
+        <p className="mt-3 font-serif text-[2.25rem] font-normal leading-none tabular-nums text-brand">
           {value}
         </p>
       )}
@@ -91,11 +84,11 @@ export function KpiTile({
     </>
   );
 
-  const frame = `card group relative flex h-full flex-col overflow-hidden bg-gradient-to-br ${GRADIENT[accent]} shadow-card`;
+  const frame = 'card group relative flex h-full flex-col overflow-hidden';
   return to ? (
     <Link
       to={to}
-      className={`${frame} transition duration-200 ease-out hover:-translate-y-0.5 hover:shadow-lifted focus-visible:-translate-y-0.5`}
+      className={`${frame} transition-colors duration-200 ease-out hover:border-brand focus-visible:border-brand`}
     >
       {body}
     </Link>
