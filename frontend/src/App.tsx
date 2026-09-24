@@ -678,16 +678,16 @@ function Layout({ children }: { children: ReactNode }) {
         content column keeps its own scroll position.
       */}
       <div className="mx-auto flex w-full max-w-content gap-8 px-4 sm:px-6 lg:px-8">
-        <aside className="sticky top-0 hidden h-[100dvh] w-[15.5rem] shrink-0 flex-col gap-5 border-r border-gold/35 bg-brand py-5 pr-5 lg:flex">
-          <Wordmark light />
+        <aside className="sticky top-0 hidden h-[100dvh] w-[13rem] shrink-0 flex-col gap-5 border-r border-gold/35 bg-surface/55 py-5 pr-4 lg:flex">
+          <Wordmark />
           <div className="-mr-2 flex-1 overflow-y-auto pr-2">
-            <Sidebar entries={entries} groups={groups} gradient rail />
+            <Sidebar entries={entries} groups={groups} />
           </div>
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header
-            className="sticky top-0 z-20 -mx-4 flex h-16 items-center justify-between gap-3
+            className="portal-header sticky top-0 z-20 -mx-4 flex h-16 items-center justify-between gap-3
               border-b border-brand/12 bg-canvas/90 px-4 backdrop-blur-xl sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0"
           >
             <div className="flex min-w-0 items-center gap-3">
@@ -771,14 +771,12 @@ function Layout({ children }: { children: ReactNode }) {
             initial={reduce ? false : { x: '-100%' }}
             animate={{ x: 0 }}
             transition={{ type: 'spring', stiffness: 380, damping: 36 }}
-            className="absolute inset-y-0 left-0 flex w-[17rem] flex-col gap-5 overflow-y-auto border-r border-gold/35 bg-brand p-5"
+            className="absolute inset-y-0 left-0 flex w-[15rem] flex-col gap-5 overflow-y-auto border-r border-gold/35 bg-surface p-5"
           >
-            <Wordmark light />
+            <Wordmark />
             <Sidebar
               entries={entries}
               groups={groups}
-              gradient
-              rail
               onNavigate={() => setDrawer(false)}
             />
           </motion.div>

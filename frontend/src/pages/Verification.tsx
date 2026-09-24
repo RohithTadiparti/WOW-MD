@@ -5,6 +5,7 @@ import { api, apiMessage } from '../lib/api';
 import { todayIso } from '../lib/dates';
 import { useAuth } from '../store/auth';
 import { Loading } from '../components/ui/Feedback';
+import { useCategoryNames } from '../components/CategoryPicker';
 import {
   CASE_ACTION_LABEL,
   CORRECTABLE_FIELD_KEYS,
@@ -19,7 +20,6 @@ import {
 import {
   BUSINESS_STATUS_LABEL,
   bookingStatusLabel,
-  humanize,
   labelFrom,
   milestoneLabel,
   paymentStatusLabel,
@@ -104,6 +104,7 @@ export interface SupportCase {
     id: string;
     name: string;
     category: string;
+    categories?: string[];
     city: string | null;
     status: string;
     isApproved: boolean;
@@ -1374,6 +1375,7 @@ export function CaseRow({
   canAllocate: boolean;
   onRun: (fn: () => Promise<unknown>, done?: string) => Promise<void>;
 }) {
+  const categoryNames = useCategoryNames();
   const [officerUserId, setOfficerUserId] = useState('');
   const [findings, setFindings] = useState(item.findings ?? '');
   const [amount, setAmount] = useState('');
@@ -1481,7 +1483,12 @@ export function CaseRow({
       {item.business && (
         <div className="rounded-sm bg-gray-50 p-2 text-sm text-gray-700">
           <p className="font-medium text-gray-900">
-            {item.business.name} · <span>{humanize(item.business.category)}</span>
+            {item.business.name} ·{' '}
+            <span>
+              {item.business.categories?.length
+                ? categoryNames(item.business.categories).join(', ')
+                : categoryNames([item.business.category]).join(', ')}
+            </span>
           </p>
           <p className="text-gray-600">
             <span>{labelFrom(BUSINESS_STATUS_LABEL, item.business.status)}</span>
@@ -2125,6 +2132,7 @@ function SubjectDetails({
   applicantType?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const categoryNames = useCategoryNames();
 
   const { data } = useQuery({
     queryKey: ['verification-request', requestId],
@@ -2179,15 +2187,18 @@ function SubjectDetails({
             not. The applicant type is what the queue already knows.
           */}
           <Row label="Category">
-            {text(
-              subject.otherCategory ??
-                subject.category ??
-                (applicantType === 'planner'
-                  ? 'Wedding planner'
-                  : applicantType === 'agent'
-                    ? 'Marriage agency'
-                    : null),
-            )}
+            {Array.isArray(subject.categories) && subject.categories.length > 0
+              ? categoryNames(subject.categories as string[]).join(', ')
+              : subject.category
+                ? categoryNames([String(subject.category)]).join(', ')
+                : text(
+                    subject.otherCategory ??
+                      (applicantType === 'planner'
+                        ? 'Wedding planner'
+                        : applicantType === 'agent'
+                          ? 'Marriage agency'
+                          : null),
+                  )}
           </Row>
           <Row label="City">{text(subject.city)}</Row>
           <Row label="Registered address">

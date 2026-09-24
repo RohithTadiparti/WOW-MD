@@ -416,6 +416,11 @@ export default () => ({
     agentSettlementFee: toNumber(process.env.AGENT_SETTLEMENT_FEE, 25000),
   },
 
+  payout: {
+    supportedBanks: toList(process.env.SUPPORTED_PAYOUT_BANKS),
+    ifscLookupBaseUrl: process.env.IFSC_LOOKUP_BASE_URL || 'https://ifsc.razorpay.com',
+  },
+
   identity: {
     /**
      * UIDAI does not issue credentials to a marketplace directly; verification

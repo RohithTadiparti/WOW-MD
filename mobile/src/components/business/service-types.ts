@@ -17,7 +17,6 @@ export interface Definition {
   allowedPricingModels: string[];
   availabilityModel: string;
   packagesAllowed: boolean;
-  defaultCapacity: number;
 }
 
 export interface Offering {
@@ -41,7 +40,6 @@ export interface VendorService {
   displayName: string | null;
   description: string | null;
   attributes: Answers;
-  concurrentCapacity: number;
   active: boolean;
   /** The server's own answer about whether a client can book this yet. */
   bookable: boolean;

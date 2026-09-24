@@ -117,9 +117,8 @@ export class VendorAvailabilitySlot {
    * Which of the vendor's services this window is for.
    *
    * Null on a window published before the catalog existed, and on a vendor who
-   * has not moved onto it. When it is set, the service's `concurrentCapacity`
-   * is where this slot's capacity comes from — which is how a caterer runs
-   * five teams in one afternoon and a convention hall runs one.
+  * has not moved onto it. When it is set, the slot is associated with that
+  * selected service.
    */
   @Index()
   @Column({ type: 'uuid', nullable: true })

@@ -514,7 +514,7 @@
   /* A page title and its one-line explanation, used at the top of every
    * screen. Written once so the app has a single masthead rhythm. */
   .page-title {
-    @apply plate w-fit border-l-4 border-brand pl-3 font-serif text-[2rem] font-medium leading-[1.1] text-brand-strong sm:text-[2.5rem];
+    @apply plate w-fit border-l-4 border-gold pl-3 font-serif text-[2rem] font-medium leading-[1.1] text-gray-900 sm:text-[2.5rem];
     text-wrap: balance;
   }
 
@@ -630,6 +630,90 @@
   .portal-shell [role='tab'][aria-selected='true'] {
     color: rgb(var(--wow-primary));
     border-color: rgb(var(--wow-primary));
+  }
+
+  /* The rail supports the work; the header and content establish the product. */
+  .portal-header {
+    box-shadow: 0 1px 0 rgb(var(--wow-gold) / 0.16);
+  }
+
+  .portal-shell main {
+    min-width: 0;
+  }
+
+  .portal-shell[data-portal='individual'] main {
+    background: radial-gradient(circle at 100% 0%, rgb(var(--rose-100) / 0.38), transparent 22rem);
+  }
+
+  .portal-shell[data-portal='individual'] .portal-header {
+    background-color: rgb(var(--surface) / 0.88);
+  }
+
+  .portal-shell[data-portal='individual'] main > div > header,
+  .portal-shell[data-portal='individual'] main > header {
+    background: linear-gradient(135deg, rgb(var(--rose-100) / 0.82), rgb(var(--surface) / 0.96));
+    border-color: rgb(var(--rose-200) / 0.75);
+    color: rgb(var(--wow-charcoal));
+  }
+
+  .portal-shell[data-portal='agent'] .card,
+  .portal-shell[data-portal='vendor'] .card {
+    border-color: rgb(var(--border) / 0.9);
+    box-shadow: 0 8px 24px -22px rgb(var(--shadow-color) / 0.6);
+  }
+
+  .portal-shell[data-portal='agent'] .section-title,
+  .portal-shell[data-portal='vendor'] .section-title {
+    font-family: 'Karla', 'Helvetica Neue', ui-sans-serif, sans-serif;
+    font-size: 0.95rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: rgb(var(--wow-charcoal));
+  }
+
+  .portal-shell[data-portal='agent'] .card {
+    border-left: 2px solid rgb(var(--rose-200) / 0.65);
+  }
+
+  .portal-shell[data-portal='vendor'] .card {
+    background: linear-gradient(145deg, rgb(var(--surface-raised)), rgb(var(--wow-ivory) / 0.75));
+  }
+
+  .portal-shell[data-portal='planner'] .portal-header {
+    background: linear-gradient(90deg, rgb(var(--surface) / 0.95), rgb(var(--wow-champagne) / 0.34));
+  }
+
+  .portal-shell[data-portal='planner'] .section-title {
+    color: rgb(var(--wow-charcoal));
+  }
+
+  .portal-shell[data-portal='verification'] .card {
+    border-radius: 0.625rem;
+    box-shadow: 0 3px 14px -14px rgb(var(--shadow-color) / 0.55);
+  }
+
+  .portal-shell[data-portal='verification'] .section-title {
+    font-family: 'Karla', 'Helvetica Neue', ui-sans-serif, sans-serif;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: rgb(var(--wow-charcoal));
+  }
+
+  .portal-shell[data-portal='admin'] .portal-header {
+    background-color: rgb(var(--surface-raised) / 0.94);
+  }
+
+  .portal-shell[data-portal='admin'] .card {
+    border-color: rgb(var(--border) / 0.8);
+    box-shadow: 0 5px 18px -18px rgb(var(--shadow-color) / 0.7);
+  }
+
+  .portal-shell[data-portal='admin'] .section-title {
+    font-family: 'Karla', 'Helvetica Neue', ui-sans-serif, sans-serif;
+    font-size: 0.875rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: rgb(var(--wow-charcoal));
   }
 
   /*

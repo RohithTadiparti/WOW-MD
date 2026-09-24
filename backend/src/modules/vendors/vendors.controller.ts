@@ -25,6 +25,7 @@ import {
   UpdateVendorDto,
   VendorSearchDto,
 } from './dto/vendor.dto';
+import { PayoutBankService } from './payout-bank.service';
 import {
   AvailabilityQueryDto,
   BlockSlotDto,
@@ -45,8 +46,22 @@ export class VendorsController {
     private readonly availability: AvailabilityService,
     private readonly bookings: BookingsService,
     private readonly lifecycle: BusinessLifecycleService,
+    private readonly payoutBanks: PayoutBankService,
   ) {}
 
+  @ApiBearerAuth()
+  @RequirePermissions(Permission.VENDOR_LISTING_MANAGE)
+  @Get('payout/banks')
+  supportedPayoutBanks(@Query('q') query?: string) {
+    return this.payoutBanks.listSupportedBanks(query);
+  }
+
+  @ApiBearerAuth()
+  @RequirePermissions(Permission.VENDOR_LISTING_MANAGE)
+  @Get('payout/ifsc/:ifsc')
+  lookupPayoutIfsc(@Param('ifsc') ifsc: string, @Query('bankName') bankName?: string) {
+    return this.payoutBanks.lookupIfsc(ifsc, bankName);
+  }
   // ------------------------------------------------------------- calendar
   //
   // Availability runs on a rolling six-month window computed from today, so

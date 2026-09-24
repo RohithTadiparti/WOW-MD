@@ -129,7 +129,7 @@ export default function MyBusiness() {
     {
       key: 'catalog',
       label: 'Catalog & Services',
-      hint: 'What you sell, what it costs, and how many you can run at once',
+      hint: 'What you sell and what it costs',
       complete: done('catalog') || done('service'),
       href: '/business-services' as const,
     },

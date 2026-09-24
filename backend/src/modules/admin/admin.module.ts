@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from '../auth/entities/user.entity';
 import { Vendor } from '../vendors/entities/vendor.entity';
+import { VendorReview } from '../vendors/entities/vendor-review.entity';
 import { PlannerProfile } from '../wedding-planners/entities/planner-profile.entity';
 import { VendorService } from '../catalog/entities/vendor-service.entity';
 import { ServiceDefinition } from '../catalog/entities/service-definition.entity';
@@ -46,6 +47,7 @@ import { AdminController } from './admin.controller';
     TypeOrmModule.forFeature([
       User,
       Vendor,
+      VendorReview,
       PlannerProfile,
       VendorService,
       ServiceDefinition,
