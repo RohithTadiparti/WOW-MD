@@ -7,6 +7,8 @@ import { ObjectInfo, PutOptions, StorageDriver, UrlOptions } from './storage.dri
 
 /** A host that names this machine to itself and to nothing else. */
 const LOOPBACK = /^(localhost|127(?:\.\d{1,3}){3}|\[::1\])$/i;
+/** A private address is reachable only on the network where it was configured. */
+const PRIVATE_NETWORK = /^(10(?:\.\d{1,3}){3}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}|192\.168(?:\.\d{1,3}){2})$/i;
 
 /**
  * The file a key names under the local store's root, or a refusal.
@@ -76,9 +78,9 @@ export class LocalStorageDriver implements StorageDriver {
    * `http://localhost:8085`: this machine, to this machine and nothing else. A
    * phone on the same Wi-Fi was handed an upload URL on its own loopback, so
    * every photograph failed at the PUT, and a browser on a second laptop failed
-   * the same way. When the configured base is loopback, the origin the request
-   * actually reached is used instead. A real address in configuration always
-   * wins, and so does a CDN.
+   * the same way. When the configured base is loopback or a private LAN address,
+   * use the origin the browser actually reached instead. Public addresses and
+   * CDNs remain as configured.
    */
   private base(requestOrigin?: string): string {
     if (this.s.cdnBaseUrl) return this.s.cdnBaseUrl;
@@ -86,7 +88,7 @@ export class LocalStorageDriver implements StorageDriver {
     if (!requestOrigin) return configured;
     try {
       const url = new URL(configured);
-      if (!LOOPBACK.test(url.hostname)) return configured;
+      if (!LOOPBACK.test(url.hostname) && !PRIVATE_NETWORK.test(url.hostname)) return configured;
       const origin = new URL(requestOrigin);
       return `${origin.protocol}//${origin.host}${url.pathname.replace(/\/+$/, '')}`;
     } catch {

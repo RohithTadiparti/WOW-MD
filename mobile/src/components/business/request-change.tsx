@@ -31,8 +31,9 @@ export function RequestChange({ vendorId }: { vendorId: string }) {
         subjectId: vendorId,
         title: 'Change request: verified business details',
         description: detail.trim(),
+        requestedFields: ['name', 'registeredAddress', 'contactPhone', 'description', 'portfolio'],
       });
-      setNotice('Sent. Our team will review it and reopen the listing if the change checks out.');
+      setNotice('Sent. An administrator will review the request and grant temporary edit access if approved.');
       setDetail('');
       setOpen(false);
     } catch (err) {

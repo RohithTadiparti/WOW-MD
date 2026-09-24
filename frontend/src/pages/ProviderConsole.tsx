@@ -1153,7 +1153,8 @@ function Field({
  */
 function RequestChange({ vendorId }: { vendorId: string }) {
   const [open, setOpen] = useState(false);
-  const [detail, setDetail] = useState('');
+  const [reason, setReason] = useState('');
+  const [fields, setFields] = useState<string[]>([]);
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -1166,10 +1167,12 @@ function RequestChange({ vendorId }: { vendorId: string }) {
         subjectType: 'vendor',
         subjectId: vendorId,
         title: 'Change request: verified business details',
-        description: detail.trim(),
+        description: reason.trim(),
+        requestedFields: fields,
       });
-      setMsg('Sent. Our team will review it and reopen the listing if the change checks out.');
-      setDetail('');
+      setMsg('Sent. An administrator will review your request and grant edit access if it is approved.');
+      setReason('');
+      setFields([]);
       setOpen(false);
     } catch (err) {
       setMsg(apiMessage(err, 'That could not be sent.'));
@@ -1193,17 +1196,43 @@ function RequestChange({ vendorId }: { vendorId: string }) {
       {msg && <p className="mt-2 rounded-sm bg-brand-light p-2 text-sm text-brand-dark">{msg}</p>}
       {open && (
         <form onSubmit={submit} className="mt-2 space-y-2">
+          <fieldset>
+            <legend className="label">Details to change</legend>
+            <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-gray-700">
+              {[
+                ['name', 'Business name'],
+                ['registeredAddress', 'Business address'],
+                ['contactPhone', 'Contact details'],
+                ['description', 'Business description'],
+                ['portfolio', 'Photos'],
+                ['complianceDocuments', 'Supporting documents'],
+              ].map(([value, label]) => (
+                <label key={value} className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={fields.includes(value)}
+                    onChange={(e) =>
+                      setFields((current) =>
+                        e.target.checked ? [...current, value] : current.filter((field) => field !== value),
+                      )
+                    }
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
           <textarea
             className="input"
             rows={3}
             minLength={10}
             maxLength={2000}
-            placeholder="Which detail needs changing, what it should be, and why."
-            value={detail}
-            onChange={(e) => setDetail(e.target.value)}
+            placeholder="Reason for this change and any information the administrator should review."
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
           />
           <div className="flex gap-2">
-            <button className="btn" disabled={busy || detail.trim().length < 10}>
+            <button className="btn" disabled={busy || reason.trim().length < 10 || fields.length === 0}>
               {busy ? 'Sending…' : 'Send request'}
             </button>
             <button
@@ -1211,7 +1240,8 @@ function RequestChange({ vendorId }: { vendorId: string }) {
               className="btn-outline"
               onClick={() => {
                 setOpen(false);
-                setDetail('');
+                setReason('');
+                setFields([]);
               }}
             >
               Cancel

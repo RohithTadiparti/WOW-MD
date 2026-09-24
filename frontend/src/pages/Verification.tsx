@@ -67,6 +67,8 @@ export interface SupportCase {
   subjectId: string | null;
   title: string;
   description: string;
+  category?: string | null;
+  requestedFields?: string[] | null;
   status: CaseStatus;
   assignedToUserId: string | null;
   findings: string | null;
@@ -1370,6 +1372,7 @@ export function CaseRow({
   // (EZ1-I181). Recorded as the settlement note the vendor reads.
   const [resNotes, setResNotes] = useState('');
   const settled = item.status === 'resolved' || item.status === 'closed';
+  const businessChange = item.subjectType === 'vendor' && item.category === 'business_change';
   // An officer has proposed a resolution and it is waiting on an administrator
   // to approve it or send it back (EZ1-I49) — a different screen from settling a
   // fresh case, so the two do not blur into one another.
@@ -1416,6 +1419,12 @@ export function CaseRow({
       </div>
 
       <p className="text-sm text-gray-700">{item.description}</p>
+
+      {businessChange && item.requestedFields?.length ? (
+        <p className="rounded-sm bg-sky-50 p-2 text-sm text-sky-900">
+          Requested fields: {item.requestedFields.join(', ')}
+        </p>
+      ) : null}
 
       {/* Who raised it and, for a booking/payment case, the booking and parties
           — so an admin can investigate without opening other screens (EZ1-I74). */}
@@ -1629,6 +1638,29 @@ export function CaseRow({
         assignment and what it is waiting on stay visible above; only the
         actions go (EZ1-I218).
       */}
+      {canAllocate && businessChange && item.status === 'open' && (
+        <div className="flex flex-wrap items-end gap-2 rounded-sm bg-sky-50 p-3">
+          <p className="mr-auto text-sm text-sky-900">
+            Review the request, then give the vendor temporary edit access. An officer is assigned after the vendor submits the update.
+          </p>
+          <button
+            className="btn"
+            onClick={() =>
+              onRun(
+                () =>
+                  api.put(`/verification/cases/${item.id}/grant-business-edit-access`, {
+                    fields: item.requestedFields ?? [],
+                  }),
+                'Edit access granted. The vendor has been notified.',
+              )
+            }
+            disabled={!item.requestedFields?.length}
+          >
+            Grant edit access
+          </button>
+        </div>
+      )}
+
       {canAllocate && !settled && !inReview && withSomebodyElse && (
         <p className="text-xs text-gray-500">
           {item.status === 'waiting_for_information'
@@ -1637,7 +1669,7 @@ export function CaseRow({
         </p>
       )}
 
-      {canAllocate && !settled && !inReview && !withSomebodyElse && (
+      {canAllocate && !settled && !inReview && !withSomebodyElse && !businessChange && (
         <div className="flex flex-wrap items-end gap-2">
           <AllocateePicker
             officers={officers}
