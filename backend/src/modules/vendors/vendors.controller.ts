@@ -165,9 +165,13 @@ export class VendorsController {
     @CurrentUser() actor: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Query() q: AvailabilityQueryDto,
+    @Query('userId') userId?: string,
   ) {
+    const scopedActor = actor.role === UserRole.ADMIN
+      ? { ...actor, role: UserRole.VENDOR, userId: userId ?? actor.userId }
+      : actor;
     return this.availability.summary(
-      actor,
+      scopedActor,
       ProviderType.VENDOR,
       id, q.from, q.to,
     );
@@ -245,8 +249,9 @@ export class VendorsController {
   @RequirePermissions(Permission.VENDOR_LISTING_MANAGE)
   @ApiOperation({ summary: 'Your own vendor listings' })
   @Get('me')
-  listOwn(@CurrentUser('userId') userId: string) {
-    return this.vendors.listOwn(userId);
+  listOwn(@CurrentUser() actor: AuthUser, @Query('userId') userId?: string) {
+    const selectedUserId = actor.role === UserRole.ADMIN && userId ? userId : actor.userId;
+    return this.vendors.listOwn(selectedUserId);
   }
 
   // ---------------------------------------------------- business lifecycle

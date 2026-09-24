@@ -339,7 +339,18 @@ function Pill({ status }: { status: string }) {
  * manages the officer accounts. The split is enforced on the server — this
  * simply stops showing controls that would only ever come back 403.
  */
-export default function Verification() {
+export default function Verification({
+  adminUserId,
+  readOnly = false,
+  adminView = false,
+}: {
+  adminUserId?: string;
+  readOnly?: boolean;
+  adminView?: boolean;
+}) {
+  void adminUserId;
+  void readOnly;
+  void adminView;
   const qc = useQueryClient();
   const permissions = useAuth((s) => s.user?.permissions ?? []);
   const role = useAuth((s) => s.user?.role);

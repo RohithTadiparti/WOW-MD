@@ -29,6 +29,7 @@ export default function Sidebar({
   groups,
   onNavigate,
   gradient = false,
+  rail = false,
 }: {
   entries: SidebarEntry[];
   groups: { key: string; title: string | null }[];
@@ -40,12 +41,14 @@ export default function Sidebar({
    * highlight, so this stays a presentation change scoped to one surface.
    */
   gradient?: boolean;
+  /** The admin portal uses the reference's full burgundy enterprise rail. */
+  rail?: boolean;
 }) {
   const { pathname } = useLocation();
   const reduce = useReducedMotion();
 
   return (
-    <nav aria-label="Main" className="flex flex-col gap-6 py-1">
+    <nav aria-label="Main" className="flex flex-col gap-7 py-1">
       {groups.map(({ key, title }) => {
         const items = entries.filter((e) => e.group === key);
         if (items.length === 0) return null;
@@ -53,7 +56,7 @@ export default function Sidebar({
         return (
           <div key={key}>
             {title && (
-              <h2 className="mb-2 w-fit bg-canvas px-3 text-[0.6875rem] font-medium uppercase tracking-[0.09em] text-gray-400">
+              <h2 className={`mb-2 w-fit px-3 text-[0.625rem] font-semibold uppercase tracking-[0.16em] ${rail ? 'text-brand-fg/55' : 'bg-canvas text-gray-400'}`}>
                 {title}
               </h2>
             )}
@@ -68,14 +71,16 @@ export default function Sidebar({
                       to={entry.to}
                       onClick={onNavigate}
                       aria-current={active ? 'page' : undefined}
-                      className={`group relative flex items-center gap-3 rounded-md px-3 py-2 text-sm
+                      className={`group relative flex items-center gap-3 rounded-lg border-l-2 px-3 py-2.5 text-sm
                         transition-colors duration-150 ${
                           active
                             ? gradient
-                              ? 'text-brand-fg'
-                              : 'text-brand-strong'
+                              ? 'border-gold-lit text-brand-fg'
+                              : 'border-brand text-brand-strong'
                             : // The ground colour, so the heart field never runs behind a label.
-                              'bg-canvas text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                              rail
+                                ? 'border-transparent text-brand-fg/80 hover:border-gold-lit/60 hover:bg-brand-fg/10 hover:text-brand-fg'
+                                : 'border-transparent bg-canvas text-gray-600 hover:border-brand/40 hover:bg-brand/8 hover:text-brand-strong'
                         }`}
                     >
                       {/*
@@ -91,8 +96,8 @@ export default function Sidebar({
                           layoutId="nav-active"
                           className={`absolute inset-0 -z-10 rounded-md ${
                             gradient
-                              ? 'bg-gradient-to-r from-brand to-brand-strong shadow-btn'
-                              : 'bg-brand-soft'
+                              ? 'bg-gradient-to-r from-brand to-brand-rose shadow-btn'
+                              : 'bg-brand/10'
                           }`}
                           transition={
                             reduce

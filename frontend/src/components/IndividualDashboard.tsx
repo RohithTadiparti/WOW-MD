@@ -180,7 +180,7 @@ export default function IndividualDashboard() {
       {/* The numbers a couple opens the app for, each opening its own module. */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {canMatch && (
-          <Stat label="New matches" value={matches?.meta?.total ?? 0} to="/matches" />
+          <Stat label="New matches" value={matches?.meta?.total ?? 0} to="/matches" accent="brand" />
         )}
         {canMatch && (
           <Stat
@@ -188,6 +188,7 @@ export default function IndividualDashboard() {
             value={interests?.counts?.received ?? 0}
             to="/interests"
             tone={(interests?.counts?.received ?? 0) > 0 ? 'text-amber-700' : undefined}
+            accent={(interests?.counts?.received ?? 0) > 0 ? 'gold' : 'neutral'}
           />
         )}
         {canChat && (
@@ -196,6 +197,7 @@ export default function IndividualDashboard() {
             value={unreadMessages}
             to="/chat"
             tone={unreadMessages > 0 ? 'text-amber-700' : undefined}
+            accent={unreadMessages > 0 ? 'brand' : 'neutral'}
           />
         )}
         {canMatch && (
@@ -228,6 +230,7 @@ export default function IndividualDashboard() {
               label="Profile completion"
               percent={completion?.percent ?? (profile?.profileCompleted ? 100 : 0)}
               to="/profile"
+              accent="brand"
               hint={
                 completion && completion.percent < 100
                   ? `${completion.missing.length} section${completion.missing.length === 1 ? '' : 's'} left`
@@ -240,6 +243,7 @@ export default function IndividualDashboard() {
               label="My wedding plan"
               percent={planPercent}
               to="/planner"
+              accent="gold"
               hint={planPercent >= 100 ? 'All done' : 'Tasks left to tick off'}
             />
           )}

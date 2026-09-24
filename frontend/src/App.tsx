@@ -6,6 +6,7 @@ import { api, bootstrapSession } from './lib/api';
 import { Permission, PermissionValue, ROLE_LABEL, UserRole, canAny } from './lib/permissions';
 import { navDenied } from './lib/nav-access';
 import { UNREAD_POLL_MS } from './lib/notification-copy';
+import { useAdminPendingCounts } from './lib/admin-pending-counts';
 import type { Icon } from '@phosphor-icons/react';
 import {
   AddressBook,
@@ -80,6 +81,7 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminBookingDetail from './pages/admin/AdminBookingDetail';
 import AdminPaymentDetail from './pages/admin/AdminPaymentDetail';
 import AdminAccountDetail from './pages/admin/AdminAccountDetail';
+import AdminRoleDashboard from './pages/admin/AdminRoleDashboard';
 import AdminProfileDetail from './pages/admin/AdminProfileDetail';
 import AdminBusinessDetail from './pages/admin/AdminBusinessDetail';
 import AdminSupport from './pages/admin/AdminSupport';
@@ -588,6 +590,7 @@ function Layout({ children }: { children: ReactNode }) {
   const permissions = user?.permissions ?? [];
   const isAdmin = user?.role === 'admin';
   const unread = useUnreadCount();
+  const { counts: pendingCounts } = useAdminPendingCounts(isAdmin);
 
   /*
    * For an administrator the left rail *is* the admin portal navigation
@@ -610,7 +613,30 @@ function Layout({ children }: { children: ReactNode }) {
         label: n.label,
         icon: n.icon,
         group: 'main',
-        badge: n.to === '/admin/notifications' ? unread : undefined,
+        badge:
+          n.to === '/admin/users'
+            ? pendingCounts.users
+            : n.to === '/admin/agents'
+              ? pendingCounts.agents
+              : n.to === '/admin/vendors'
+                ? pendingCounts.vendors
+                : n.to === '/admin/officers'
+                  ? pendingCounts.verificationOfficers
+                  : n.to === '/admin/planners'
+                    ? pendingCounts.weddingPlanners
+                    : n.to === '/admin/bookings'
+                      ? pendingCounts.bookings
+                      : n.to === '/admin/payments'
+                        ? pendingCounts.payments
+                        : n.to === '/verification'
+                          ? pendingCounts.verification
+                          : n.to === '/admin/support'
+                            ? pendingCounts.support
+                            : n.to === '/admin/notifications'
+                              ? pendingCounts.notifications
+                              : n.to === '/admin/reports'
+                                ? pendingCounts.reports
+                                : undefined,
       }))
     : NAV.filter(
         (n) =>
@@ -638,17 +664,17 @@ function Layout({ children }: { children: ReactNode }) {
         content column keeps its own scroll position.
       */}
       <div className="mx-auto flex w-full max-w-content gap-8 px-4 sm:px-6 lg:px-8">
-        <aside className="sticky top-0 hidden h-[100dvh] w-[15.5rem] shrink-0 flex-col gap-5 py-5 lg:flex">
-          <Wordmark />
+        <aside className="sticky top-0 hidden h-[100dvh] w-[15.5rem] shrink-0 flex-col gap-5 border-r border-gold/35 bg-brand py-5 pr-5 lg:flex">
+          <Wordmark light />
           <div className="-mr-2 flex-1 overflow-y-auto pr-2">
-            <Sidebar entries={entries} groups={groups} gradient={isAdmin} />
+            <Sidebar entries={entries} groups={groups} gradient rail />
           </div>
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header
             className="sticky top-0 z-20 -mx-4 flex h-16 items-center justify-between gap-3
-              border-b border-gray-200 bg-canvas/80 px-4 backdrop-blur-xl sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0"
+              border-b border-brand/12 bg-canvas/90 px-4 backdrop-blur-xl sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0"
           >
             <div className="flex min-w-0 items-center gap-3">
               <button
@@ -661,7 +687,7 @@ function Layout({ children }: { children: ReactNode }) {
               <span className="lg:hidden">
                 <Wordmark compact />
               </span>
-              <h1 className="hidden truncate text-sm font-medium text-gray-500 lg:block">
+              <h1 className="hidden truncate text-sm font-semibold text-brand-strong lg:block">
                 {entries.find((e) => e.to === loc.pathname)?.label ?? ''}
               </h1>
             </div>
@@ -674,8 +700,8 @@ function Layout({ children }: { children: ReactNode }) {
           </header>
 
           {user && !user.isVerified && (
-            <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-caution-fg/25 bg-caution-bg px-4 py-3 text-sm text-caution-fg">
-              <Warning size={17} className="mt-0.5 shrink-0" aria-hidden />
+            <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-gold/75 bg-surface-sunken px-4 py-3 text-sm text-gray-800">
+              <Warning size={17} className="mt-0.5 shrink-0 text-gold-deep" aria-hidden />
               <p>
                 Please confirm your email address.{' '}
                 <Link className="font-medium underline underline-offset-2" to="/security">
@@ -703,7 +729,7 @@ function Layout({ children }: { children: ReactNode }) {
             initial={reduce ? false : { opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-            className="flex-1 py-6 pb-20"
+            className="flex-1 py-8 pb-20"
           >
             {/*
               Keyed on the path, so leaving a screen that failed clears the
@@ -731,14 +757,14 @@ function Layout({ children }: { children: ReactNode }) {
             initial={reduce ? false : { x: '-100%' }}
             animate={{ x: 0 }}
             transition={{ type: 'spring', stiffness: 380, damping: 36 }}
-            className="absolute inset-y-0 left-0 flex w-[17rem] flex-col gap-5 overflow-y-auto
-              border-r border-gray-200 bg-surface p-5"
+            className="absolute inset-y-0 left-0 flex w-[17rem] flex-col gap-5 overflow-y-auto border-r border-gold/35 bg-brand p-5"
           >
-            <Wordmark />
+            <Wordmark light />
             <Sidebar
               entries={entries}
               groups={groups}
-              gradient={isAdmin}
+              gradient
+              rail
               onNavigate={() => setDrawer(false)}
             />
           </motion.div>
@@ -756,12 +782,12 @@ function Layout({ children }: { children: ReactNode }) {
  * as the first heading on the page. No drawn logo: an invented glyph would be a decoration standing in
  * for an identity the brand has not decided on yet.
  */
-function Wordmark({ compact = false }: { compact?: boolean }) {
+function Wordmark({ compact = false, light = false }: { compact?: boolean; light?: boolean }) {
   return (
     <Link to="/" className="flex items-baseline gap-2 px-3 py-1">
-      <span className="font-serif text-[1.5rem] uppercase tracking-[0.18em] text-brand">WOW</span>
+      <span className={`font-serif text-[1.5rem] uppercase tracking-[0.18em] ${light ? 'text-brand-fg' : 'text-brand'}`}>WOW</span>
       {!compact && (
-        <span className="text-[0.625rem] uppercase tracking-[0.22em] text-gray-500">
+        <span className={`text-[0.625rem] uppercase tracking-[0.22em] ${light ? 'text-brand-fg/65' : 'text-gray-500'}`}>
           World of Weddingz
         </span>
       )}
@@ -1237,14 +1263,19 @@ export default function App() {
           routes render one component keyed by the account id.
         */}
         <Route path="clients/:id" element={<AdminAccountDetail kind="client" />} />
+        <Route path="clients/:clientId" element={<AdminAccountDetail kind="client" />} />
         <Route path="agents" element={<AdminAgents />} />
-        <Route path="agents/:id" element={<AdminAccountDetail kind="agent" />} />
+        <Route path="agents/:id" element={<AdminRoleDashboard role="agent" />} />
+        <Route path="agents/:agentId" element={<AdminRoleDashboard role="agent" />} />
         <Route path="vendors" element={<AdminVendors />} />
-        <Route path="vendors/:id" element={<AdminAccountDetail kind="vendor" />} />
+        <Route path="vendors/:id" element={<AdminRoleDashboard role="vendor" />} />
+        <Route path="vendors/:vendorId" element={<AdminRoleDashboard role="vendor" />} />
         <Route path="officers" element={<AdminOfficers />} />
-        <Route path="officers/:id" element={<AdminAccountDetail kind="officer" />} />
+        <Route path="officers/:id" element={<AdminRoleDashboard role="officer" />} />
+        <Route path="officers/:officerId" element={<AdminRoleDashboard role="officer" />} />
         <Route path="planners" element={<AdminPlanners />} />
-        <Route path="planners/:id" element={<AdminAccountDetail kind="planner" />} />
+        <Route path="planners/:id" element={<AdminRoleDashboard role="planner" />} />
+        <Route path="planners/:plannerId" element={<AdminRoleDashboard role="planner" />} />
         {/* Drill-downs from an account: one profile, one business, in full (EZ1-I185/I188). */}
         <Route path="profiles/:id" element={<AdminProfileDetail />} />
         <Route path="businesses/:id" element={<AdminBusinessDetail />} />

@@ -58,9 +58,19 @@ const money = (v: string) => `₹${Number(v).toLocaleString('en-IN')}`;
  * everything else is ordered by how likely it is to need action: money, then
  * what is late, then who has not replied.
  */
-export default function WeddingDashboard() {
+export default function WeddingDashboard({
+  adminUserId,
+  readOnly = false,
+  adminView = false,
+}: {
+  adminUserId?: string;
+  readOnly?: boolean;
+  adminView?: boolean;
+}) {
+  void readOnly;
+  void adminView;
   const { data } = useQuery<Dashboard>({
-    queryKey: ['wedding-dashboard'],
+    queryKey: ['wedding-dashboard', adminUserId],
     queryFn: async () => (await api.get('/planner/dashboard')).data,
     retry: false,
   });

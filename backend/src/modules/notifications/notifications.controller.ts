@@ -14,6 +14,8 @@ import { NotificationsService } from './notifications.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PushService } from '../../platform/push/push.service';
 import { RegisterDeviceDto, WhatsAppOptInDto } from './dto/channel.dto';
+import { UserRole } from '../../common/enums';
+import { Query } from '@nestjs/common';
 
 @ApiTags('notifications')
 @ApiBearerAuth()
@@ -30,8 +32,9 @@ export class NotificationsController {
   }
 
   @Get('unread-count')
-  unreadCount(@CurrentUser('userId') userId: string) {
-    return this.notifications.unreadCount(userId);
+  unreadCount(@CurrentUser() actor: { userId: string; role: UserRole }, @Query('userId') userId?: string) {
+    const selectedUserId = actor.role === UserRole.ADMIN && userId ? userId : actor.userId;
+    return this.notifications.unreadCount(selectedUserId);
   }
 
   @Put('read-all')

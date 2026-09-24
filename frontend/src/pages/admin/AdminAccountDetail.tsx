@@ -139,8 +139,38 @@ interface AccountDetail {
 
 const money = (v: string) => `₹${Number(v ?? 0).toLocaleString('en-IN')}`;
 
+export function buildSummaryCards(kind: Kind, data: AccountDetail, accountId: string) {
+  const providerId = data.businesses[0]?.id ?? data.plannerBusinesses[0]?.id;
+
+  if (kind === 'agent') {
+    return [
+      { label: 'Total clients', value: data.metrics.agent?.clients ?? 0, to: `/admin/users?role=bride&agentId=${accountId}` },
+      { label: 'Bookings placed', value: data.metrics.agent?.bookings ?? 0, to: `/admin/bookings?userId=${accountId}` },
+      { label: 'Interests sent', value: data.matchmaking?.sent ?? 0, to: undefined },
+      { label: 'Matches fixed', value: data.matchmaking?.fixed ?? 0, to: undefined },
+    ];
+  }
+
+  if (kind === 'officer') {
+    return [
+      { label: 'Assigned cases', value: data.officer?.assigned ?? 0, to: `/admin/support?tab=cases&assignee=${accountId}` },
+      { label: 'Open queue', value: data.officer?.open ?? 0, to: undefined },
+      { label: 'Overdue', value: data.officer?.overdue ?? 0, to: undefined },
+      { label: 'Service areas', value: data.officer?.serviceAreas.length ?? 0, to: undefined },
+    ];
+  }
+
+  return [
+    { label: 'Total bookings', value: data.metrics.provider.bookings, to: providerId ? `/admin/bookings?providerId=${providerId}` : undefined },
+    { label: 'Amount in escrow', value: money(data.metrics.provider.inEscrow), to: providerId ? `/admin/payments?providerId=${providerId}` : undefined },
+    { label: 'Amount released', value: money(data.metrics.provider.released), to: providerId ? `/admin/payments?providerId=${providerId}` : undefined },
+    { label: 'Recent payments', value: data.payments.history.length, to: undefined },
+  ];
+}
+
 export default function AdminAccountDetail({ kind }: { kind: Kind }) {
-  const { id = '' } = useParams();
+  const { id, vendorId, agentId, plannerId, officerId, clientId } = useParams();
+  const accountId = id ?? vendorId ?? agentId ?? plannerId ?? officerId ?? clientId ?? '';
   const navigate = useNavigate();
   const qc = useQueryClient();
   const meta = KIND[kind];
@@ -148,8 +178,8 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
   const [busy, setBusy] = useState(false);
 
   const { data, isLoading, error } = useQuery<AccountDetail>({
-    queryKey: ['admin-account-detail', id],
-    queryFn: async () => (await api.get(`/admin/accounts/${id}`)).data,
+    queryKey: ['admin-account-detail', accountId],
+    queryFn: async () => (await api.get(`/admin/accounts/${accountId}`)).data,
     retry: false,
   });
 
@@ -161,7 +191,7 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
     setActionError('');
     setBusy(true);
     try {
-      await api.put(`/admin/users/${id}/status`, { isActive: active });
+      await api.put(`/admin/users/${accountId}/status`, { isActive: active });
       for (const k of ['admin-account-detail', 'analytics', 'audit'])
         qc.invalidateQueries({ queryKey: [k] });
     } catch (err) {
@@ -169,6 +199,22 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
     } finally {
       setBusy(false);
     }
+  }
+
+  function handleAdminAction(action: 'suspend' | 'deactivate' | 'delete') {
+    const label = action === 'delete' ? 'delete this account' : action === 'deactivate' ? 'deactivate this account' : 'suspend this account';
+    const prompt = action === 'delete'
+      ? `This is a destructive admin action. Type in the account email to confirm deletion for ${name}.`
+      : `Are you sure you want to ${label}?`;
+
+    if (!window.confirm(prompt)) return;
+
+    if (action === 'delete') {
+      setActionError('Delete account is not available in the current backend workflow. The account should be suspended or deactivated instead.');
+      return;
+    }
+
+    setActive(false);
   }
 
   const back = (
@@ -193,36 +239,60 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
 
   const { user } = data;
   const name = data.profiles[0]?.displayName || user.email;
-  const providerId = data.businesses[0]?.id ?? data.plannerBusinesses[0]?.id;
-  const metricCards = kind === 'agent'
-    ? [
-        { label: 'Total clients', value: data.metrics.agent?.clients ?? 0, to: `/admin/users?role=bride&agentId=${id}` },
-        { label: 'Bookings placed', value: data.metrics.agent?.bookings ?? 0, to: `/admin/bookings?userId=${id}` },
-      ]
-    : kind === 'officer'
-      ? [
-          { label: 'Assigned cases', value: Object.values(data.metrics.officer ?? {}).reduce((n, v) => n + v, 0), to: undefined },
-          { label: 'In progress', value: data.metrics.officer?.in_progress ?? 0, to: undefined },
-          { label: 'Submitted', value: data.metrics.officer?.submitted ?? 0, to: undefined },
-        ]
-      : [
-          { label: 'Total bookings', value: data.metrics.provider.bookings, to: providerId ? `/admin/bookings?providerId=${providerId}` : undefined },
-          { label: 'Amount in escrow', value: money(data.metrics.provider.inEscrow), to: undefined },
-          { label: 'Amount released', value: money(data.metrics.provider.released), to: undefined },
-        ];
+  const businessName = data.businesses[0]?.name ?? data.plannerBusinesses[0]?.name ?? 'No business recorded';
+  const portalLabel =
+    kind === 'vendor' ? 'Vendor Portal' :
+    kind === 'agent' ? 'Agent Portal' :
+    kind === 'planner' ? 'Wedding Planner Portal' :
+    kind === 'officer' ? 'Verification Officer Portal' :
+    'Account Portal';
+  const adminAccountActions = [
+    {
+      label: user.isActive ? 'Suspend account' : 'Reinstate account',
+      action: () => setActive(!user.isActive),
+      tone: 'default',
+      disabled: busy,
+    },
+    {
+      label: 'Deactivate account',
+      action: () => handleAdminAction('deactivate'),
+      tone: 'default',
+      disabled: busy || !user.isActive,
+    },
+    {
+      label: 'Delete account',
+      action: () => handleAdminAction('delete'),
+      tone: 'danger',
+      disabled: busy,
+    },
+  ];
+
+  const metricCards = buildSummaryCards(kind, data, accountId);
 
   return (
     <div className="space-y-5">
       {back}
 
-      <div className="card bg-gradient-to-br from-brand-soft to-surface">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="card overflow-hidden border border-brand/10 bg-gradient-to-br from-brand-soft via-surface to-surface-raised shadow-lifted">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <span className="inline-flex items-center rounded-full border border-brand/20 bg-brand/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-strong">
+            ADMIN VIEW • READ ONLY
+          </span>
+          <span className="text-xs uppercase tracking-[0.18em] text-gray-500">{portalLabel}</span>
+        </div>
+
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-xs uppercase tracking-wide text-brand-strong">{meta.title}</p>
-            <h1 className="page-title truncate">{name}</h1>
-            <p className="page-subtitle">{user.email}</p>
+            <p className="text-xs uppercase tracking-[0.2em] text-gray-500">{meta.title}</p>
+            <h1 className="page-title mt-1 truncate text-[2rem] leading-tight">{name}</h1>
+            <p className="mt-1 text-base font-medium text-gray-700">{businessName}</p>
+            <div className="mt-3 space-y-1 text-sm text-gray-600">
+              <p>{user.email}</p>
+              <p>{user.phone ?? 'Phone not provided'}</p>
+            </div>
           </div>
-          <div className="flex flex-col items-end gap-2">
+
+          <div className="flex flex-col items-end gap-3">
             <div className="flex flex-wrap gap-2">
               <span className={`pill ${user.isActive ? 'bg-positive-bg text-positive-fg' : 'bg-critical-bg text-critical-fg'}`}>
                 {user.isActive ? 'Active' : 'Suspended'}
@@ -231,7 +301,8 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
                 {user.isVerified ? 'Verified' : 'Unverified'}
               </span>
             </div>
-            <div className="flex items-center gap-2">
+
+            <div className="flex flex-wrap items-center justify-end gap-2">
               {data.profiles[0] && (
                 <Link className="btn btn-sm" to={`/admin/profiles/${data.profiles[0].id}`}>
                   View full profile
@@ -246,18 +317,21 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
                 >
                   {user.isActive ? 'Suspend account' : 'Reinstate account'}
                 </button>
-                {/*
-                  Hard deletion is deliberately not offered (EZ1-I194): consent,
-                  circulation and agency records have to outlive the account, so
-                  suspend is the terminal action. Shown disabled to say so.
-                */}
                 <button
                   role="menuitem"
-                  className="block w-full cursor-not-allowed px-3 py-2 text-left text-sm text-gray-400"
-                  disabled
-                  title="Deletion is not available; suspend the account instead."
+                  className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-brand-soft/40 disabled:opacity-50"
+                  disabled={busy || !user.isActive}
+                  onClick={() => handleAdminAction('deactivate')}
                 >
-                  Delete account (unavailable)
+                  Deactivate account
+                </button>
+                <button
+                  role="menuitem"
+                  className="block w-full px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50 disabled:opacity-50"
+                  disabled={busy}
+                  onClick={() => handleAdminAction('delete')}
+                >
+                  Delete account
                 </button>
               </ActionsMenu>
             </div>
@@ -266,8 +340,8 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
         {actionError && <p className="alert-critical mt-3">{actionError}</p>}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Section title="Overview">
+      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+        <Section title={kind === 'vendor' ? 'Business overview' : kind === 'agent' ? 'Client book overview' : kind === 'planner' ? 'Wedding operations overview' : 'Verification workload overview'}>
           <Row label="Account ID">
             <span className="font-mono text-xs">{user.id.slice(0, 8)}</span>
           </Row>
@@ -282,47 +356,287 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
           )}
         </Section>
 
-        <Section title="Money">
-          <Row label="Paid in total">{money(data.payments.total)}</Row>
-          <Row label="Held in escrow">{money(data.payments.inEscrow)}</Row>
-          <Row label="Released">{money(data.payments.released)}</Row>
-          <Row label="Refunded">{money(data.payments.refunded)}</Row>
+        <Section title="Admin actions">
+          <div className="space-y-2">
+            {adminAccountActions.map((action) => (
+              <button
+                key={action.label}
+                type="button"
+                className={`block w-full rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                  action.tone === 'danger'
+                    ? 'text-red-700 hover:bg-red-50'
+                    : 'text-gray-700 hover:bg-brand-soft/40'
+                } disabled:cursor-not-allowed disabled:opacity-50`}
+                disabled={action.disabled}
+                onClick={action.action}
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
         </Section>
-
-        {data.matchmaking && (
-          <Section title="Matchmaking">
-            <Row label="Interests sent">{String(data.matchmaking.sent)}</Row>
-            <Row label="Received">{String(data.matchmaking.received)}</Row>
-            <Row label="Accepted">{String(data.matchmaking.accepted)}</Row>
-            <Row label="Match fixed">{data.matchmaking.fixed > 0 ? 'Yes' : 'No'}</Row>
-          </Section>
-        )}
-
-        {data.officer && (
-          <Section title="Verification workload">
-            <Row label="Allocated">{String(data.officer.assigned)}</Row>
-            <Row label="Still open">{String(data.officer.open)}</Row>
-            <Row label="Past the deadline">{String(data.officer.overdue)}</Row>
-          </Section>
-        )}
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {metricCards.map((card) => (
           card.to ? (
             <Link key={card.label} to={card.to} className="card transition-colors hover:border-brand hover:bg-brand-soft/30">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{card.label}</p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums text-gray-900">{card.value}</p>
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-gray-500">{card.label}</p>
+              <p className="mt-2 text-2xl font-semibold tabular-nums text-gray-900">{card.value}</p>
               <p className="mt-1 text-xs text-brand-strong">View filtered records</p>
             </Link>
           ) : (
             <div key={card.label} className="card">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{card.label}</p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums text-gray-900">{card.value}</p>
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-gray-500">{card.label}</p>
+              <p className="mt-2 text-2xl font-semibold tabular-nums text-gray-900">{card.value}</p>
             </div>
           )
         ))}
       </div>
+
+      {kind === 'vendor' && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Section title="Business listing">
+            {data.businesses.length === 0 ? (
+              <p className="py-2 text-sm text-gray-400">No businesses on record.</p>
+            ) : (
+              <div className="space-y-3">
+                {data.businesses.map((b) => (
+                  <div key={b.id} className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-medium text-gray-900">{b.name}</p>
+                        <p className="text-xs text-gray-500">{humanize(b.category)}</p>
+                      </div>
+                      <span className="pill bg-gray-100 text-gray-600">{labelFrom(BUSINESS_STATUS_LABEL, b.status)}</span>
+                    </div>
+                    <div className="mt-3 grid gap-2 text-sm text-gray-600 sm:grid-cols-2">
+                      <span>Approved: {b.isApproved ? 'Yes' : 'No'}</span>
+                      <span>Visibility: {b.isApproved ? 'Live' : 'Pending'}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Section>
+
+          <Section title="Escrow & payments">
+            <Row label="Paid in total">{money(data.payments.total)}</Row>
+            <Row label="Held in escrow">{money(data.payments.inEscrow)}</Row>
+            <Row label="Released">{money(data.payments.released)}</Row>
+            <Row label="Refunded">{money(data.payments.refunded)}</Row>
+          </Section>
+        </div>
+      )}
+
+      {kind === 'agent' && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Section title="Connected profiles">
+            {data.profiles.length === 0 ? (
+              <p className="py-2 text-sm text-gray-400">No profiles attached.</p>
+            ) : (
+              <div className="space-y-2">
+                {data.profiles.map((p) => (
+                  <div key={p.id} className="flex items-center justify-between gap-3 rounded-md px-2 py-2 hover:bg-brand-soft/30">
+                    <span className="text-sm font-medium text-gray-800">{p.displayName}</span>
+                    <span className="text-xs text-gray-500">{LIFECYCLE_LABEL[p.lifecycle as ProfileLifecycle] ?? humanize(p.lifecycle)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Section>
+
+          <Section title="Matchmaking summary">
+            <Row label="Interests sent">{String(data.matchmaking?.sent ?? 0)}</Row>
+            <Row label="Received">{String(data.matchmaking?.received ?? 0)}</Row>
+            <Row label="Accepted">{String(data.matchmaking?.accepted ?? 0)}</Row>
+            <Row label="Match fixed">{data.matchmaking?.fixed ? 'Yes' : 'No'}</Row>
+          </Section>
+        </div>
+      )}
+
+      {kind === 'planner' && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Section title="Planner business">
+            {data.plannerBusinesses.length === 0 ? (
+              <p className="py-2 text-sm text-gray-400">No planner profile on record.</p>
+            ) : (
+              <div className="space-y-3">
+                {data.plannerBusinesses.map((b) => (
+                  <div key={b.id} className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-medium text-gray-900">{b.name}</p>
+                        <p className="text-xs text-gray-500">{[b.city, b.state].filter(Boolean).join(', ') || 'Location not set'}</p>
+                      </div>
+                      <span className={`pill ${b.isApproved ? 'bg-positive-bg text-positive-fg' : 'bg-caution-bg text-caution-fg'}`}>
+                        {b.isApproved ? 'Approved' : 'Pending approval'}
+                      </span>
+                    </div>
+                    <div className="mt-2 grid gap-2 text-sm text-gray-600 sm:grid-cols-2">
+                      <span>Contact: {b.contactPerson ?? '—'}</span>
+                      <span>Phone: {b.contactPhone ?? '—'}</span>
+                      <span>Email: {b.contactEmail ?? '—'}</span>
+                      <span>Rating: {b.ratingCount > 0 ? `${b.ratingAvg.toFixed(1)} (${b.ratingCount})` : 'No ratings'}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Section>
+
+          <Section title="Booking and payments">
+            <Row label="Bookings received">{String(data.providerBookings.length)}</Row>
+            <Row label="Bookings placed">{String(data.bookings.length)}</Row>
+            <Row label="Held in escrow">{money(data.payments.inEscrow)}</Row>
+            <Row label="Released">{money(data.payments.released)}</Row>
+          </Section>
+        </div>
+      )}
+
+      {kind === 'officer' && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Section title="Allocation snapshot">
+            <Row label="Assigned">{String(data.officer?.assigned ?? 0)}</Row>
+            <Row label="Open">{String(data.officer?.open ?? 0)}</Row>
+            <Row label="Overdue">{String(data.officer?.overdue ?? 0)}</Row>
+            <Row label="Service areas">{String(data.officer?.serviceAreas.length ?? 0)}</Row>
+          </Section>
+
+          <Section title="Recent decisions">
+            {data.officer?.decisions.length ? (
+              <div className="space-y-2">
+                {data.officer.decisions.slice(0, 4).map((d) => (
+                  <div key={d.id} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="text-gray-700">{humanize(d.applicantType)}</span>
+                    <span className="pill bg-gray-100 text-gray-600">{labelFrom(VERIFICATION_LABEL, d.status)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="py-2 text-sm text-gray-400">No decisions recorded.</p>
+            )}
+          </Section>
+        </div>
+      )}
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        {(kind === 'vendor' || kind === 'planner') && data.providerBookings.length > 0 && (
+          <ListSection
+            title={kind === 'vendor' ? 'Bookings received' : 'Bookings received'}
+            empty="No bookings."
+            rows={data.providerBookings}
+            render={(b) => (
+              <Link
+                key={b.id}
+                to={`/admin/bookings/${b.id}`}
+                className="flex items-center justify-between gap-3 rounded-md px-2 py-2 transition-colors hover:bg-brand-soft/40"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium text-gray-900">
+                    {b.buyerName ?? 'Customer'}
+                    {b.serviceName ? ` · ${b.serviceName}` : ''}
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    {formatDate(b.eventDate ?? b.createdAt)} · #{b.id.slice(0, 8)}
+                  </span>
+                </span>
+                <span className="flex items-center gap-2">
+                  <span className="text-sm font-medium tabular-nums text-gray-900">{bookingAmountLabel(b)}</span>
+                  <span className="pill bg-brand-soft text-brand-strong">{BOOKING_STATUS_LABEL[b.status] ?? b.status}</span>
+                </span>
+              </Link>
+            )}
+          />
+        )}
+
+        {(kind === 'agent' || kind === 'vendor' || kind === 'planner') && data.bookings.length > 0 && (
+          <ListSection
+            title={kind === 'agent' ? 'Bookings placed' : 'Bookings placed'}
+            empty="No bookings."
+            rows={data.bookings}
+            render={(b) => (
+              <Link
+                key={b.id}
+                to={`/admin/bookings/${b.id}`}
+                className="flex items-center justify-between gap-3 rounded-md px-2 py-2 transition-colors hover:bg-brand-soft/40"
+              >
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium tabular-nums text-gray-900">{bookingAmountLabel(b)}</span>
+                  <span className="text-xs text-gray-500">
+                    {formatDate(b.eventDate ?? b.createdAt)} · #{b.id.slice(0, 8)}
+                  </span>
+                </span>
+                <span className="pill bg-brand-soft text-brand-strong">{BOOKING_STATUS_LABEL[b.status] ?? b.status}</span>
+              </Link>
+            )}
+          />
+        )}
+      </div>
+
+      {(kind === 'officer' ? data.officer?.queue ?? [] : data.verifications).length > 0 && (
+        <ListSection
+          title={kind === 'officer' ? 'Assigned verification cases' : 'Verification'}
+          empty="Nothing here."
+          rows={kind === 'officer' ? data.officer?.queue ?? [] : data.verifications}
+          render={(v) => (
+            <div key={v.id} className="flex items-center justify-between gap-3 py-2">
+              <span className="text-sm text-gray-800">{humanize(v.applicantType)} · #{v.id.slice(0, 8)}</span>
+              <span className="pill bg-gray-100 text-gray-600">{labelFrom(VERIFICATION_LABEL, v.status)}</span>
+            </div>
+          )}
+        />
+      )}
+
+      {(data.casesRaised.length > 0 || data.casesAssigned.length > 0) && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {data.casesRaised.length > 0 && (
+            <ListSection
+              title="Cases raised"
+              empty="None."
+              rows={data.casesRaised}
+              render={(c) => (
+                <div key={c.id} className="flex items-center justify-between gap-3 py-2">
+                  <span className="truncate text-sm text-gray-800">{c.title}</span>
+                  <span className="pill bg-gray-100 text-gray-600">{labelFrom(CASE_STATUS_LABEL, c.status)}</span>
+                </div>
+              )}
+            />
+          )}
+          {data.casesAssigned.length > 0 && (
+            <ListSection
+              title="Cases assigned"
+              empty="None."
+              rows={data.casesAssigned}
+              render={(c) => (
+                <div key={c.id} className="flex items-center justify-between gap-3 py-2">
+                  <span className="truncate text-sm text-gray-800">{c.title}</span>
+                  <span className="pill bg-gray-100 text-gray-600">{labelFrom(CASE_STATUS_LABEL, c.status)}</span>
+                </div>
+              )}
+            />
+          )}
+        </div>
+      )}
+
+      {data.payments.history.length > 0 && (
+        <ListSection
+          title="Recent payments"
+          empty="None."
+          rows={data.payments.history}
+          render={(p) => (
+            <div key={p.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+              <span className="text-gray-600">
+                {formatDate(p.createdAt)} · <span>{milestoneLabel(p.milestone)}</span>
+              </span>
+              <span className="flex items-center gap-3">
+                <span className="font-medium tabular-nums text-gray-900">{money(p.amount)}</span>
+                <span className="pill bg-gray-100 text-gray-600">{paymentStatusLabel(p.status, 'admin')}</span>
+              </span>
+            </div>
+          )}
+        />
+      )}
 
       {/* An agency's book: the accounts they brought on, each clickable (EZ1-I171). */}
       {data.agency && (

@@ -37,7 +37,7 @@ export function RecentNotifications({ rows }: { rows: Notification[] }) {
             <li
               key={n.id}
               className={`flex items-start justify-between gap-3 px-4 py-3 ${
-                !n.isRead ? 'bg-brand-light/30' : ''
+                !n.isRead ? 'bg-brand/10' : ''
               }`}
             >
               <div className="min-w-0">
@@ -64,20 +64,29 @@ export function Stat({
   value,
   to,
   tone,
+  accent = 'neutral',
 }: {
   label: string;
   value: ReactNode;
   to: string;
   tone?: string;
+  accent?: 'neutral' | 'brand' | 'gold';
 }) {
+  const accentClass =
+    accent === 'brand'
+      ? 'border-brand/40 border-t-2 border-t-brand'
+      : accent === 'gold'
+        ? 'border-gold/60 border-t-2 border-t-gold-lit'
+        : 'border-gray-200';
+
   return (
     <Link
       to={to}
-      className="group rounded-lg border border-gray-200 bg-surface p-4 transition-[border-color,box-shadow] duration-200 hover:border-gray-300 hover:shadow-card"
+      className={`group rounded-lg bg-surface-raised p-4 transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-brand hover:shadow-lifted ${accentClass}`}
     >
-      <p className="truncate text-[0.8125rem] text-gray-500">{label}</p>
+      <p className="truncate text-[0.8125rem] font-medium text-brand-strong/75">{label}</p>
       <p
-        className={`mt-1.5 font-mono text-[1.75rem] font-medium leading-none tracking-[-0.02em] ${tone ?? 'text-gray-900'}`}
+        className={`mt-1.5 font-mono text-[1.75rem] font-semibold leading-none tracking-[-0.02em] ${tone ?? 'text-brand-strong'}`}
       >
         {value}
       </p>
@@ -90,25 +99,30 @@ export function Progress({
   percent,
   to,
   hint,
+  accent = 'brand',
 }: {
   label: string;
   percent: number;
   to: string;
   hint: string;
+  accent?: 'brand' | 'gold';
 }) {
   const pct = Math.max(0, Math.min(100, Math.round(percent)));
+  const progressColor = accent === 'gold' ? 'bg-gold-lit' : 'bg-brand';
+  const borderColor = accent === 'gold' ? 'border-gold/70 border-t-gold-lit' : 'border-brand/35 border-t-brand';
+
   return (
     <Link
       to={to}
-      className="group rounded-lg border border-gray-200 bg-surface p-4 transition-[border-color,box-shadow] duration-200 hover:border-gray-300 hover:shadow-card"
+      className={`group rounded-lg border border-t-2 bg-surface-raised p-4 transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-gold-deep hover:shadow-lifted ${borderColor}`}
     >
       <div className="flex items-baseline justify-between">
-        <p className="text-[0.8125rem] text-gray-500">{label}</p>
-        <p className="font-mono text-lg font-medium leading-none text-gray-900">{pct}%</p>
+        <p className="text-[0.8125rem] font-medium text-brand-strong/75">{label}</p>
+        <p className="font-mono text-lg font-semibold leading-none text-brand-strong">{pct}%</p>
       </div>
       <div className="mt-2 h-1.5 w-full rounded-sm bg-gray-100">
         <div
-          className={`h-1.5 rounded-sm ${pct >= 100 ? 'bg-emerald-500' : 'bg-brand'}`}
+          className={`h-1.5 rounded-sm ${progressColor}`}
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -121,7 +135,7 @@ export function QuickAction({ to, label }: { to: string; label: string }) {
   return (
     <Link
       to={to}
-      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-surface px-4 py-2 text-sm font-medium text-gray-800 transition-colors hover:border-gray-300 hover:bg-gray-50"
+      className="inline-flex items-center gap-1.5 rounded-md border border-brand/45 bg-surface-raised px-4 py-2 text-sm font-medium text-brand-strong transition-[border-color,background-color,transform] hover:-translate-y-px hover:border-brand hover:bg-brand/10"
     >
       {label}
       <ArrowRight size={15} aria-hidden className="text-gray-400" />

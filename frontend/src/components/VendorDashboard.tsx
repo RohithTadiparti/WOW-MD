@@ -78,9 +78,20 @@ const TAB_FOR = {
 /** In-flight: everything that is neither finished nor called off. */
 const CLOSED = ['completed', 'cancelled', 'disputed'];
 
-export default function VendorDashboard() {
+export default function VendorDashboard({
+  adminUserId,
+  readOnly = false,
+  adminView = false,
+}: {
+  adminUserId?: string;
+  readOnly?: boolean;
+  adminView?: boolean;
+}) {
+  void readOnly;
+  void adminView;
   const profile = useAuth((s) => s.user);
   const { active, businesses, activeId } = useBusinesses();
+  const adminScope = adminUserId ? { userId: adminUserId, role: 'vendor' } : undefined;
 
   // Poll while open and refetch when the tab regains focus, so a new request or
   // a released payout appears without a manual refresh (EZ1-I147).
@@ -92,43 +103,44 @@ export default function VendorDashboard() {
   };
 
   const counts = useQuery({
-    queryKey: ['incoming-counts'],
-    queryFn: async () => (await api.get('/bookings/incoming/counts')).data as Record<string, number>,
+    queryKey: ['incoming-counts', adminUserId],
+    queryFn: async () => (await api.get('/bookings/incoming/counts', { params: adminScope })).data as Record<string, number>,
     ...live,
   });
 
   const earnings = useQuery({
-    queryKey: ['earnings'],
-    queryFn: async () => (await api.get('/bookings/earnings')).data as Earnings,
+    queryKey: ['earnings', adminUserId],
+    queryFn: async () => (await api.get('/bookings/earnings', { params: adminScope })).data as Earnings,
     ...live,
   });
 
   const incoming = useQuery({
-    queryKey: ['incoming-bookings'],
+    queryKey: ['incoming-bookings', adminUserId],
     queryFn: async () =>
-      (await api.get('/bookings/incoming', { params: { limit: 100 } })).data as {
+      (await api.get('/bookings/incoming', { params: { limit: 100, ...adminScope } })).data as {
         data: IncomingBooking[];
       },
     ...live,
   });
 
   const unread = useQuery({
-    queryKey: ['unread-count'],
-    queryFn: async () => (await api.get('/notifications/unread-count')).data as { unread: number },
+    queryKey: ['unread-count', adminUserId],
+    queryFn: async () => (await api.get('/notifications/unread-count', { params: adminScope })).data as { unread: number },
     ...live,
   });
 
   const vendorRows = useQuery({
-    queryKey: ['vendor-me'],
-    queryFn: async () => (await api.get('/vendors/me')).data as VendorRow[],
+    queryKey: ['vendor-me', adminUserId],
+    queryFn: async () => (await api.get('/vendors/me', { params: adminScope })).data as VendorRow[],
     retry: false,
   });
 
+  const selectedActiveId = activeId ?? vendorRows.data?.[0]?.id;
   const slots = useQuery({
-    queryKey: ['availability-summary', activeId],
+    queryKey: ['availability-summary', selectedActiveId, adminUserId],
     queryFn: async () =>
-      (await api.get(`/vendors/${activeId}/availability/summary`)).data as { openSlots: number },
-    enabled: Boolean(activeId),
+      (await api.get(`/vendors/${selectedActiveId}/availability/summary`, { params: adminScope })).data as { openSlots: number },
+    enabled: Boolean(selectedActiveId),
     refetchOnMount: 'always',
     retry: false,
   });
