@@ -1,3 +1,4 @@
+import { IntakeBiodataDto } from './intake-biodata.dto';
 import { IsNotFutureDate } from '../../../common/decorators/not-future.decorator';
 import { IsAdultDate } from '../../../common/decorators/adult-date.decorator';
 import { ApiProperty, ApiPropertyOptional, OmitType, PartialType } from '@nestjs/swagger';
@@ -102,6 +103,16 @@ export class IntakeConsentDto {
  * needed if and when they are invited to claim the profile.
  */
 export class CreateManagedProfileDto {
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => IntakeBiodataDto)
+  biodata?: IntakeBiodataDto;
+
+  @IsOptional()
+  @IsUploadedUrl()
+  @MaxLength(2048)
+  biodataDocumentUrl?: string;
+
   /**
    * How you are related to them, for a family member stewarding a relative.
    *
@@ -120,13 +131,14 @@ export class CreateManagedProfileDto {
   @MaxLength(120)
   displayName: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: '+919876543210',
-    description: 'The primary way to reach this family. Required.',
+    description: 'The primary way to reach this family.',
   })
+  @IsOptional()
   @Transform(normaliseMobile)
   @Matches(MOBILE_PATTERN, { message: MOBILE_MESSAGE })
-  contactPhone: string;
+  contactPhone?: string;
 
   @ApiPropertyOptional({
     example: 'priya@example.com',

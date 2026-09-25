@@ -178,6 +178,7 @@ export default function Profile() {
       }
       await api.put('/users/me/profile', payload);
       await qc.invalidateQueries({ queryKey: ['me'] });
+      await qc.invalidateQueries({ queryKey: ['viewable-profile'] });
       setEditing(false);
       setNotice('Saved. This is what we hold for you now.');
     } catch (err) {
@@ -433,8 +434,8 @@ export default function Profile() {
                   ))}
                 </select>
                 <span className="mt-1 block text-xs text-gray-500">
-                  Public is visible under the normal rules; the private options stay restricted until
-                  the matching and interest conditions are met.
+                  Public shares your full profile. Matches only unlocks it after interest is accepted.
+                  Hidden until matched requires a fixed, confirmed match. All three can appear in Matches.
                 </span>
               </label>
             )}

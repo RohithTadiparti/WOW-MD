@@ -23,13 +23,15 @@ import {
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import {
   InterestStatus,
+  MatchFixedState,
   MaritalStatus,
   ProfileLifecycle,
   ProfileVisibility,
   UserRole,
 } from '../../common/enums';
 import { Interest } from '../matchmaking/entities/interest.entity';
-import { ageBand } from '../users/dto/public-profile.dto';
+import { hasFullProfileAccess } from '../users/profile-visibility';
+import { ageBand, toCardFacts } from '../users/dto/public-profile.dto';
 
 /** The most brothers and sisters a profile may list (EZ1-I102). */
 export const SIBLING_LIMIT = 10;
@@ -558,23 +560,19 @@ export class ProfileDetailsService {
    * mother tongue, education and occupation — the details a family reads to
    * decide, without the native place, which stays behind a fixed match.
    */
-  async basicCard(profileId: string): Promise<{
-    religion: string | null;
-    caste: string | null;
-    subCaste: string | null;
-    motherTongue: string | null;
-    highestQualification: string | null;
-    occupationStatus: string | null;
-  } | null> {
+  async basicCard(profileId: string) {
     const row = await this.details.findOne({ where: { profileId } });
     if (!row) return null;
+    const card = toCardFacts(row);
     return {
-      religion: row.religion,
-      caste: row.caste,
-      subCaste: row.subCaste,
-      motherTongue: row.motherTongue,
-      highestQualification: row.highestQualification,
-      occupationStatus: row.occupationStatus,
+      religion: card.religion,
+      caste: card.caste,
+      subCaste: row.subCaste ?? null,
+      motherTongue: card.motherTongue,
+      highestQualification: card.highestQualification,
+      occupationStatus: card.occupationStatus,
+      profession: card.profession,
+      heightCm: row.heightCm ?? null,
     };
   }
 
@@ -718,6 +716,29 @@ export class ProfileDetailsService {
    * a profile id guessable into a biodata; anything tighter would list people
    * you are not allowed to look at.
    */
+  /** Shared visibility decision for profile APIs and stored profile media. */
+  async canSeeFull(actor: AuthUser | undefined, profile: Profile): Promise<boolean> {
+    // A steward needs the complete record to edit and administer a client, via
+    // `findFull`. Viewing that client from Matches or Interests is different:
+    // it is a viewer relationship and must honour the client's visibility.
+    // Only the subject who owns the profile (and staff) bypasses this gate.
+    if (actor && (actor.role === UserRole.ADMIN || profile.userId === actor.userId)) return true;
+    if (hasFullProfileAccess(profile.visibility)) return true;
+    if (!actor) return false;
+    const mine = await this.profiles.find({
+      where: [{ userId: actor.userId }, { managedByUserId: actor.userId }],
+    });
+    const ids = mine.map(p => p.id).filter(id => id !== profile.id);
+    if (!ids.length) return false;
+    const relationship = profile.visibility === ProfileVisibility.MATCHES_ONLY
+      ? [{ status: InterestStatus.ACCEPTED }, { matchFixedState: MatchFixedState.CONFIRMED }]
+      : [{ matchFixedState: MatchFixedState.CONFIRMED }];
+    return Boolean(await this.interests.findOne({ where: relationship.flatMap(state => [
+      { fromProfileId: In(ids), toProfileId: profile.id, ...state },
+      { fromProfileId: profile.id, toProfileId: In(ids), ...state },
+    ]) }));
+  }
+
   async findViewable(actor: AuthUser, profileId: string) {
     const profile = await this.load(profileId);
 
@@ -726,106 +747,33 @@ export class ProfileDetailsService {
       profile.managedByUserId === actor.userId ||
       actor.role === UserRole.ADMIN;
 
-    // Whether the caller may see the full biodata, or only the basic card.
-    let basicOnly = false;
-
-    if (!controlsIt) {
-      if (profile.lifecycle !== ProfileLifecycle.ACTIVE) {
-        throw new NotFoundException('That profile is not available');
-      }
-      // Explicitly PRIVATE stays fully shut, before and after any interest.
-      if (profile.visibility === ProfileVisibility.PRIVATE) {
-        throw new ForbiddenException('That profile is private');
-      }
-
-      // MATCHES_ONLY means exactly that: an accepted interest between the two
-      // sides, in either direction.
-      if (profile.visibility === ProfileVisibility.MATCHES_ONLY) {
-        const mine = await this.profiles.find({
-          where: [{ userId: actor.userId }, { managedByUserId: actor.userId }],
-        });
-        const ids = mine.map((p) => p.id);
-        const matched = ids.length
-          ? await this.interests.findOne({
-              where: [
-                { fromProfileId: In(ids), toProfileId: profileId, status: InterestStatus.ACCEPTED },
-                { fromProfileId: profileId, toProfileId: In(ids), status: InterestStatus.ACCEPTED },
-              ],
-            })
-          : null;
-        // Before mutual acceptance the counterpart is not shut out entirely —
-        // they see a basic card (name, age band, gender, city, one photo) so
-        // they can decide whether to express interest at all. The private
-        // biodata — contact, family, horoscope, the full gallery — stays behind
-        // the mutual accept. A profile marked PRIVATE (above) is exempt.
-        if (!matched) basicOnly = true;
-      }
+    const basicOnly = !(await this.canSeeFull(actor, profile));
+    if (!controlsIt && profile.lifecycle !== ProfileLifecycle.ACTIVE && basicOnly) {
+      throw new NotFoundException('That profile is not available');
     }
-
     if (basicOnly) {
-      // The basic biodata a family reads before deciding to send interest —
-      // community, education and occupation — travels with the basic card, while
-      // family, horoscope, marital history and contact stay behind the mutual
-      // accept (EZ1-I37). Only these fields are copied, so nothing private leaks.
-      const detail = await this.details.findOne({ where: { profileId } });
-      // The horoscope headline (rashi, star, padam, gothram, kuja dosham) is on
-      // the match card already and is what many families compare on before they
-      // decide (EZ1-I48), so the basic profile view carries it too. The rest of
-      // the chart, and the document, stay behind the mutual accept.
-      const chart = detail?.horoscopeAvailable ? (detail.horoscope ?? {}) : {};
-      const basicDetails = detail
-        ? {
-            religion: detail.religion,
-            caste: detail.caste,
-            subCaste: detail.subCaste,
-            motherTongue: detail.motherTongue,
-            highestQualification: detail.highestQualification,
-            occupationStatus: detail.occupationStatus,
-            heightCm: detail.heightCm,
-            horoscopeAvailable: detail.horoscopeAvailable,
-            rashi: chart.rashi ?? null,
-            star: chart.star ?? null,
-            padam: chart.padam ?? null,
-            gothram: chart.gothram ?? null,
-            kujaDosham: chart.kujaDosham ?? null,
-            /*
-             * The chart itself, before the mutual accept (EZ1-I231).
-             *
-             * It was held back with the rest of the private biodata, on the
-             * reasoning that a chart image carries the exact birth date and
-             * time while this view deliberately shows only an age band. That
-             * was reversed deliberately: in this market a chart is the thing
-             * families compare before deciding whether to send interest at
-             * all, and the headline above -- rashi, star, padam, gothram, kuja
-             * dosham -- is already public here. Withholding only the image
-             * while publishing everything computed from it protected very
-             * little and stopped the comparison the page exists for.
-             *
-             * Everything else private stays private: family, contact, marital
-             * history and the rest of the gallery are still behind the accept.
-             */
-            horoscopeDocumentUrl: detail.horoscopeDocumentUrl ?? null,
-          }
-        : null;
       return {
+        profileId,
+        accessLevel: 'basic' as const,
+        unlockRequirement:
+          profile.visibility === ProfileVisibility.PRIVATE
+            ? ('fixed_match' as const)
+            : ('accepted_interest' as const),
         limited: true as const,
-        // Empty, not absent: the profile view renders these lists, and the basic
-        // card deliberately carries none of the private biodata behind them.
         siblings: [],
         assets: [],
-        details: basicDetails,
         contact: null,
+        details: await this.basicCard(profileId),
         profile: {
           id: profile.id,
           profileCode: profile.profileCode,
           displayName: profile.displayName,
           city: profile.city,
           gender: profile.gender,
-          // An age band, not the exact date of birth: enough to judge a match,
-          // not the full record, which is what the mutual accept unlocks.
           ageRange: ageBand(profile.dateOfBirth),
-          photos: (profile.photos ?? []).slice(0, 1),
+          photos: [],
           identityVerified: Boolean(profile.idVerifiedAt),
+          managingFor: profile.managingFor,
           stewardship: await this.stewardshipOf(profile),
         },
       };
@@ -834,6 +782,9 @@ export class ProfileDetailsService {
     const shareable = await this.findShareable(profileId);
     return {
       ...shareable,
+      limited: false as const,
+      accessLevel: 'full' as const,
+      unlockRequirement: null,
       profile: {
         id: profile.id,
         profileCode: profile.profileCode,
@@ -896,6 +847,7 @@ export class ProfileDetailsService {
     if (!details) return { profileId, details: null, siblings: [], assets: [] };
 
     const {
+      biodataDocumentUrl,
       communicationAddress,
       alternateMobile,
       employment,

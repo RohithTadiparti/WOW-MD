@@ -188,7 +188,7 @@ export class CirculationController {
   @Get('shared-with-me')
   async sharedWithMe(@CurrentUser() actor: AuthUser) {
     const rows = await this.sharing.sharedWithMe(actor);
-    return rows.map(({ share, profile, sharedBy }) => ({
+    return Promise.all(rows.map(async ({ share, profile, sharedBy }) => ({
       shareId: share.id,
       sharedAt: share.createdAt,
       message: share.message,
@@ -198,8 +198,9 @@ export class CirculationController {
       sharedBy,
       // A recipient gets the full biodata: the point of circulating is that they
       // can assess the match. They still cannot edit it or act as it.
-      profile: toBiodata(profile),
-    }));
+      profile: { ...(await this.details.findViewable(actor, profile.id)).profile,
+        basic: await this.details.basicCard(profile.id) },
+    })));
   }
 
   @ApiOperation({
@@ -223,8 +224,12 @@ export class CirculationController {
   @RequirePermissions(Permission.NETWORK_POOL_BROWSE)
   @ApiOperation({ summary: 'Search the vetted-agent pool' })
   @Get('pool')
-  searchPool(@CurrentUser() actor: AuthUser, @Query() q: PoolSearchDto) {
-    return this.sharing.searchPool(actor, q);
+  async searchPool(@CurrentUser() actor: AuthUser, @Query() q: PoolSearchDto) {
+    const page = await this.sharing.searchPool(actor, q);
+    return { ...page, data: await Promise.all(page.data.map(async profile => ({
+      ...(await this.details.findViewable(actor, profile.id)).profile,
+      basic: await this.details.basicCard(profile.id),
+    }))) };
   }
 
   @ApiBearerAuth()

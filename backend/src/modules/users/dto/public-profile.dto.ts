@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Profile, ProfilePreferences } from '../entities/profile.entity';
+import { hasFullProfileAccess, ProfileAccessRelationship } from '../profile-visibility';
 import { ProfileClaimStatus, ProfileVisibility } from '../../../common/enums';
 
 /**
@@ -40,15 +41,18 @@ export class PublicProfileView {
   @ApiProperty({ description: 'True once photos and details are fully visible' })
   matched: boolean;
 
+  @ApiProperty({ enum: ['basic', 'full'] })
+  accessLevel: 'basic' | 'full';
+
   @ApiPropertyOptional()
   preferences?: Pick<ProfilePreferences, 'religion' | 'community' | 'education' | 'lifestyle'>;
 
   @ApiProperty({ enum: ProfileClaimStatus })
-  claimStatus: ProfileClaimStatus;
+  claimStatus?: ProfileClaimStatus;
 
   /** True when an agent or family member is handling this profile. */
   @ApiProperty()
-  managed: boolean;
+  managed?: boolean;
 
   /**
    * How the person running a managed profile relates to its subject — "parent",
@@ -73,15 +77,15 @@ export class PublicProfileView {
 
   /** The short code a family can read out. */
   @ApiProperty({ example: 'WOW10231' })
-  profileCode: string;
+  profileCode?: string;
 
   /** An officer has seen the identity document in person. */
   @ApiProperty()
-  verified: boolean;
+  verified?: boolean;
 
   /** Null when the profile has never signed in — an agency-built one, say. */
   @ApiPropertyOptional({ type: String, format: 'date-time' })
-  lastActiveAt: string | null;
+  lastActiveAt?: string | null;
 
   /**
    * The handful of biodata fields a card is useless without.
@@ -97,11 +101,11 @@ export class PublicProfileView {
 }
 
 export interface ProfileCardFacts {
-  heightCm: number | null;
+  heightCm?: number | null;
   religion: string | null;
   caste: string | null;
-  motherTongue: string | null;
-  maritalStatus: string | null;
+  motherTongue?: string | null;
+  maritalStatus?: string | null;
   highestQualification: string | null;
   occupationStatus: string | null;
   /** Job title, or the business name when self-employed. */
@@ -117,11 +121,11 @@ export interface ProfileCardFacts {
    * reading at all. Null throughout for a family that does not use horoscopes,
    * and the card simply shows nothing rather than a row of blanks.
    */
-  rashi: string | null;
-  star: string | null;
-  padam: string | null;
-  gothram: string | null;
-  kujaDosham: string | null;
+  rashi?: string | null;
+  star?: string | null;
+  padam?: string | null;
+  gothram?: string | null;
+  kujaDosham?: string | null;
 }
 
 /**
@@ -208,7 +212,7 @@ export function toOwnProfile(profile: Profile): OwnProfileView {
  */
 export interface BiodataView {
   id: string;
-  profileCode: string;
+  profileCode?: string;
   displayName: string;
   gender?: string;
   ageRange: string | null;
@@ -217,14 +221,15 @@ export interface BiodataView {
   bio?: string;
   photos: string[];
   preferences?: ProfilePreferences;
-  claimStatus: ProfileClaimStatus;
-  managed: boolean;
+  claimStatus?: ProfileClaimStatus;
+  managed?: boolean;
   /** The basic biodata a shared link shows (EZ1-I135). Null until details exist. */
   basic?: {
     religion: string | null;
     caste: string | null;
-    subCaste: string | null;
-    motherTongue: string | null;
+    subCaste?: string | null;
+    motherTongue?: string | null;
+    profession?: string | null;
     highestQualification: string | null;
     occupationStatus: string | null;
   } | null;
@@ -234,6 +239,14 @@ export function toBiodata(
   profile: Profile,
   basic?: BiodataView['basic'],
 ): BiodataView {
+  if (profile.visibility !== ProfileVisibility.PUBLIC) {
+    return { id: profile.id, displayName: profile.displayName, photos: [],
+      ageRange: ageBand(profile.dateOfBirth), dateOfBirth: null,
+      basic: basic ? { religion: basic.religion, caste: basic.caste, motherTongue: basic.motherTongue,
+        highestQualification: basic.highestQualification,
+        occupationStatus: basic.occupationStatus, profession: basic.profession } : null,
+    };
+  }
   return {
     id: profile.id,
     displayName: profile.displayName,
@@ -277,17 +290,44 @@ export function ageBand(dateOfBirth: string | null): string | null {
  */
 export function toPublicProfile(
   profile: Profile,
-  opts: { matched?: boolean; card?: ProfileCardFacts; sourceAgency?: string | null } = {},
+  opts: ProfileAccessRelationship & { matched?: boolean; card?: ProfileCardFacts; sourceAgency?: string | null } = {},
 ): PublicProfileView {
-  const matched = Boolean(opts.matched);
+  const full = hasFullProfileAccess(profile.visibility, opts);
+  const matched = Boolean(opts.matched ?? (opts.owner ? true : full));
   const allPhotos = profile.photos ?? [];
+  if (!full) {
+    return {
+      sourceAgency: opts.sourceAgency ?? null,
+      id: profile.id,
+      displayName: profile.displayName,
+      gender: profile.gender,
+      ageRange: ageBand(profile.dateOfBirth),
+      city: profile.city,
+      photos: [],
+      photoCount: 0,
+      matched,
+      accessLevel: 'basic',
+      claimStatus: profile.claimStatus,
+      managed: profile.managedByUserId !== null,
+      managedByRelation:
+        profile.managedByUserId && profile.stewardRelation ? profile.stewardRelation : null,
+      profileCode: profile.profileCode,
+      verified: Boolean(profile.idVerifiedAt),
+      lastActiveAt: profile.lastActiveAt ? profile.lastActiveAt.toISOString() : null,
+      card: opts.card
+        ? {
+            religion: opts.card.religion,
+            caste: opts.card.caste,
+            motherTongue: opts.card.motherTongue,
+            highestQualification: opts.card.highestQualification,
+            occupationStatus: opts.card.occupationStatus,
+            profession: opts.card.profession,
+          }
+        : undefined,
+    };
+  }
 
-  // MATCHES_ONLY hides imagery until both sides have agreed. PUBLIC profiles
-  // show a lead photo to browsers. PRIVATE profiles never reach here, but treat
-  // them as hidden anyway rather than relying on the caller having filtered.
-  let photos: string[] = [];
-  if (matched) photos = allPhotos;
-  else if (profile.visibility === ProfileVisibility.PUBLIC) photos = allPhotos.slice(0, 1);
+  const photos = allPhotos;
 
   return {
     sourceAgency: opts.sourceAgency ?? null,
@@ -296,10 +336,11 @@ export function toPublicProfile(
     gender: profile.gender,
     ageRange: ageBand(profile.dateOfBirth),
     city: profile.city,
-    bio: matched ? profile.bio : undefined,
+    bio: profile.bio,
     photos,
     photoCount: allPhotos.length,
     matched,
+    accessLevel: 'full',
     preferences: profile.preferences
       ? {
           religion: profile.preferences.religion,

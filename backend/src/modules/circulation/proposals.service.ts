@@ -124,7 +124,7 @@ export class ProposalsService {
       interestId,
       status: interest.status,
       sides: [from, to].map((p) => ({
-        profile: toPublicProfile(p, { matched: matched || mineIds.has(p.id) }),
+        profile: toPublicProfile(p, { owner: mineIds.has(p.id), accepted: matched, fixed: interest.matchFixedState === 'confirmed' }),
         handledBy: stewardName(p.managedByUserId),
         isMine: mineIds.has(p.id),
       })),

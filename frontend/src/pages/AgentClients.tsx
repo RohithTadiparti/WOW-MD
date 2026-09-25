@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiMessage } from '../lib/api';
@@ -53,6 +53,8 @@ const CLAIM_TONE: Record<string, string> = {
  */
 export default function AgentClients() {
   const qc = useQueryClient();
+  const [creatingProfile, setCreatingProfile] = useState(false);
+  const createFormSlot = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState('');
   // 'all' rather than an empty string: "show me everyone" is a real answer here,
   // not the absence of one, and a deactivated client still needs finding.
@@ -112,16 +114,38 @@ export default function AgentClients() {
 
   const clients: Client[] = data?.data ?? [];
 
+  useEffect(() => {
+    if (!creatingProfile || !createFormSlot.current) return;
+
+    const scrollToFormIfNeeded = () => {
+      const rect = createFormSlot.current?.getBoundingClientRect();
+      if (rect && (rect.top < 0 || rect.top > window.innerHeight)) {
+        createFormSlot.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    };
+
+    const frame = requestAnimationFrame(scrollToFormIfNeeded);
+    return () => cancelAnimationFrame(frame);
+  }, [creatingProfile]);
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="page-title">My Clients</h1>
-        <p className="page-subtitle">
-          Everyone you manage, invited or not, and the profiles you built for them.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="page-title">My Clients</h1>
+          <p className="page-subtitle">
+            Everyone you manage, invited or not, and the profiles you built for them.
+          </p>
+        </div>
+        <button className="btn shrink-0" onClick={() => setCreatingProfile((open) => !open)}>
+          {creatingProfile ? 'Cancel' : 'Create new client'}
+        </button>
       </div>
 
       {error && <p className="alert-critical">{error}</p>}
+
+      {/* The profile component renders the form here, before the client accounts list. */}
+      <div ref={createFormSlot} />
 
       <div className="card space-y-3">
         <div className="flex items-center justify-between gap-3">
@@ -299,7 +323,13 @@ export default function AgentClients() {
         manage" are the same code they always were. `embedded` only tells it
         that this page has already written the heading.
       */}
-      <ManagedProfiles embedded />
+      <ManagedProfiles
+        embedded
+        creating={creatingProfile}
+        onCreatingChange={setCreatingProfile}
+        hideCreateAction
+        createFormContainer={createFormSlot.current}
+      />
     </div>
   );
 }

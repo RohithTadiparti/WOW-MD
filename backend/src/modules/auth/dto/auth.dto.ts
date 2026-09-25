@@ -345,18 +345,17 @@ export class AcceptInvitationDto {
   @Matches(PASSWORD_PATTERN, { message: PASSWORD_MESSAGE })
   password: string;
 
-  /**
-   * Only needed when the invitation arrived by SMS alone.
-   *
-   * Intake is phone-first, so plenty of profiles are built with a number and
-   * nothing else. An account still needs an email — it is the sign-in
-   * credential and the only way to reset a password — so the one moment to ask
-   * for it is here, when the person themselves is on the other end of the form
-   * rather than the agent guessing on their behalf.
-   */
-  @ApiPropertyOptional({ description: 'Required only when the invitation had no email address' })
+  /** An SMS invite can be claimed without email; an added address stays unverified. */
+  @ApiPropertyOptional({ description: 'Optional email for a mobile-only invitation' })
   @IsOptional()
+  @Transform(normaliseEmail)
   @IsEmail({}, { message: 'Enter a valid email address' })
   @MaxLength(180)
   email?: string;
+
+  @ApiPropertyOptional({ description: 'OTP code sent to mobile for SMS-only invitations' })
+  @IsOptional()
+  @IsString()
+  @Matches(/^[0-9]{6}$/, { message: 'The verification code must be 6 digits' })
+  otpCode?: string;
 }

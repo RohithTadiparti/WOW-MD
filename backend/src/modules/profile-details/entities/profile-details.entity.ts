@@ -23,6 +23,10 @@ import { FamilyType, MaritalStatus, OccupationStatus } from '../../../common/enu
  */
 @Entity('profile_details')
 export class ProfileDetails {
+  /** Original intake document, visible only to the owner and steward. */
+  @Column({ type: 'text', nullable: true })
+  biodataDocumentUrl: string | null;
+
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
