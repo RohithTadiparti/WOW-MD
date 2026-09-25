@@ -6,7 +6,7 @@ import { useAuth } from '../store/auth';
 
 interface InvitationPreview {
   displayName: string;
-  /** Null when the invitation went out by SMS alone; the claim form asks for one. */
+  /** Null when the invitation went out by SMS alone; email remains optional. */
   email: string | null;
   phoneHint: string | null;
   invitedBy: string;
@@ -31,6 +31,10 @@ export default function AcceptInvite() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [sendingOtp, setSendingOtp] = useState(false);
+  const [otpNotice, setOtpNotice] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -40,6 +44,28 @@ export default function AcceptInvite() {
     retry: false,
     enabled: Boolean(token),
   });
+
+  async function requestOtp() {
+    setSendingOtp(true);
+    setError('');
+    setOtpNotice('');
+    try {
+      const res = await api.post('/auth/invitations/send-otp', { token });
+      setOtpSent(true);
+      setOtpNotice(
+        res.data?.devCode
+          ? `Code sent! (Dev code: ${res.data.devCode})`
+          : 'A 6-digit verification code has been sent to your mobile phone.',
+      );
+      if (res.data?.devCode) {
+        setOtpCode(res.data.devCode);
+      }
+    } catch (err) {
+      setError(apiMessage(err, 'Failed to send verification code.'));
+    } finally {
+      setSendingOtp(false);
+    }
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -57,10 +83,13 @@ export default function AcceptInvite() {
        * so an untouched field is omitted entirely (EZ1-I233).
        */
       const typed = email.trim();
-      const body = data?.email
-        ? { token, password }
-        : { token, password, ...(typed ? { email: typed } : {}) };
-      const res = await api.post('/auth/invitations/accept', body);
+      const payload: Record<string, unknown> = {
+        token,
+        password,
+      };
+      if (typed) payload.email = typed;
+      if (otpCode.trim()) payload.otpCode = otpCode.trim();
+      const res = await api.post('/auth/invitations/accept', payload);
       setAuth(res.data);
       nav('/profile');
     } catch (err) {
@@ -131,28 +160,61 @@ export default function AcceptInvite() {
             </p>
           </div>
         ) : (
-          <div>
-            <label className="label" htmlFor="email">
-              Your email <span className="font-normal text-gray-500">(optional)</span>
-            </label>
-            <input
-              id="email"
-              className="input"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-            {/*
-              Not required. This used to be, and an agency's client who had
-              only ever given a mobile number had to invent an address to
-              finish claiming their own account (EZ1-I233).
-            */}
-            <p className="mt-1 text-xs text-gray-500">
-              You were invited by text message
-              {data.phoneHint ? ` to ${data.phoneHint}` : ''}, and you can sign in with that
-              number. Add an email if you would like to sign in with one as well; either way you
-              can reset your password by text message.
-            </p>
+          <div className="space-y-3">
+            <div>
+              <label className="label" htmlFor="invited-mobile">Your mobile number</label>
+              <div className="flex gap-2">
+                <input id="invited-mobile" className="input bg-gray-50 flex-1" value={data.phoneHint ?? ''} readOnly />
+                <button
+                  type="button"
+                  className="btn-outline shrink-0 text-xs px-3"
+                  onClick={requestOtp}
+                  disabled={sendingOtp}
+                >
+                  {sendingOtp ? 'Sending…' : otpSent ? 'Resend code' : 'Verify mobile (Send OTP)'}
+                </button>
+              </div>
+              {otpNotice && <p className="mt-1 text-xs text-brand font-medium">{otpNotice}</p>}
+              {!otpSent && (
+                <p className="mt-1 text-xs text-gray-500">
+                  Tap verify to receive a 6-digit code on your mobile.
+                </p>
+              )}
+            </div>
+
+            {otpSent && (
+              <div>
+                <label className="label" htmlFor="otp-code">
+                  Verification code <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="otp-code"
+                  className="input"
+                  type="text"
+                  maxLength={6}
+                  placeholder="6-digit code"
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                  required
+                />
+              </div>
+            )}
+
+            <div>
+              <label className="label" htmlFor="email">
+                Your email <span className="font-normal text-gray-500">(optional)</span>
+              </label>
+              <input
+                id="email"
+                className="input"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                You were invited by text message to {data.phoneHint}. Email is optional.
+              </p>
+            </div>
           </div>
         )}
 

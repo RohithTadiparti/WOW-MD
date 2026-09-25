@@ -20,7 +20,6 @@ import {
   MatchFixedState,
   ProfileClaimStatus,
   ProfileLifecycle,
-  ProfileVisibility,
   UserRole,
   isIndividual,
 } from '../../common/enums';
@@ -305,7 +304,6 @@ export class MatchmakingService {
           candidates = await this.profiles.find({
             where: {
               id: In(ids),
-              visibility: Not(ProfileVisibility.PRIVATE),
               lifecycle: ProfileLifecycle.ACTIVE,
             },
           });
@@ -329,7 +327,6 @@ export class MatchmakingService {
          */
         const base = {
           id: Not(me.id),
-          visibility: Not(ProfileVisibility.PRIVATE),
           lifecycle: ProfileLifecycle.ACTIVE,
         };
         const bases = want ? genderWhere(want).map((g) => ({ ...base, ...g })) : [base];
@@ -374,7 +371,7 @@ export class MatchmakingService {
 
       // What the viewer may see of each candidate depends on whether the two
       // sides have already matched.
-      const acceptedWith = await this.acceptedCounterpartIds(me.id);
+      const acceptedWith = await this.counterpartAccess(me.id);
 
       candidates = await this.applyFilters(candidates, q);
 
@@ -452,7 +449,7 @@ export class MatchmakingService {
 
       const pageItems = window.map((s) => ({
         profile: toPublicProfile(s.profile, {
-          matched: acceptedWith.has(s.profile.id),
+          ...acceptedWith.get(s.profile.id),
           card: facts.get(s.profile.id),
           sourceAgency: agencies.get(s.profile.id) ?? null,
         }),
@@ -631,7 +628,7 @@ export class MatchmakingService {
 
     const profiles = await this.profiles.find({ where: { id: In(rows.map((r) => r.profileId)) } });
     const byId = new Map(profiles.map((p) => [p.id, p]));
-    const acceptedWith = await this.acceptedCounterpartIds(me.id);
+    const acceptedWith = await this.counterpartAccess(me.id);
     const [agencies, facts, interactions, pool] = await Promise.all([
       this.agencyNamesFor(profiles),
       this.cardFactsFor(profiles.map((p) => p.id)),
@@ -650,7 +647,7 @@ export class MatchmakingService {
         });
         return {
           profile: toPublicProfile(profile, {
-            matched: acceptedWith.has(profile.id),
+            ...acceptedWith.get(profile.id),
             card: facts.get(profile.id),
             sourceAgency: agencies.get(profile.id) ?? null,
           }),
@@ -701,7 +698,7 @@ export class MatchmakingService {
     if (profiles.length === 0) return [];
 
     const byId = new Map(profiles.map((p) => [p.id, p]));
-    const acceptedWith = await this.acceptedCounterpartIds(me.id);
+    const acceptedWith = await this.counterpartAccess(me.id);
     const [agencies, facts, interactions, pool, shortlisted] = await Promise.all([
       this.agencyNamesFor(profiles),
       this.cardFactsFor(profiles.map((p) => p.id)),
@@ -725,7 +722,7 @@ export class MatchmakingService {
       return [
         {
           profile: toPublicProfile(profile, {
-            matched: acceptedWith.has(profile.id),
+            ...acceptedWith.get(profile.id),
             card: facts.get(profile.id),
             sourceAgency: agencies.get(profile.id) ?? null,
           }),
@@ -938,16 +935,25 @@ export class MatchmakingService {
     return age;
   }
 
-  private async acceptedCounterpartIds(profileId: string): Promise<Set<string>> {
+  private async counterpartAccess(profileId: string) {
     const rows = await this.interests.find({
       where: [
         { fromProfileId: profileId, status: InterestStatus.ACCEPTED },
         { toProfileId: profileId, status: InterestStatus.ACCEPTED },
+        { fromProfileId: profileId, matchFixedState: MatchFixedState.CONFIRMED },
+        { toProfileId: profileId, matchFixedState: MatchFixedState.CONFIRMED },
       ],
     });
-    return new Set(
-      rows.map((r) => (r.fromProfileId === profileId ? r.toProfileId : r.fromProfileId)),
-    );
+    const access = new Map<string, { accepted: boolean; fixed: boolean }>();
+    for (const row of rows) {
+      const id = row.fromProfileId === profileId ? row.toProfileId : row.fromProfileId;
+      const prev = access.get(id);
+      access.set(id, {
+        accepted: Boolean(prev?.accepted) || row.status === InterestStatus.ACCEPTED,
+        fixed: Boolean(prev?.fixed) || row.matchFixedState === MatchFixedState.CONFIRMED,
+      });
+    }
+    return access;
   }
 
   async sendInterest(
@@ -981,9 +987,6 @@ export class MatchmakingService {
       throw new BadRequestException(
         'You can only send an interest to a profile of the opposite gender.',
       );
-    }
-    if (target.visibility === ProfileVisibility.PRIVATE) {
-      throw new ForbiddenException('That profile is not accepting interests');
     }
     if (target.userId) {
       const owner = await this.users.findOne({ where: { id: target.userId } });
@@ -1299,7 +1302,7 @@ export class MatchmakingService {
       const client = sentByClient ? from : to;
       const matched = row.status === InterestStatus.ACCEPTED;
       const view = (profile: Profile) =>
-        toPublicProfile(profile, { matched: clientIds.has(profile.id) || matched });
+        toPublicProfile(profile, { owner: clientIds.has(profile.id), accepted: matched, fixed: row.matchFixedState === MatchFixedState.CONFIRMED });
 
       counts.all += 1;
       counts[sentByClient ? 'sent' : 'received'] += 1;
@@ -1490,6 +1493,7 @@ export class MatchmakingService {
     );
     const others = await this.profiles.find({ where: { id: In(otherIds) } });
     const byId = new Map(others.map((p) => [p.id, p]));
+    const cards = await this.cardFactsFor(otherIds);
 
     return rows.flatMap((r) => {
       const otherId = r.fromProfileId === myProfileId ? r.toProfileId : r.fromProfileId;
@@ -1500,7 +1504,7 @@ export class MatchmakingService {
           id: r.id,
           status: r.status,
           createdAt: r.createdAt,
-          counterpart: toPublicProfile(other, { matched }),
+          counterpart: toPublicProfile(other, { accepted: matched, fixed: r.matchFixedState === MatchFixedState.CONFIRMED, card: cards.get(other.id) }),
           direction: r.toProfileId === myProfileId ? ('incoming' as const) : ('outgoing' as const),
           screening: r.screening ?? null,
         },

@@ -16,6 +16,8 @@ import { MailService } from '../../platform/mail/mail.service';
 import { SmsService } from '../../platform/sms/sms.service';
 import { AuditAction, AuditService } from '../../platform/audit/audit.service';
 import { expiresIn, generateToken, hashToken } from '../../common/util/tokens';
+import { randomInt } from 'crypto';
+import { RedisService } from '../../platform/redis/redis.service';
 import {
   InvitationStatus,
   ProfileClaimStatus,
@@ -60,6 +62,7 @@ export class InvitationsService {
     private readonly sms: SmsService,
     private readonly audit: AuditService,
     private readonly dataSource: DataSource,
+    private readonly redis: RedisService,
   ) {}
 
   /**
@@ -250,6 +253,21 @@ export class InvitationsService {
     };
   }
 
+  /** Sends an OTP to the mobile number on an SMS-only invitation for verification. */
+  async sendOtp(token: string): Promise<{ sent: true; devCode?: string }> {
+    const invitation = await this.loadPending(token);
+    if (!invitation.phone) {
+      throw new BadRequestException('This invitation does not have a mobile number');
+    }
+    const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
+    if (this.redis?.raw) {
+      await this.redis.raw.set(`invitation:otp:${invitation.id}`, hashToken(code), 'EX', 600);
+    }
+    await this.sms.sendPhoneVerification({ to: invitation.phone, code });
+    const dev = this.cfg.mail.provider === 'log' ? { devCode: code } : {};
+    return { sent: true, ...dev };
+  }
+
   /**
    * Accepts an invitation: creates the account, links it to the profile and
    * marks the profile claimed. Everything happens in one transaction so a
@@ -258,7 +276,7 @@ export class InvitationsService {
    * The subject's email is verified implicitly — they proved control of it by
    * following the link.
    */
-  async accept(token: string, password: string, email?: string): Promise<User> {
+  async accept(token: string, password: string, email?: string, otpCode?: string): Promise<User> {
     return this.dataSource.transaction(async (manager) => {
       const invitationRepo = manager.getRepository(Invitation);
       const profileRepo = manager.getRepository(Profile);
@@ -266,6 +284,7 @@ export class InvitationsService {
 
       const invitation = await invitationRepo.findOne({
         where: { tokenHash: hashToken(token), status: InvitationStatus.PENDING },
+        lock: { mode: 'pessimistic_write' },
       });
       if (!invitation) {
         throw new NotFoundException('That invitation link is not valid or has already been used');
@@ -276,9 +295,12 @@ export class InvitationsService {
         throw new BadRequestException('That invitation has expired. Ask for a new one.');
       }
 
-      const profile = await profileRepo.findOne({ where: { id: invitation.profileId } });
+      const profile = await profileRepo.findOne({ where: { id: invitation.profileId }, lock: { mode: 'pessimistic_write' } });
       if (!profile) throw new NotFoundException('That profile no longer exists');
       if (profile.userId) throw new ConflictException('That profile already has an owner');
+      if (profile.contactPhone !== invitation.phone || profile.contactEmail !== invitation.email) {
+        throw new ConflictException('The contact details changed. Ask your agent for a new invitation.');
+      }
 
       /*
        * An invitation that went out by SMS alone carries no address. The
@@ -312,6 +334,14 @@ export class InvitationsService {
         if (numberTaken) throw new ConflictException('That mobile number already has an account');
       }
 
+      if (!invitation.email && invitation.phone && otpCode && this.redis?.raw) {
+        const stored = await this.redis.raw.get(`invitation:otp:${invitation.id}`);
+        if (!stored || stored !== hashToken(otpCode)) {
+          throw new BadRequestException('Invalid or expired mobile verification code');
+        }
+        await this.redis.raw.del(`invitation:otp:${invitation.id}`);
+      }
+
       const passwordHash = await bcrypt.hash(password, this.cfg.auth.bcryptRounds);
       const user = await userRepo.save(
         userRepo.create({
@@ -328,6 +358,7 @@ export class InvitationsService {
           // nothing, so that account starts unverified like any other.
           isVerified: Boolean(invitation.email),
           emailVerifiedAt: invitation.email ? new Date() : null,
+          phoneVerifiedAt: invitation.phone ? new Date() : null,
         }),
       );
 
@@ -335,6 +366,7 @@ export class InvitationsService {
       // agent's copy and the owner's disagree from the first day. A claim made
       // without an address leaves the profile's own contact details alone.
       if (address) profile.contactEmail = address;
+      profile.contactPhone = invitation.phone;
       profile.userId = user.id;
       profile.claimStatus = ProfileClaimStatus.CLAIMED;
       await profileRepo.save(profile);

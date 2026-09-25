@@ -1,4 +1,5 @@
 import { FormEvent, useState } from 'react';
+import BiodataImport from '../components/BiodataImport';
 import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiMessage } from '../lib/api';
@@ -83,15 +84,71 @@ interface AgencyStatus {
 const STEWARD_RELATIONS = ['Self', 'Parent', 'Sibling', 'Relative', 'Friend', 'Other'];
 
 const emptyDraft = {
+  firstName: '',
+  lastName: '',
+  nativePlace: '',
   displayName: '',
   stewardRelation: '',
   contactPhone: '',
   contactEmail: '',
-  gender: 'female',
+  gender: '',
   dateOfBirth: '',
   city: '',
   bio: '',
 };
+
+const IMPORT_REVIEW_SECTIONS = [
+  {
+    title: 'Personal and birth details',
+    fields: [
+      ['heightCm', 'Height (cm)'], ['complexion', 'Complexion'],
+      ['placeOfBirth', 'Place of birth'], ['timeOfBirth', 'Birth time'],
+      ['communicationAddress', 'Address'], ['alternateMobile', 'Alternate mobile'],
+      ['maritalStatus', 'Marital status'],
+    ],
+  },
+  {
+    title: 'Religion and horoscope',
+    fields: [
+      ['religion', 'Religion'], ['caste', 'Caste'], ['subCaste', 'Sub-caste'],
+      ['motherTongue', 'Mother tongue'], ['denomination', 'Denomination'], ['gothram', 'Gothram'], ['rashi', 'Rasi / Rashi'],
+      ['star', 'Nakshatram / Star'], ['padam', 'Padam'], ['kujaDosham', 'Kuja dosham'],
+    ],
+  },
+  {
+    title: 'Education and occupation',
+    fields: [
+      ['highestQualification', 'Qualification'], ['course', 'Course'], ['institution', 'Institution'],
+      ['collegePlace', 'College place'], ['profession', 'Occupation / Profession'],
+      ['occupationStatus', 'Occupation status'], ['designation', 'Designation'],
+      ['company', 'Employer / Company'], ['workLocation', 'Work location'],
+      ['annualIncome', 'Annual income'], ['salary', 'Salary'],
+    ],
+  },
+  {
+    title: 'Family details',
+    fields: [
+      ['fatherName', "Father's name"], ['fatherProfession', "Father's occupation"],
+      ['motherName', "Mother's name"], ['motherProfession', "Mother's occupation"],
+      ['brothers', 'Brothers'], ['sisters', 'Sisters'], ['familyType', 'Family type'],
+      ['familyStatus', 'Family status'], ['nativeState', 'Native state'],
+      ['nativeDistrict', 'Native district'], ['nativeCountry', 'Native country'],
+    ],
+  },
+] as const;
+
+type IntakeMode = 'manual' | 'upload';
+
+function applyImportedFields(
+  current: typeof emptyDraft,
+  fields: Record<string, string>,
+): typeof emptyDraft {
+  const next = { ...current };
+  for (const key of Object.keys(emptyDraft) as Array<keyof typeof emptyDraft>) {
+    if (fields[key]) next[key] = fields[key];
+  }
+  return next;
+}
 
 /**
  * Where an agent (or a family member looking after a relative) builds a full
@@ -137,6 +194,11 @@ export default function ManagedProfiles({
     else setUncontrolledCreating(next);
   };
   const [draft, setDraft] = useState(emptyDraft);
+  const [intakeMode, setIntakeMode] = useState<IntakeMode | null>(null);
+  const [extractedBiodata, setExtractedBiodata] = useState<Record<string, string>>({});
+  const [documentUrl, setDocumentUrl] = useState('');
+  const validIntakePhone = isValidMobile(draft.contactPhone) || Boolean(documentUrl && !draft.contactPhone);
+  const [importing, setImporting] = useState(false);
   const [consent, setConsent] = useState<ConsentDraft>(emptyConsent());
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -159,23 +221,36 @@ export default function ManagedProfiles({
 
   const create = useMutation({
     mutationFn: async (inviteNow: boolean) => {
+      const values = draft;
       const payload: Record<string, unknown> = {
-        displayName: draft.displayName,
-        contactPhone: draft.contactPhone,
-        gender: draft.gender,
+        displayName: values.displayName,
+        ...(values.contactPhone ? { contactPhone: values.contactPhone } : {}),
+        ...(values.gender ? { gender: values.gender } : {}),
         consent: consentPayload(consent),
         inviteNow,
       };
+      const biodata: Record<string, string> = {
+        ...extractedBiodata,
+        ...(values.firstName ? { firstName: values.firstName } : {}),
+        ...(values.lastName ? { lastName: values.lastName } : {}),
+        ...(values.nativePlace ? { nativePlace: values.nativePlace } : {}),
+      };
+      if (Object.keys(biodata).length) payload.biodata = biodata;
+      if (documentUrl) payload.biodataDocumentUrl = documentUrl;
       // Email is optional: a walk-in family often gives only a number.
-      if (draft.contactEmail) payload.contactEmail = draft.contactEmail;
-      if (draft.dateOfBirth) payload.dateOfBirth = draft.dateOfBirth;
-      if (draft.city) payload.city = draft.city;
-      if (draft.bio) payload.bio = draft.bio;
-      if (draft.stewardRelation) payload.stewardRelation = draft.stewardRelation;
+      if (values.contactEmail) payload.contactEmail = values.contactEmail;
+      if (values.dateOfBirth) payload.dateOfBirth = values.dateOfBirth;
+      if (values.city) payload.city = values.city;
+      if (values.bio) payload.bio = values.bio;
+      if (values.stewardRelation) payload.stewardRelation = values.stewardRelation;
       return (await api.post('/agents/profiles', payload)).data as ManagedProfile;
     },
-    onSuccess: (profile, inviteNow) => {
+    onSuccess: (profile, input) => {
+      const inviteNow = input === true;
       setDraft(emptyDraft);
+      setIntakeMode(null);
+      setExtractedBiodata({});
+      setDocumentUrl('');
       setConsent(emptyConsent());
       // Back to the list, with the profile just created in it (EZ1-I238).
       setCreating(false);
@@ -184,12 +259,13 @@ export default function ManagedProfiles({
         inviteNow
           ? profile.contactEmail
             ? `Profile created and an invitation sent to ${profile.contactEmail}.`
-            : 'Profile created and an invitation sent by SMS to their mobile. They add an email when they claim it.'
+            : 'Profile created and an invitation sent by SMS to their mobile. They can claim it without an email.'
           : 'Profile saved. It is matchable now: circulate it, or invite them to claim it later.',
       );
       qc.invalidateQueries({ queryKey: ['managed-profiles'] });
       // My Clients includes these profiles as well as claimed accounts.
       qc.invalidateQueries({ queryKey: ['agent-clients'] });
+      qc.invalidateQueries({ queryKey: ['actable-profiles'] });
     },
     onError: (err) => {
       setNotice('');
@@ -253,9 +329,17 @@ export default function ManagedProfiles({
   const set = (k: keyof typeof emptyDraft) => (e: { target: { value: string } }) =>
     setDraft((d) => ({ ...d, [k]: e.target.value }));
 
+  const setBiodata = (key: string) => (e: { target: { value: string } }) => {
+    const value = e.target.value;
+    setExtractedBiodata((current) => ({ ...current, [key]: value }));
+    if (key in emptyDraft) {
+      setDraft((current) => ({ ...current, [key]: value }));
+    }
+  };
+
   function submit(e: FormEvent) {
     e.preventDefault();
-    if (!isValidMobile(draft.contactPhone)) return;
+    if (importing || !validIntakePhone) return;
     create.mutate(false);
   }
 
@@ -338,7 +422,79 @@ export default function ManagedProfiles({
     const form = (
       <form onSubmit={submit} className="card space-y-4">
         <h2 className="section-title">New profile</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+
+        <div>
+          <p className="label">How would you like to create this client?</p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className={intakeMode === 'manual' ? 'btn' : 'btn-outline'}
+              onClick={() => setIntakeMode('manual')}
+            >
+              Enter details manually
+            </button>
+            <button
+              type="button"
+              className={intakeMode === 'upload' ? 'btn' : 'btn-outline'}
+              onClick={() => setIntakeMode('upload')}
+            >
+              Upload image / PDF
+            </button>
+          </div>
+        </div>
+
+        {intakeMode === 'upload' && (
+          <BiodataImport
+            busy={importing || create.isPending}
+            onBusy={setImporting}
+            onImported={(fields, url) => {
+              setDraft((current) => applyImportedFields(current, fields));
+              setDocumentUrl(url);
+              setExtractedBiodata(fields);
+            }}
+          />
+        )}
+        {documentUrl && (
+          <p className="text-xs text-emerald-700 bg-emerald-50 p-2 rounded border border-emerald-200">
+            Biodata document attached. Review and edit the extracted fields below; no client has been created yet.
+          </p>
+        )}
+
+        {intakeMode && <><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div>
+            <label className="label">First Name</label>
+            <input
+              className="input"
+              value={draft.firstName}
+              onChange={(e) => {
+                const fn = e.target.value;
+                setDraft((d) => ({
+                  ...d,
+                  firstName: fn,
+                  displayName: [fn, d.lastName].filter(Boolean).join(' '),
+                }));
+              }}
+            />
+          </div>
+          <div>
+            <label className="label">Last Name</label>
+            <input
+              className="input"
+              value={draft.lastName}
+              onChange={(e) => {
+                const ln = e.target.value;
+                setDraft((d) => ({
+                  ...d,
+                  lastName: ln,
+                  displayName: [d.firstName, ln].filter(Boolean).join(' '),
+                }));
+              }}
+            />
+          </div>
+          <div>
+            <label className="label">Native Place</label>
+            <input className="input" value={draft.nativePlace} onChange={set('nativePlace')} />
+          </div>
           <div>
             <label className="label">Full name</label>
             <input className="input" value={draft.displayName} onChange={set('displayName')} required />
@@ -411,7 +567,7 @@ export default function ManagedProfiles({
               value={draft.contactPhone}
               onChange={set('contactPhone')}
               aria-invalid={Boolean(draft.contactPhone) && !isValidMobile(draft.contactPhone)}
-              required
+              required={!documentUrl}
             />
             {draft.contactPhone && !isValidMobile(draft.contactPhone) ? (
               <p className="mt-1 text-xs text-red-600">Enter a 10-digit Indian mobile number.</p>
@@ -445,6 +601,7 @@ export default function ManagedProfiles({
             */}
             <label className="label">Managing profile for</label>
             <select className="input" value={draft.gender} onChange={set('gender')}>
+              <option value="">Choose gender</option>
               <option value="female">Bride</option>
               <option value="male">Groom</option>
             </select>
@@ -470,10 +627,36 @@ export default function ManagedProfiles({
           <textarea className="input" rows={3} maxLength={2000} value={draft.bio} onChange={set('bio')} />
         </div>
 
+        {intakeMode === 'upload' && documentUrl && (
+          <div className="space-y-4 rounded-lg border border-brand-light bg-brand-light/20 p-4">
+            <div>
+              <h3 className="font-semibold text-gray-900">Extracted biodata</h3>
+              <p className="text-xs text-gray-600">Only values you confirm here will be saved to the new client.</p>
+            </div>
+            {IMPORT_REVIEW_SECTIONS.map((section) => (
+              <fieldset key={section.title} className="space-y-2">
+                <legend className="text-sm font-medium text-gray-800">{section.title}</legend>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {section.fields.map(([key, label]) => (
+                    <label key={key} className="block">
+                      <span className="label">{label}</span>
+                      <input
+                        className="input"
+                        value={extractedBiodata[key] ?? ''}
+                        onChange={setBiodata(key)}
+                      />
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            ))}
+          </div>
+        )}
+
         <ConsentFields value={consent} onChange={setConsent} />
 
         <div className="flex flex-wrap gap-2">
-          <button className="btn" disabled={create.isPending || !isValidMobile(draft.contactPhone)}>
+          <button className="btn" disabled={importing || create.isPending || !validIntakePhone}>
             {create.isPending ? 'Saving...' : 'Save profile'}
           </button>
           {/*
@@ -487,7 +670,7 @@ export default function ManagedProfiles({
           <button
             type="button"
             className="btn-outline"
-            disabled={create.isPending || !isValidMobile(draft.contactPhone)}
+            disabled={importing || create.isPending || !isValidMobile(draft.contactPhone)}
             onClick={() => create.mutate(true)}
           >
             Save and invite now
@@ -495,9 +678,10 @@ export default function ManagedProfiles({
           <p className="w-full text-xs text-gray-500">
             {draft.contactEmail
               ? 'The invitation goes to their email and mobile.'
-              : 'With no email, the invitation goes by SMS. They add an email when they claim it.'}
+              : 'With no email, the invitation goes by SMS. They can claim it without an email.'}
           </p>
         </div>
+        </>}
       </form>
     );
 
