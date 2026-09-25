@@ -26,19 +26,9 @@ import { useAuth, type AuthUser } from '@/store/auth';
  * machine instead of trying to reach its own localhost. A production build
  * should always provide EXPO_PUBLIC_API_URL.
  */
-function defaultApiUrl(): string {
-  const hostUri = Constants.expoConfig?.hostUri;
-  if (!hostUri) return 'http://192.168.0.9:3000/api';
 
-  try {
-    const host = new URL(`http://${hostUri}`).hostname;
-    return `http://${host}:3000/api`;
-  } catch {
-    return 'http://localhost:3000/api';
-  }
-}
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || defaultApiUrl();
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://10.72.223.206:3000/api' ;
 
 /** Alphanumerics, dot, dash and underscore only: SecureStore rejects the rest. */
 const REFRESH_KEY = 'wow.refreshToken';
