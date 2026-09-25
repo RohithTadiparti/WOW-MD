@@ -1,293 +1,31 @@
-import { useState, type ComponentType } from 'react';
-import { Alert as NativeAlert, Pressable, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  Briefcase,
-  CalendarBlank,
-  CaretRight,
-  CurrencyInr,
-  Sparkle,
-  UsersThree,
-  type IconProps,
-} from 'phosphor-react-native';
+import { ArrowLeft, CaretRight, CheckCircle } from 'phosphor-react-native';
 
 import { api, apiMessage } from '@/lib/api';
-import { shortDate } from '@/lib/format';
-import {
-  fetchPlans,
-  fetchWeddingDashboard,
-  type WeddingDashboard,
-  type WeddingPlanRow,
-} from '@/lib/wedding-plan';
-import { DateField } from '@/components/form';
-import {
-  Alert,
-  Body,
-  Button,
-  Caption,
-  Card,
-  EmptyState,
-  Loading,
-  Screen,
-  SectionTitle,
-} from '@/components/ui';
+import { rupees, shortDate } from '@/lib/format';
+import { Alert, Button, Caption, Card, EmptyState, Field, Loading, SectionTitle, Screen } from '@/components/ui';
 import { rgb, space, useTheme } from '@/theme';
 
-type Section = {
-  title: string;
-  hint: string;
-  icon: ComponentType<IconProps>;
-  to: string;
-};
-
-export default function MyWeddingPlan() {
-  const theme = useTheme();
-  const router = useRouter();
-  const qc = useQueryClient();
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const [editingDate, setEditingDate] = useState(false);
-  const [date, setDate] = useState('');
-  const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
-
-  const dashboard = useQuery({
-    queryKey: ['wedding-dashboard'],
-    queryFn: fetchWeddingDashboard,
-    retry: false,
-  });
-  const plans = useQuery({
-    queryKey: ['plans'],
-    queryFn: fetchPlans,
-    retry: false,
-  });
-  const events = useQuery({
-    queryKey: ['events'],
-    queryFn: async () => (await api.get('/events')).data,
-    retry: false,
-  });
-
-  const create = useMutation({
-    mutationFn: async () =>
-      (await api.post('/planner/plan', { weddingDate: date })).data as WeddingPlanRow,
-    onSuccess: async (plan) => {
-      await qc.invalidateQueries({ queryKey: ['plans'] });
-      await qc.invalidateQueries({ queryKey: ['wedding-dashboard'] });
-      setEditingDate(false);
-      setNotice('Plan created.');
-      router.replace({ pathname: '/plan/[id]', params: { id: plan.id } });
-    },
-    onError: (err) => setError(apiMessage(err, 'That plan could not be created.')),
-  });
-
-  if (dashboard.isPending || plans.isPending) {
-    return (
-      <Screen>
-        <Loading rows={4} />
-      </Screen>
-    );
-  }
-
-  if (dashboard.error) {
-    return (
-      <Screen>
-        <EmptyState title="Plan unavailable">
-          {apiMessage(dashboard.error, 'Please try again shortly.')}
-        </EmptyState>
-      </Screen>
-    );
-  }
-
-  const data = dashboard.data as WeddingDashboard;
-  const plan = plans.data?.find((p) => p.id === id) ?? plans.data?.[0];
-  const eventRows = Array.isArray(events.data) ? events.data : (events.data?.data ?? []);
-  const primary = eventRows.find((e: { category?: string | null }) => e.category) ?? eventRows[0];
-  const location =
-    data.upcoming.find((e) => e.venue)?.venue ??
-    primary?.city ??
-    primary?.venue ??
-    null;
-  const guestCount = data.guests.expectedHeadcount || data.guests.onList || 0;
-  const weddingType = primary?.category
-    ? String(primary.category).replace(/_/g, ' ')
-    : 'Wedding';
-
-  const sections: Section[] = [
-    { title: 'Budget', hint: 'Track spending by category', icon: CurrencyInr, to: '/plan/budget' },
-    { title: 'Guest List', hint: 'Who is invited and who replied', icon: UsersThree, to: '/plan/guests' },
-    { title: 'Vendors', hint: 'Find and shortlist vendors', icon: Briefcase, to: '/vendors' },
-    { title: 'Events', hint: 'Ceremony days and venues', icon: CalendarBlank, to: '/events' },
-    {
-      title: 'Additional Services',
-      hint: 'Makeup, mehendi, music and more',
-      icon: Sparkle,
-      to: '/plan/services',
-    },
-  ];
-
-  if (!plan && !editingDate) {
-    return (
-      <Screen>
-        <SectionTitle>My Wedding Plan</SectionTitle>
-        <Caption tone="muted">
-          Everything for your wedding — budget, guests, vendors and events — in one place.
-        </Caption>
-        {error ? <Alert tone="critical">{error}</Alert> : null}
-        <EmptyState title="No plan yet">Set your wedding date to generate a checklist.</EmptyState>
-        <Button label="Create plan" onPress={() => setEditingDate(true)} />
-      </Screen>
-    );
-  }
-
-  if (!plan && editingDate) {
-    return (
-      <Screen>
-        <SectionTitle>Create plan</SectionTitle>
-        {error ? <Alert tone="critical">{error}</Alert> : null}
-        <DateField
-          label="Wedding Date"
-          value={date}
-          onChange={setDate}
-          from={new Date().toISOString().slice(0, 10)}
-        />
-        <Button
-          label="Create"
-          busy={create.isPending}
-          disabled={!date}
-          onPress={() => create.mutate()}
-        />
-        <Button label="Cancel" variant="outline" onPress={() => setEditingDate(false)} />
-      </Screen>
-    );
-  }
-
-  return (
-    <Screen>
-      <SectionTitle>My Wedding Plan</SectionTitle>
-      <Caption tone="muted">
-        Everything for your wedding — budget, guests, vendors and events — in one place.
-      </Caption>
-      {notice ? <Alert tone="positive">{notice}</Alert> : null}
-      {error ? <Alert tone="critical">{error}</Alert> : null}
-
-      <Card style={{ padding: 0, overflow: 'hidden' }}>
-        <DetailRow label="Wedding Type" value={weddingType} />
-        <DetailRow
-          label="Wedding Date"
-          value={data.countdown.weddingDate ? shortDate(data.countdown.weddingDate) : 'Not set'}
-          action="Edit"
-          onAction={() =>
-            NativeAlert.alert(
-              'Wedding date',
-              'The wedding date is set when the plan is created. Update event dates under Events, or create a new plan from Plan Home if you need a different wedding day.',
-            )
-          }
-        />
-        <DetailRow
-          label="Location"
-          value={location ?? 'Not set'}
-          action="Edit"
-          onAction={() => router.push('/events')}
-        />
-        <DetailRow
-          label="Guest Count"
-          value={guestCount ? String(guestCount) : 'Not set'}
-          action="View"
-          onAction={() => router.push('/plan/guests')}
-        />
-        <DetailRow
-          label="Planner Status"
-          value={plan?.plannerUserId ? 'Planner engaged' : 'No planner yet'}
-          action="View"
-          onAction={() => router.push('/planners')}
-          last
-        />
-      </Card>
-
-      <View style={{ gap: space(2) }}>
-        <Caption tone="faint" style={{ letterSpacing: 1.2, textTransform: 'uppercase', fontSize: 11 }}>
-          Plan Sections
-        </Caption>
-        <Card style={{ padding: 0, overflow: 'hidden' }}>
-          {sections.map((section, index) => (
-            <Pressable
-              key={section.title}
-              onPress={() => router.push(section.to as never)}
-              style={({ pressed }) => [
-                {
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: space(3),
-                  paddingHorizontal: space(4),
-                  paddingVertical: space(3.5),
-                  borderBottomWidth: index === sections.length - 1 ? 0 : 1,
-                  borderBottomColor: rgb(theme.border),
-                },
-                pressed && { backgroundColor: rgb(theme.surfaceSunken) },
-              ]}
-            >
-              <View
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 18,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: rgb(theme.brandSoft),
-                }}
-              >
-                <section.icon size={18} color={rgb(theme.brandStrong)} />
-              </View>
-              <View style={{ flex: 1, gap: 2 }}>
-                <Body style={{ fontWeight: '600' }}>{section.title}</Body>
-                <Caption tone="faint">{section.hint}</Caption>
-              </View>
-              <CaretRight size={16} color={rgb(theme.ink[400])} />
-            </Pressable>
-          ))}
-        </Card>
-      </View>
-    </Screen>
-  );
+type Task = { id: string; title: string; category?: string | null; dueDate?: string | null; status: string };
+type Timeline = { tasks?: Task[] };
+type BudgetData = { budgeted: string; committed: string; categories: { category: string; budgeted: string; committed: string }[] };
+type Dashboard = { budget: BudgetData };
+type Tab = 'Tasks' | 'Timeline' | 'Budget' | 'Notes';
+export default function WeddingPlan() {
+  const theme = useTheme(); const router = useRouter(); const qc = useQueryClient(); const { id } = useLocalSearchParams<{ id: string }>(); const [tab, setTab] = useState<Tab>('Tasks'); const [filter, setFilter] = useState('All'); const [adding, setAdding] = useState(false); const [title, setTitle] = useState(''); const [error, setError] = useState('');
+  const query = useQuery({ queryKey: ['plan-timeline', id], queryFn: async () => (await api.get(`/planner/plan/${id}/timeline`)).data as Timeline, enabled: Boolean(id), retry: false });
+  const dashboard = useQuery({ queryKey: ['wedding-dashboard'], queryFn: async () => (await api.get('/planner/dashboard')).data as Dashboard, retry: false });
+  const update = useMutation({ mutationFn: ({ task, status }: { task: Task; status: string }) => api.put(`/planner/tasks/${task.id}/status`, { status }), onSuccess: () => void qc.invalidateQueries({ queryKey: ['plan-timeline', id] }), onError: (e) => setError(apiMessage(e, 'Task could not be updated.')) });
+  const add = useMutation({ mutationFn: () => api.post(`/planner/plan/${id}/tasks`, { title, category: 'Custom' }), onSuccess: () => { setTitle(''); setAdding(false); void qc.invalidateQueries({ queryKey: ['plan-timeline', id] }); }, onError: (e) => setError(apiMessage(e, 'Task could not be added.')) });
+  if (query.isPending) return <Screen><Loading rows={5} /></Screen>; if (query.error || !query.data) return <Screen><EmptyState title="Wedding plan unavailable">{apiMessage(query.error, 'Please try again shortly.')}</EmptyState></Screen>;
+  const data = query.data; const tasks = data.tasks ?? []; const visible = tasks.filter((t) => filter === 'All' || (filter === 'Completed' ? t.status === 'done' : filter === 'To Do' ? t.status === 'pending' : t.status === 'in_progress'));
+  return <Screen><View style={{ flexDirection: 'row', alignItems: 'center', gap: space(2) }}><Pressable onPress={() => router.back()}><ArrowLeft size={22} color={rgb(theme.ink[800])} /></Pressable><SectionTitle style={{ flex: 1, textAlign: 'center' }}>Wedding Plan</SectionTitle><View style={{ width: 22 }} /></View><View style={{ flexDirection: 'row', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: rgb(theme.border) }}>{(['Tasks', 'Timeline', 'Budget', 'Notes'] as Tab[]).map((item) => <Pressable key={item} onPress={() => setTab(item)} style={{ paddingVertical: space(2), borderBottomWidth: 2, borderBottomColor: tab === item ? rgb(theme.brand) : 'transparent' }}><Caption tone={tab === item ? 'brand' : 'muted'} style={{ fontWeight: tab === item ? '700' : '400' }}>{item}</Caption></Pressable>)}</View>{error ? <Alert tone="critical">{error}</Alert> : null}
+    {tab === 'Tasks' ? <View style={{ gap: space(2) }}><View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><SectionTitle>Your Checklist</SectionTitle><Caption>{tasks.length} tasks</Caption></View><View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(1) }}>{['All', 'To Do', 'In Progress', 'Completed'].map((item) => <Pressable key={item} onPress={() => setFilter(item)} style={{ paddingHorizontal: space(2), paddingVertical: space(1), borderRadius: 12, backgroundColor: filter === item ? rgb(theme.brand) : rgb(theme.surfaceSunken) }}><Caption tone={filter === item ? 'onBrand' : 'muted'}>{item}</Caption></Pressable>)}</View>{visible.length ? visible.map((task) => <Pressable key={task.id} disabled={update.isPending} onPress={() => update.mutate({ task, status: task.status === 'done' ? 'pending' : 'done' })}><Card style={{ flexDirection: 'row', alignItems: 'center', padding: space(3) }}><CheckCircle size={21} color={rgb(task.status === 'done' ? theme.brand : theme.ink[400])} weight={task.status === 'done' ? 'fill' : 'regular'} /><View style={{ flex: 1, marginLeft: space(2) }}><Caption style={{ textDecorationLine: task.status === 'done' ? 'line-through' : 'none', color: rgb(theme.ink[800]) }}>{task.title}</Caption><Caption tone="faint">{[task.category, task.dueDate ? shortDate(task.dueDate) : null].filter(Boolean).join(' · ')}</Caption></View><CaretRight size={18} color={rgb(theme.ink[400])} /></Card></Pressable>) : <EmptyState title="No tasks here" />}{adding ? <Card><Field label="Task" value={title} onChangeText={setTitle} placeholder="What needs doing?" /><Button label="Add task" onPress={() => add.mutate()} busy={add.isPending} disabled={!title.trim()} /></Card> : <Button label="Add Custom Task" onPress={() => setAdding(true)} />}</View> : null}
+    {tab === 'Timeline' ? <View style={{ gap: space(2) }}><SectionTitle>Planning Timeline</SectionTitle>{tasks.length ? tasks.map((task, index) => <View key={task.id} style={{ flexDirection: 'row', gap: space(3) }}><View style={{ alignItems: 'center' }}><View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: rgb(theme.brandSoft), borderWidth: 3, borderColor: rgb(theme.brand) }} /><View style={{ flex: 1, width: 1, backgroundColor: rgb(theme.border) }} /></View><View style={{ flex: 1, paddingBottom: space(3) }}><Caption style={{ fontWeight: '700', color: rgb(theme.ink[800]) }}>{task.title}</Caption><Caption tone="faint">{[task.category, shortDate(task.dueDate)].filter(Boolean).join(' · ')}</Caption></View></View>) : <EmptyState title="No milestones yet" />}</View> : null}
+    {tab === 'Budget' ? dashboard.isPending ? <Loading rows={3} /> : <Budget budget={dashboard.data?.budget} /> : null}{tab === 'Notes' ? <EmptyState title="Notes are not available yet">The current WOW API does not provide wedding-plan notes, so this mobile screen does not create local-only notes.</EmptyState> : null}
+  </Screen>;
 }
-
-function DetailRow({
-  label,
-  value,
-  action,
-  onAction,
-  last = false,
-}: {
-  label: string;
-  value: string;
-  action?: string;
-  onAction?: () => void;
-  last?: boolean;
-}) {
-  const theme = useTheme();
-  return (
-    <View
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: space(3),
-        paddingHorizontal: space(4),
-        paddingVertical: space(3.5),
-        borderBottomWidth: last ? 0 : 1,
-        borderBottomColor: rgb(theme.border),
-      }}
-    >
-      <View style={{ flex: 1, gap: 2 }}>
-        <Caption tone="faint">{label}</Caption>
-        <Body style={{ fontWeight: '600' }}>{value}</Body>
-      </View>
-      {action && onAction ? (
-        <Pressable onPress={onAction} hitSlop={8}>
-          <Caption tone="brand" style={{ fontWeight: '700' }}>
-            {action}
-          </Caption>
-        </Pressable>
-      ) : null}
-    </View>
-  );
-}
+function Budget({ budget }: { budget?: BudgetData }) { const theme = useTheme(); if (!budget) return <EmptyState title="No budget yet">Budget details appear as bookings and event budgets are added.</EmptyState>; const spent = Number(budget.committed); const total = Number(budget.budgeted); const pct = total ? Math.min(100, Math.round(spent / total * 100)) : 0; return <View style={{ gap: space(3) }}><Card style={{ backgroundColor: rgb(theme.brandSoft) }}><Caption>Total Budget</Caption><SectionTitle>{rupees(total)}</SectionTitle><Caption>Spent {rupees(spent)} · {pct}%</Caption><View style={{ height: 6, backgroundColor: rgb(theme.surface), borderRadius: 4 }}><View style={{ height: 6, width: `${pct}%`, borderRadius: 4, backgroundColor: rgb(theme.brand) }} /></View></Card>{budget.categories.map((c) => <Card key={c.category} style={{ padding: space(3) }}><View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Caption style={{ textTransform: 'capitalize' }}>{c.category.replace(/_/g, ' ')}</Caption><Caption>{rupees(c.committed)} / {rupees(c.budgeted)}</Caption></View></Card>)}</View>; }

@@ -8,7 +8,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Heart, MapPin, SealCheck, Star } from 'phosphor-react-native';
 
 import { api, apiMessage } from '@/lib/api';
@@ -41,6 +41,7 @@ type Planner = {
   packages?: { name: string; price: number; includes?: string[] }[];
   contactPerson?: string | null;
   website?: string | null;
+  ownerUserId: string;
 };
 
 type Review = {
@@ -51,6 +52,7 @@ type Review = {
 };
 
 export default function PlannerDetail() {
+  const qc = useQueryClient();
   const theme = useTheme();
   const router = useRouter();
   const { width } = useWindowDimensions();
@@ -87,25 +89,38 @@ export default function PlannerDetail() {
 
   const request = useMutation({
     mutationFn: async () => {
-      await api.post('/bookings', {
+      const response = await api.post('/bookings', {
         providerType: 'planner',
         providerId: id,
         ...(eventDate ? { eventDate } : {}),
         ...(budget ? { expectedBudget: Number(budget) } : {}),
         ...(requirements.trim() ? { requirements: requirements.trim() } : {}),
       });
+      return response.data as { id: string };
     },
-    onSuccess: () => {
+    onSuccess: async (data) => {
       setRequesting(false);
-      setNotice('Planner request sent.');
+      setNotice('');
       setError('');
+      await qc.invalidateQueries({ queryKey: ['my-bookings'] });
+      await qc.invalidateQueries({ queryKey: ['wedding-dashboard'] });
+      router.push({ pathname: '/plan/bookings', params: { highlight: data.id } });
     },
     onError: (err) => setError(apiMessage(err, 'That request could not be sent.')),
   });
 
   if (query.isPending) {
     return (
-      <View style={{ flex: 1, padding: space(4) }}>
+      <View style={{ flex: 1, padding: space(4), backgroundColor: rgb(theme.canvas) }}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+          onPress={() => router.back()}
+          hitSlop={8}
+          style={{ marginBottom: space(3), alignSelf: 'flex-start' }}
+        >
+          <ArrowLeft size={22} color={rgb(theme.ink[800])} />
+        </Pressable>
         <Loading rows={4} />
       </View>
     );
@@ -113,7 +128,16 @@ export default function PlannerDetail() {
 
   if (query.error || !query.data) {
     return (
-      <View style={{ flex: 1, padding: space(4) }}>
+      <View style={{ flex: 1, padding: space(4), backgroundColor: rgb(theme.canvas) }}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+          onPress={() => router.back()}
+          hitSlop={8}
+          style={{ marginBottom: space(3), alignSelf: 'flex-start' }}
+        >
+          <ArrowLeft size={22} color={rgb(theme.ink[800])} />
+        </Pressable>
         <EmptyState title="Planner unavailable">
           {apiMessage(query.error, 'This listing may no longer be available.')}
         </EmptyState>
@@ -361,28 +385,13 @@ export default function PlannerDetail() {
           }}
         >
           <Button
-            label="Chat"
-            variant="outline"
-            onPress={() =>
-              NativeAlert.alert(
-                'Chat with this planner',
-                'Planner chat opens from Chat once a conversation exists. Browse your conversations from the Chat tab.',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Open Chat', onPress: () => router.push('/chat') },
-                ],
-              )
-            }
-            style={{ flex: 1 }}
-          />
-          <Button
             label="Request Planner"
             onPress={() => {
               setRequesting(true);
               setNotice('');
               setError('');
             }}
-            style={{ flex: 1.5 }}
+            style={{ flex: 1 }}
           />
         </View>
       ) : null}

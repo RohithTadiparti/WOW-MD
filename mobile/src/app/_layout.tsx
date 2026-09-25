@@ -162,6 +162,7 @@ function Routes() {
         options={{ headerShown: true, title: 'Review & Submit' }}
       />
       <Stack.Screen name="accounts" options={{ headerShown: true, title: 'Accounts' }} />
+      <Stack.Screen name="escrow" options={{ headerShown: true, title: 'Escrow' }} />
       <Stack.Screen name="account" options={{ headerShown: true, title: 'Account Information' }} />
       <Stack.Screen name="profile" options={{ headerShown: true, title: 'My Profile' }} />
       <Stack.Screen name="edit-profile" options={{ headerShown: true, title: 'Edit Profile' }} />

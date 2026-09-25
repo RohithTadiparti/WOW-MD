@@ -1,12 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { api, apiMessage } from '@/lib/api';
-import { humanise, shortDate } from '@/lib/format';
+import { humanise, rupees, shortDate } from '@/lib/format';
 import { categoryLabel } from '@/lib/wedding-plan';
 import { Badge } from '@/components/chrome';
+import { BookingChat } from '@/components/bookings/chat';
+import { BuyerMoneyPanel } from '@/components/bookings/buyer-money';
 import {
   Alert,
   Body,
@@ -31,6 +33,14 @@ interface BuyerBooking {
   status: string;
   eventDate?: string | null;
   eventName?: string | null;
+  amount?: string | null;
+  currency?: string | null;
+  paymentStatus?: string | null;
+  cancellationReason?: string | null;
+  deliveredAt?: string | null;
+  deliveryAcceptedAt?: string | null;
+  deliveryNotes?: string | null;
+  collectedMilestones?: string[];
 }
 
 const TABS: { key: Tab; label: string }[] = [
@@ -62,8 +72,14 @@ function statusTone(status: string): 'positive' | 'caution' | 'critical' | 'neut
 export default function PlanBookings() {
   const theme = useTheme();
   const router = useRouter();
+  const params = useLocalSearchParams<{ highlight?: string }>();
+  const highlight = typeof params.highlight === 'string' ? params.highlight : undefined;
   const [tab, setTab] = useState<Tab>('all');
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(highlight ?? null);
+
+  useEffect(() => {
+    if (highlight) setOpenId(highlight);
+  }, [highlight]);
 
   const query = useQuery({
     queryKey: ['my-bookings'],
@@ -87,9 +103,11 @@ export default function PlanBookings() {
   }, [query.data, tab]);
 
   return (
-    <Screen>
+    <Screen onRefresh={() => void query.refetch()} refreshing={query.isRefetching}>
       <SectionTitle>Bookings</SectionTitle>
-      <Caption tone="muted">Requests and confirmed work with vendors and planners.</Caption>
+      <Caption tone="muted">
+        Accept a quotation, pay instalments into escrow, then confirm delivery.
+      </Caption>
 
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2) }}>
         {TABS.map((item) => {
@@ -129,38 +147,65 @@ export default function PlanBookings() {
       ) : (
         rows.map((row) => {
           const open = openId === row.id;
+          const highlighted = highlight === row.id;
           return (
-            <Card key={row.id} style={{ gap: space(2), borderRadius: 14 }}>
+            <Card
+              key={row.id}
+              style={{
+                gap: space(2),
+                borderRadius: 14,
+                ...(highlighted ? { borderWidth: 2, borderColor: rgb(theme.brand) } : null),
+              }}
+            >
               <Pressable onPress={() => setOpenId(open ? null : row.id)}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: space(2) }}>
+                <View
+                  style={{ flexDirection: 'row', justifyContent: 'space-between', gap: space(2) }}
+                >
                   <Body style={{ fontWeight: '700', flex: 1 }} numberOfLines={1}>
                     {row.providerName ?? row.serviceName ?? 'Booking'}
                   </Body>
-                  <Badge tone={statusTone(row.status)}>
-                    {humanise(row.status)}
-                  </Badge>
+                  <Badge tone={statusTone(row.status)}>{humanise(row.status)}</Badge>
                 </View>
                 <Caption tone="muted">
                   {[
                     row.serviceName || row.offeringName,
                     row.providerType ? categoryLabel(row.providerType) : null,
                     row.eventDate ? shortDate(row.eventDate) : null,
+                    row.amount != null && row.amount !== '' ? rupees(row.amount) : null,
                   ]
                     .filter(Boolean)
                     .join(' · ')}
                 </Caption>
+                {row.paymentStatus ? (
+                  <Caption tone="muted" style={{ marginTop: space(0.5) }}>
+                    Payment: {humanise(row.paymentStatus)}
+                  </Caption>
+                ) : null}
+                {row.status === 'payment_pending' ? (
+                  <Caption tone="brand" style={{ marginTop: space(0.5), fontWeight: '600' }}>
+                    Advance due — open to Pay Now
+                  </Caption>
+                ) : null}
+                {row.status === 'completed_pending_final_payment' &&
+                !(row.collectedMilestones ?? []).includes('final') ? (
+                  <Caption tone="brand" style={{ marginTop: space(0.5), fontWeight: '600' }}>
+                    Final payment due — open to Pay Now
+                  </Caption>
+                ) : null}
               </Pressable>
               {open ? (
                 <View
                   style={{
-                    gap: space(1.5),
+                    gap: space(2),
                     paddingTop: space(2),
                     borderTopWidth: 1,
                     borderTopColor: rgb(theme.border),
                   }}
                 >
                   {row.eventName ? <Caption>Event: {row.eventName}</Caption> : null}
-                  <Caption>Status: {humanise(row.status)}</Caption>
+                  {row.cancellationReason ? (
+                    <Caption>Cancellation: {row.cancellationReason}</Caption>
+                  ) : null}
                   {row.providerType === 'vendor' && row.providerId ? (
                     <Pressable
                       onPress={() =>
@@ -189,6 +234,8 @@ export default function PlanBookings() {
                       </Caption>
                     </Pressable>
                   ) : null}
+                  <BuyerMoneyPanel booking={row} />
+                  <BookingChat bookingId={row.id} />
                 </View>
               ) : null}
             </Card>

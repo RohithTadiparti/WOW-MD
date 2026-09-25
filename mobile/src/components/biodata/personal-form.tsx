@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { View } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -6,7 +6,7 @@ import { api, apiMessage } from '@/lib/api';
 import { DateField, SelectField } from '@/components/form';
 import { Alert, Button, Card, Field } from '@/components/ui';
 import { space } from '@/theme';
-import { GENDERS, MARITAL, RELIGIONS, HEIGHTS, stored } from './constants';
+import { GENDERS, MARITAL, RELIGIONS, COMPLEXIONS, stored } from './constants';
 
 interface Form {
   fullName: string;
@@ -83,6 +83,12 @@ export function PersonalForm({
 
   const form = draft ?? formFrom(me, full);
 
+  const maxDob = useMemo(() => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - 21);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, []);
+
   const save = useMutation({
     mutationFn: async () => {
       const payload: Record<string, string> = {};
@@ -152,10 +158,10 @@ export function PersonalForm({
       {error ? <Alert tone="critical">{error}</Alert> : null}
       <Card>
         <Field label="Full Name" value={form.fullName} onChangeText={set('fullName')} />
-        <DateField label="Date of Birth" value={form.dateOfBirth} onChange={set('dateOfBirth')} />
+        <DateField label="Date of Birth" value={form.dateOfBirth} onChange={set('dateOfBirth')} to={maxDob} />
         <SelectField label="Gender" value={form.gender} options={GENDERS} onChange={set('gender')} />
-        <SelectField label="Height" value={form.heightCm} options={HEIGHTS} onChange={set('heightCm')} />
-        <Field label="Complexion" value={form.complexion} onChangeText={set('complexion')} />
+        <Field label="Height (cm)" value={form.heightCm} onChangeText={set('heightCm')} keyboardType="numeric" />
+        <SelectField label="Complexion" value={form.complexion} options={COMPLEXIONS} onChange={set('complexion')} />
         <SelectField label="Marital Status" value={form.maritalStatus} options={MARITAL} onChange={set('maritalStatus')} />
         <Field label="Place of Birth" value={form.placeOfBirth} onChangeText={set('placeOfBirth')} />
       </Card>
@@ -202,7 +208,17 @@ export function PersonalForm({
           label="Save & Continue →"
           busy={save.isPending}
           disabled={!form.fullName.trim()}
-          onPress={() => save.mutate()}
+          onPress={() => {
+            if (form.heightCm) {
+              const h = Number(form.heightCm);
+              if (Number.isNaN(h) || h < 120 || h > 230) {
+                setError('Height must be between 120cm and 230cm.');
+                return;
+              }
+            }
+            setError('');
+            save.mutate();
+          }}
         />
       </View>
     </View>

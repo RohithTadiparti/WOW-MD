@@ -6,7 +6,7 @@ import { api, apiMessage } from '@/lib/api';
 import { SelectField } from '@/components/form';
 import { Alert, Button, Card, Field } from '@/components/ui';
 import { space } from '@/theme';
-import { FAMILY_TYPES, stored } from './constants';
+import { FAMILY_TYPES, FAMILY_STATUSES, stored } from './constants';
 
 interface Form {
   fatherName: string;
@@ -97,7 +97,7 @@ export function FamilyBackgroundForm({
       
       <Card>
         <SelectField label="Family Type" value={form.familyType} options={FAMILY_TYPES} onChange={set('familyType')} />
-        <Field label="Family Status" value={form.familyStatus} onChangeText={set('familyStatus')} hint="E.g. Middle class, Upper middle class" />
+        <SelectField label="Family Status" value={form.familyStatus} options={FAMILY_STATUSES} onChange={set('familyStatus')} />
         <Field label="Number of Brothers" value={form.brothers} onChangeText={set('brothers')} keyboardType="number-pad" />
         <Field label="Number of Sisters" value={form.sisters} onChangeText={set('sisters')} keyboardType="number-pad" />
         <Field label="Family Net Worth" value={form.familyNetWorth} onChangeText={set('familyNetWorth')} keyboardType="number-pad" hint="Optional, in Rupees" />

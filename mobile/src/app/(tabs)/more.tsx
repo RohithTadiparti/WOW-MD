@@ -23,6 +23,7 @@ import {
   SignOut,
   SlidersHorizontal,
   UserCircle,
+  Vault,
   type IconProps,
 } from 'phosphor-react-native';
 
@@ -65,6 +66,7 @@ export default function More() {
   const canMatch = can(permissions, Permission.MATCH_BROWSE);
   const canChat = can(permissions, Permission.CHAT_INQUIRE) || can(permissions, Permission.CHAT_MATCH);
   const canPlanEvents = can(permissions, Permission.EVENT_MANAGE_OWN);
+  const canEscrow = can(permissions, Permission.BOOKING_READ_OWN);
 
   const { data: me, isPending: loadingMe, isError: meFailed, refetch } = useQuery({
     queryKey: ['me'],
@@ -280,6 +282,7 @@ export default function More() {
       ) : null}
 
       <Group title="Account">
+        {canEscrow ? <Row icon={Vault} label="Escrow" to="/escrow" /> : null}
         <Row icon={Lock} label="Account Information" to="/account" last />
       </Group>
 

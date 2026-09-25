@@ -461,7 +461,6 @@ function MatchCard({
   const facts = [profile.ageRange, profile.city].filter(Boolean).join(" • ");
   return (
     <Pressable
-      accessibilityRole="button"
       accessibilityLabel={`View ${profile.displayName}`}
       onPress={onOpen}
       style={({ pressed }) => [

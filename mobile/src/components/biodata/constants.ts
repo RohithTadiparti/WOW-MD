@@ -63,3 +63,23 @@ export const OCCUPATION_STATUS = [
 
 export const stored = (value: unknown): string =>
   typeof value === 'number' || (typeof value === 'string' && value.trim()) ? String(value) : '';
+
+export const COMPLEXIONS = [
+  { value: 'fair', label: 'Fair' },
+  { value: 'wheatish', label: 'Wheatish' },
+  { value: 'dark', label: 'Dark' },
+  { value: 'very_fair', label: 'Very Fair' },
+];
+
+export const FAMILY_STATUSES = [
+  { value: 'lower_middle_class', label: 'Lower middle class' },
+  { value: 'middle_class', label: 'Middle class' },
+  { value: 'upper_middle_class', label: 'Upper middle class' },
+  { value: 'affluent', label: 'Affluent' },
+];
+
+export const KUJA_DOSHAM_OPTIONS = [
+  { value: 'yes', label: 'Yes' },
+  { value: 'no', label: 'No' },
+  { value: 'unknown', label: 'Unknown' },
+];

@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Pressable, Share, View } from 'react-native';
+import { useState } from 'react';
+import { Share, View } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarBlank, MapPin, UsersThree } from 'phosphor-react-native';
 
@@ -54,12 +54,9 @@ interface Summary {
   cancelled: number;
 }
 
-type Tab = 'all' | 'upcoming' | 'completed';
-
 export default function Events() {
   const theme = useTheme();
   const qc = useQueryClient();
-  const [tab, setTab] = useState<Tab>('all');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -97,21 +94,7 @@ export default function Events() {
   });
 
   // A plain array, not the paged envelope.
-  const allRows: WeddingEvent[] = Array.isArray(data) ? data : (data?.data ?? []);
-  const today = todayIso();
-  const rows = useMemo(() => {
-    return allRows.filter((row) => {
-      if (tab === 'all') return true;
-      if (tab === 'completed') {
-        return row.status === 'completed' || (row.eventDate !== null && row.eventDate < today);
-      }
-      return (
-        row.status !== 'cancelled' &&
-        row.status !== 'completed' &&
-        (row.eventDate === null || row.eventDate >= today)
-      );
-    });
-  }, [allRows, tab, today]);
+  const rows: WeddingEvent[] = Array.isArray(data) ? data : (data?.data ?? []);
 
   return (
     <ListScreen
@@ -136,41 +119,8 @@ export default function Events() {
             </TileGrid>
           ) : null}
 
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2) }}>
-            {(
-              [
-                ['all', 'All'],
-                ['upcoming', 'Upcoming'],
-                ['completed', 'Completed'],
-              ] as const
-            ).map(([key, label]) => {
-              const active = tab === key;
-              return (
-                <Pressable
-                  key={key}
-                  onPress={() => setTab(key)}
-                  style={{
-                    paddingHorizontal: space(3),
-                    paddingVertical: space(1.5),
-                    borderRadius: 999,
-                    backgroundColor: active ? rgb(theme.brand) : rgb(theme.surfaceSunken),
-                  }}
-                >
-                  <Caption
-                    style={{
-                      color: active ? rgb(theme.brandFg) : rgb(theme.ink[700]),
-                      fontWeight: '600',
-                    }}
-                  >
-                    {label}
-                  </Caption>
-                </Pressable>
-              );
-            })}
-          </View>
-
           <Button
-            label={creating ? 'Cancel' : 'Add Event'}
+            label={creating ? 'Cancel' : 'Add an event'}
             variant={creating ? 'outline' : 'primary'}
             onPress={() => setCreating((open) => !open)}
           />
@@ -184,7 +134,6 @@ export default function Events() {
                 setNotice('Added. Vendors can be booked against it now.');
                 void qc.invalidateQueries({ queryKey: ['events'] });
                 void qc.invalidateQueries({ queryKey: ['events-summary'] });
-                void qc.invalidateQueries({ queryKey: ['wedding-dashboard'] });
               }}
               onError={setError}
             />

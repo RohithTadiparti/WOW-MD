@@ -9,7 +9,9 @@ import { isChartImage } from '@/shared/horoscope';
 import { DetailGrid, DetailRow } from '@/components/chrome';
 import { PhotoPicker } from '@/components/uploader';
 import { Alert, Body, Button, Caption, Card, Field, SectionTitle } from '@/components/ui';
+import { SelectField } from '@/components/form';
 import { radius, rgb, space, useTheme } from '@/theme';
+import { KUJA_DOSHAM_OPTIONS } from './constants';
 
 export function HoroscopeSection({
   profileId,
@@ -87,11 +89,11 @@ export function HoroscopeSection({
             <Field label="Star / Nakshatram" value={form.star} onChangeText={set('star')} />
             <Field label="Padam" value={form.padam} onChangeText={set('padam')} maxLength={20} />
             <Field label="Gothram" value={form.gothram} onChangeText={set('gothram')} />
-            <Field
+            <SelectField
               label="Kuja dosham"
               value={form.kujaDosham}
-              onChangeText={set('kujaDosham')}
-              maxLength={20}
+              onChange={set('kujaDosham')}
+              options={KUJA_DOSHAM_OPTIONS}
             />
             <Field label="Time of Birth" value={form.timeOfBirth} onChangeText={set('timeOfBirth')} hint="e.g. 10:30 AM" />
             {!isWizard && (

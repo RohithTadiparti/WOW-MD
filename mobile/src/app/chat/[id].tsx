@@ -115,6 +115,12 @@ export default function Thread() {
       setError(apiMessage(e, "Conversation could not be cleared.")),
   });
   const confirmClear = () => {
+    if (Platform.OS === 'web') {
+      if (window.confirm("Clear this conversation?")) {
+        clear.mutate();
+      }
+      return;
+    }
     NativeAlert.alert("Clear this conversation?", "", [
       { text: "Cancel", style: "cancel" },
       {
