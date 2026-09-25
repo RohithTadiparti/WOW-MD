@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiMessage } from '../lib/api';
 import { Loading } from './ui/Feedback';
+import ConfirmDialog from './ConfirmDialog';
 import DynamicForm, {
   Answers,
   FieldSpec,
@@ -105,6 +106,10 @@ export default function VendorServices({
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [pricing, setPricing] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<
+    { kind: 'service'; id: string; name: string } | { kind: 'offering'; serviceId: string; id: string; name: string } | null
+  >(null);
+  const [deleting, setDeleting] = useState(false);
 
   const { data: services = [], isLoading } = useQuery<VendorService[]>({
     queryKey: ['vendor-services', vendorId],
@@ -205,6 +210,18 @@ export default function VendorServices({
                 {editing === service.id ? 'Close' : 'Edit'}
               </button>
               <button
+                className="btn-outline text-critical-fg"
+                onClick={() =>
+                  setDeleteTarget({
+                    kind: 'service',
+                    id: service.id,
+                    name: service.displayName ?? service.definition?.name ?? 'this service',
+                  })
+                }
+              >
+                Delete
+              </button>
+              <button
                 className="btn-outline"
                 onClick={() => setPricing(pricing === service.id ? null : service.id)}
               >
@@ -249,17 +266,17 @@ export default function VendorServices({
           {editing === service.id && (
             <EditService
               service={service}
+              onDelete={() =>
+                setDeleteTarget({
+                  kind: 'service',
+                  id: service.id,
+                  name: service.displayName ?? service.definition?.name ?? 'this service',
+                })
+              }
               onSave={async (body) => {
                 const ok = await act(
                   () => api.put(`/vendors/${vendorId}/services/${service.id}`, body),
                   'Service updated.',
-                );
-                if (ok) setEditing(null);
-              }}
-              onRemove={async () => {
-                const ok = await act(
-                  () => api.delete(`/vendors/${vendorId}/services/${service.id}`),
-                  'Service removed.',
                 );
                 if (ok) setEditing(null);
               }}
@@ -270,11 +287,50 @@ export default function VendorServices({
             <Offerings
               vendorId={vendorId}
               service={service}
+              onDelete={(offering) =>
+                setDeleteTarget({
+                  kind: 'offering',
+                  serviceId: service.id,
+                  id: offering.id,
+                  name: offering.name,
+                })
+              }
               onChanged={(ok) => act(async () => undefined, ok)}
             />
           )}
         </div>
       ))}
+
+      {deleteTarget && (
+        <ConfirmDialog
+          title={deleteTarget.kind === 'service' ? 'Delete service?' : 'Delete pricing/package?'}
+          body={`Delete "${deleteTarget.name}" permanently? This cannot be undone.`}
+          confirmLabel="Delete"
+          busy={deleting}
+          onDismiss={() => {
+            if (!deleting) setDeleteTarget(null);
+          }}
+          onConfirm={async () => {
+            setDeleting(true);
+            const target = deleteTarget;
+            const ok = await act(
+              () =>
+                target.kind === 'service'
+                  ? api.delete(`/vendors/${vendorId}/services/${target.id}`)
+                  : api.delete(
+                      `/vendors/${vendorId}/services/${target.serviceId}/offerings/${target.id}`,
+                    ),
+              target.kind === 'service' ? 'Service deleted.' : 'Pricing/package deleted.',
+            );
+            setDeleting(false);
+            if (ok) {
+              setDeleteTarget(null);
+              setEditing(null);
+              setPricing(null);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -397,12 +453,12 @@ function AddService({
 
 function EditService({
   service,
+  onDelete,
   onSave,
-  onRemove,
 }: {
   service: VendorService;
+  onDelete: () => void;
   onSave: (b: Record<string, unknown>) => void;
-  onRemove: () => void;
 }) {
   const [displayName, setDisplayName] = useState(service.displayName ?? '');
   const [description, setDescription] = useState(service.description ?? '');
@@ -457,9 +513,7 @@ function EditService({
         <button
           type="button"
           className="btn-outline"
-          onClick={() => {
-            if (confirm('Remove this service from your business?')) onRemove();
-          }}
+          onClick={onDelete}
         >
           Remove
         </button>
@@ -471,10 +525,12 @@ function EditService({
 function Offerings({
   vendorId,
   service,
+  onDelete,
   onChanged,
 }: {
   vendorId: string;
   service: VendorService;
+  onDelete: (offering: Offering) => void;
   onChanged: (ok: string) => void;
 }) {
   const qc = useQueryClient();
@@ -538,15 +594,7 @@ function Offerings({
                 )
               }
               onCancel={() => setEditing(null)}
-              onRemove={() =>
-                act(
-                  () =>
-                    api.delete(
-                      `/vendors/${vendorId}/services/${service.id}/offerings/${o.id}`,
-                    ),
-                  'Price removed.',
-                )
-              }
+              onRemove={() => onDelete(o)}
             />
           ) : (
             <div key={o.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
@@ -571,6 +619,9 @@ function Offerings({
               </div>
               <button className="btn-outline" onClick={() => setEditing(o.id)}>
                 Edit
+              </button>
+              <button className="btn-outline text-critical-fg" onClick={() => onDelete(o)}>
+                Delete
               </button>
             </div>
           ),

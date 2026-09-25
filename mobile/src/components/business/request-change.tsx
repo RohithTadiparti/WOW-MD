@@ -1,10 +1,21 @@
 import { useState } from 'react';
-import { View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { api, apiMessage } from '@/lib/api';
 import { Textarea } from '@/components/form';
 import { Alert, Body, Button, Caption, Card, SectionTitle } from '@/components/ui';
-import { space } from '@/theme';
+import { radius, rgb, space, useTheme } from '@/theme';
+import { Check } from 'phosphor-react-native';
+
+const CHANGE_OPTIONS = [
+  { value: 'name', label: 'Business name' },
+  { value: 'categories', label: 'Categories' },
+  { value: 'registeredAddress', label: 'Business address' },
+  { value: 'contactPhone', label: 'Contact details' },
+  { value: 'description', label: 'Business description' },
+  { value: 'portfolio', label: 'Photos' },
+  { value: 'complianceDocuments', label: 'Supporting documents' },
+] as const;
 
 /**
  * A verified listing's legal details are locked, so a genuine change to one
@@ -16,8 +27,10 @@ import { space } from '@/theme';
  * then reopens the listing through the existing unlock flow.
  */
 export function RequestChange({ vendorId }: { vendorId: string }) {
+  const theme = useTheme();
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState('');
+  const [fields, setFields] = useState<string[]>([]);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -31,10 +44,11 @@ export function RequestChange({ vendorId }: { vendorId: string }) {
         subjectId: vendorId,
         title: 'Change request: verified business details',
         description: detail.trim(),
-        requestedFields: ['name', 'registeredAddress', 'contactPhone', 'description', 'portfolio'],
+        requestedFields: fields,
       });
       setNotice('Sent. An administrator will review the request and grant temporary edit access if approved.');
       setDetail('');
+      setFields([]);
       setOpen(false);
     } catch (err) {
       setError(apiMessage(err, 'That could not be sent.'));
@@ -57,14 +71,56 @@ export function RequestChange({ vendorId }: { vendorId: string }) {
         <Button label="Request a change" variant="outline" onPress={() => setOpen(true)} />
       ) : (
         <View style={{ gap: space(2.5) }}>
+          <View style={{ gap: space(1.5) }}>
+            <Caption tone="faint">Details to change</Caption>
+            <View style={{ gap: space(1) }}>
+              {CHANGE_OPTIONS.map((option) => {
+                const selected = fields.includes(option.value);
+                return (
+                  <Pressable
+                    key={option.value}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: selected }}
+                    onPress={() =>
+                      setFields((current) =>
+                        selected
+                          ? current.filter((field) => field !== option.value)
+                          : [...current, option.value],
+                      )
+                    }
+                    style={({ pressed }) => [
+                      styles.checkboxRow,
+                      {
+                        borderColor: rgb(selected ? theme.brand : theme.border),
+                        backgroundColor: rgb(selected ? theme.brandSoft : theme.surface),
+                      },
+                      pressed && { opacity: 0.75 },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.checkbox,
+                        {
+                          borderColor: rgb(selected ? theme.brand : theme.ink[400]),
+                          backgroundColor: rgb(selected ? theme.brand : theme.surface),
+                        },
+                      ]}
+                    >
+                      {selected ? <Check size={14} color={rgb(theme.brandFg)} weight="bold" /> : null}
+                    </View>
+                    <Body>{option.label}</Body>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
           <Textarea
-            label="What needs changing"
+            label="Reason for this change"
             value={detail}
             onChange={setDetail}
             rows={4}
             maxLength={2000}
-            placeholder="Which detail needs changing, what it should be, and why."
-            hint="At least ten characters — the team reads this verbatim."
+            placeholder="Reason for this change and any information the administrator should review."
           />
           <View style={{ flexDirection: 'row', gap: space(2) }}>
             <Button
@@ -73,13 +129,14 @@ export function RequestChange({ vendorId }: { vendorId: string }) {
               onPress={() => {
                 setOpen(false);
                 setDetail('');
+                setFields([]);
               }}
               style={{ flex: 1 }}
             />
             <Button
               label="Send request"
               busy={busy}
-              disabled={detail.trim().length < 10}
+              disabled={detail.trim().length < 10 || fields.length === 0}
               onPress={() => void submit()}
               style={{ flex: 1 }}
             />
@@ -89,3 +146,24 @@ export function RequestChange({ vendorId }: { vendorId: string }) {
     </Card>
   );
 }
+
+const styles = StyleSheet.create({
+  checkboxRow: {
+    alignItems: 'center',
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    gap: space(2),
+    minHeight: 48,
+    paddingHorizontal: space(2.5),
+    paddingVertical: space(1.5),
+  },
+  checkbox: {
+    alignItems: 'center',
+    borderRadius: 3,
+    borderWidth: 1,
+    height: 20,
+    justifyContent: 'center',
+    width: 20,
+  },
+});

@@ -1123,6 +1123,34 @@ export class BookingsService {
     return booking;
   }
 
+  /** Transfer every pending payout on one eligible booking in full. */
+  async releasePayout(
+    actor: AuthUser,
+    bookingId: string,
+    milestone?: PaymentMilestone,
+  ): Promise<Booking> {
+    const booking = await this.loadOrFail(bookingId);
+    await this.assertSellerSide(actor, booking);
+
+    if (await this.cases.hasOpenCaseFor(bookingId)) {
+      throw new BadRequestException('An open case is holding this booking.');
+    }
+
+    const pending = await this.payments.count({
+      where: {
+        bookingId,
+        status: PaymentStatus.PENDING_PAYOUT,
+        ...(milestone ? { milestone } : {}),
+      },
+    });
+    if (pending === 0) {
+      throw new BadRequestException('No eligible payout remains for this booking');
+    }
+
+    await this.releasePending(actor, bookingId, milestone);
+    return booking;
+  }
+
   /**
    * Moves every held payment on a booking to the provider.
    *
@@ -1188,6 +1216,57 @@ export class BookingsService {
           milestone: payment.milestone,
           payout: split.payout,
           commission: split.commission,
+          transferred: result.transferred,
+          reason: result.reason,
+        },
+      });
+    }
+    return moved;
+  }
+
+  /** Retry transfers for money already earned but waiting for payout setup. */
+  private async releasePending(
+    actor: AuthUser,
+    bookingId: string,
+    milestone?: PaymentMilestone,
+  ): Promise<number> {
+    const pending = await this.payments.find({
+      where: {
+        bookingId,
+        status: PaymentStatus.PENDING_PAYOUT,
+        ...(milestone ? { milestone } : {}),
+      },
+    });
+    const booking = await this.bookings.findOne({ where: { id: bookingId } });
+    const destination = booking
+      ? await this.payoutDestination(booking)
+      : { accountId: null, label: 'unknown provider' };
+    let moved = 0;
+
+    for (const payment of pending) {
+      if (!payment.providerRef) continue;
+      const result = await this.gateway.release(
+        payment.providerRef,
+        payment.payoutAmount,
+        payment.currency,
+        destination,
+      );
+      await this.payments.update(payment.id, {
+        status: result.transferred ? PaymentStatus.RELEASED : PaymentStatus.PENDING_PAYOUT,
+        payoutRef: result.transferRef,
+        payoutNote: result.reason,
+      });
+      if (result.transferred) moved += 1;
+      await this.audit.record({
+        action: AuditAction.BOOKING_ESCROW_RELEASED,
+        actor,
+        resourceType: 'booking',
+        resourceId: bookingId,
+        metadata: {
+          gross: payment.amount,
+          milestone: payment.milestone,
+          payout: payment.payoutAmount,
+          commission: payment.commissionAmount,
           transferred: result.transferred,
           reason: result.reason,
         },
@@ -2064,11 +2143,14 @@ export class BookingsService {
       clientName: string | null;
       /** What was booked: the service's name, or 'Wedding planning' for a planner. */
       serviceName: string | null;
+      eventDate: string | null;
       milestone: PaymentMilestone;
       status: PaymentStatus;
       amount: string;
       commissionAmount: string;
       payoutAmount: string;
+      releasedAmount: string;
+      availableAmount: string;
       /** The gateway's reference for the transfer, once one is made. */
       payoutRef: string | null;
       /** Why a payout has not happened, when it has not. */
@@ -2092,7 +2174,7 @@ export class BookingsService {
 
     const bookings = await this.bookings.find({
       where: { providerId: In(providerIds) },
-      select: ['id', 'currency', 'userId', 'providerType', 'vendorServiceId'],
+      select: ['id', 'currency', 'userId', 'providerType', 'vendorServiceId', 'eventDate'],
     });
     if (bookings.length === 0) return empty;
 
@@ -2170,11 +2252,17 @@ export class BookingsService {
         bookingId: p.bookingId,
         clientName: clientNames.get(bookingById.get(p.bookingId)?.userId ?? '') ?? null,
         serviceName: serviceNameOf(bookingById.get(p.bookingId)),
+        eventDate: bookingById.get(p.bookingId)?.eventDate ?? null,
         milestone: p.milestone,
         status: p.status,
         amount: p.amount,
         commissionAmount: p.commissionAmount,
         payoutAmount: p.payoutAmount,
+        releasedAmount:
+          p.status === PaymentStatus.RELEASED || p.status === PaymentStatus.PARTIALLY_SETTLED
+            ? p.payoutAmount
+            : '0.00',
+        availableAmount: p.status === PaymentStatus.PENDING_PAYOUT ? p.payoutAmount : '0.00',
         payoutRef: p.payoutRef ?? null,
         payoutNote: p.payoutNote ?? null,
         confirmedAt: p.webhookVerifiedAt ?? null,
