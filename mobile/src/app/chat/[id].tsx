@@ -266,14 +266,14 @@ function Header({
       {photo ? (
         <Image
           source={{ uri: photo }}
-          style={{ width: 42, height: 42, borderRadius: 21 }}
+          style={{ width: 42, height: 42, borderRadius: radius.md }}
         />
       ) : (
         <View
           style={{
             width: 42,
             height: 42,
-            borderRadius: 21,
+            borderRadius: radius.md,
             backgroundColor: rgb(theme.surfaceSunken),
           }}
         />
@@ -297,7 +297,7 @@ function Header({
               style={{
                 width: 8,
                 height: 8,
-                borderRadius: 4,
+                borderRadius: radius.md,
                 backgroundColor: rgb(theme.positiveFg),
               }}
             />
@@ -372,7 +372,7 @@ function Composer({
           flex: 1,
           flexDirection: "row",
           alignItems: "center",
-          borderRadius: 24,
+          borderRadius: radius.md,
           backgroundColor: rgb(theme.surfaceSunken),
         }}
       >
@@ -412,7 +412,7 @@ function Composer({
         style={{
           width: 46,
           height: 46,
-          borderRadius: 23,
+          borderRadius: radius.md,
           alignItems: "center",
           justifyContent: "center",
           backgroundColor: rgb(
@@ -436,7 +436,7 @@ function Bubble({ message, mine }: { message: Message; mine: boolean }) {
       <View
         style={{
           maxWidth: "82%",
-          borderRadius: 16,
+          borderRadius: radius.md,
           paddingHorizontal: space(3),
           paddingVertical: space(2),
           backgroundColor: rgb(mine ? theme.brandSoft : theme.surface),

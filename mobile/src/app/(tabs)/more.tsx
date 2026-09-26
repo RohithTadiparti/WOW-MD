@@ -149,7 +149,7 @@ export default function More() {
               style={{
                 width: 56,
                 height: 56,
-                borderRadius: 28,
+                borderRadius: radius.md,
                 overflow: 'hidden',
                 backgroundColor: rgb(theme.surfaceSunken),
               }}
@@ -181,7 +181,7 @@ export default function More() {
             <View
               style={{
                 height: 6,
-                borderRadius: 3,
+                borderRadius: radius.md,
                 overflow: 'hidden',
                 backgroundColor: rgb(theme.surfaceSunken),
               }}
@@ -382,7 +382,7 @@ function Row({
         style={{
           width: 34,
           height: 34,
-          borderRadius: 17,
+          borderRadius: radius.md,
           alignItems: 'center',
           justifyContent: 'center',
           backgroundColor: rgb(theme.brandSoft),
@@ -437,7 +437,7 @@ function GridCard({
         style={{
           width: 36,
           height: 36,
-          borderRadius: 18,
+          borderRadius: radius.md,
           alignItems: 'center',
           justifyContent: 'center',
           backgroundColor: rgb(theme.brandSoft),

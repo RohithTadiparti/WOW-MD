@@ -16,7 +16,7 @@ import { apiMessage } from '@/lib/api';
 import { shortDate } from '@/lib/format';
 import { fetchPlans, fetchWeddingDashboard } from '@/lib/wedding-plan';
 import { Body, Caption, Card, Loading, Screen, SectionTitle } from '@/components/ui';
-import { rgb, space, useTheme } from '@/theme';
+import { rgb, space, useTheme, radius } from '@/theme';
 
 type Row = {
   title: string;
@@ -159,7 +159,7 @@ export default function PlanMore() {
               style={{
                 width: 40,
                 height: 40,
-                borderRadius: 20,
+                borderRadius: radius.md,
                 alignItems: 'center',
                 justifyContent: 'center',
                 backgroundColor:

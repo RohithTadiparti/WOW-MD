@@ -30,7 +30,7 @@ import {
   Screen,
   SectionTitle,
 } from '@/components/ui';
-import { rgb, space, useTheme } from '@/theme';
+import { rgb, space, useTheme, radius } from '@/theme';
 import { Txt } from '@/theme/fonts';
 
 type Action = {
@@ -122,7 +122,7 @@ export default function PlanHome() {
           })
         }
       >
-        <Card style={{ gap: space(3), borderRadius: 16 }}>
+        <Card style={{ gap: space(3), borderRadius: radius.md }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <SectionTitle>My Wedding Plan</SectionTitle>
             {plan ? (
@@ -152,12 +152,12 @@ export default function PlanHome() {
               onPress={() => router.push(action.to as never)}
               style={{ width: '48.5%' }}
             >
-              <Card style={{ minHeight: 96, padding: space(3), borderRadius: 14, gap: space(1) }}>
+              <Card style={{ minHeight: 96, padding: space(3), borderRadius: radius.md, gap: space(1) }}>
                 <View
                   style={{
                     width: 36,
                     height: 36,
-                    borderRadius: 18,
+                    borderRadius: radius.md,
                     alignItems: 'center',
                     justifyContent: 'center',
                     backgroundColor: rgb(theme.brandSoft),
@@ -194,7 +194,7 @@ export default function PlanHome() {
               key={event.id}
               onPress={() => router.push('/events')}
             >
-              <Card style={{ gap: space(1), borderRadius: 14 }}>
+              <Card style={{ gap: space(1), borderRadius: radius.md }}>
                 <Body style={{ fontWeight: '700' }}>{event.name}</Body>
                 <Caption tone="muted">
                   {[shortDate(event.eventDate), event.venue].filter(Boolean).join(' · ')}
@@ -224,7 +224,7 @@ export default function PlanHome() {
         ) : (
           upcomingBookings.map((row) => (
             <Pressable key={row.id} onPress={() => router.push('/plan/bookings')}>
-              <Card style={{ gap: space(1), borderRadius: 14 }}>
+              <Card style={{ gap: space(1), borderRadius: radius.md }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: space(2) }}>
                   <Body style={{ fontWeight: '700', flex: 1 }} numberOfLines={1}>
                     {row.providerName ?? row.serviceName ?? 'Booking'}
@@ -288,7 +288,7 @@ function ProgressRing({ percent }: { percent: number }) {
       style={{
         width: 88,
         height: 88,
-        borderRadius: 44,
+        borderRadius: radius.md,
         borderWidth: 8,
         borderColor: rgb(theme.brandSoft),
         alignItems: 'center',
@@ -301,7 +301,7 @@ function ProgressRing({ percent }: { percent: number }) {
           position: 'absolute',
           width: 88,
           height: 88,
-          borderRadius: 44,
+          borderRadius: radius.md,
           borderWidth: 8,
           borderColor: 'transparent',
           borderTopColor: rgb(theme.brand),

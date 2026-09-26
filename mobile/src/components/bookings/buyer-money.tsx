@@ -9,7 +9,7 @@ import { MILESTONE_LABEL, Permission, can } from '@/shared/permissions';
 import { useAuth } from '@/store/auth';
 import { Badge } from '@/components/chrome';
 import { Alert as UiAlert, Body, Button, Caption, Field } from '@/components/ui';
-import { rgb, space, useTheme } from '@/theme';
+import { rgb, space, useTheme, radius } from '@/theme';
 import { Txt } from '@/theme/fonts';
 
 type MilestoneKey = 'advance' | 'second' | 'final';
@@ -264,7 +264,7 @@ export function BuyerMoneyPanel({ booking }: { booking: BuyerMoneyBooking }) {
               style={{
                 gap: space(1),
                 padding: space(2),
-                borderRadius: 10,
+                borderRadius: radius.md,
                 backgroundColor: rgb(theme.surfaceSunken),
               }}
             >
@@ -382,7 +382,7 @@ export function BuyerMoneyPanel({ booking }: { booking: BuyerMoneyBooking }) {
                               style={{
                                 paddingHorizontal: space(2.5),
                                 paddingVertical: space(1),
-                                borderRadius: 8,
+                                borderRadius: radius.md,
                                 borderWidth: 1,
                                 borderColor: active ? rgb(theme.brand) : rgb(theme.border),
                                 backgroundColor: active ? rgb(theme.brandSoft) : 'transparent',

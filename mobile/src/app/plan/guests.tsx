@@ -18,7 +18,7 @@ import {
   Screen,
   SectionTitle,
 } from '@/components/ui';
-import { rgb, space, useTheme } from '@/theme';
+import { rgb, space, useTheme, radius } from '@/theme';
 
 type RelationFilter = 'all' | 'family' | 'friends' | 'work' | 'others';
 type RsvpTone = 'positive' | 'caution' | 'critical' | 'neutral';
@@ -179,7 +179,7 @@ export default function PlanGuests() {
           flexDirection: 'row',
           alignItems: 'center',
           backgroundColor: rgb(theme.surface),
-          borderRadius: 22,
+          borderRadius: radius.md,
           paddingLeft: space(3),
           borderWidth: 1,
           borderColor: rgb(theme.border),
@@ -205,7 +205,7 @@ export default function PlanGuests() {
               style={{
                 paddingHorizontal: space(3),
                 paddingVertical: space(1.5),
-                borderRadius: 999,
+                borderRadius: radius.md,
                 backgroundColor: active ? rgb(theme.brand) : rgb(theme.surfaceSunken),
               }}
             >
@@ -232,7 +232,7 @@ export default function PlanGuests() {
                 style={{
                   width: 44,
                   height: 44,
-                  borderRadius: 22,
+                  borderRadius: radius.md,
                   alignItems: 'center',
                   justifyContent: 'center',
                   backgroundColor: rgb(theme.brandSoft),
@@ -331,7 +331,7 @@ function StatBox({
       style={{
         width: '48%',
         padding: space(3),
-        borderRadius: 12,
+        borderRadius: radius.md,
         backgroundColor: rgb(bg),
         gap: 2,
       }}

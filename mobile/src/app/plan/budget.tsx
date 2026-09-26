@@ -21,7 +21,7 @@ import {
   Screen,
   SectionTitle,
 } from '@/components/ui';
-import { rgb, space, useTheme } from '@/theme';
+import { rgb, space, useTheme, radius } from '@/theme';
 
 const FALLBACK_CATEGORIES = [
   'venue',
@@ -108,7 +108,7 @@ export default function PlanBudget() {
       {notice ? <Alert tone="positive">{notice}</Alert> : null}
       {error ? <Alert tone="critical">{error}</Alert> : null}
 
-      <Card style={{ gap: space(3), borderRadius: 16 }}>
+      <Card style={{ gap: space(3), borderRadius: radius.md }}>
         <Caption tone="faint">Total Budget</Caption>
         <Body style={{ fontSize: 28, fontWeight: '700', color: rgb(theme.brandStrong) }}>
           {rupees(budgeted)}
@@ -130,7 +130,7 @@ export default function PlanBudget() {
           const spent = Number(row.committed || 0);
           const pct = allocated > 0 ? Math.min(100, (spent / allocated) * 100) : spent > 0 ? 100 : 0;
           return (
-            <Card key={row.category} style={{ gap: space(2), borderRadius: 14 }}>
+            <Card key={row.category} style={{ gap: space(2), borderRadius: radius.md }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                 <Body style={{ fontWeight: '600' }}>{categoryLabel(row.category)}</Body>
                 <Caption tone="muted">{rupees(allocated || spent)}</Caption>
@@ -138,7 +138,7 @@ export default function PlanBudget() {
               <View
                 style={{
                   height: 6,
-                  borderRadius: 3,
+                  borderRadius: radius.md,
                   backgroundColor: rgb(theme.brandSoft),
                   overflow: 'hidden',
                 }}

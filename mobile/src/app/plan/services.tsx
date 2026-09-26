@@ -13,7 +13,7 @@ import {
 import type { ComponentType } from 'react';
 
 import { Body, Caption, Card, Screen, SectionTitle } from '@/components/ui';
-import { rgb, space, useTheme } from '@/theme';
+import { rgb, space, useTheme, radius } from '@/theme';
 
 const SERVICES: {
   title: string;
@@ -101,7 +101,7 @@ export default function PlanServices() {
               style={{
                 width: 40,
                 height: 40,
-                borderRadius: 20,
+                borderRadius: radius.md,
                 alignItems: 'center',
                 justifyContent: 'center',
                 backgroundColor: rgb(theme.brandSoft),

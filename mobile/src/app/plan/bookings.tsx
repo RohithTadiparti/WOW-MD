@@ -19,7 +19,7 @@ import {
   Screen,
   SectionTitle,
 } from '@/components/ui';
-import { rgb, space, useTheme } from '@/theme';
+import { rgb, space, useTheme, radius } from '@/theme';
 
 type Tab = 'all' | 'upcoming' | 'completed' | 'cancelled';
 
@@ -119,7 +119,7 @@ export default function PlanBookings() {
               style={{
                 paddingHorizontal: space(3),
                 paddingVertical: space(1.5),
-                borderRadius: 999,
+                borderRadius: radius.md,
                 backgroundColor: active ? rgb(theme.brand) : rgb(theme.surfaceSunken),
               }}
             >
@@ -153,7 +153,7 @@ export default function PlanBookings() {
               key={row.id}
               style={{
                 gap: space(2),
-                borderRadius: 14,
+                borderRadius: radius.md,
                 ...(highlighted ? { borderWidth: 2, borderColor: rgb(theme.brand) } : null),
               }}
             >

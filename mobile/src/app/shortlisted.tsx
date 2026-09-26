@@ -8,7 +8,7 @@ import { api, apiMessage } from '@/lib/api';
 import { ProfileSilhouette } from '@/components/profile-silhouette';
 import { ListScreen } from '@/components/layout';
 import { Alert, Body, Caption } from '@/components/ui';
-import { rgb, space, useTheme } from '@/theme';
+import { rgb, space, useTheme, radius } from '@/theme';
 
 interface Profile {
   id: string;
@@ -84,12 +84,12 @@ export default function Shortlisted() {
           {item.profile.photos?.[0] ? (
             <Image
               source={{ uri: item.profile.photos[0] }}
-              style={{ width: 56, height: 56, borderRadius: 28 }}
+              style={{ width: 56, height: 56, borderRadius: radius.md }}
             />
           ) : (
             <ProfileSilhouette
               gender={item.profile.gender}
-              style={{ width: 56, height: 56, borderRadius: 28 }}
+              style={{ width: 56, height: 56, borderRadius: radius.md }}
             />
           )}
           <View style={{ flex: 1, gap: 2 }}>

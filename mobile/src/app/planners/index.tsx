@@ -17,7 +17,7 @@ import {
   PageTitle,
   Screen,
 } from '@/components/ui';
-import { rgb, space, useTheme } from '@/theme';
+import { rgb, space, useTheme, radius } from '@/theme';
 
 type Planner = {
   id: string;
@@ -79,7 +79,7 @@ export default function HirePlanner() {
           flexDirection: 'row',
           alignItems: 'center',
           backgroundColor: rgb(theme.surface),
-          borderRadius: 22,
+          borderRadius: radius.md,
           paddingLeft: space(3),
           borderWidth: 1,
           borderColor: rgb(theme.border),
@@ -98,7 +98,7 @@ export default function HirePlanner() {
           style={{
             marginRight: space(1),
             padding: space(2),
-            borderRadius: 20,
+            borderRadius: radius.md,
             backgroundColor: rgb(theme.brand),
           }}
         >
@@ -135,19 +135,19 @@ export default function HirePlanner() {
           const openPlanner = () =>
             router.push({ pathname: '/planners/[id]', params: { id: planner.id } });
           return (
-            <Card key={planner.id} style={{ gap: space(2), padding: space(2), borderRadius: 14 }}>
+            <Card key={planner.id} style={{ gap: space(2), padding: space(2), borderRadius: radius.md }}>
               <Pressable onPress={openPlanner}>
                 {photo ? (
                   <Image
                     source={{ uri: photo }}
-                    style={{ width: '100%', height: 140, borderRadius: 12 }}
+                    style={{ width: '100%', height: 140, borderRadius: radius.md }}
                   />
                 ) : (
                   <View
                     style={{
                       width: '100%',
                       height: 140,
-                      borderRadius: 12,
+                      borderRadius: radius.md,
                       backgroundColor: rgb(theme.surfaceSunken),
                     }}
                   />

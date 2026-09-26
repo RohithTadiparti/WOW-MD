@@ -5,7 +5,7 @@ import { Bell } from 'phosphor-react-native';
 
 import { api } from '@/lib/api';
 import { Caption } from '@/components/ui';
-import { rgb, space, useTheme } from '@/theme';
+import { rgb, space, useTheme, radius } from '@/theme';
 
 /**
  * The way into Notifications for somebody whose tab bar has no Alerts tab.
@@ -49,7 +49,7 @@ export function NotificationBell() {
         {
           width: 40,
           height: 40,
-          borderRadius: 20,
+          borderRadius: radius.md,
           alignItems: 'center',
           justifyContent: 'center',
           backgroundColor: rgb(theme.surface),
@@ -68,7 +68,7 @@ export function NotificationBell() {
             right: -2,
             minWidth: 18,
             height: 18,
-            borderRadius: 9,
+            borderRadius: radius.md,
             paddingHorizontal: space(0.75),
             alignItems: 'center',
             justifyContent: 'center',

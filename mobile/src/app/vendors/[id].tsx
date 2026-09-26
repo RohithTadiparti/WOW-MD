@@ -27,7 +27,7 @@ import {
   Loading,
   SectionTitle,
 } from '@/components/ui';
-import { rgb, space, useTheme } from '@/theme';
+import { rgb, space, useTheme, radius } from '@/theme';
 
 type Tab = 'overview' | 'photos' | 'reviews' | 'packages';
 
@@ -158,7 +158,7 @@ export default function VendorDetail() {
               top: space(5),
               left: space(3),
               padding: space(2),
-              borderRadius: 22,
+              borderRadius: radius.md,
               backgroundColor: rgb(theme.surface),
             }}
           >
@@ -177,7 +177,7 @@ export default function VendorDetail() {
               accessibilityRole="button"
               accessibilityLabel="Shortlist vendor"
               onPress={() => void toggleVendorShortlist(vendor.id).then(setShortlist)}
-              style={{ padding: space(2), borderRadius: 22, backgroundColor: rgb(theme.surface) }}
+              style={{ padding: space(2), borderRadius: radius.md, backgroundColor: rgb(theme.surface) }}
             >
               <Heart
                 size={20}
@@ -189,7 +189,7 @@ export default function VendorDetail() {
               accessibilityRole="button"
               accessibilityLabel="Share vendor"
               onPress={() => void Share.share({ message: vendor.name })}
-              style={{ padding: space(2), borderRadius: 22, backgroundColor: rgb(theme.surface) }}
+              style={{ padding: space(2), borderRadius: radius.md, backgroundColor: rgb(theme.surface) }}
             >
               <ShareNetwork size={20} color={rgb(theme.brand)} />
             </Pressable>
@@ -202,7 +202,7 @@ export default function VendorDetail() {
                 right: space(3),
                 paddingHorizontal: space(2),
                 paddingVertical: space(1),
-                borderRadius: 12,
+                borderRadius: radius.md,
                 backgroundColor: 'rgba(0,0,0,0.55)',
               }}
             >
@@ -249,7 +249,7 @@ export default function VendorDetail() {
                   style={{
                     paddingHorizontal: space(3),
                     paddingVertical: space(1.5),
-                    borderRadius: 999,
+                    borderRadius: radius.md,
                     backgroundColor: active ? rgb(theme.brand) : rgb(theme.surfaceSunken),
                   }}
                 >
@@ -302,7 +302,7 @@ export default function VendorDetail() {
                     <Image
                       key={photo}
                       source={{ uri: photo }}
-                      style={{ width: (width - space(10)) / 3, height: 92, borderRadius: 10 }}
+                      style={{ width: (width - space(10)) / 3, height: 92, borderRadius: radius.md }}
                     />
                   ))}
                 </View>

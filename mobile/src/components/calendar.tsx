@@ -224,7 +224,7 @@ export function MonthCalendar({
                 style={{
                   width: 12,
                   height: 12,
-                  borderRadius: 3,
+                  borderRadius: radius.md,
                   backgroundColor: toneColours(theme, tone).bg,
                 }}
               />

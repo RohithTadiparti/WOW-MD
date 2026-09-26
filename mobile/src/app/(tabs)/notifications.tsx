@@ -39,7 +39,7 @@ function getAvatarOrIcon(item: Notification, theme: any) {
     return (
       <Image
         source={{ uri: photoUrl }}
-        style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: rgb(theme.surfaceSunken) }}
+        style={{ width: 48, height: 48, borderRadius: radius.md, backgroundColor: rgb(theme.surfaceSunken) }}
         contentFit="cover"
       />
     );
@@ -47,7 +47,7 @@ function getAvatarOrIcon(item: Notification, theme: any) {
 
   // If it's a person-related notification but no photo, show silhouette
   if (item.type.startsWith('match_interest') || item.type === 'new_message' || item.type.includes('liked')) {
-    return <ProfileSilhouette gender={gender} style={{ width: 48, height: 48, borderRadius: 24 }} />;
+    return <ProfileSilhouette gender={gender} style={{ width: 48, height: 48, borderRadius: radius.md }} />;
   }
 
   // System/Event notification fallback
@@ -57,7 +57,7 @@ function getAvatarOrIcon(item: Notification, theme: any) {
   else if (item.type.startsWith('booking_')) IconCmp = Briefcase;
 
   return (
-    <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: rgb(theme.brandSoft), alignItems: 'center', justifyContent: 'center' }}>
+    <View style={{ width: 48, height: 48, borderRadius: radius.md, backgroundColor: rgb(theme.brandSoft), alignItems: 'center', justifyContent: 'center' }}>
       <IconCmp size={24} color={rgb(theme.brandStrong)} weight="regular" />
     </View>
   );

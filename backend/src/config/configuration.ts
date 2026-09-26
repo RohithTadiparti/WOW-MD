@@ -24,7 +24,7 @@ export default () => ({
     port: toNumber(process.env.PORT, 3000),
     apiPrefix: process.env.API_PREFIX || 'api',
     logLevel: process.env.LOG_LEVEL || 'info',
-    corsOrigins: toList(process.env.CORS_ORIGINS, ['http://localhost:5173', 'http://localhost:8081']),
+    corsOrigins: toList(process.env.CORS_ORIGINS, ['http://localhost:5173']),
     swaggerEnabled: toBool(process.env.SWAGGER_ENABLED, true),
   },
 

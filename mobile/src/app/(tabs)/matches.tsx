@@ -37,7 +37,7 @@ import {
 import { api, apiMessage } from "@/lib/api";
 import { useMatchmakingGate } from "@/lib/matchmaking";
 import { useAuth } from "@/store/auth";
-import { rgb, space, useTheme } from "@/theme";
+import { rgb, space, useTheme, radius } from "@/theme";
 import { Txt, typeface } from "@/theme/fonts";
 
 interface Profile {
@@ -185,7 +185,7 @@ export default function Matches() {
                 style={{
                   flexDirection: "row",
                   alignItems: "center",
-                  borderRadius: 24,
+                  borderRadius: radius.md,
                   backgroundColor: rgb(theme.surface),
                   borderWidth: StyleSheet.hairlineWidth,
                   borderColor: rgb(theme.border),
@@ -214,7 +214,7 @@ export default function Matches() {
                     width: 40,
                     height: 40,
                     marginRight: space(1),
-                    borderRadius: 20,
+                    borderRadius: radius.md,
                     alignItems: "center",
                     justifyContent: "center",
                     backgroundColor: rgb(theme.brand),
@@ -230,7 +230,7 @@ export default function Matches() {
                     gap: space(2),
                     alignItems: "center",
                     padding: space(2),
-                    borderRadius: 12,
+                    borderRadius: radius.md,
                     backgroundColor: rgb(theme.surfaceSunken),
                   }}
                 >
@@ -245,7 +245,7 @@ export default function Matches() {
                       style={{
                         paddingHorizontal: space(2),
                         paddingVertical: space(1),
-                        borderRadius: 12,
+                        borderRadius: radius.md,
                         backgroundColor:
                           sort === v ? rgb(theme.brand) : rgb(theme.surface),
                       }}
@@ -272,7 +272,7 @@ export default function Matches() {
                   style={{
                     flex: 1,
                     minHeight: 36,
-                    borderRadius: 9,
+                    borderRadius: radius.md,
                     alignItems: "center",
                     justifyContent: "center",
                     backgroundColor:
@@ -416,7 +416,7 @@ function Header({ initial }: { initial?: string }) {
           style={{
             width: 40,
             height: 40,
-            borderRadius: 20,
+            borderRadius: radius.md,
             backgroundColor: rgb(theme.brandSoft),
             alignItems: "center",
             justifyContent: "center",
@@ -467,7 +467,7 @@ function MatchCard({
         {
           width: cardWidth,
           backgroundColor: rgb(theme.surface),
-          borderRadius: 15,
+          borderRadius: radius.md,
           overflow: "hidden",
           borderWidth: StyleSheet.hairlineWidth,
           borderColor: rgb(theme.border),
@@ -508,7 +508,7 @@ function MatchCard({
             right: 8,
             width: 32,
             height: 32,
-            borderRadius: 16,
+            borderRadius: radius.md,
             backgroundColor: rgb(theme.surface),
             alignItems: "center",
             justifyContent: "center",

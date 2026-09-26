@@ -19,8 +19,7 @@ import { useAuth, type AuthUser } from '@/store/auth';
  * statuses count as a token problem — is the same reasoning as the web client,
  * and the comments there are worth reading alongside these.
  */
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://192.168.1.22:3000/api';
-
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8085/api';
 /** Alphanumerics, dot, dash and underscore only: SecureStore rejects the rest. */
 const REFRESH_KEY = 'wow.refreshToken';
 

@@ -155,7 +155,7 @@ export function IndividualHome({ profileId }: { profileId: string | null }) {
                 right: -8,
                 minWidth: 18,
                 height: 18,
-                borderRadius: 9,
+                borderRadius: radius.md,
                 paddingHorizontal: 4,
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -180,7 +180,7 @@ export function IndividualHome({ profileId }: { profileId: string | null }) {
         <View style={{
           width: 50,
           height: 50,
-          borderRadius: 25,
+          borderRadius: radius.md,
           overflow: 'hidden',
           backgroundColor: rgb(theme.surfaceSunken),
         }}>
@@ -237,7 +237,7 @@ export function IndividualHome({ profileId }: { profileId: string | null }) {
           <Loading rows={2} />
         ) : !recommendations.data?.data || recommendations.data.data.length === 0 ? (
           <Card style={{ alignItems: 'center', padding: space(6), gap: space(3) }}>
-            <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: rgb(theme.brandSoft), alignItems: 'center', justifyContent: 'center' }}>
+            <View style={{ width: 48, height: 48, borderRadius: radius.md, backgroundColor: rgb(theme.brandSoft), alignItems: 'center', justifyContent: 'center' }}>
               <MagnifyingGlass size={24} color={rgb(theme.brandStrong)} />
             </View>
             <View style={{ alignItems: 'center', gap: space(1) }}>
@@ -293,7 +293,7 @@ export function IndividualHome({ profileId }: { profileId: string | null }) {
           <View style={{
             width: 64,
             height: 64,
-            borderRadius: 32,
+            borderRadius: radius.md,
             borderWidth: 4,
             borderColor: rgb(theme.brandSoft),
             borderTopColor: rgb(theme.brand),
@@ -339,7 +339,7 @@ export function IndividualHome({ profileId }: { profileId: string | null }) {
           <Loading rows={2} />
         ) : upcoming.length === 0 ? (
           <Card style={{ alignItems: 'center', padding: space(4), gap: space(2), flexDirection: 'row' }}>
-            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: rgb(theme.brandSoft), alignItems: 'center', justifyContent: 'center' }}>
+            <View style={{ width: 40, height: 40, borderRadius: radius.md, backgroundColor: rgb(theme.brandSoft), alignItems: 'center', justifyContent: 'center' }}>
               <CalendarBlank size={20} color={rgb(theme.brandStrong)} />
             </View>
             <View style={{ flex: 1 }}>
@@ -404,7 +404,7 @@ function ActionIcon({ icon: Icon, label, onPress }: { icon: any, label: string, 
       <View style={{
         width: 56,
         height: 56,
-        borderRadius: 28,
+        borderRadius: radius.md,
         backgroundColor: rgb(theme.surface),
         borderWidth: StyleSheet.hairlineWidth,
         borderColor: rgb(theme.border),
@@ -458,7 +458,7 @@ function RecommendationCard({ recommendation, onPress, onToggleShortlist }: { re
         </Caption>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: space(1) }}>
           {p.verified ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: rgb(theme.positiveBg), paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: rgb(theme.positiveBg), paddingHorizontal: 4, paddingVertical: 2, borderRadius: radius.md }}>
               <Caption style={{ color: rgb(theme.positiveFg), fontSize: 10, fontWeight: '600' }}>Verified</Caption>
             </View>
           ) : <View />}

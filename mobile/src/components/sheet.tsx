@@ -82,7 +82,7 @@ export function Sheet({
               style={{
                 width: 36,
                 height: 4,
-                borderRadius: 2,
+                borderRadius: radius.md,
                 backgroundColor: rgb(theme.borderStrong),
                 marginBottom: space(3),
               }}

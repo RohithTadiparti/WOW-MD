@@ -14,7 +14,7 @@ import { PlannerAgencyCard, PlannerBook } from '@/components/home/planner-home';
 import { Body, Caption, Card, Loading, SectionTitle } from '@/components/ui';
 import { useAuth } from '@/store/auth';
 import { useBusinesses } from '@/store/business';
-import { rgb, space, useTheme } from '@/theme';
+import { rgb, space, useTheme, radius } from '@/theme';
 
 interface Earnings {
   heldInEscrow: string;
@@ -309,7 +309,7 @@ export function ProviderHome() {
                   style={{
                     flex: 1.2,
                     height: 6,
-                    borderRadius: 3,
+                    borderRadius: radius.md,
                     overflow: 'hidden',
                     backgroundColor: rgb(theme.surfaceSunken),
                   }}
@@ -317,7 +317,7 @@ export function ProviderHome() {
                   <View
                     style={{
                       height: '100%',
-                      borderRadius: 3,
+                      borderRadius: radius.md,
                       width: `${((c[status] ?? 0) / all) * 100}%`,
                       backgroundColor: rgb(theme.brand),
                     }}

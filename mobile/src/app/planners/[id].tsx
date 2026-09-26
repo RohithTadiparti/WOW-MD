@@ -25,7 +25,7 @@ import {
   Loading,
   SectionTitle,
 } from '@/components/ui';
-import { rgb, space, useTheme } from '@/theme';
+import { rgb, space, useTheme, radius } from '@/theme';
 
 type Tab = 'about' | 'services' | 'reviews' | 'gallery';
 
@@ -168,7 +168,7 @@ export default function PlannerDetail() {
               top: space(5),
               left: space(3),
               padding: space(2),
-              borderRadius: 22,
+              borderRadius: radius.md,
               backgroundColor: rgb(theme.surface),
             }}
           >
@@ -183,7 +183,7 @@ export default function PlannerDetail() {
               top: space(5),
               right: space(3),
               padding: space(2),
-              borderRadius: 22,
+              borderRadius: radius.md,
               backgroundColor: rgb(theme.surface),
             }}
           >
@@ -201,7 +201,7 @@ export default function PlannerDetail() {
                 right: space(3),
                 paddingHorizontal: space(2),
                 paddingVertical: space(1),
-                borderRadius: 12,
+                borderRadius: radius.md,
                 backgroundColor: 'rgba(0,0,0,0.55)',
               }}
             >
@@ -246,7 +246,7 @@ export default function PlannerDetail() {
                   style={{
                     paddingHorizontal: space(3),
                     paddingVertical: space(1.5),
-                    borderRadius: 999,
+                    borderRadius: radius.md,
                     backgroundColor: active ? rgb(theme.brand) : rgb(theme.surfaceSunken),
                   }}
                 >
@@ -331,7 +331,7 @@ export default function PlannerDetail() {
                   <Image
                     key={photo}
                     source={{ uri: photo }}
-                    style={{ width: (width - space(10)) / 3, height: 92, borderRadius: 10 }}
+                    style={{ width: (width - space(10)) / 3, height: 92, borderRadius: radius.md }}
                   />
                 ))}
               </View>

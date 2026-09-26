@@ -34,7 +34,7 @@ import {
 import { api, apiMessage } from "@/lib/api";
 import { ageFrom, labelFor } from "@/lib/labels";
 import { OCCUPATION_LABEL } from "@/shared/permissions";
-import { rgb, space, useTheme } from "@/theme";
+import { rgb, space, useTheme, radius } from "@/theme";
 import { Txt } from "@/theme/fonts";
 
 interface ProfileView {
@@ -245,7 +245,7 @@ export default function MatchProfile() {
               left: space(3),
               width: 40,
               height: 40,
-              borderRadius: 20,
+              borderRadius: radius.md,
               backgroundColor: rgb(theme.surface),
               alignItems: "center",
               justifyContent: "center",
@@ -263,7 +263,7 @@ export default function MatchProfile() {
               right: space(3),
               width: 40,
               height: 40,
-              borderRadius: 20,
+              borderRadius: radius.md,
               backgroundColor: rgb(theme.surface),
               alignItems: "center",
               justifyContent: "center",
@@ -277,7 +277,7 @@ export default function MatchProfile() {
                 position: "absolute",
                 right: space(3),
                 bottom: space(3),
-                borderRadius: 13,
+                borderRadius: radius.md,
                 backgroundColor: "rgba(0,0,0,.55)",
                 paddingHorizontal: space(2),
                 paddingVertical: 3,
@@ -296,7 +296,7 @@ export default function MatchProfile() {
             padding: space(4),
             gap: space(3),
             backgroundColor: rgb(theme.surface),
-            borderRadius: 18,
+            borderRadius: radius.md,
             borderWidth: StyleSheet.hairlineWidth,
             borderColor: rgb(theme.border),
           }}
@@ -344,7 +344,7 @@ export default function MatchProfile() {
                 style={{
                   paddingHorizontal: space(2),
                   paddingVertical: space(1),
-                  borderRadius: 12,
+                  borderRadius: radius.md,
                   backgroundColor: rgb(theme.brandSoft),
                 }}
               >
@@ -402,7 +402,7 @@ export default function MatchProfile() {
                   <View
                     key={tag}
                     style={{
-                      borderRadius: 14,
+                      borderRadius: radius.md,
                       paddingHorizontal: space(2),
                       paddingVertical: space(1),
                       backgroundColor: rgb(theme.brandSoft),
