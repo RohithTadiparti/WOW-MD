@@ -1,229 +1,345 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import type { ComponentType, ReactNode } from 'react';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
+import { Image } from 'expo-image';
 import {
+  Bell,
+  BookOpenText,
   CalendarBlank,
   CaretRight,
   ChatCircleDots,
-  Check,
-  Coins,
-  Gear,
+  CheckCircle,
+  FileText,
+  Heart,
   IdentificationCard,
+  Image as ImageIcon,
   Info,
   Lifebuoy,
   Lock,
+  MagnifyingGlass,
+  Prohibit,
+  ShieldCheck,
   SignOut,
-  Star,
-  Storefront,
+  SlidersHorizontal,
   UserCircle,
+  Vault,
   type IconProps,
 } from 'phosphor-react-native';
 
-import { signOut } from '@/lib/api';
-import { isPlannerAccount } from '@/lib/planner-listing';
-import { Permission, ROLE_LABEL, can, canAny } from '@/shared/permissions';
+import { api, signOut } from '@/lib/api';
+import { Permission, ROLE_LABEL, can } from '@/shared/permissions';
+import { ProfileSilhouette } from '@/components/profile-silhouette';
 import {
   Body,
   Caption,
   Card,
   Eyebrow,
+  Loading,
+  PageSubtitle,
+  PageTitle,
   Screen,
   SectionTitle,
 } from '@/components/ui';
 import { useAuth } from '@/store/auth';
-import { radius, rgb, space, useTheme, useThemeChoice, type ThemeChoice } from '@/theme';
+import { radius, rgb, space, useTheme } from '@/theme';
 
-/**
- * More: the account, and nothing the tab bar already holds.
- *
- * What is one tap away along the bottom of the same phone is deliberately not
- * repeated here. An officer reaches Verification, Cases and Alerts from the bar;
- * a vendor reaches My Business, Bookings and Availability from the bar. Listing
- * them again meant two routes to the same screen and a menu that read as a
- * sitemap rather than an account page (EZ1-I257, EZ1-I255).
- *
- * So this is the account itself — who is signed in, their own profile, what
- * customers said, the way in when something breaks, the password and the
- * devices holding a session, the money — then how the app looks, and the way
- * out. Three groups, the same three for every persona, with the rows a persona
- * has no use for left out rather than shown dead.
- *
- * Notifications were here too. A vendor has no Alerts tab, so they now reach
- * them from the bell on Home, where the count is; every other persona has the
- * tab and was being offered the same screen twice.
- */
+interface MeResponse {
+  id?: string | null;
+  displayName?: string | null;
+  gender?: string | null;
+}
+
+interface Completion {
+  percent: number;
+}
+
+interface IdentityView {
+  verifiedAt: string | null;
+}
+
 export default function More() {
+  const theme = useTheme();
+  const router = useRouter();
   const user = useAuth((s) => s.user);
   const permissions = user?.permissions ?? [];
+  const canMatch = can(permissions, Permission.MATCH_BROWSE);
+  const canChat = can(permissions, Permission.CHAT_INQUIRE) || can(permissions, Permission.CHAT_MATCH);
+  const canPlanEvents = can(permissions, Permission.EVENT_MANAGE_OWN);
+  const canEscrow = can(permissions, Permission.BOOKING_READ_OWN);
 
-  const isVendor = can(permissions, Permission.VENDOR_LISTING_MANAGE);
-  // A planner's listing is one form, not the vendor's guided set-up, so it has
-  // no tab of its own and lives here (EZ1-I39).
-  const isPlanner = isPlannerAccount(permissions);
-  const isProvider = canAny(permissions, [
-    Permission.VENDOR_LISTING_MANAGE,
-    Permission.PLANNER_LISTING_MANAGE,
-  ]);
+  const { data: me, isPending: loadingMe, isError: meFailed, refetch } = useQuery({
+    queryKey: ['me'],
+    queryFn: async () => (await api.get('/users/me')).data as MeResponse,
+    retry: false,
+  });
+
+  const profileId = me?.id ?? null;
+
+  const { data: completion } = useQuery({
+    queryKey: ['biodata-completion', profileId],
+    enabled: Boolean(profileId) && canMatch,
+    queryFn: async () =>
+      (await api.get(`/profiles/${profileId}/details/completion`)).data as Completion,
+    retry: false,
+  });
+
+  const { data: photos } = useQuery({
+    queryKey: ['biodata-photos', profileId],
+    enabled: Boolean(profileId),
+    queryFn: async () =>
+      (await api.get(`/profiles/${profileId}/details/photos`)).data as { photos: string[] },
+    retry: false,
+  });
+
+  const { data: identity } = useQuery({
+    queryKey: ['identity', profileId],
+    enabled: Boolean(profileId) && canMatch,
+    queryFn: async () =>
+      (await api.get(`/users/profiles/${profileId}/identity`)).data as IdentityView,
+    retry: false,
+  });
+
+  const primaryPhoto = photos?.photos?.[0] ?? null;
+  const fullName = me?.displayName?.trim() || user?.email?.split('@')[0] || 'Your profile';
+  const percent = completion?.percent ?? 0;
+  const identityVerified = Boolean(identity?.verifiedAt);
+
+  if (loadingMe) {
+    return (
+      <Screen>
+        <Loading rows={4} />
+      </Screen>
+    );
+  }
+
+  if (meFailed) {
+    return (
+      <Screen>
+        <PageTitle>More</PageTitle>
+        <Card>
+          <Body tone="muted">Your profile could not be loaded.</Body>
+          <Pressable onPress={() => void refetch()} accessibilityRole="button">
+            <Caption tone="brand">Retry</Caption>
+          </Pressable>
+        </Card>
+      </Screen>
+    );
+  }
 
   return (
     <Screen>
-      <AccountHeader />
+      <View>
+        <PageTitle>More</PageTitle>
+        <PageSubtitle>Everything you need, in one place.</PageSubtitle>
+      </View>
 
-      {/* Matchmaking's other screens, for the personas that have them. Chat is
-          here rather than in the bar because a conversation is opened from the
-          person it is with — a match, an interest — far more often than from a
-          list of all of them (EZ1-I261). */}
-      {canAny(permissions, [Permission.PROFILE_MANAGE_OWN, Permission.CHAT_MATCH]) &&
-      canAny(permissions, [Permission.MATCH_BROWSE, Permission.CHAT_MATCH]) ? (
-        <Group title="Matchmaking">
-          <Row
-            icon={IdentificationCard}
-            label="Biodata"
-            hint="What families read before they ask about you"
-            to="/biodata"
-          />
-          {canAny(permissions, [Permission.CHAT_MATCH]) ? (
-            <Row
-              icon={ChatCircleDots}
-              label="Chat"
-              hint="Conversations with families you have matched with"
-              to="/chat"
+      <Card style={{ padding: 0, overflow: 'hidden' }}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open profile"
+          onPress={() => router.push('/profile')}
+          style={({ pressed }) => [
+            { padding: space(4), gap: space(3) },
+            pressed && { backgroundColor: rgb(theme.surfaceSunken) },
+          ]}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(3) }}>
+            <View
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: radius.md,
+                overflow: 'hidden',
+                backgroundColor: rgb(theme.surfaceSunken),
+              }}
+            >
+              {primaryPhoto ? (
+                <Image
+                  source={{ uri: primaryPhoto }}
+                  style={{ width: '100%', height: '100%' }}
+                  contentFit="cover"
+                />
+              ) : (
+                <ProfileSilhouette gender={me?.gender} style={{ width: '100%', height: '100%' }} />
+              )}
+            </View>
+            <View style={{ flex: 1, gap: 2 }}>
+              <SectionTitle numberOfLines={1}>{fullName}</SectionTitle>
+              <Caption tone="muted" numberOfLines={1}>
+                {user ? (ROLE_LABEL[user.role] ?? user.role) : 'Member'}
+              </Caption>
+            </View>
+            <CaretRight size={16} color={rgb(theme.ink[400])} />
+          </View>
+
+          <View style={{ gap: space(1.5) }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Caption>Profile Completion</Caption>
+              <Caption style={{ fontWeight: '700', color: rgb(theme.brand) }}>{percent}%</Caption>
+            </View>
+            <View
+              style={{
+                height: 6,
+                borderRadius: radius.md,
+                overflow: 'hidden',
+                backgroundColor: rgb(theme.surfaceSunken),
+              }}
+            >
+              <View
+                style={{
+                  height: '100%',
+                  width: `${Math.min(100, Math.max(0, percent))}%`,
+                  backgroundColor: rgb(theme.brand),
+                }}
+              />
+            </View>
+          </View>
+
+          <View
+            style={{
+              backgroundColor: rgb(theme.brandSoft),
+              borderRadius: radius.md,
+              padding: space(3),
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: space(2),
+            }}
+          >
+            <CheckCircle
+              size={22}
+              weight={percent >= 100 ? 'fill' : 'regular'}
+              color={rgb(theme.brandStrong)}
             />
-          ) : null}
+            <View style={{ flex: 1, gap: 2 }}>
+              <Body style={{ fontWeight: '700', color: rgb(theme.brandStrong) }}>
+                {percent >= 100 ? "You're all set" : 'Finish your profile'}
+              </Body>
+              <Caption style={{ color: rgb(theme.brandStrong) }}>
+                {percent >= 100
+                  ? 'Your profile is complete and visible to matches.'
+                  : 'Add details so families can find you.'}
+              </Caption>
+            </View>
+          </View>
+        </Pressable>
+      </Card>
+
+      {canMatch || canChat || canPlanEvents ? (
+        <View style={{ gap: space(2) }}>
+          <Eyebrow>Explore</Eyebrow>
+          <View style={styles.grid}>
+            {canMatch ? (
+              <GridCard
+                icon={MagnifyingGlass}
+                title="Find Matches"
+                description="Discover profiles"
+                onPress={() => router.push('/matches')}
+              />
+            ) : null}
+            {canChat ? (
+              <GridCard
+                icon={ChatCircleDots}
+                title="Messages"
+                description="Chat with families"
+                onPress={() => router.push('/chat')}
+              />
+            ) : null}
+            {canPlanEvents ? (
+              <GridCard
+                icon={CalendarBlank}
+                title="Wedding Planning"
+                description="Plan your events"
+                onPress={() => router.push('/events')}
+              />
+            ) : null}
+            {canMatch ? (
+              <GridCard
+                icon={Heart}
+                title="Shortlisted"
+                description="Profiles you saved"
+                onPress={() => router.push('/shortlisted')}
+              />
+            ) : null}
+          </View>
+        </View>
+      ) : null}
+
+      {canMatch ? (
+        <Group title="My Profile">
+          <Row icon={UserCircle} label="Edit Profile" to="/edit-profile" />
+          <Row icon={IdentificationCard} label="Biodata" to="/biodata" />
+          <Row icon={ImageIcon} label="Photos" to="/photos" />
+          <Row icon={SlidersHorizontal} label="Partner Preferences" to="/preferences" />
+          <Row
+            icon={ShieldCheck}
+            label="Verification"
+            to="/identity"
+            badge={identityVerified ? 'Verified' : undefined}
+          />
+          <Row icon={Heart} label="Interests" to="/interests" last />
         </Group>
       ) : null}
 
-      {/* The wedding's own days, on the one capability the web sidebar gates
-          Events on. It sat inside the matchmaking group, so an account holding
-          events without browsing matches never saw it. An administrator holds
-          every permission and is kept off it the way the web keeps them off. */}
-      {can(permissions, Permission.EVENT_MANAGE_OWN) && user?.role !== 'admin' ? (
-        <Group title="Wedding">
-          <Row
-            icon={CalendarBlank}
-            label="Events"
-            hint="The days of the wedding, and the invitations to them"
-            to="/events"
-          />
-        </Group>
-      ) : null}
-
-      <Group title="My account">
-        <Row
-          icon={UserCircle}
-          label="My Profile"
-          hint="Your name, contact details and what we hold"
-          to="/profile"
-        />
-        {isPlanner ? (
-          <Row
-            icon={Storefront}
-            label="My Listing"
-            hint="Your agency, packages and the cities you work in"
-            to="/business-details"
-          />
-        ) : null}
-        {isVendor || isPlanner ? (
-          <Row
-            icon={Star}
-            label="My Reviews"
-            hint="What customers said after a completed booking"
-            to="/my-reviews"
-          />
-        ) : null}
-        <Row
-          icon={Lifebuoy}
-          label="Support"
-          hint="Raise something that has gone wrong"
-          to="/support"
-        />
-        <Row
-          icon={Lock}
-          label="Security"
-          hint="Password, two-factor and signed-in devices"
-          to="/security"
-        />
-        {isProvider ? (
-          <Row icon={Coins} label="Accounts" hint="Escrow, payouts and the ledger" to="/accounts" />
-        ) : null}
+      <Group title="Account">
+        {canEscrow ? <Row icon={Vault} label="Escrow" to="/escrow" /> : null}
+        <Row icon={Lock} label="Account Information" to="/account" last />
       </Group>
 
-      <Group title="App settings">
-        <Appearance />
+      <Group title="Communication">
+        <Row icon={Bell} label="Notifications" to="/notifications" />
+        <Row icon={ShieldCheck} label="Privacy & Safety" to="/privacy" />
+        <Row icon={Prohibit} label="Blocked Profiles" to="/blocked" last />
       </Group>
 
-      <Group title="Other">
-        <Row icon={Info} label="About" hint="Version, build and what this app is" to="/about" />
-        <Row
-          icon={SignOut}
-          label="Sign out"
-          hint="End this session on this device"
-          onPress={() => void signOut()}
-        />
+      <Group title="Help & Support">
+        <Row icon={BookOpenText} label="Help Center" to="/support?type=help" />
+        <Row icon={Lifebuoy} label="Contact Support" to="/support?type=contact" />
+        <Row icon={ChatCircleDots} label="Share Feedback" to="/support?type=feedback" last />
       </Group>
+
+      <Group title="About">
+        <Row icon={Info} label="About WOW" to="/about?type=about" />
+        <Row icon={FileText} label="Terms of Service" to="/about?type=terms" />
+        <Row icon={ShieldCheck} label="Privacy Policy" to="/about?type=privacy" last />
+      </Group>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Logout"
+        onPress={() =>
+          Alert.alert('Are you sure?', 'You will be logged out of this account.', [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Logout', style: 'destructive', onPress: () => void signOut() },
+          ])
+        }
+        style={({ pressed }) => [
+          {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: space(2),
+            paddingVertical: space(3.5),
+            borderRadius: radius.md,
+            backgroundColor: rgb(theme.surface),
+            borderWidth: StyleSheet.hairlineWidth,
+            borderColor: rgb(theme.border),
+          },
+          pressed && { backgroundColor: rgb(theme.surfaceSunken) },
+        ]}
+      >
+        <SignOut size={18} color={rgb(theme.criticalFg)} />
+        <Body style={{ fontWeight: '600', color: rgb(theme.criticalFg) }}>Logout</Body>
+      </Pressable>
     </Screen>
   );
 }
 
-/**
- * Who is signed in, said once.
- *
- * The page used to open with its own name and the email underneath it, which
- * spent the top of the screen telling somebody the word they had just tapped.
- * The email and the role are the two facts that belong here — a vendor with a
- * second account needs to know which one this is before they act on anything
- * below — and the gear goes where a gear goes.
- */
-function AccountHeader() {
-  const theme = useTheme();
-  const router = useRouter();
-  const user = useAuth((s) => s.user);
-
+function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <Card style={{ marginTop: space(4) }}>
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space(2) }}>
-        <View style={{ flex: 1, gap: space(0.5) }}>
-          <Eyebrow>Signed in as</Eyebrow>
-          <SectionTitle numberOfLines={1}>{user?.email ?? 'Signed in'}</SectionTitle>
-          <Caption tone="faint">
-            {user ? (ROLE_LABEL[user.role] ?? user.role) : 'Unknown'}
-          </Caption>
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Security settings"
-          onPress={() => router.push('/security')}
-          hitSlop={8}
-          style={({ pressed }) => [
-            {
-              width: 38,
-              height: 38,
-              borderRadius: 19,
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: rgb(theme.surfaceSunken),
-            },
-            pressed && { opacity: 0.7 },
-          ]}
-        >
-          <Gear size={19} color={rgb(theme.ink[600])} />
-        </Pressable>
-      </View>
-      {/* This is the email-confirmation flag, not in-person identity — which
-          no longer gates matchmaking for individuals. */}
-      {user?.isVerified ? (
-        <Caption>Your email address is confirmed.</Caption>
-      ) : (
-        <Caption>Confirm your email address to secure your account.</Caption>
-      )}
-    </Card>
-  );
-}
-
-function Group({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <View style={{ gap: space(1.5) }}>
+    <View style={{ gap: space(2) }}>
       <Eyebrow>{title}</Eyebrow>
-      <Card style={{ padding: 0, gap: 0, overflow: 'hidden' }}>{children}</Card>
+      <Card style={{ padding: 0, overflow: 'hidden' }}>{children}</Card>
     </View>
   );
 }
@@ -231,16 +347,15 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
 function Row({
   icon: Glyph,
   label,
-  hint,
   to,
-  onPress,
+  badge,
+  last = false,
 }: {
-  icon: React.ComponentType<IconProps>;
+  icon: ComponentType<IconProps>;
   label: string;
-  hint: string;
-  /** Where the row goes. Omitted for a row that does something instead. */
-  to?: string;
-  onPress?: () => void;
+  to: string;
+  badge?: string;
+  last?: boolean;
 }) {
   const theme = useTheme();
   const router = useRouter();
@@ -248,9 +363,7 @@ function Row({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      // Cast because these paths are generated into the router's type union at
-      // build time, and this list is written once for every persona.
-      onPress={() => (onPress ? onPress() : to ? router.push(to as never) : undefined)}
+      onPress={() => router.push(to as never)}
       style={({ pressed }) => [
         {
           flexDirection: 'row',
@@ -258,9 +371,9 @@ function Row({
           gap: space(3),
           paddingHorizontal: space(4),
           paddingVertical: space(3),
-          minHeight: 60,
-          borderTopWidth: StyleSheet.hairlineWidth,
-          borderTopColor: rgb(theme.border),
+          minHeight: 56,
+          borderBottomWidth: last ? 0 : StyleSheet.hairlineWidth,
+          borderBottomColor: rgb(theme.border),
         },
         pressed && { backgroundColor: rgb(theme.surfaceSunken) },
       ]}
@@ -269,7 +382,7 @@ function Row({
         style={{
           width: 34,
           height: 34,
-          borderRadius: 17,
+          borderRadius: radius.md,
           alignItems: 'center',
           justifyContent: 'center',
           backgroundColor: rgb(theme.brandSoft),
@@ -277,90 +390,86 @@ function Row({
       >
         <Glyph size={17} color={rgb(theme.brandStrong)} />
       </View>
-      <View style={{ flex: 1, gap: space(0.5) }}>
-        <Body>{label}</Body>
-        <Caption tone="faint" numberOfLines={1}>
-          {hint}
-        </Caption>
-      </View>
+      <Body style={{ flex: 1, fontWeight: '500' }}>{label}</Body>
+      {badge ? (
+        <View
+          style={{
+            backgroundColor: rgb(theme.positiveBg),
+            paddingHorizontal: space(2),
+            paddingVertical: space(0.5),
+            borderRadius: radius.sm,
+          }}
+        >
+          <Caption style={{ color: rgb(theme.positiveFg), fontWeight: '600', fontSize: 11 }}>
+            {badge}
+          </Caption>
+        </View>
+      ) : null}
       <CaretRight size={16} color={rgb(theme.ink[400])} />
     </Pressable>
   );
 }
 
-const CHOICES: { key: ThemeChoice; label: string; hint: string }[] = [
-  { key: 'system', label: 'Match device', hint: 'Follows your phone, including at dusk.' },
-  { key: 'light', label: 'Light', hint: 'Always light, whatever the phone is set to.' },
-  { key: 'dark', label: 'Dark', hint: 'Always dark, whatever the phone is set to.' },
-];
-
-/**
- * Three states, not a switch.
- *
- * A two-position toggle cannot express "follow the phone", so the first time
- * the OS flips at dusk the app either disagrees with everything else on the
- * device or silently overrides a choice the person made. The web app carries
- * the same three.
- */
-function Appearance() {
+function GridCard({
+  icon: Icon,
+  title,
+  description,
+  onPress,
+}: {
+  icon: ComponentType<IconProps>;
+  title: string;
+  description: string;
+  onPress: () => void;
+}) {
   const theme = useTheme();
-  const choice = useThemeChoice((s) => s.choice);
-  const set = useThemeChoice((s) => s.set);
-
-  // No card of its own: the group around it already is one, and a card inside a
-  // card reads as two lists that happen to be touching.
   return (
-    <>
-      <View style={{ padding: space(4), paddingBottom: space(2) }}>
-        <SectionTitle>Appearance</SectionTitle>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.card,
+        { backgroundColor: rgb(theme.surface), borderColor: rgb(theme.border) },
+        pressed && { backgroundColor: rgb(theme.surfaceSunken) },
+      ]}
+    >
+      <View
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: radius.md,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: rgb(theme.brandSoft),
+        }}
+      >
+        <Icon size={18} color={rgb(theme.brandStrong)} />
       </View>
-      <View accessibilityRole="radiogroup">
-        {CHOICES.map((option, i) => {
-          const active = choice === option.key;
-          return (
-            <Pressable
-              key={option.key}
-              accessibilityRole="radio"
-              accessibilityState={{ selected: active }}
-              onPress={() => set(option.key)}
-              style={({ pressed }) => [
-                {
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: space(3),
-                  paddingHorizontal: space(4),
-                  paddingVertical: space(3),
-                  // A divided list rather than gaps: these are one set of
-                  // mutually exclusive options, and space between them would
-                  // read as three unrelated rows.
-                  borderTopWidth: i === 0 ? 0 : StyleSheet.hairlineWidth,
-                  borderTopColor: rgb(theme.border),
-                },
-                pressed && { backgroundColor: rgb(theme.surfaceSunken) },
-              ]}
-            >
-              <View style={{ flex: 1, gap: space(0.5) }}>
-                <Body>{option.label}</Body>
-                <Caption tone="faint">{option.hint}</Caption>
-              </View>
-              <View
-                style={{
-                  width: 22,
-                  height: 22,
-                  borderRadius: radius.sm,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: active ? rgb(theme.brand) : 'transparent',
-                  borderWidth: active ? 0 : StyleSheet.hairlineWidth,
-                  borderColor: rgb(theme.borderStrong),
-                }}
-              >
-                {active ? <Check size={13} weight="bold" color={rgb(theme.brandFg)} /> : null}
-              </View>
-            </Pressable>
-          );
-        })}
+      <Body style={{ fontWeight: '600', fontSize: 14 }}>{title}</Body>
+      <Caption tone="faint" numberOfLines={2}>
+        {description}
+      </Caption>
+      <View style={{ position: 'absolute', top: space(3), right: space(3) }}>
+        <CaretRight size={14} color={rgb(theme.ink[400])} />
       </View>
-    </>
+    </Pressable>
   );
 }
+
+const styles = StyleSheet.create({
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: space(2),
+  },
+  card: {
+    width: '48%',
+    flexGrow: 1,
+    padding: space(3),
+    paddingRight: space(6),
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: space(1),
+    position: 'relative',
+  },
+});

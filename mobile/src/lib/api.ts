@@ -20,7 +20,6 @@ import { useAuth, type AuthUser } from '@/store/auth';
  * and the comments there are worth reading alongside these.
  */
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8085/api';
-
 /** Alphanumerics, dot, dash and underscore only: SecureStore rejects the rest. */
 const REFRESH_KEY = 'wow.refreshToken';
 
@@ -116,12 +115,12 @@ export async function signOutLocally(): Promise<void> {
  */
 export async function signOut(): Promise<void> {
   const stored = await keystore.get();
+  await signOutLocally();
   try {
     await api.post('/auth/logout', stored ? { refreshToken: stored } : {});
   } catch {
     /* revoked or unreachable; the local clear below is what the user asked for */
   }
-  await signOutLocally();
 }
 
 /**

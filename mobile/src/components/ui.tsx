@@ -165,7 +165,7 @@ export function Eyebrow({ children, style }: TxtProps) {
 
 // --------------------------------------------------------------- surfaces --
 
-export function Screen({ children, scroll = true }: { children: ReactNode; scroll?: boolean }) {
+export function Screen({ children, scroll = true, onRefresh, refreshing = false }: { children: ReactNode; scroll?: boolean; onRefresh?: () => void; refreshing?: boolean }) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const style = { flex: 1 };
@@ -181,9 +181,16 @@ export function Screen({ children, scroll = true }: { children: ReactNode; scrol
       </HeartBackdrop>
     );
   }
+  
+  const { RefreshControl } = require('react-native');
   return (
     <HeartBackdrop>
-      <ScrollView style={style} contentContainerStyle={content} keyboardShouldPersistTaps="handled">
+      <ScrollView 
+        style={style} 
+        contentContainerStyle={content} 
+        keyboardShouldPersistTaps="handled"
+        refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined}
+      >
         {children}
       </ScrollView>
     </HeartBackdrop>

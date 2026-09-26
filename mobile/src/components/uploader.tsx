@@ -317,7 +317,7 @@ function ProgressBar({ fraction }: { fraction: number }) {
       accessibilityValue={{ min: 0, max: 100, now: Math.round(fraction * 100) }}
       style={{
         height: 4,
-        borderRadius: 2,
+        borderRadius: radius.md,
         overflow: 'hidden',
         backgroundColor: rgb(theme.surfaceSunken),
       }}
@@ -376,7 +376,7 @@ export function MediaStrip({
                   right: space(1),
                   width: 28,
                   height: 28,
-                  borderRadius: 14,
+                  borderRadius: radius.md,
                   alignItems: 'center',
                   justifyContent: 'center',
                   backgroundColor: rgba(theme.scrim, 0.6),

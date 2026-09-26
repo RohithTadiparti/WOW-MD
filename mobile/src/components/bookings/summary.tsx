@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View } from 'react-native';
+import { Alert as NativeAlert, View } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api, apiMessage } from '@/lib/api';
@@ -229,14 +229,34 @@ export function PaymentBreakdown({ summary }: { summary: BookingSummaryData }) {
     Number(p.heldInEscrow) > 0 &&
     (!delivery.deliveredAt || Boolean(delivery.deliveryAcceptedAt));
 
+  function handleRelease() {
+    NativeAlert.alert(
+      'Release payout',
+      'Are you sure you want to release this payout to your account? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Release', style: 'destructive', onPress: () => void release() }
+      ]
+    );
+  }
+
   async function release() {
+    if (releasing) return;
     setError('');
     setReleasing(true);
     try {
       await api.put(`/bookings/${summary.bookingId}/settle`);
-      for (const key of ['booking-summary', 'booking-history', 'incoming-bookings', 'earnings']) {
+      for (const key of [
+        'booking-summary',
+        'booking-history',
+        'incoming-bookings',
+        'earnings',
+        'escrow',
+        'my-bookings',
+      ]) {
         void qc.invalidateQueries({ queryKey: [key] });
       }
+      void qc.invalidateQueries({ queryKey: ['booking-summary', summary.bookingId] });
     } catch (err) {
       setError(apiMessage(err, 'The payout could not be released.'));
     } finally {
@@ -309,7 +329,13 @@ export function PaymentBreakdown({ summary }: { summary: BookingSummaryData }) {
         </Caption>
       ) : null}
       {canRelease ? (
-        <Button label="Release payout" small disabled={releasing} onPress={() => void release()} />
+        <Button
+          label={releasing ? 'Releasing…' : 'Release payout'}
+          small
+          busy={releasing}
+          disabled={releasing}
+          onPress={handleRelease}
+        />
       ) : null}
       {error ? <Alert tone="critical">{error}</Alert> : null}
     </Section>

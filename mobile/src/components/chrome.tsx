@@ -40,7 +40,7 @@ export function Badge({ tone = 'neutral', children }: { tone?: Tone; children: R
   const theme = useTheme();
   const { bg, fg } = toneColours(theme, tone);
   return (
-    <View style={{ backgroundColor: bg, borderRadius: 999, paddingHorizontal: space(2), paddingVertical: space(1) }}>
+    <View style={{ backgroundColor: bg, borderRadius: radius.md, paddingHorizontal: space(2), paddingVertical: space(1) }}>
       <Txt style={{ fontSize: 12, fontWeight: '500', color: fg }}>{children}</Txt>
     </View>
   );
@@ -97,7 +97,7 @@ export function FilterChips({
                 flexDirection: 'row',
                 alignItems: 'center',
                 gap: space(1.5),
-                borderRadius: 999,
+                borderRadius: radius.md,
                 paddingHorizontal: space(3),
                 // 34pt tall: smaller than a button because it is a filter, but
                 // still inside what a thumb hits without aiming.

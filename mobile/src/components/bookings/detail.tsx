@@ -22,7 +22,7 @@ import {
   useBookingSummary,
 } from '@/components/bookings/summary';
 import { Button, Caption } from '@/components/ui';
-import { space } from '@/theme';
+import { space, radius } from '@/theme';
 
 /**
  * Everything about one booking, behind the fold.
@@ -137,7 +137,7 @@ export function BookingDetail({ booking }: { booking: IncomingBooking }) {
                 accessibilityRole="imagebutton"
                 accessibilityLabel="Open the reference photo full size"
               >
-                <Image source={{ uri: url }} style={{ width: 80, height: 80, borderRadius: 4 }} contentFit="cover" />
+                <Image source={{ uri: url }} style={{ width: 80, height: 80, borderRadius: radius.md }} contentFit="cover" />
               </Pressable>
             ))}
           </View>

@@ -1,45 +1,42 @@
-import { Linking, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
-import { Image } from 'expo-image';
-import { FileText, SealCheck } from 'phosphor-react-native';
-
-import { api, apiMessage } from '@/lib/api';
-import { ageFrom, labelFor, stewardshipLine, type Stewardship } from '@/lib/labels';
-import { isChartImage } from '@/shared/horoscope';
-import { formatDate } from '@/shared/dates';
-import { FAMILY_TYPE_LABEL, MARITAL_LABEL, OCCUPATION_LABEL } from '@/shared/permissions';
-import { DetailGrid, DetailRow } from '@/components/chrome';
+import { useState, type ReactNode } from "react";
 import {
+  Alert as NativeAlert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+  ActionSheetIOS,
+  Platform,
+  Share,
+} from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Image } from "expo-image";
+import {
+  ArrowLeft,
+  DotsThree,
+  PaperPlaneTilt,
+  SealCheck,
+} from "phosphor-react-native";
+
+import { ProfileSilhouette } from "@/components/profile-silhouette";
+import { DetailGrid, DetailRow } from "@/components/chrome";
+import {
+  Alert,
   Body,
   Button,
   Caption,
-  Card,
   EmptyState,
   Loading,
-  PageSubtitle,
-  PageTitle,
-  Screen,
   SectionTitle,
-} from '@/components/ui';
-import { radius, rgb, space, useTheme } from '@/theme';
-import { ProfileSilhouette } from '@/components/profile-silhouette';
+} from "@/components/ui";
+import { api, apiMessage } from "@/lib/api";
+import { ageFrom, labelFor } from "@/lib/labels";
+import { OCCUPATION_LABEL } from "@/shared/permissions";
+import { rgb, space, useTheme, radius } from "@/theme";
+import { Txt } from "@/theme/fonts";
 
-/**
- * One profile, as somebody browsing may see it (EZ1-I261, EZ1-I231).
- *
- * The web app's View Profile, on a phone. What is shown is the server's
- * decision and not this screen's: before a mutual accept it answers with the
- * basic card and the horoscope headline, and the family, the contact details
- * and the rest of the gallery arrive only once both sides have agreed. This
- * renders whichever of the two came back and says which it is.
- *
- * The chart is here because it is what families actually compare before
- * deciding whether to send interest at all — the same reasoning that put it on
- * the web card. A photograph of one is shown; a PDF is opened by the phone,
- * because drawing a PDF into an image is a broken-image icon and reads as an
- * upload that failed.
- */
 interface ProfileView {
   limited: boolean;
   profile: {
@@ -48,237 +45,461 @@ interface ProfileView {
     profileCode: string | null;
     city: string | null;
     gender: string | null;
-    /** The age band. On the basic card; the full view carries the date instead. */
     ageRange?: string | null;
     dateOfBirth?: string | null;
-    /** Only once both sides have accepted. */
     bio?: string | null;
-    /** Who answers for this person. Null when they manage it themselves. */
-    stewardship?: Stewardship | null;
     photos: string[];
     identityVerified: boolean;
   };
   details: Record<string, unknown> | null;
-  siblings: { name?: string | null; relation?: string | null }[];
-  contact: { phone?: string | null; email?: string | null } | null;
 }
+const str = (value: unknown) =>
+  typeof value === "string" && value.trim() ? value : null;
 
 export default function MatchProfile() {
-  const { id } = useLocalSearchParams<{ id: string }>();
-
+  const theme = useTheme();
+  const router = useRouter();
+  const qc = useQueryClient();
+  const { width } = useWindowDimensions();
+  const { id, score, shortlisted, interaction, actingProfileId } =
+    useLocalSearchParams<{
+      id: string;
+      score?: string;
+      shortlisted?: string;
+      interaction?: string;
+      actingProfileId?: string;
+    }>();
+  const [isShortlisted, setIsShortlisted] = useState(shortlisted === "true");
+  const [currentInteraction, setCurrentInteraction] = useState(interaction || "none");
+  const [actionError, setActionError] = useState("");
+  const clientParam = actingProfileId ? { profileId: actingProfileId } : {};
   const { data, isPending, error } = useQuery({
-    queryKey: ['profile-view', id],
-    queryFn: async () => (await api.get(`/profiles/${id}/view`)).data as ProfileView,
+    queryKey: ["profile-view", id],
+    queryFn: async () =>
+      (await api.get(`/profiles/${id}/view`)).data as ProfileView,
     enabled: Boolean(id),
     retry: false,
   });
-
-  if (isPending) {
+  const shortlistMutation = useMutation({
+    mutationFn: () =>
+      isShortlisted
+        ? api.delete(`/matches/shortlist/${id}`, { params: clientParam })
+        : api.put(`/matches/shortlist/${id}`, {}, { params: clientParam }),
+    onSuccess: () => {
+      setIsShortlisted((v) => !v);
+      setActionError("");
+      void qc.invalidateQueries({ queryKey: ["suggestions"] });
+      void qc.invalidateQueries({ queryKey: ["shortlist"] });
+    },
+    onError: (e) =>
+      setActionError(apiMessage(e, "That shortlist could not be updated.")),
+  });
+  const interestMutation = useMutation({
+    mutationFn: () =>
+      api.post("/matches/interest", { toProfileId: id, ...clientParam }),
+    onSuccess: () => {
+      setActionError("");
+      setCurrentInteraction("sent");
+      void qc.invalidateQueries({ queryKey: ["suggestions"] });
+    },
+    onError: (e) =>
+      setActionError(apiMessage(e, "That interest could not be sent.")),
+  });
+  if (isPending)
     return (
-      <Screen>
-        <Loading rows={4} />
-      </Screen>
-    );
-  }
-
-  if (error || !data) {
-    return (
-      <Screen>
-        <EmptyState title="This profile is not available">
-          {apiMessage(error, 'It may have been withdrawn, or it may not be yours to open.')}
-        </EmptyState>
-      </Screen>
-    );
-  }
-
-  const { profile } = data;
-  // The basic card answers with an age band and the full view with the date of
-  // birth, so the age is worked out from whichever came back.
-  const age = profile.ageRange ?? ageFrom(profile.dateOfBirth);
-  const steward = stewardshipLine(profile.stewardship);
-  const d = (data.details ?? {}) as Record<string, unknown>;
-  const text = (key: string): string | null => {
-    const value = d[key];
-    return typeof value === 'string' && value.trim() ? value : null;
-  };
-  const bag = (key: string): Record<string, unknown> =>
-    (d[key] as Record<string, unknown> | undefined) ?? {};
-
-  // Before the accept the chart facts are flattened onto the view; after it
-  // they sit inside the horoscope block. Both are read, so one screen serves
-  // the two shapes the server sends.
-  const chart = { ...bag('horoscope'), ...d };
-  const chartText = (key: string): string | null => {
-    const value = chart[key];
-    return typeof value === 'string' && value.trim() ? value : null;
-  };
-  const chartUrl = typeof d.horoscopeDocumentUrl === 'string' ? d.horoscopeDocumentUrl : null;
-
-  return (
-    <Screen>
-      <View style={{ gap: space(1) }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(2) }}>
-          <PageTitle>{profile.displayName}</PageTitle>
-          {profile.identityVerified ? <SealCheck size={20} weight="fill" color="#1f8a5b" /> : null}
-        </View>
-        <PageSubtitle>
-          {[age, profile.city, profile.profileCode].filter(Boolean).join(' · ')}
-        </PageSubtitle>
-        {/* Who a family will actually be speaking to. A father answering for his
-            daughter is a different conversation from an agency listing. */}
-        {steward ? <Caption tone="muted">{steward}</Caption> : null}
+      <View
+        style={{
+          flex: 1,
+          padding: space(4),
+          backgroundColor: rgb(theme.canvas),
+        }}
+      >
+        <Loading rows={5} />
       </View>
+    );
+  if (error || !data)
+    return (
+      <View
+        style={{
+          flex: 1,
+          padding: space(4),
+          backgroundColor: rgb(theme.canvas),
+        }}
+      >
+        <EmptyState title="This profile is not available">
+          {apiMessage(
+            error,
+            "It may have been withdrawn, or it may not be yours to open.",
+          )}
+        </EmptyState>
+      </View>
+    );
+  const { profile } = data;
+  const d = data.details ?? {};
+  const age = profile.ageRange ?? ageFrom(profile.dateOfBirth);
+  const education = str(d.highestQualification);
+  const profession =
+    str(d.profession) ?? labelFor(OCCUPATION_LABEL, d.occupationStatus);
+  const company = str(d.company) ?? str(d.employer);
+  const languages = str(d.motherTongue) ?? str(d.languages);
+  const tags = preferenceTags(d);
+  const photoHeight = Math.min(width * 1.16, 460);
+  const canMessage = currentInteraction === "accepted";
+  
+  let interestLabel = "Send Interest";
+  let interestDisabled = false;
+  if (currentInteraction === "sent") {
+    interestLabel = "Interest Sent";
+    interestDisabled = true;
+  } else if (currentInteraction === "accepted") {
+    interestLabel = "Accepted";
+    interestDisabled = true;
+  } else if (currentInteraction === "received") {
+    interestLabel = "Interest Received";
+    interestDisabled = true;
+  } else if (currentInteraction === "rejected") {
+    interestLabel = "Declined";
+    interestDisabled = true;
+  }
 
-      {profile.photos.length > 0 ? (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2) }}>
-          {profile.photos.map((photo) => (
-            <Image
-              key={photo}
-              source={{ uri: photo }}
-              style={{ width: 104, height: 130, borderRadius: radius.md }}
-              contentFit="cover"
-              transition={150}
-            />
-          ))}
+  const shortlistAction = () => shortlistMutation.mutate();
+  const messageAction = () =>
+    canMessage
+      ? router.push("/chat")
+      : setActionError(
+          "You can message when they accept your request.",
+        );
+  const moreOptions = () => {
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ["Cancel", "Report", "Blocked profiles", "Share Profile"],
+          cancelButtonIndex: 0,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 1)
+            router.push({ pathname: "/support", params: { type: "contact" } });
+          else if (buttonIndex === 2) router.push("/blocked");
+          else if (buttonIndex === 3) void Share.share({ message: `Check out this profile: https://wow.com/match/${id}` });
+        },
+      );
+    } else {
+      NativeAlert.alert(profile.displayName, "Choose an action", [
+        {
+          text: "Report",
+          onPress: () =>
+            router.push({ pathname: "/support", params: { type: "contact" } }),
+        },
+        {
+          text: "Blocked profiles",
+          onPress: () => router.push("/blocked"),
+        },
+        {
+          text: "Share Profile",
+          onPress: () => void Share.share({ message: `Check out this profile: https://wow.com/match/${id}` }),
+        },
+        { text: "Cancel", style: "cancel" },
+      ]);
+    }
+  };
+  return (
+    <View style={{ flex: 1, backgroundColor: rgb(theme.canvas) }}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 92 }}
+      >
+        <View
+          style={{
+            height: photoHeight,
+            backgroundColor: rgb(theme.surfaceSunken),
+          }}
+        >
+          <ScrollView
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+          >
+            {profile.photos.length ? (
+              profile.photos.map((photo) => (
+                <Image
+                  key={photo}
+                  source={{ uri: photo }}
+                  style={{ width, height: photoHeight }}
+                  contentFit="cover"
+                />
+              ))
+            ) : (
+              <ProfileSilhouette
+                gender={profile.gender}
+                style={{ width, height: photoHeight }}
+              />
+            )}
+          </ScrollView>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            onPress={() => router.back()}
+            style={{
+              position: "absolute",
+              top: space(5),
+              left: space(3),
+              width: 40,
+              height: 40,
+              borderRadius: radius.md,
+              backgroundColor: rgb(theme.surface),
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <ArrowLeft size={21} color={rgb(theme.ink[800])} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="More profile options"
+            onPress={moreOptions}
+            style={{
+              position: "absolute",
+              top: space(5),
+              right: space(3),
+              width: 40,
+              height: 40,
+              borderRadius: radius.md,
+              backgroundColor: rgb(theme.surface),
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <DotsThree size={22} color={rgb(theme.ink[800])} weight="bold" />
+          </Pressable>
+          {profile.photos.length > 1 ? (
+            <View
+              style={{
+                position: "absolute",
+                right: space(3),
+                bottom: space(3),
+                borderRadius: radius.md,
+                backgroundColor: "rgba(0,0,0,.55)",
+                paddingHorizontal: space(2),
+                paddingVertical: 3,
+              }}
+            >
+              <Txt
+                style={{ color: "#fff", fontSize: 12 }}
+              >{`1/${profile.photos.length}`}</Txt>
+            </View>
+          ) : null}
         </View>
-      ) : (
-        <ProfileSilhouette
-          gender={profile.gender}
-          style={{ width: 104, height: 130, borderRadius: radius.md }}
-        />
-      )}
-
-      {profile.bio?.trim() ? (
-        <Card>
-          <SectionTitle>In their words</SectionTitle>
-          <Body tone="muted">{profile.bio}</Body>
-        </Card>
-      ) : null}
-
-      <Card>
-        <SectionTitle>About</SectionTitle>
-        <DetailGrid>
-          <DetailRow label="Age">{age ?? '—'}</DetailRow>
-          <DetailRow label="City">{profile.city ?? '—'}</DetailRow>
-          <DetailRow label="Religion">{text('religion') ?? '—'}</DetailRow>
-          <DetailRow label="Caste">{text('caste') ?? '—'}</DetailRow>
-          <DetailRow label="Mother tongue">{text('motherTongue') ?? '—'}</DetailRow>
-          <DetailRow label="Education">{text('highestQualification') ?? '—'}</DetailRow>
-          <DetailRow label="Occupation">
-            {labelFor(OCCUPATION_LABEL, d.occupationStatus) ?? '—'}
-          </DetailRow>
-          {typeof d.heightCm === 'number' ? (
-            <DetailRow label="Height">{`${d.heightCm} cm`}</DetailRow>
-          ) : null}
-        </DetailGrid>
-      </Card>
-
-      <Card>
-        <SectionTitle>Horoscope</SectionTitle>
-        <DetailGrid>
-          <DetailRow label="Rashi">{chartText('rashi') ?? '—'}</DetailRow>
-          <DetailRow label="Star">{chartText('star') ?? '—'}</DetailRow>
-          <DetailRow label="Padam">{chartText('padam') ?? '—'}</DetailRow>
-          <DetailRow label="Gothram">{chartText('gothram') ?? '—'}</DetailRow>
-          <DetailRow label="Kuja dosham">{chartText('kujaDosham') ?? '—'}</DetailRow>
-        </DetailGrid>
-        <HoroscopeChart url={chartUrl} />
-      </Card>
-
-      {data.limited ? (
-        <Caption tone="faint">
-          Family, contact details and the rest of the biodata are shared once you both accept
-          interest.
-        </Caption>
-      ) : (
-        <>
-          <Card>
-            <SectionTitle>Family</SectionTitle>
-            <DetailGrid>
-              <DetailRow label="Father">
-                {(bag('father').name as string | undefined) || '—'}
-              </DetailRow>
-              <DetailRow label="Mother">
-                {(bag('mother').name as string | undefined) || '—'}
-              </DetailRow>
-              <DetailRow label="Family type">
-                {labelFor(FAMILY_TYPE_LABEL, d.familyType) ?? '—'}
-              </DetailRow>
-            </DetailGrid>
-            {data.siblings.length > 0 ? (
-              <Caption tone="muted">
-                Siblings: {data.siblings.map((s) => s.name).filter(Boolean).join(', ')}
+        <View
+          style={{
+            marginTop: -space(3),
+            marginHorizontal: space(3),
+            padding: space(4),
+            gap: space(3),
+            backgroundColor: rgb(theme.surface),
+            borderRadius: radius.md,
+            borderWidth: StyleSheet.hairlineWidth,
+            borderColor: rgb(theme.border),
+          }}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "flex-start",
+              gap: space(2),
+            }}
+          >
+            <View style={{ flex: 1 }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: space(1),
+                }}
+              >
+                <Txt
+                  serif
+                  style={{
+                    fontSize: 29,
+                    lineHeight: 32,
+                    fontWeight: "600",
+                    color: rgb(theme.ink[900]),
+                  }}
+                >
+                  {profile.displayName}
+                </Txt>
+                {profile.identityVerified ? (
+                  <SealCheck
+                    size={19}
+                    color={rgb(theme.positiveFg)}
+                    weight="fill"
+                  />
+                ) : null}
+              </View>
+              <Caption>
+                {[age, profile.city].filter(Boolean).join(" years • ")}
               </Caption>
+            </View>
+            {score ? (
+              <View
+                style={{
+                  paddingHorizontal: space(2),
+                  paddingVertical: space(1),
+                  borderRadius: radius.md,
+                  backgroundColor: rgb(theme.brandSoft),
+                }}
+              >
+                <Caption tone="brand" style={{ fontWeight: "700" }}>
+                  {score}% Match
+                </Caption>
+              </View>
             ) : null}
-          </Card>
-
-          {data.contact ? (
-            <Card>
-              <SectionTitle>Contact</SectionTitle>
-              <DetailGrid>
-                <DetailRow label="Phone">{data.contact.phone ?? '—'}</DetailRow>
-                <DetailRow label="Email">{data.contact.email ?? '—'}</DetailRow>
-              </DetailGrid>
-            </Card>
+          </View>
+          {profession ? (
+            <Body>{company ? `${profession} at ${company}` : profession}</Body>
           ) : null}
-
-          <Card>
-            <SectionTitle>Marital status</SectionTitle>
+          <View
+            style={{ flexDirection: "row", flexWrap: "wrap", gap: space(3) }}
+          >
+            {education ? <Compact label="Education" value={education} /> : null}
+            {profile.city ? (
+              <Compact label="Location" value={profile.city} />
+            ) : null}
+            {str(d.religion) ? (
+              <Compact label="Religion" value={str(d.religion)!} />
+            ) : null}
+            {languages ? <Compact label="Language" value={languages} /> : null}
+          </View>
+          <Pressable
+            onPress={messageAction}
+            style={{
+              alignItems: "center",
+              flexDirection: "row",
+              justifyContent: "center",
+              gap: space(1),
+            }}
+          >
+            <PaperPlaneTilt size={16} color={rgb(theme.brandStrong)} />
+            <Caption tone="brand">Message</Caption>
+          </Pressable>
+        </View>
+        <View style={{ padding: space(4), gap: space(4) }}>
+          {actionError ? <Alert tone="critical">{actionError}</Alert> : null}
+          {profile.bio ? (
+            <Section title="About Me">
+              <Body tone="muted">{profile.bio}</Body>
+            </Section>
+          ) : null}
+          {tags.length ? (
+            <Section title="Looking For">
+              <View
+                style={{
+                  flexDirection: "row",
+                  flexWrap: "wrap",
+                  gap: space(2),
+                }}
+              >
+                {tags.map((tag) => (
+                  <View
+                    key={tag}
+                    style={{
+                      borderRadius: radius.md,
+                      paddingHorizontal: space(2),
+                      paddingVertical: space(1),
+                      backgroundColor: rgb(theme.brandSoft),
+                    }}
+                  >
+                    <Caption tone="brand">{tag}</Caption>
+                  </View>
+                ))}
+              </View>
+            </Section>
+          ) : null}
+          <Section title="Basic Details">
             <DetailGrid>
-              <DetailRow label="Status">
-                {labelFor(MARITAL_LABEL, d.maritalStatus) ?? '—'}
-              </DetailRow>
-              {typeof bag('maritalHistory').marriageDate === 'string' ? (
-                <DetailRow label="Married on">
-                  {formatDate(bag('maritalHistory').marriageDate as string)}
-                </DetailRow>
+              <DetailRow label="Age">{age ?? "—"}</DetailRow>
+              {typeof d.heightCm === "number" ? (
+                <DetailRow label="Height">{`${d.heightCm} cm`}</DetailRow>
+              ) : null}
+              {profession ? (
+                <DetailRow label="Profession">{profession}</DetailRow>
+              ) : null}
+              {company ? (
+                <DetailRow label="Company">{company}</DetailRow>
+              ) : null}
+              {education ? (
+                <DetailRow label="Education">{education}</DetailRow>
               ) : null}
             </DetailGrid>
-          </Card>
-        </>
-      )}
-    </Screen>
+          </Section>
+          {data.limited ? (
+            <Caption tone="faint">
+              More profile information is shared once they accept interest.
+            </Caption>
+          ) : null}
+        </View>
+      </ScrollView>
+      <View
+        style={{
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          padding: space(3),
+          gap: space(2),
+          flexDirection: "row",
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderColor: rgb(theme.border),
+          backgroundColor: rgb(theme.surface),
+        }}
+      >
+        <Button
+          label={isShortlisted ? "Shortlisted" : "Shortlist"}
+          variant="outline"
+          onPress={shortlistAction}
+          busy={shortlistMutation.isPending}
+          style={{ flex: 1 }}
+        />
+        <Button
+          label={interestLabel}
+          onPress={() => interestMutation.mutate()}
+          busy={interestMutation.isPending}
+          disabled={interestDisabled}
+          style={{ flex: 1.4 }}
+        />
+      </View>
+    </View>
   );
 }
 
-/** The chart, drawn if it can be drawn and offered to the phone if not. */
-function HoroscopeChart({ url }: { url: string | null }) {
+function Compact({ label, value }: { label: string; value: string }) {
   const theme = useTheme();
-
-  if (!url) {
-    /*
-     * Not the same answer as a field somebody chose to withhold. This family
-     * keeps a horoscope — that is why the section is here — and has not
-     * attached the chart (EZ1-I231).
-     */
-    return <Caption tone="faint">Chart: not uploaded</Caption>;
-  }
-
-  if (isChartImage(url)) {
-    return (
-      <Image
-        source={{ uri: url }}
-        style={{
-          width: '100%',
-          height: 260,
-          borderRadius: radius.sm,
-          backgroundColor: rgb(theme.surfaceSunken),
-        }}
-        contentFit="contain"
-        transition={150}
-      />
-    );
-  }
-
   return (
-    <View style={{ gap: space(1.5) }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(2) }}>
-        <FileText size={18} color={rgb(theme.ink[400])} />
-        <Body tone="muted" style={{ flex: 1 }}>
-          The chart is a document.
-        </Body>
-      </View>
-      <Button label="Open the chart" variant="outline" small onPress={() => void Linking.openURL(url)} />
+    <View style={{ minWidth: "42%", flex: 1 }}>
+      <Caption tone="faint" style={{ fontSize: 10 }}>
+        {label}
+      </Caption>
+      <Caption numberOfLines={1}>{value}</Caption>
     </View>
   );
+}
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <View style={{ gap: space(2) }}>
+      <SectionTitle>{title}</SectionTitle>
+      {children}
+    </View>
+  );
+}
+function preferenceTags(d: Record<string, unknown>): string[] {
+  const raw = d.partnerPreferences ?? d.preferences ?? d.lookingFor;
+  if (Array.isArray(raw))
+    return raw
+      .filter((x): x is string => typeof x === "string" && Boolean(x.trim()))
+      .slice(0, 8);
+  if (raw && typeof raw === "object")
+    return Object.values(raw as Record<string, unknown>)
+      .flatMap((v) => (Array.isArray(v) ? v : [v]))
+      .filter((x): x is string => typeof x === "string" && Boolean(x.trim()))
+      .slice(0, 8);
+  return [];
 }

@@ -107,23 +107,25 @@ export default function Home() {
 
   return (
     <Screen>
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'flex-start',
-          gap: space(2),
-          marginTop: space(4),
-        }}
-      >
-        <View style={{ flex: 1, gap: space(1) }}>
-          <Eyebrow>{greeting()}</Eyebrow>
-          <PageTitle>{name ?? 'Welcome'}</PageTitle>
-          <PageSubtitle>Here is where things stand today.</PageSubtitle>
+      {!isIndividual && (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+            gap: space(2),
+            marginTop: space(4),
+          }}
+        >
+          <View style={{ flex: 1, gap: space(1) }}>
+            <Eyebrow>{greeting()}</Eyebrow>
+            <PageTitle>{name ?? 'Welcome'}</PageTitle>
+            <PageSubtitle>Here is where things stand today.</PageSubtitle>
+          </View>
+          {/* A provider's bar has no Alerts tab, so the count comes here instead
+              of hiding behind More (EZ1-I255). */}
+          {noAlertsTab ? <NotificationBell /> : null}
         </View>
-        {/* A provider's bar has no Alerts tab, so the count comes here instead
-            of hiding behind More (EZ1-I255). */}
-        {noAlertsTab ? <NotificationBell /> : null}
-      </View>
+      )}
 
       {isPending ? (
         <Loading rows={2} />
