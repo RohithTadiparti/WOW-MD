@@ -4,7 +4,7 @@ import type { Answers, FieldSpec } from '@/shared/dynamic-form';
 import { CheckRow, DateField, SelectField, Textarea, TimeField } from '@/components/form';
 import { DocumentList, PhotoPicker } from '@/components/uploader';
 import { Body, Caption, Field } from '@/components/ui';
-import { rgb, space, useTheme } from '@/theme';
+import { rgb, space, useTheme, radius } from '@/theme';
 
 /**
  * The catalog's questions, drawn with native controls.
@@ -145,7 +145,7 @@ function Control({
                   }
                   style={({ pressed }) => [
                     {
-                      borderRadius: 999,
+                      borderRadius: radius.md,
                       paddingHorizontal: space(3),
                       minHeight: 36,
                       justifyContent: 'center',

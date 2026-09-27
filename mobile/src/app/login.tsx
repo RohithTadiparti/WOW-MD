@@ -88,7 +88,7 @@ export default function Login() {
         {byMobile ? (
           <OtpLogin onNeedsPassword={() => setByMobile(false)} />
         ) : (
-          <>
+          <View accessibilityRole={'form' as any}>
         {error ? <Alert tone="critical">{error}</Alert> : null}
 
         <Field
@@ -157,7 +157,7 @@ export default function Login() {
             }}
           />
         )}
-          </>
+          </View>
         )}
 
         {/*

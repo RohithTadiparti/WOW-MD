@@ -22,3 +22,5 @@ e2e-results/
 
 # Local compose secrets
 docker/.env
+
+mobile/.env

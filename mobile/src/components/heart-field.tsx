@@ -26,7 +26,7 @@ export const HeartField = memo(function HeartField() {
   const theme = useTheme();
   const gold = { gold: theme.gold, 'gold-lit': theme.goldLit, 'gold-deep': theme.goldDeep };
   return (
-    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: 0.5 }]}>
+    <View style={[StyleSheet.absoluteFill, { opacity: 0.5, pointerEvents: 'none' }]}>
       <Svg
         width="100%"
         height="100%"
