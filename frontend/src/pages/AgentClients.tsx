@@ -55,6 +55,7 @@ export default function AgentClients() {
   const qc = useQueryClient();
   const [creatingProfile, setCreatingProfile] = useState(false);
   const createFormSlot = useRef<HTMLDivElement>(null);
+  const [signupLinkSlot, setSignupLinkSlot] = useState<HTMLDivElement | null>(null);
   const [search, setSearch] = useState('');
   // 'all' rather than an empty string: "show me everyone" is a real answer here,
   // not the absence of one, and a deactivated client still needs finding.
@@ -146,6 +147,7 @@ export default function AgentClients() {
 
       {/* The profile component renders the form here, before the client accounts list. */}
       <div ref={createFormSlot} />
+      <div ref={setSignupLinkSlot} />
 
       <div className="card space-y-3">
         <div className="flex items-center justify-between gap-3">
@@ -329,6 +331,7 @@ export default function AgentClients() {
         onCreatingChange={setCreatingProfile}
         hideCreateAction
         createFormContainer={createFormSlot.current}
+        signupLinkContainer={signupLinkSlot}
       />
     </div>
   );

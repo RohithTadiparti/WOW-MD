@@ -137,6 +137,19 @@ const IMPORT_REVIEW_SECTIONS = [
   },
 ] as const;
 
+const ALLOWED_BIODATA_KEYS = new Set([
+  'firstName', 'lastName', 'surname', 'displayName', 'heightCm', 'complexion',
+  'nativePlace', 'nativeState', 'nativeCountry', 'nativeDistrict', 'placeOfBirth',
+  'communicationAddress', 'address', 'contactPhone', 'alternateMobile', 'contactEmail',
+  'dateOfBirth', 'gender', 'city', 'religion', 'caste', 'subCaste', 'motherTongue',
+  'denomination', 'gothram', 'rashi', 'star', 'padam', 'kujaDosham', 'timeOfBirth',
+  'horoscopeAvailable', 'maritalStatus', 'fatherName', 'fatherProfession', 'motherName',
+  'motherProfession', 'familyType', 'familyStatus', 'brothers', 'sisters',
+  'highestQualification', 'course', 'institution', 'collegePlace', 'occupationStatus',
+  'profession', 'designation', 'company', 'workLocation', 'annualIncome', 'salary',
+  'bio',
+]);
+
 type IntakeMode = 'manual' | 'upload';
 
 function applyImportedFields(
@@ -166,6 +179,8 @@ interface ManagedProfilesProps {
   hideCreateAction?: boolean;
   /** Optional slot for putting the create form before a host page's list. */
   createFormContainer?: Element | null;
+  /** Optional slot for putting the client sign-up link before a host page's list. */
+  signupLinkContainer?: Element | null;
 }
 
 export default function ManagedProfiles({
@@ -174,6 +189,7 @@ export default function ManagedProfiles({
   onCreatingChange,
   hideCreateAction = false,
   createFormContainer,
+  signupLinkContainer,
 }: ManagedProfilesProps = {}) {
   const qc = useQueryClient();
   const permissions = useAuth((s) => s.user?.permissions ?? []);
@@ -229,12 +245,18 @@ export default function ManagedProfiles({
         consent: consentPayload(consent),
         inviteNow,
       };
-      const biodata: Record<string, string> = {
+      const rawBiodata: Record<string, unknown> = {
         ...extractedBiodata,
         ...(values.firstName ? { firstName: values.firstName } : {}),
         ...(values.lastName ? { lastName: values.lastName } : {}),
         ...(values.nativePlace ? { nativePlace: values.nativePlace } : {}),
       };
+      const biodata: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(rawBiodata)) {
+        if (ALLOWED_BIODATA_KEYS.has(k) && v !== undefined && v !== '') {
+          biodata[k] = v;
+        }
+      }
       if (Object.keys(biodata).length) payload.biodata = biodata;
       if (documentUrl) payload.biodataDocumentUrl = documentUrl;
       // Email is optional: a walk-in family often gives only a number.
@@ -340,6 +362,7 @@ export default function ManagedProfiles({
   function submit(e: FormEvent) {
     e.preventDefault();
     if (importing || !validIntakePhone) return;
+    setError('');
     create.mutate(false);
   }
 
@@ -408,10 +431,12 @@ export default function ManagedProfiles({
       )}
 
       {notice && <p className="rounded-sm bg-brand-light p-3 text-sm text-brand-dark">{notice}</p>}
-      {error && <p className="alert-critical">{error}</p>}
+      {!creating && error && <p className="alert-critical">{error}</p>}
 
       {isAgent && agency?.approved && (
-        <ClientSignupLink active={Boolean(agency.shareLinkActive)} />
+        signupLinkContainer
+          ? createPortal(<ClientSignupLink active={Boolean(agency.shareLinkActive)} />, signupLinkContainer)
+          : <ClientSignupLink active={Boolean(agency.shareLinkActive)} />
       )}
 
       {renderCreateForm()}
@@ -448,9 +473,15 @@ export default function ManagedProfiles({
             busy={importing || create.isPending}
             onBusy={setImporting}
             onImported={(fields, url) => {
-              setDraft((current) => applyImportedFields(current, fields));
+              const allowedFields: Record<string, string> = {};
+              for (const [key, value] of Object.entries(fields)) {
+                if (ALLOWED_BIODATA_KEYS.has(key)) {
+                  allowedFields[key] = value;
+                }
+              }
+              setDraft(applyImportedFields(emptyDraft, allowedFields));
               setDocumentUrl(url);
-              setExtractedBiodata(fields);
+              setExtractedBiodata(allowedFields);
             }}
           />
         )}
@@ -655,6 +686,8 @@ export default function ManagedProfiles({
 
         <ConsentFields value={consent} onChange={setConsent} />
 
+        {error && <p className="alert-critical">{error}</p>}
+
         <div className="flex flex-wrap gap-2">
           <button className="btn" disabled={importing || create.isPending || !validIntakePhone}>
             {create.isPending ? 'Saving...' : 'Save profile'}
@@ -671,7 +704,10 @@ export default function ManagedProfiles({
             type="button"
             className="btn-outline"
             disabled={importing || create.isPending || !isValidMobile(draft.contactPhone)}
-            onClick={() => create.mutate(true)}
+            onClick={() => {
+              setError('');
+              create.mutate(true);
+            }}
           >
             Save and invite now
           </button>

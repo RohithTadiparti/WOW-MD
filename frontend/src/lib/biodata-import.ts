@@ -1,15 +1,35 @@
+function degreeRank(text: string): number {
+  const lower = text.toLowerCase();
+  if (/\b(?:ph\.?d|doctorate|post[\s-]?doc|fellowship)\b/i.test(lower)) return 5;
+  if (/\b(?:master|masters|m\.?s|m\.?tech|m\.?b\.?a|m\.?c\.?a|m\.?d|m\.?e|m\.?com|post[\s-]?grad|residency)\b/i.test(lower)) return 4;
+  if (/\b(?:bachelor|bachelors|b\.?tech|b\.?e|b\.?sc|b\.?c\.?a|b\.?com|b\.?a|m\.?b;?b\.?s|under[\s-]?grad|graduate|graduation|degree)\b/i.test(lower)) return 3;
+  if (/\b(?:inter|intermediate|diploma|10\+2|puc|higher secondary)\b/i.test(lower)) return 2;
+  if (/\b(?:school|schooling|ssc|10th|icse|cbse)\b/i.test(lower)) return 1;
+  return 0;
+}
+
+function cleanQualificationValue(text: string): string {
+  let cleaned = text.replace(/^[-•*]\s*/, '').trim();
+  cleaned = cleaned.replace(/^(?:post[\s-]?grad(?:uate)?|under[\s-]?grad(?:uate)?|graduation|intermediate|schooling)\s*[:\uFF1A]\s*/i, '');
+  cleaned = cleaned.split(',')[0].trim();
+  cleaned = cleaned.replace(/\s*\([^)]*(\)|$)/g, '').trim();
+  return cleaned;
+}
+
 /** Only explicitly labelled values are mapped; unknown/missing values stay empty. */
 export function parseBiodata(text: string): Record<string, string> {
   const aliases: Record<string, string> = {
     name: 'displayName', 'full name': 'displayName', 'date of birth': 'dateOfBirth', dob: 'dateOfBirth',
     mobile: 'contactPhone', phone: 'contactPhone', 'mobile number': 'contactPhone', email: 'contactEmail',
     gender: 'gender', city: 'city', location: 'city', religion: 'religion', caste: 'caste',
-    'sub caste': 'subCaste', subcaste: 'subCaste', 'mother tongue': 'motherTongue', education: 'highestQualification',
+    'sub caste': 'subCaste', subcaste: 'subCaste', 'sub-caste': 'subCaste',
+    'religion/caste': 'caste', 'religion / caste': 'caste', 'religion and caste': 'caste',
+    'mother tongue': 'motherTongue', education: 'highestQualification',
     qualification: 'highestQualification', occupation: 'profession', profession: 'profession',
     'first name': 'firstName', 'last name': 'lastName', 'native place': 'nativePlace',
     surname: 'lastName', 'birth date': 'dateOfBirth', sex: 'gender',
     'contact number': 'contactPhone', 'phone number': 'contactPhone', 'contact email': 'contactEmail',
-    height: 'heightCm', 'height cm': 'heightCm', complexion: 'complexion',
+    height: 'heightCm', 'height cm': 'heightCm', complexion: 'complexion', colour: 'complexion', color: 'complexion',
     address: 'communicationAddress', 'communication address': 'communicationAddress',
     'alternate mobile': 'alternateMobile', 'native state': 'nativeState',
     'native country': 'nativeCountry', 'native district': 'nativeDistrict',
@@ -20,7 +40,8 @@ export function parseBiodata(text: string): Record<string, string> {
     'fathers occupation': 'fatherProfession', 'fathers profession': 'fatherProfession',
     'mother occupation': 'motherProfession', 'mother profession': 'motherProfession',
     'mothers occupation': 'motherProfession', 'mothers profession': 'motherProfession',
-    'family type': 'familyType', 'family status': 'familyStatus', brothers: 'brothers', sisters: 'sisters', siblings: 'siblings',
+    'family type': 'familyType', 'family status': 'familyStatus',
+    brothers: 'brothers', sisters: 'sisters', siblings: 'siblings',
     'highest qualification': 'highestQualification', course: 'course',
     institution: 'institution', college: 'institution', university: 'institution', 'college place': 'collegePlace',
     employer: 'company', company: 'company', designation: 'designation',
@@ -28,33 +49,134 @@ export function parseBiodata(text: string): Record<string, string> {
     'annual income': 'annualIncome', salary: 'salary',
     rashi: 'rashi', rasi: 'rashi', star: 'star', nakshatra: 'star', nakshatram: 'star',
     padam: 'padam', pada: 'padam', gothram: 'gothram', gotra: 'gothram', gothra: 'gothram',
-    'kuja dosham': 'kujaDosham', 'manglik': 'kujaDosham',
-    'time of birth': 'timeOfBirth', 'birth time': 'timeOfBirth',
-    'place of birth': 'placeOfBirth', 'birth place': 'placeOfBirth', 'about me': 'bio',
+    'kuja dosham': 'kujaDosham', manglik: 'kujaDosham',
+    'time of birth': 'timeOfBirth', 'birth time': 'timeOfBirth', tob: 'timeOfBirth',
+    'place of birth': 'placeOfBirth', 'birth place': 'placeOfBirth', pob: 'placeOfBirth', 'about me': 'bio',
+  };
+  const educationLevels: Record<string, number> = {
+    schooling: 1, intermediate: 2, undergrad: 3, undergraduate: 3,
+    'under graduate': 3, graduation: 3, postgrad: 4, postgraduate: 4, 'post graduate': 4,
+    doctorate: 5, phd: 5,
   };
   const result: Record<string, string> = {};
-  const labels = Object.keys(aliases).sort((a, b) => b.length - a.length)
-    .map(label => label.replace(/ /g, '[ .-]+')).join('|');
+  const labelNames = [
+    ...Object.keys(aliases), ...Object.keys(educationLevels),
+    'family', 'sibling', 'family details', 'personal details', 'educational details',
+    'sister', 'brother', 'sister name', 'brother name',
+  ];
+  const labelsPattern = labelNames
+    .sort((a, b) => b.length - a.length)
+    .map(label => label.replace(/[/]/g, '[/]').replace(/ /g, '[ .-]+'))
+    .join('|');
+
   // OCR commonly separates every character in D.O.B. Preserve the familiar
   // abbreviation before looking for labels, so it maps just like "DOB".
-  text = text.replace(/\bd\s*\.?\s*o\s*\.?\s*b\.?\s*(?=[:\uFF1A\-\u2013\u2014])/gi, 'DOB');
-  text = text
-    .replace(/([a-z])['’]s(?=\s+(?:name|occupation|profession))/gi, '$1s')
-    .replace(new RegExp(`(^|[\\r\\n \\t|]+)(${labels})\\s*[\\-\\u2013\\u2014]`, 'gi'), '$1$2:');
-  const lines = text.replace(/([a-z])['’]s(?=\s+(?:name|occupation|profession))/gi, '$1s')
-    .replace(new RegExp(`(^|[\\r\\n \\t|]+)(${labels})\\s*[:\\uFF1A]`, 'gi'), '\n$2:')
-    .replace(/[:\uFF1A][ \t]*\r?\n[ \t]*(?=[^\r\n:]+(?:\r?\n|$))/g, ': ');
-  for (const line of lines.split(/[\r\n]+/)) {
-    const match = line.match(/^\s*([a-z .'’()-]+?)\s*[:\uFF1A]\s*(\S.*?)\s*$/i);
-    if (!match) continue;
-    const key = aliases[match[1].trim().toLowerCase().replace(/[.'’()]/g, '').replace(/-/g, ' ').replace(/\s+/g, ' ')];
-    if (!key || result[key]) continue;
+  text = text.replace(/\b([dtp])\s*\.?\s*o\s*\.?\s*b\.?\s*(?=[:\uFF1A;\-\u2013\u2014\s])/gi,
+    (_, initial: string) => `${initial.toUpperCase()}OB`);
+  text = text.replace(/([a-z])['’]s(?=\s+(?:name|occupation|profession))/gi, '$1s');
+
+  // Split multi-column lines like "Name: Rahul Kumar   Gender: Male"
+  text = text.replace(
+    new RegExp(`([ \\t]{2,}|\\|)(?=(${labelsPattern})[ \\t]*[:\\uFF1A])`, 'gi'),
+    '\n'
+  );
+
+  // If a colon has its value on the next line (and that next line does not have a colon), join them
+  text = text.replace(/[:\uFF1A][ \t]*\r?\n[ \t]*(?=[^\r\n:]+(?:\r?\n|$))/g, ': ');
+
+  let inFamily = false;
+  let familyMember: 'father' | 'mother' | 'sibling' | undefined;
+  let educationRank = 0;
+  let inQualificationSection = false;
+
+  const labelLineRegex = new RegExp(
+    `^\\s*(?:[-•*]\\s*)?(${labelsPattern})\\s*(?:\\([^)]*\\)\\s*)?(?:[:\\uFF1A;]+|\\s*[-–—]+\\s*|\\s+)(.*)$`,
+    'i'
+  );
+
+  for (const line of text.split(/[\r\n]+/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    // Check for section headers
+    if (/^\s*(?:personal details|educational? details|biodata|bio\s*[-–—]?\s*data)\s*[:\uFF1A]?\s*$/i.test(trimmed)) {
+      inFamily = false;
+      inQualificationSection = false;
+      continue;
+    }
+    if (/^\s*(?:family details|family)\s*[:\uFF1A]?\s*$/i.test(trimmed)) {
+      inFamily = true;
+      familyMember = undefined;
+      inQualificationSection = false;
+      continue;
+    }
+
+    const match = trimmed.match(labelLineRegex);
+    if (!match) {
+      // Continuation line (e.g. multi-line education under Qualification:)
+      if (inQualificationSection && !inFamily) {
+        const rank = degreeRank(trimmed);
+        if (rank > 0 && rank >= educationRank) {
+          educationRank = rank;
+          result.highestQualification = cleanQualificationValue(trimmed);
+        }
+      }
+      continue;
+    }
+
+    const rawLabel = match[1].trim().toLowerCase().replace(/[.'’()]/g, '').replace(/-/g, ' ').replace(/\s+/g, ' ');
+    const label = rawLabel;
+    let key = aliases[label] || aliases[label.replace(/\//g, ' ')];
     let value = match[2].trim().replace(/\s*\|$/, '').trim();
-    if (/^(?:n\/?a|not specified|unknown|[-—]+)$/i.test(value)) continue;
+
+    // Qualification/Education section tracking
+    const rank = educationLevels[label] || degreeRank(label);
+    if (rank || key === 'highestQualification') {
+      if (!inFamily) {
+        inQualificationSection = true;
+        const valRank = degreeRank(value) || rank || 0;
+        if (valRank >= educationRank && value && !/^(?:n\/?a|not specified|unknown|[-—]+)$/i.test(value)) {
+          educationRank = valRank;
+          result.highestQualification = cleanQualificationValue(value);
+        }
+        continue;
+      } else {
+        continue;
+      }
+    } else {
+      inQualificationSection = false;
+    }
+
+    // Family tracking
+    if (key === 'fatherName') {
+      inFamily = true;
+      familyMember = 'father';
+    } else if (key === 'motherName') {
+      inFamily = true;
+      familyMember = 'mother';
+    } else if (label === 'sibling' || label === 'sister' || label === 'brother' || label === 'sister name' || label === 'brother name' || key === 'siblings' || key === 'brothers' || key === 'sisters') {
+      inFamily = true;
+      familyMember = 'sibling';
+    }
+
+    if (!value || /^(?:n\/?a|not specified|unknown|[-—]+)$/i.test(value)) continue;
+
+    if (key === 'profession' && inFamily) {
+      if (familyMember !== 'father' && familyMember !== 'mother') continue;
+      key = familyMember === 'father' ? 'fatherProfession' : 'motherProfession';
+    }
+
+    if (!key || result[key]) continue;
+
     if (key === 'dateOfBirth') {
       const normalised = parseDateOfBirth(value);
       if (!normalised) continue;
       value = normalised;
+    }
+    if (key === 'timeOfBirth') {
+      const time = value.match(/^(\d{1,2}):([0-5]\d)\s*(AM|PM)?(?:\s*\([^()]*\))*$/i);
+      if (!time || Number(time[1]) > (time[3] ? 12 : 23) || (time[3] && Number(time[1]) === 0)) continue;
+      value = `${time[1]}:${time[2]}${time[3] ? ` ${time[3].toUpperCase()}` : ''}`;
     }
     if (key === 'contactPhone' || key === 'alternateMobile') {
       value = value.replace(/[\s()-]/g, '').replace(/^\+91/, '');
@@ -98,7 +220,8 @@ export function parseBiodata(text: string): Record<string, string> {
 
 /** Converts only unambiguous, explicitly labelled Indian biodata dates to ISO. */
 function parseDateOfBirth(value: string): string | undefined {
-  const numeric = value.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  value = value.replace(/(?:\s*\([^()]*\))+\s*$/, '').trim();
+  const numeric = value.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);
   let day: number;
   let month: number;
   let year: number;
