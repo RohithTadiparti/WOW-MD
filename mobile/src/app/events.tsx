@@ -134,6 +134,7 @@ export default function Events() {
                 setNotice('Added. Vendors can be booked against it now.');
                 void qc.invalidateQueries({ queryKey: ['events'] });
                 void qc.invalidateQueries({ queryKey: ['events-summary'] });
+                void qc.invalidateQueries({ queryKey: ['wedding-dashboard'] });
               }}
               onError={setError}
             />

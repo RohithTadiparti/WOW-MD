@@ -200,6 +200,10 @@ export class CreateGuestDto {
   @ApiPropertyOptional({ maxLength: 60, example: "Bride's uncle" })
   @IsOptional() @IsString() @MaxLength(60)
   relation?: string;
+
+  @ApiPropertyOptional({ maxLength: 1000, description: 'Private to the host.' })
+  @IsOptional() @IsString() @MaxLength(1000)
+  notes?: string;
 }
 
 export class UpdateGuestDto {
@@ -224,6 +228,10 @@ export class UpdateGuestDto {
   @ApiPropertyOptional({ maxLength: 60 })
   @IsOptional() @IsString() @MaxLength(60)
   relation?: string;
+
+  @ApiPropertyOptional({ maxLength: 1000 })
+  @IsOptional() @IsString() @MaxLength(1000)
+  notes?: string;
 }
 
 export class InviteDto {

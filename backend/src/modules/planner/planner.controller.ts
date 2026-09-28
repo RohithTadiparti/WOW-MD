@@ -7,6 +7,7 @@ import {
   AddTaskDto,
   CreatePlanDto,
   EngagePlannerDto,
+  SetWeddingBudgetDto,
   UpdateTaskStatusDto,
 } from './dto/planner.dto';
 import { AuthUser, CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -107,6 +108,13 @@ export class PlannerController {
   @Get('dashboard')
   dashboard(@CurrentUser('userId') userId: string) {
     return this.weddingDashboard.summary(userId);
+  }
+
+  @RequirePermissions(Permission.PLAN_MANAGE_OWN)
+  @ApiOperation({ summary: 'Set (or clear, with null) the overall wedding budget' })
+  @Put('budget')
+  setBudget(@CurrentUser() actor: AuthUser, @Body() dto: SetWeddingBudgetDto) {
+    return this.planner.setBudget(actor, dto.budget);
   }
 
   @Get('plans')

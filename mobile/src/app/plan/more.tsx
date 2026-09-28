@@ -13,9 +13,9 @@ import {
 import type { ComponentType } from 'react';
 
 import { apiMessage } from '@/lib/api';
-import { shortDate } from '@/lib/format';
+import { money, shortDate } from '@/lib/format';
 import { fetchPlans, fetchWeddingDashboard } from '@/lib/wedding-plan';
-import { Body, Caption, Card, Loading, Screen, SectionTitle } from '@/components/ui';
+import { Body, Caption, Card, Loading, Screen } from '@/components/ui';
 import { rgb, space, useTheme, radius } from '@/theme';
 
 type Row = {
@@ -57,9 +57,9 @@ export default function PlanMore() {
     data?.countdown.weddingDate
       ? `Wedding day: ${shortDate(data.countdown.weddingDate)}`
       : 'Wedding day: not set',
-    `Guests on list: ${data?.guests.onList ?? 0}`,
-    `Plan progress: ${data?.journey.percent ?? 0}%`,
-    `Budget planned: ₹${Number(data?.budget.budgeted || 0).toLocaleString('en-IN')}`,
+    `Guests on list: ${data?.guests.onList || 'not set'}`,
+    `Plan progress: ${data?.journey.total ? `${data.journey.percent}%` : 'not started'}`,
+    `Budget planned: ${Number(data?.budget.budgeted) ? money(data?.budget.budgeted) : 'not set'}`,
   ].join('\n');
 
   const rows: Row[] = [
@@ -67,10 +67,7 @@ export default function PlanMore() {
       title: 'Manage Plan',
       hint: 'Open your wedding plan details',
       icon: FileText,
-      onPress: () => {
-        if (plan) router.push({ pathname: '/plan/[id]', params: { id: plan.id } });
-        else NativeAlert.alert('No plan yet', 'Create a plan from Plan Home first.');
-      },
+      onPress: () => router.push({ pathname: '/plan/[id]', params: { id: plan?.id ?? 'new' } }),
     },
     {
       title: 'Download Plan (PDF)',
@@ -129,7 +126,6 @@ export default function PlanMore() {
 
   return (
     <Screen>
-      <SectionTitle>Plan More</SectionTitle>
       <Caption tone="muted">Manage, share and get help with your wedding plan.</Caption>
       {dashboard.error ? (
         <Caption tone="critical">

@@ -72,6 +72,14 @@ interface QuotationRow {
   notes: string | null;
 }
 
+interface EscrowRecord {
+  bookingId: string;
+  currency: string;
+  heldInEscrow: string;
+  released: string;
+  refunded: string;
+}
+
 interface PaymentMethods {
   methods: string[];
   cash: { enabled: boolean; maxAmount: number };
@@ -95,6 +103,8 @@ function invalidateMoney(qc: ReturnType<typeof useQueryClient>, bookingId: strin
     'booking-history',
     'earnings',
     'incoming-bookings',
+    'wedding-dashboard',
+    'event-workspace',
   ]) {
     void qc.invalidateQueries({ queryKey: [key] });
   }
@@ -142,6 +152,15 @@ export function BuyerMoneyPanel({ booking }: { booking: BuyerMoneyBooking }) {
       (await api.get(`/bookings/${booking.id}/quotations`)).data as QuotationRow[],
     retry: false,
   });
+
+  // Refunded payments drop out of /milestones, so a closed booking's money is read from escrow.
+  const escrowQuery = useQuery({
+    queryKey: ['escrow'],
+    queryFn: async () => (await api.get('/bookings/escrow')).data as { records: EscrowRecord[] },
+    enabled: terminal,
+    retry: false,
+  });
+  const escrowRecord = escrowQuery.data?.records.find((r) => r.bookingId === booking.id);
 
   const act = useMutation({
     mutationFn: async (fn: () => Promise<unknown>) => {
@@ -315,7 +334,33 @@ export function BuyerMoneyPanel({ booking }: { booking: BuyerMoneyBooking }) {
         <Caption tone="muted">
           Paid in order. Online payments are held in escrow until delivery is accepted.
         </Caption>
-        {milestonesQuery.isPending ? (
+        {terminal ? (
+          escrowQuery.isPending ? (
+            <Caption tone="muted">Loading payments…</Caption>
+          ) : escrowQuery.isError ? (
+            <UiAlert tone="critical">
+              {apiMessage(escrowQuery.error, 'Payments could not be loaded.')}
+            </UiAlert>
+          ) : !escrowRecord ? (
+            <Caption tone="muted">Nothing was paid on this booking.</Caption>
+          ) : (
+            <Caption>
+              {[
+                Number(escrowRecord.refunded) > 0
+                  ? `Refunded ${money(escrowRecord.refunded, escrowRecord.currency)}`
+                  : null,
+                Number(escrowRecord.heldInEscrow) > 0
+                  ? `Held ${money(escrowRecord.heldInEscrow, escrowRecord.currency)}`
+                  : null,
+                Number(escrowRecord.released) > 0
+                  ? `Released ${money(escrowRecord.released, escrowRecord.currency)}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(' · ') || 'Nothing was paid on this booking.'}
+            </Caption>
+          )
+        ) : milestonesQuery.isPending ? (
           <Caption tone="muted">Loading instalments…</Caption>
         ) : milestonesQuery.isError ? (
           <UiAlert tone="critical">

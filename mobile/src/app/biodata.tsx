@@ -87,13 +87,13 @@ export default function BiodataWizard() {
   const showMarital = d.maritalStatus && d.maritalStatus !== 'never_married';
 
   const steps = [
+    { id: 'photos', title: 'Photographs' },
     { id: 'personal', title: 'Basic Information' },
     ...(showMarital ? [{ id: 'marital', title: 'Marital History' }] : []),
     { id: 'education', title: 'Education & Career' },
     { id: 'family', title: 'Family Background' },
     { id: 'horoscope', title: 'Horoscope' },
     { id: 'preferences', title: 'Partner Preferences' },
-    { id: 'photos', title: 'Photographs' }
   ];
 
   const totalSteps = steps.length;
@@ -136,6 +136,7 @@ export default function BiodataWizard() {
           me={me as Record<string, unknown>}
           full={full}
           onSaved={nextStep}
+          onBack={prevStep}
         />
       )}
 
@@ -195,7 +196,7 @@ export default function BiodataWizard() {
         <View style={{ gap: space(4) }}>
           <Card>
             <Body tone="muted">
-              A profile with photographs is asked about several times more often than one without.
+              Add at least 3 photographs — basic information cannot be saved without them.
             </Body>
             {photos && (photos.photos ?? []).length === 0 ? (
               <ProfileSilhouette
@@ -219,12 +220,7 @@ export default function BiodataWizard() {
             />
           </Card>
           <View style={{ flexDirection: 'row', gap: space(2) }}>
-            <Button
-              label="Back"
-              variant="outline"
-              onPress={prevStep}
-            />
-            <Button style={{ flex: 1 }} label="Finish" onPress={nextStep} />
+            <Button style={{ flex: 1 }} label="Continue →" onPress={nextStep} />
           </View>
         </View>
       )}

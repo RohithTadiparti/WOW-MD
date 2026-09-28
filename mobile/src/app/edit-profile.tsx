@@ -13,46 +13,10 @@ import {
   Screen,
   SectionTitle,
 } from '@/components/ui';
+import { ChoiceField, canonical } from '@/components/biodata/choice-field';
+import { GENDERS, MARITAL } from '@/components/biodata/constants';
+import { CASTES_BY_RELIGION, CITIES, RELIGIONS } from '@/shared/reference';
 import { space } from '@/theme';
-
-const GENDERS = [
-  { value: 'female', label: 'Female' },
-  { value: 'male', label: 'Male' },
-  { value: 'other', label: 'Other' },
-];
-
-const MARITAL = [
-  { value: 'never_married', label: 'Never Married' },
-  { value: 'divorced', label: 'Divorced' },
-  { value: 'widowed', label: 'Widowed' },
-  { value: 'separated', label: 'Separated' },
-];
-
-const RELIGIONS = [
-  { value: 'hindu', label: 'Hindu' },
-  { value: 'muslim', label: 'Muslim' },
-  { value: 'christian', label: 'Christian' },
-  { value: 'sikh', label: 'Sikh' },
-  { value: 'jain', label: 'Jain' },
-  { value: 'buddhist', label: 'Buddhist' },
-  { value: 'other', label: 'Other' },
-];
-
-const HEIGHTS = [
-  { value: '152', label: `5' 0" (152 cm)` },
-  { value: '155', label: `5' 1" (155 cm)` },
-  { value: '157', label: `5' 2" (157 cm)` },
-  { value: '160', label: `5' 3" (160 cm)` },
-  { value: '163', label: `5' 4" (163 cm)` },
-  { value: '165', label: `5' 5" (165 cm)` },
-  { value: '168', label: `5' 6" (168 cm)` },
-  { value: '170', label: `5' 7" (170 cm)` },
-  { value: '173', label: `5' 8" (173 cm)` },
-  { value: '175', label: `5' 9" (175 cm)` },
-  { value: '178', label: `5' 10" (178 cm)` },
-  { value: '180', label: `5' 11" (180 cm)` },
-  { value: '183', label: `6' 0" (183 cm)` },
-];
 
 interface Form {
   fullName: string;
@@ -70,15 +34,16 @@ function formFrom(
   full?: { details?: Record<string, unknown>; dateOfBirth?: string | null },
 ): Form {
   const d = (full?.details ?? {}) as Record<string, unknown>;
+  const religion = canonical(String(d.religion ?? ''), RELIGIONS);
   return {
     fullName: String(me.displayName ?? ''),
     dateOfBirth: String(me.dateOfBirth ?? full?.dateOfBirth ?? '').slice(0, 10),
     gender: String(me.gender ?? '').toLowerCase(),
     heightCm: d.heightCm != null ? String(d.heightCm) : '',
     maritalStatus: String(d.maritalStatus ?? ''),
-    religion: String(d.religion ?? '').toLowerCase(),
-    caste: String(d.caste ?? ''),
-    location: String(me.city ?? d.city ?? ''),
+    religion,
+    caste: canonical(String(d.caste ?? ''), CASTES_BY_RELIGION[religion] ?? []),
+    location: String(me.city ?? ''),
   };
 }
 
@@ -119,35 +84,30 @@ export default function EditProfile() {
       await api.put('/users/me/profile', payload);
 
       if (!profileId) return;
+      const d = (full?.details ?? {}) as Record<string, unknown>;
       const names = form.fullName.trim().split(/\s+/);
-      try {
+      if (form.heightCm && d.complexion && d.communicationAddress) {
         await api.put(`/profiles/${profileId}/details/personal`, {
           firstName: names[0] || form.fullName.trim(),
           lastName: names.slice(1).join(' ') || undefined,
-          heightCm: form.heightCm ? Number(form.heightCm) : undefined,
-          city: form.location.trim() || undefined,
+          heightCm: Number(form.heightCm),
+          complexion: d.complexion,
+          communicationAddress: d.communicationAddress,
         });
-      } catch {
-        /* personal section may require complexion; account fields already saved */
       }
-      if (form.religion) {
-        try {
-          await api.put(`/profiles/${profileId}/details/religion`, {
-            religion: form.religion,
-            caste: form.caste.trim() || undefined,
-          });
-        } catch {
-          /* optional */
-        }
+      if (form.religion && d.subCaste && d.motherTongue) {
+        await api.put(`/profiles/${profileId}/details/religion`, {
+          religion: form.religion,
+          caste: form.caste.trim(),
+          subCaste: d.subCaste,
+          motherTongue: d.motherTongue,
+          ...(d.denomination ? { denomination: d.denomination } : {}),
+        });
       }
       if (form.maritalStatus) {
-        try {
-          await api.put(`/profiles/${profileId}/details/marital`, {
-            maritalStatus: form.maritalStatus,
-          });
-        } catch {
-          /* optional */
-        }
+        await api.put(`/profiles/${profileId}/details/marital`, {
+          maritalStatus: form.maritalStatus,
+        });
       }
     },
     onSuccess: async () => {
@@ -183,28 +143,41 @@ export default function EditProfile() {
       <Field label="Full Name" value={form.fullName} onChangeText={set('fullName')} />
       <DateField label="Date of Birth" value={form.dateOfBirth} onChange={set('dateOfBirth')} />
       <SelectField label="Gender" value={form.gender} options={GENDERS} onChange={set('gender')} />
-      <SelectField label="Height" value={form.heightCm} options={HEIGHTS} onChange={set('heightCm')} />
+      <Field label="Height (cm)" value={form.heightCm} onChangeText={set('heightCm')} keyboardType="number-pad" maxLength={3} />
       <SelectField
         label="Marital Status"
         value={form.maritalStatus}
         options={MARITAL}
         onChange={set('maritalStatus')}
       />
-      <SelectField
+      <ChoiceField
         label="Religion"
         value={form.religion}
         options={RELIGIONS}
-        onChange={set('religion')}
+        onChange={(religion) => setDraft({ ...form, religion, caste: '' })}
       />
-      <Field label="Caste" value={form.caste} onChangeText={set('caste')} />
-      <Field label="Location" value={form.location} onChangeText={set('location')} />
+      <ChoiceField
+        key={`caste-${form.religion}`}
+        label="Caste"
+        value={form.caste}
+        options={CASTES_BY_RELIGION[form.religion] ?? []}
+        onChange={set('caste')}
+      />
+      <ChoiceField label="Location" value={form.location} options={CITIES} onChange={set('location')} />
 
       <View style={{ marginTop: space(2) }}>
         <Button
           label="Save Changes"
           busy={save.isPending}
           disabled={!form.fullName.trim()}
-          onPress={() => save.mutate()}
+          onPress={() => {
+            const h = Number(form.heightCm);
+            if (form.heightCm && (Number.isNaN(h) || h < 120 || h > 230)) {
+              setError('Height must be between 120cm and 230cm.');
+              return;
+            }
+            save.mutate();
+          }}
         />
       </View>
     </Screen>

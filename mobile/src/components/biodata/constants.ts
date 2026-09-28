@@ -1,41 +1,22 @@
+import {
+  COMPLEXION_LABEL,
+  FAMILY_STATUS_LABEL,
+  FAMILY_TYPE_LABEL,
+  MARITAL_LABEL,
+  OCCUPATION_LABEL,
+  SELF_MARITAL_STATUSES,
+} from '@/shared/permissions';
+
+const options = (labels: Record<string, string>) =>
+  Object.entries(labels).map(([value, label]) => ({ value, label }));
+
 export const GENDERS = [
   { value: 'female', label: 'Female' },
   { value: 'male', label: 'Male' },
   { value: 'other', label: 'Other' },
 ];
 
-export const MARITAL = [
-  { value: 'never_married', label: 'Never Married' },
-  { value: 'divorced', label: 'Divorced' },
-  { value: 'widowed', label: 'Widowed' },
-  { value: 'separated', label: 'Separated' },
-];
-
-export const RELIGIONS = [
-  { value: 'hindu', label: 'Hindu' },
-  { value: 'muslim', label: 'Muslim' },
-  { value: 'christian', label: 'Christian' },
-  { value: 'sikh', label: 'Sikh' },
-  { value: 'jain', label: 'Jain' },
-  { value: 'buddhist', label: 'Buddhist' },
-  { value: 'other', label: 'Other' },
-];
-
-export const HEIGHTS = [
-  { value: '152', label: `5' 0" (152 cm)` },
-  { value: '155', label: `5' 1" (155 cm)` },
-  { value: '157', label: `5' 2" (157 cm)` },
-  { value: '160', label: `5' 3" (160 cm)` },
-  { value: '163', label: `5' 4" (163 cm)` },
-  { value: '165', label: `5' 5" (165 cm)` },
-  { value: '168', label: `5' 6" (168 cm)` },
-  { value: '170', label: `5' 7" (170 cm)` },
-  { value: '173', label: `5' 8" (173 cm)` },
-  { value: '175', label: `5' 9" (175 cm)` },
-  { value: '178', label: `5' 10" (178 cm)` },
-  { value: '180', label: `5' 11" (180 cm)` },
-  { value: '183', label: `6' 0" (183 cm)` },
-];
+export const MARITAL = SELF_MARITAL_STATUSES.map((value) => ({ value, label: MARITAL_LABEL[value] }));
 
 export const NRI_OPTIONS = [
   { value: 'no_preference', label: "Doesn't matter" },
@@ -49,37 +30,35 @@ export const NRI_LABEL: Record<string, string> = {
   no: 'No, prefer non-NRI',
 };
 
-export const FAMILY_TYPES = [
-  { value: 'joint', label: 'Joint' },
-  { value: 'nuclear', label: 'Nuclear' },
-];
+export const FAMILY_TYPES = options(FAMILY_TYPE_LABEL);
 
-export const OCCUPATION_STATUS = [
-  { value: 'employed', label: 'Employed' },
-  { value: 'business', label: 'Business' },
-  { value: 'not_working', label: 'Not working' },
-  { value: 'student', label: 'Student' },
-];
+export const OCCUPATION_STATUS = options(OCCUPATION_LABEL);
 
 export const stored = (value: unknown): string =>
   typeof value === 'number' || (typeof value === 'string' && value.trim()) ? String(value) : '';
 
-export const COMPLEXIONS = [
-  { value: 'fair', label: 'Fair' },
-  { value: 'wheatish', label: 'Wheatish' },
-  { value: 'dark', label: 'Dark' },
-  { value: 'very_fair', label: 'Very Fair' },
-];
+export const COMPLEXIONS = options(COMPLEXION_LABEL);
 
-export const FAMILY_STATUSES = [
-  { value: 'lower_middle_class', label: 'Lower middle class' },
-  { value: 'middle_class', label: 'Middle class' },
-  { value: 'upper_middle_class', label: 'Upper middle class' },
-  { value: 'affluent', label: 'Affluent' },
+export const FAMILY_STATUSES = options(FAMILY_STATUS_LABEL);
+
+export const LIFE_STATUSES = [
+  { value: 'alive', label: 'Alive' },
+  { value: 'deceased', label: 'Deceased' },
 ];
 
 export const KUJA_DOSHAM_OPTIONS = [
   { value: 'yes', label: 'Yes' },
   { value: 'no', label: 'No' },
   { value: 'unknown', label: 'Unknown' },
+];
+
+export const HOROSCOPE_EXPECTATIONS = [
+  { value: 'required', label: 'Required' },
+  { value: 'preferred', label: 'Preferred' },
+  { value: 'not_required', label: 'Not required' },
+];
+
+export const KUJA_PREFERENCES = [
+  { value: 'must_match', label: 'Must match' },
+  { value: 'no_objection', label: 'No objection' },
 ];

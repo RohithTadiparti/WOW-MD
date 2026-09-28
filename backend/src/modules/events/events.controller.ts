@@ -156,6 +156,28 @@ export class EventsController {
     return this.events.updateGuest(userId, id, dto);
   }
 
+  @ApiOperation({
+    summary: 'Invite a guest to the whole wedding',
+    description:
+      'One personal RSVP link covering every event the host has. Sending again rotates the ' +
+      'link (the old one stops working) and keeps any answer already given.',
+  })
+  @HttpCode(200)
+  @Post('guests/:id/invite')
+  inviteToWedding(@CurrentUser('userId') userId: string, @Param('id', ParseUUIDPipe) id: string) {
+    return this.events.inviteToWedding(userId, id);
+  }
+
+  @ApiOperation({ summary: 'Record a guest’s wedding reply on their behalf (e.g. by phone)' })
+  @Put('guests/:id/rsvp')
+  weddingRsvp(
+    @CurrentUser('userId') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: GuestRsvpDto,
+  ) {
+    return this.events.respondForGuest(userId, id, dto);
+  }
+
   @Get(':id/guest-list')
   guestList(@CurrentUser('userId') userId: string, @Param('id', ParseUUIDPipe) id: string) {
     return this.events.guestList(userId, id);

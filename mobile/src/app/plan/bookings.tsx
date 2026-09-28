@@ -17,7 +17,6 @@ import {
   EmptyState,
   Loading,
   Screen,
-  SectionTitle,
 } from '@/components/ui';
 import { rgb, space, useTheme, radius } from '@/theme';
 
@@ -104,7 +103,6 @@ export default function PlanBookings() {
 
   return (
     <Screen onRefresh={() => void query.refetch()} refreshing={query.isRefetching}>
-      <SectionTitle>Bookings</SectionTitle>
       <Caption tone="muted">
         Accept a quotation, pay instalments into escrow, then confirm delivery.
       </Caption>

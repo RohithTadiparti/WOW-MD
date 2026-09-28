@@ -1,4 +1,5 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, IntersectionType, PartialType } from '@nestjs/swagger';
+import { SocialLinksDto } from '../../../common/dto/social-links.dto';
 import { CATEGORY_SLUG, MAX_CATEGORIES } from '../vendor-categories';
 import { Type } from 'class-transformer';
 import { IsNotFutureDate } from '../../../common/decorators/not-future.decorator';
@@ -130,7 +131,7 @@ export class VendorComplianceDto {
   complianceDocuments?: string[];
 }
 
-export class CreateVendorDto extends VendorComplianceDto {
+export class CreateVendorDto extends IntersectionType(VendorComplianceDto, SocialLinksDto) {
   @ApiProperty({ maxLength: 120 })
   @IsString()
   @MinLength(2)

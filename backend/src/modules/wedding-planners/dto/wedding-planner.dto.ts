@@ -18,6 +18,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
+import { SocialLinksDto } from '../../../common/dto/social-links.dto';
 import { IsUploadedUrl } from '../../../common/decorators/uploaded-url.decorator';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import {
@@ -49,7 +50,7 @@ export class PlannerPackageDto {
   includes?: string[];
 }
 
-export class UpsertPlannerProfileDto {
+export class UpsertPlannerProfileDto extends SocialLinksDto {
   @ApiProperty({ example: 'Everafter Weddings', maxLength: 120 })
   @IsString()
   @MinLength(2)
@@ -127,12 +128,6 @@ export class UpsertPlannerProfileDto {
   @IsOptional()
   @Matches(/^[1-9]\d{5}$/, { message: 'Enter a valid 6-digit pincode' })
   pincode?: string;
-
-  @ApiPropertyOptional({ maxLength: 200 })
-  @IsOptional()
-  @IsString()
-  @MaxLength(200)
-  website?: string;
 
   @ApiPropertyOptional({ type: [String], maxItems: 30 })
   @IsOptional()

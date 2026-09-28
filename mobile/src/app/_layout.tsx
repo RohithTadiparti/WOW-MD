@@ -53,7 +53,9 @@ function useAuthGate() {
     // Both ends of the signed-out flow, or opening sign-up would bounce
     // straight back to sign-in — which is the screen it was reached from.
     const inAuthFlow = segments[0] === 'login' || segments[0] === 'register';
-    if (!user && !inAuthFlow) router.replace('/login');
+    // A guest answering their invitation has no account; the link is their key.
+    const isPublic = (segments[0] as string) === 'rsvp';
+    if (!user && !inAuthFlow && !isPublic) router.replace('/login');
     else if (user && inAuthFlow) router.replace('/');
   }, [ready, user, segments, router]);
 }
@@ -210,6 +212,7 @@ function Routes() {
       <Stack.Screen name="match/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="visit/[id]" options={{ headerShown: true, title: 'Visit' }} />
       <Stack.Screen name="case/[id]" options={{ headerShown: true, title: 'Case' }} />
+      <Stack.Screen name="rsvp/[token]" options={{ headerShown: true, title: 'Invitation' }} />
     </Stack>
   );
 }

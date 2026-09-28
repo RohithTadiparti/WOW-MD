@@ -495,8 +495,8 @@ export class BusinessLifecycleService {
       if (value === undefined || allow.has(key)) continue;
       if (JSON.stringify(value) !== JSON.stringify(current[key] ?? null)) {
         throw new ForbiddenException(
-          'This listing is verified. Only the description, contact number and portfolio can be ' +
-            'changed here — for the verified details, raise a change request.',
+          'This listing is verified. Only the description, contact number, portfolio and social ' +
+            'links can be changed here — for the verified details, raise a change request.',
         );
       }
     }

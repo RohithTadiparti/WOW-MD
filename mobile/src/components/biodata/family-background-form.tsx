@@ -5,19 +5,30 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, apiMessage } from '@/lib/api';
 import { SelectField } from '@/components/form';
 import { Alert, Button, Card, Field } from '@/components/ui';
+import { PROFESSIONS } from '@/shared/reference';
 import { space } from '@/theme';
-import { FAMILY_TYPES, FAMILY_STATUSES, stored } from './constants';
+import { ChoiceField, DependentLocation, canonical } from './choice-field';
+import { FAMILY_TYPES, FAMILY_STATUSES, LIFE_STATUSES, stored } from './constants';
 
 interface Form {
   fatherName: string;
-  fatherOccupation: string;
+  fatherProfession: string;
+  fatherLifeStatus: string;
   motherName: string;
-  motherOccupation: string;
+  motherProfession: string;
+  motherLifeStatus: string;
   familyType: string;
   familyStatus: string;
   brothers: string;
   sisters: string;
   familyNetWorth: string;
+  nativeCountry: string;
+  nativeState: string;
+  nativeDistrict: string;
+  nativePlace: string;
+  isNri: string;
+  nriCity: string;
+  nriCountry: string;
 }
 
 export function FamilyBackgroundForm({
@@ -41,32 +52,51 @@ export function FamilyBackgroundForm({
   
   const [form, setForm] = useState<Form>({
     fatherName: String(father.name ?? ''),
-    fatherOccupation: String(father.occupation ?? ''),
+    fatherProfession: canonical(String(father.profession ?? ''), PROFESSIONS),
+    fatherLifeStatus: String(father.lifeStatus ?? ''),
     motherName: String(mother.name ?? ''),
-    motherOccupation: String(mother.occupation ?? ''),
+    motherProfession: canonical(String(mother.profession ?? ''), PROFESSIONS),
+    motherLifeStatus: String(mother.lifeStatus ?? ''),
     familyType: String(details.familyType ?? ''),
     familyStatus: String(details.familyStatus ?? ''),
     brothers: stored(details.brothers),
     sisters: stored(details.sisters),
     familyNetWorth: stored(details.familyNetWorth),
+    nativeCountry: String(details.nativeCountry ?? ''),
+    nativeState: String(details.nativeState ?? ''),
+    nativeDistrict: String(details.nativeDistrict ?? ''),
+    nativePlace: String(details.nativePlace ?? ''),
+    isNri: details.isNri === true ? 'yes' : 'no',
+    nriCity: String(details.nriCity ?? ''),
+    nriCountry: String(details.nriCountry ?? ''),
   });
 
   const save = useMutation({
     mutationFn: async () => {
+      const nri = form.isNri === 'yes';
       const payload = {
         father: {
-          name: form.fatherName.trim() || undefined,
-          occupation: form.fatherOccupation.trim() || undefined,
+          name: form.fatherName.trim(),
+          profession: form.fatherProfession.trim() || undefined,
+          lifeStatus: form.fatherLifeStatus || undefined,
         },
         mother: {
-          name: form.motherName.trim() || undefined,
-          occupation: form.motherOccupation.trim() || undefined,
+          name: form.motherName.trim(),
+          profession: form.motherProfession.trim() || undefined,
+          lifeStatus: form.motherLifeStatus || undefined,
         },
-        familyType: form.familyType || undefined,
-        familyStatus: form.familyStatus.trim() || undefined,
-        brothers: form.brothers ? Number(form.brothers) : undefined,
-        sisters: form.sisters ? Number(form.sisters) : undefined,
+        familyType: form.familyType,
+        familyStatus: form.familyStatus,
+        brothers: Number(form.brothers) || 0,
+        sisters: Number(form.sisters) || 0,
         familyNetWorth: form.familyNetWorth ? Number(form.familyNetWorth) : undefined,
+        nativeCountry: form.nativeCountry || undefined,
+        nativeState: form.nativeState || undefined,
+        nativeDistrict: form.nativeDistrict || undefined,
+        nativePlace: form.nativePlace.trim() || undefined,
+        isNri: nri,
+        nriCity: nri ? form.nriCity.trim() || undefined : undefined,
+        nriCountry: nri ? form.nriCountry.trim() || undefined : undefined,
       };
       await api.put(`/profiles/${profileId}/details/family`, payload);
     },
@@ -81,26 +111,62 @@ export function FamilyBackgroundForm({
 
   const set = (key: keyof Form) => (value: string) => setForm({ ...form, [key]: value });
 
+  function submit() {
+    if (!form.fatherName.trim() || !form.motherName.trim() || !form.familyType || !form.familyStatus) {
+      setError("Father's name, mother's name, family type and family status are needed.");
+      return;
+    }
+    setError('');
+    save.mutate();
+  }
+
   return (
     <View style={{ gap: space(4) }}>
       {error ? <Alert tone="critical">{error}</Alert> : null}
       
       <Card>
         <Field label="Father's Name" value={form.fatherName} onChangeText={set('fatherName')} />
-        <Field label="Father's Occupation" value={form.fatherOccupation} onChangeText={set('fatherOccupation')} />
+        <ChoiceField label="Father's Profession" value={form.fatherProfession} options={PROFESSIONS} onChange={set('fatherProfession')} />
+        <SelectField label="Father's Living Status" value={form.fatherLifeStatus} options={LIFE_STATUSES} onChange={set('fatherLifeStatus')} placeholder="Not said" />
       </Card>
       
       <Card>
         <Field label="Mother's Name" value={form.motherName} onChangeText={set('motherName')} />
-        <Field label="Mother's Occupation" value={form.motherOccupation} onChangeText={set('motherOccupation')} />
+        <ChoiceField label="Mother's Profession" value={form.motherProfession} options={PROFESSIONS} onChange={set('motherProfession')} />
+        <SelectField label="Mother's Living Status" value={form.motherLifeStatus} options={LIFE_STATUSES} onChange={set('motherLifeStatus')} placeholder="Not said" />
       </Card>
       
       <Card>
         <SelectField label="Family Type" value={form.familyType} options={FAMILY_TYPES} onChange={set('familyType')} />
         <SelectField label="Family Status" value={form.familyStatus} options={FAMILY_STATUSES} onChange={set('familyStatus')} />
-        <Field label="Number of Brothers" value={form.brothers} onChangeText={set('brothers')} keyboardType="number-pad" />
-        <Field label="Number of Sisters" value={form.sisters} onChangeText={set('sisters')} keyboardType="number-pad" />
+        <Field label="Number of Brothers" value={form.brothers} onChangeText={set('brothers')} keyboardType="number-pad" maxLength={2} />
+        <Field label="Number of Sisters" value={form.sisters} onChangeText={set('sisters')} keyboardType="number-pad" maxLength={2} />
         <Field label="Family Net Worth" value={form.familyNetWorth} onChangeText={set('familyNetWorth')} keyboardType="number-pad" hint="Optional, in Rupees" />
+      </Card>
+
+      <Card>
+        <DependentLocation
+          country={form.nativeCountry}
+          state={form.nativeState}
+          district={form.nativeDistrict}
+          onChange={(next) =>
+            setForm({ ...form, nativeCountry: next.country, nativeState: next.state, nativeDistrict: next.district })
+          }
+          labels={{ country: 'Native Country', state: 'Native State', district: 'Native District' }}
+        />
+        <Field label="Native Place (village / town)" value={form.nativePlace} onChangeText={set('nativePlace')} maxLength={120} />
+        <SelectField
+          label="Settled abroad"
+          value={form.isNri}
+          options={[{ value: 'no', label: 'No' }, { value: 'yes', label: 'Yes, an NRI' }]}
+          onChange={set('isNri')}
+        />
+        {form.isNri === 'yes' && (
+          <>
+            <Field label="City abroad" value={form.nriCity} onChangeText={set('nriCity')} maxLength={120} />
+            <Field label="Country" value={form.nriCountry} onChangeText={set('nriCountry')} maxLength={80} />
+          </>
+        )}
       </Card>
       
       <View style={{ gap: space(2) }}>
@@ -108,7 +174,7 @@ export function FamilyBackgroundForm({
           {onBack && (
             <Button label="Back" variant="outline" onPress={onBack} disabled={save.isPending} />
           )}
-          <Button style={{ flex: 1 }} label="Save & Continue →" busy={save.isPending} onPress={() => save.mutate()} />
+          <Button style={{ flex: 1 }} label="Save & Continue →" busy={save.isPending} onPress={submit} />
         </View>
         {onSkip && (
           <Button label="Skip this step" variant="ghost" onPress={onSkip} disabled={save.isPending} />

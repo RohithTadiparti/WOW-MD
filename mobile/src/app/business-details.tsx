@@ -16,6 +16,7 @@ import { useCompletion, useRefreshBusiness } from '@/components/business/complet
 import { VerifiedDetails } from '@/components/business/verified-details';
 import { CategoryPicker } from '@/components/business/category-picker';
 import { DocumentList, MediaStrip, PhotoPicker } from '@/components/uploader';
+import { SOCIAL_KEYS, SocialLinkFields, socialLinkErrors } from '@/components/social-links';
 import {
   Alert,
   Body,
@@ -59,6 +60,9 @@ const EMPTY = {
   tradingSince: '',
   registeredAddress: '',
   contactPhone: '',
+  website: '',
+  instagramUrl: '',
+  youtubeUrl: '',
 };
 
 type Form = typeof EMPTY;
@@ -122,6 +126,9 @@ function BusinessDetails() {
       tradingSince: listing.tradingSince ? listing.tradingSince.slice(0, 10) : '',
       registeredAddress: listing.registeredAddress ?? '',
       contactPhone: listing.contactPhone ?? '',
+      website: listing.website ?? '',
+      instagramUrl: listing.instagramUrl ?? '',
+      youtubeUrl: listing.youtubeUrl ?? '',
     });
     setCategories(listing.categories ?? []);
     setPortfolio(listing.portfolio ?? []);
@@ -174,7 +181,7 @@ function BusinessDetails() {
     } else if (!MOBILE.test(form.contactPhone.replace(/\s|-/g, ''))) {
       found.contactPhone = 'Enter a 10-digit Indian mobile number';
     }
-    return found;
+    return { ...found, ...socialLinkErrors(form) };
   }
 
   /** The lighter check for a verified/live listing: only what is on screen. */
@@ -186,7 +193,7 @@ function BusinessDetails() {
     } else if (!MOBILE.test(form.contactPhone.replace(/\s|-/g, ''))) {
       found.contactPhone = 'Enter a 10-digit Indian mobile number';
     }
-    return found;
+    return { ...found, ...socialLinkErrors(form) };
   }
 
   async function save() {
@@ -231,12 +238,15 @@ function BusinessDetails() {
           if (form[key]) payload[key] = form[key];
         }
       }
+      // Always sent: a blank social link is how one is removed.
+      for (const key of SOCIAL_KEYS) payload[key] = form[key].trim();
 
       const created = !listing;
       if (listing) await api.put(`/vendors/${listing.id}`, payload);
       else await api.post('/vendors', payload);
 
       refresh();
+      if (listing) void qc.invalidateQueries({ queryKey: ['vendor', listing.id] });
       // Wait for the saved listing, so the details shown next are the saved ones.
       await qc.refetchQueries({ queryKey: ['my-listing'] });
 
@@ -297,7 +307,7 @@ function BusinessDetails() {
             listing or an edit is said by the subtitle and by the save button. */}
         {presentationalOnly ? (
           <PageSubtitle>
-            Your listing is verified. About, contact number and photos are yours to change and go
+            Your listing is verified. About, contact number, social links and photos are yours to change and go
             live straight away. The verified details — name, category, PAN, GST, registration and
             address — are locked; use “Request a change” for those.
           </PageSubtitle>
@@ -373,6 +383,8 @@ function BusinessDetails() {
           onUploaded={(url) => setPortfolio((p) => [...p, url])}
         />
       </Card>
+
+      <SocialLinkFields values={form} onChange={(key, value) => set(key)(value)} errors={errors} />
 
       {!presentationalOnly && (
         <>

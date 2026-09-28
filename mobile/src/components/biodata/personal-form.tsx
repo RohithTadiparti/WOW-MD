@@ -5,8 +5,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, apiMessage } from '@/lib/api';
 import { DateField, SelectField } from '@/components/form';
 import { Alert, Button, Card, Field } from '@/components/ui';
+import { CASTES_BY_RELIGION, CITIES, MOTHER_TONGUES, RELIGIONS } from '@/shared/reference';
 import { space } from '@/theme';
-import { GENDERS, MARITAL, RELIGIONS, COMPLEXIONS, stored } from './constants';
+import { ChoiceField, canonical } from './choice-field';
+import { GENDERS, MARITAL, COMPLEXIONS, stored } from './constants';
 
 interface Form {
   fullName: string;
@@ -21,14 +23,6 @@ interface Form {
   denomination: string;
   location: string;
   communicationAddress: string;
-  placeOfBirth: string;
-  nativePlace: string;
-  nativeDistrict: string;
-  nativeState: string;
-  nativeCountry: string;
-  isNri: string;
-  nriCity: string;
-  nriCountry: string;
   alternateMobile: string;
   complexion: string;
 }
@@ -38,27 +32,20 @@ function formFrom(
   full?: { details?: Record<string, unknown> | null; dateOfBirth?: string | null },
 ): Form {
   const d = (full?.details ?? {}) as Record<string, unknown>;
+  const religion = canonical(String(d.religion ?? ''), RELIGIONS);
   return {
     fullName: String(me.displayName ?? ''),
     dateOfBirth: String(me.dateOfBirth ?? full?.dateOfBirth ?? '').slice(0, 10),
     gender: String(me.gender ?? '').toLowerCase(),
     heightCm: stored(d.heightCm),
     maritalStatus: String(d.maritalStatus ?? ''),
-    religion: String(d.religion ?? '').toLowerCase(),
-    caste: String(d.caste ?? ''),
+    religion,
+    caste: canonical(String(d.caste ?? ''), CASTES_BY_RELIGION[religion] ?? []),
     subCaste: String(d.subCaste ?? ''),
-    motherTongue: String(d.motherTongue ?? ''),
+    motherTongue: canonical(String(d.motherTongue ?? ''), MOTHER_TONGUES),
     denomination: String(d.denomination ?? ''),
-    location: String(me.city ?? d.city ?? ''),
+    location: String(me.city ?? ''),
     communicationAddress: String(d.communicationAddress ?? ''),
-    placeOfBirth: String(d.placeOfBirth ?? ''),
-    nativePlace: String(d.nativePlace ?? ''),
-    nativeDistrict: String(d.nativeDistrict ?? ''),
-    nativeState: String(d.nativeState ?? ''),
-    nativeCountry: String(d.nativeCountry ?? ''),
-    isNri: d.isNri === true ? 'yes' : d.isNri === false ? 'no' : '',
-    nriCity: String(d.nriCity ?? ''),
-    nriCountry: String(d.nriCountry ?? ''),
     alternateMobile: String(d.alternateMobile ?? ''),
     complexion: String(d.complexion ?? ''),
   };
@@ -89,6 +76,11 @@ export function PersonalForm({
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }, []);
 
+  const personalStarted = Boolean(
+    form.heightCm || form.complexion || form.communicationAddress.trim() || form.alternateMobile.trim(),
+  );
+  const religionStarted = Boolean(form.religion || form.caste || form.subCaste.trim() || form.motherTongue);
+
   const save = useMutation({
     mutationFn: async () => {
       const payload: Record<string, string> = {};
@@ -100,42 +92,31 @@ export function PersonalForm({
 
       if (!profileId) return;
       const names = form.fullName.trim().split(/\s+/);
-      try {
+      if (personalStarted) {
         await api.put(`/profiles/${profileId}/details/personal`, {
           firstName: names[0] || form.fullName.trim(),
           lastName: names.slice(1).join(' ') || undefined,
-          heightCm: form.heightCm ? Number(form.heightCm) : undefined,
-          city: form.location.trim() || undefined,
-          complexion: form.complexion.trim() || undefined,
-          nativePlace: form.nativePlace.trim() || undefined,
-          nativeDistrict: form.nativeDistrict.trim() || undefined,
-          nativeState: form.nativeState.trim() || undefined,
-          nativeCountry: form.nativeCountry.trim() || undefined,
-          isNri: form.isNri === 'yes' ? true : form.isNri === 'no' ? false : undefined,
-          nriCity: form.nriCity.trim() || undefined,
-          nriCountry: form.nriCountry.trim() || undefined,
-          placeOfBirth: form.placeOfBirth.trim() || undefined,
-          communicationAddress: form.communicationAddress.trim() || undefined,
-          alternateMobile: form.alternateMobile.trim() || undefined,
+          heightCm: Number(form.heightCm),
+          complexion: form.complexion,
+          communicationAddress: form.communicationAddress.trim(),
+          alternateMobile: form.alternateMobile.trim() || null,
         });
-      } catch {}
-      
-      try {
+      }
+
+      if (religionStarted) {
         await api.put(`/profiles/${profileId}/details/religion`, {
-          religion: form.religion.trim() || undefined,
-          caste: form.caste.trim() || undefined,
-          subCaste: form.subCaste.trim() || undefined,
-          motherTongue: form.motherTongue.trim() || undefined,
+          religion: form.religion,
+          caste: form.caste.trim(),
+          subCaste: form.subCaste.trim(),
+          motherTongue: form.motherTongue.trim(),
           denomination: form.denomination.trim() || undefined,
         });
-      } catch {}
-      
+      }
+
       if (form.maritalStatus) {
-        try {
-          await api.put(`/profiles/${profileId}/details/marital`, {
-            maritalStatus: form.maritalStatus,
-          });
-        } catch {}
+        await api.put(`/profiles/${profileId}/details/marital`, {
+          maritalStatus: form.maritalStatus,
+        });
       }
     },
     onSuccess: async () => {
@@ -153,6 +134,26 @@ export function PersonalForm({
 
   const set = (key: keyof Form) => (value: string) => setDraft({ ...form, [key]: value });
 
+  function submit() {
+    if (personalStarted) {
+      const h = Number(form.heightCm);
+      if (!form.heightCm || Number.isNaN(h) || h < 120 || h > 230) {
+        setError('Height must be between 120cm and 230cm.');
+        return;
+      }
+      if (!form.complexion || !form.communicationAddress.trim()) {
+        setError('Complexion and communication address are needed to save personal details.');
+        return;
+      }
+    }
+    if (religionStarted && (!form.religion || !form.caste.trim() || !form.subCaste.trim() || !form.motherTongue.trim())) {
+      setError('Religion, caste, sub-caste and mother tongue are all needed to save religion details.');
+      return;
+    }
+    setError('');
+    save.mutate();
+  }
+
   return (
     <View style={{ gap: space(4) }}>
       {error ? <Alert tone="critical">{error}</Alert> : null}
@@ -160,45 +161,36 @@ export function PersonalForm({
         <Field label="Full Name" value={form.fullName} onChangeText={set('fullName')} />
         <DateField label="Date of Birth" value={form.dateOfBirth} onChange={set('dateOfBirth')} to={maxDob} />
         <SelectField label="Gender" value={form.gender} options={GENDERS} onChange={set('gender')} />
-        <Field label="Height (cm)" value={form.heightCm} onChangeText={set('heightCm')} keyboardType="numeric" />
+        <Field label="Height (cm)" value={form.heightCm} onChangeText={set('heightCm')} keyboardType="number-pad" maxLength={3} />
         <SelectField label="Complexion" value={form.complexion} options={COMPLEXIONS} onChange={set('complexion')} />
         <SelectField label="Marital Status" value={form.maritalStatus} options={MARITAL} onChange={set('maritalStatus')} />
-        <Field label="Place of Birth" value={form.placeOfBirth} onChangeText={set('placeOfBirth')} />
-      </Card>
-      
-      <Card>
-        <SelectField label="Religion" value={form.religion} options={RELIGIONS} onChange={set('religion')} />
-        <Field label="Caste" value={form.caste} onChangeText={set('caste')} />
-        <Field label="Sub-Caste" value={form.subCaste} onChangeText={set('subCaste')} />
-        <Field label="Mother Tongue" value={form.motherTongue} onChangeText={set('motherTongue')} />
-        <Field label="Denomination" value={form.denomination} onChangeText={set('denomination')} />
       </Card>
 
       <Card>
-        <Field label="Location (Current City)" value={form.location} onChangeText={set('location')} />
-        <Field label="Communication Address" value={form.communicationAddress} onChangeText={set('communicationAddress')} />
-        <Field label="Alternate Mobile" value={form.alternateMobile} onChangeText={set('alternateMobile')} />
-      </Card>
-      
-      <Card>
-        <Field label="Native Place" value={form.nativePlace} onChangeText={set('nativePlace')} />
-        <Field label="Native District" value={form.nativeDistrict} onChangeText={set('nativeDistrict')} />
-        <Field label="Native State" value={form.nativeState} onChangeText={set('nativeState')} />
-        <Field label="Native Country" value={form.nativeCountry} onChangeText={set('nativeCountry')} />
-        <SelectField 
-          label="Are you an NRI?" 
-          value={form.isNri} 
-          options={[{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }]} 
-          onChange={set('isNri')} 
+        <ChoiceField
+          label="Religion"
+          value={form.religion}
+          options={RELIGIONS}
+          onChange={(religion) => setDraft({ ...form, religion, caste: '' })}
         />
-        {form.isNri === 'yes' && (
-          <>
-            <Field label="NRI City" value={form.nriCity} onChangeText={set('nriCity')} />
-            <Field label="NRI Country" value={form.nriCountry} onChangeText={set('nriCountry')} />
-          </>
-        )}
+        <ChoiceField
+          key={`caste-${form.religion}`}
+          label="Caste"
+          value={form.caste}
+          options={CASTES_BY_RELIGION[form.religion] ?? []}
+          onChange={set('caste')}
+        />
+        <Field label="Sub-Caste" value={form.subCaste} onChangeText={set('subCaste')} maxLength={60} />
+        <ChoiceField label="Mother Tongue" value={form.motherTongue} options={MOTHER_TONGUES} onChange={set('motherTongue')} />
+        <Field label="Denomination" value={form.denomination} onChangeText={set('denomination')} maxLength={60} />
       </Card>
-      
+
+      <Card>
+        <ChoiceField label="Location (Current City)" value={form.location} options={CITIES} onChange={set('location')} />
+        <Field label="Communication Address" value={form.communicationAddress} onChangeText={set('communicationAddress')} />
+        <Field label="Alternate Mobile" value={form.alternateMobile} onChangeText={set('alternateMobile')} keyboardType="phone-pad" />
+      </Card>
+
       <View style={{ flexDirection: 'row', gap: space(2) }}>
         {onBack && (
           <Button label="Back" variant="outline" onPress={onBack} disabled={save.isPending} />
@@ -208,17 +200,7 @@ export function PersonalForm({
           label="Save & Continue →"
           busy={save.isPending}
           disabled={!form.fullName.trim()}
-          onPress={() => {
-            if (form.heightCm) {
-              const h = Number(form.heightCm);
-              if (Number.isNaN(h) || h < 120 || h > 230) {
-                setError('Height must be between 120cm and 230cm.');
-                return;
-              }
-            }
-            setError('');
-            save.mutate();
-          }}
+          onPress={submit}
         />
       </View>
     </View>

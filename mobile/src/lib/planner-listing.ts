@@ -35,6 +35,8 @@ export interface PlannerListing {
   contactEmail: string | null;
   address: string | null;
   website: string | null;
+  instagramUrl: string | null;
+  youtubeUrl: string | null;
   portfolio: string[];
   ratingAvg: number;
   ratingCount: number;

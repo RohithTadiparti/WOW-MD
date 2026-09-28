@@ -28,6 +28,9 @@ export interface VendorListing {
   tradingSince: string | null;
   registeredAddress: string | null;
   contactPhone: string | null;
+  website: string | null;
+  instagramUrl: string | null;
+  youtubeUrl: string | null;
   portfolio: string[];
   complianceDocuments: string[];
   isApproved: boolean;

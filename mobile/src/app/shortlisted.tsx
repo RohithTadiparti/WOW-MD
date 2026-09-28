@@ -23,6 +23,7 @@ interface Profile {
 interface Suggestion {
   profile: Profile;
   score: number;
+  interaction?: string;
 }
 
 export default function Shortlisted() {
@@ -71,6 +72,7 @@ export default function Shortlisted() {
                 id: item.profile.id,
                 score: String(Math.round(item.score)),
                 shortlisted: 'true',
+                interaction: item.interaction ?? 'none',
               },
             })
           }

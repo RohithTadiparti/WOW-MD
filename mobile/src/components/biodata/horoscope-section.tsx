@@ -9,8 +9,10 @@ import { isChartImage } from '@/shared/horoscope';
 import { DetailGrid, DetailRow } from '@/components/chrome';
 import { PhotoPicker } from '@/components/uploader';
 import { Alert, Body, Button, Caption, Card, Field, SectionTitle } from '@/components/ui';
-import { SelectField } from '@/components/form';
+import { SelectField, TimeField } from '@/components/form';
+import { NAKSHATRAS, PADAMS, RASHIS } from '@/shared/reference';
 import { radius, rgb, space, useTheme } from '@/theme';
+import { ChoiceField, canonical } from './choice-field';
 import { KUJA_DOSHAM_OPTIONS } from './constants';
 
 export function HoroscopeSection({
@@ -37,9 +39,9 @@ export function HoroscopeSection({
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [form, setForm] = useState({
-    rashi: String(chart.rashi ?? ''),
-    star: String(chart.star ?? ''),
-    padam: String(chart.padam ?? ''),
+    rashi: canonical(String(chart.rashi ?? ''), RASHIS),
+    star: canonical(String(chart.star ?? ''), NAKSHATRAS),
+    padam: canonical(String(chart.padam ?? ''), PADAMS),
     gothram: String(chart.gothram ?? ''),
     kujaDosham: String(chart.kujaDosham ?? ''),
     timeOfBirth: String(chart.timeOfBirth ?? ''),
@@ -85,9 +87,9 @@ export function HoroscopeSection({
 
         {editing ? (
           <>
-            <Field label="Rashi" value={form.rashi} onChangeText={set('rashi')} />
-            <Field label="Star / Nakshatram" value={form.star} onChangeText={set('star')} />
-            <Field label="Padam" value={form.padam} onChangeText={set('padam')} maxLength={20} />
+            <ChoiceField label="Rashi" value={form.rashi} options={RASHIS} onChange={set('rashi')} allowOther={false} />
+            <ChoiceField label="Star / Nakshatram" value={form.star} options={NAKSHATRAS} onChange={set('star')} allowOther={false} />
+            <ChoiceField label="Padam" value={form.padam} options={PADAMS} onChange={set('padam')} allowOther={false} />
             <Field label="Gothram" value={form.gothram} onChangeText={set('gothram')} />
             <SelectField
               label="Kuja dosham"
@@ -95,7 +97,7 @@ export function HoroscopeSection({
               onChange={set('kujaDosham')}
               options={KUJA_DOSHAM_OPTIONS}
             />
-            <Field label="Time of Birth" value={form.timeOfBirth} onChangeText={set('timeOfBirth')} hint="e.g. 10:30 AM" />
+            <TimeField label="Time of Birth" value={form.timeOfBirth} onChange={set('timeOfBirth')} hint="Optional" />
             {!isWizard && (
               <View style={{ gap: space(2) }}>
                 <Button label="Save" busy={save.isPending} onPress={() => save.mutate({})} />
@@ -111,7 +113,7 @@ export function HoroscopeSection({
               <DetailRow label="Star">{String(chart.star ?? '—')}</DetailRow>
               <DetailRow label="Padam">{String(chart.padam ?? '—')}</DetailRow>
               <DetailRow label="Gothram">{String(chart.gothram ?? '—')}</DetailRow>
-              <DetailRow label="Kuja dosham">{String(chart.kujaDosham ?? '—')}</DetailRow>
+              <DetailRow label="Kuja dosham">{KUJA_DOSHAM_OPTIONS.find((o) => o.value === chart.kujaDosham)?.label ?? String(chart.kujaDosham ?? '—')}</DetailRow>
               <DetailRow label="Time of Birth">{String(chart.timeOfBirth ?? '—')}</DetailRow>
             </DetailGrid>
             <Button label="Edit the chart details" variant="outline" small onPress={() => setEditing(true)} />

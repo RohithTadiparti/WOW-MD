@@ -14,6 +14,7 @@ import { ArrowLeft, Heart, MapPin, SealCheck, Star } from 'phosphor-react-native
 import { api, apiMessage } from '@/lib/api';
 import { loadPlannerShortlist, togglePlannerShortlist } from '@/lib/plan-shortlist';
 import { DateField } from '@/components/form';
+import { SocialLinksList, type SocialLinks } from '@/components/social-links';
 import {
   Alert,
   Body,
@@ -40,9 +41,8 @@ type Planner = {
   portfolio?: string[];
   packages?: { name: string; price: number; includes?: string[] }[];
   contactPerson?: string | null;
-  website?: string | null;
   ownerUserId: string;
-};
+} & SocialLinks;
 
 type Review = {
   id: string;
@@ -275,6 +275,7 @@ export default function PlannerDetail() {
               {planner.contactPerson ? (
                 <Caption tone="muted">Contact: {planner.contactPerson}</Caption>
               ) : null}
+              <SocialLinksList links={planner} />
             </Card>
           ) : null}
 
