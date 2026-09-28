@@ -296,6 +296,9 @@ export default function EscrowScreen() {
                               </View>
                               <Caption tone="muted">{paymentWhenLabel(p)}</Caption>
                               <Caption tone="muted" style={{ fontFamily: 'monospace', fontSize: 11 }}>
+                                Booking {r.bookingId}
+                              </Caption>
+                              <Caption tone="muted" style={{ fontFamily: 'monospace', fontSize: 11 }}>
                                 Payment {p.paymentId}
                               </Caption>
                               {p.reference || p.payoutRef ? (

@@ -9,11 +9,11 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Heart, MapPin, SealCheck, ShareNetwork, Star } from 'phosphor-react-native';
 
 import { api, apiMessage } from '@/lib/api';
-import { rupees } from '@/lib/format';
+import { money, rupees } from '@/lib/format';
 import { loadVendorShortlist, toggleVendorShortlist } from '@/lib/plan-shortlist';
 import { DateField } from '@/components/form';
 import {
@@ -61,6 +61,7 @@ type Review = {
 export default function VendorDetail() {
   const theme = useTheme();
   const router = useRouter();
+  const qc = useQueryClient();
   const { width } = useWindowDimensions();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [tab, setTab] = useState<Tab>('overview');
@@ -69,6 +70,8 @@ export default function VendorDetail() {
   const [eventDate, setEventDate] = useState('');
   const [budget, setBudget] = useState('');
   const [requirements, setRequirements] = useState('');
+  const [vendorServiceId, setVendorServiceId] = useState('');
+  const [slotId, setSlotId] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
@@ -100,18 +103,23 @@ export default function VendorDetail() {
 
   const request = useMutation({
     mutationFn: async () => {
-      await api.post('/bookings', {
+      const response = await api.post('/bookings', {
         providerType: 'vendor',
         providerId: id,
         ...(eventDate ? { eventDate } : {}),
+        ...(vendorServiceId ? { vendorServiceId } : {}),
+        ...(slotId ? { slotId } : {}),
         ...(budget ? { expectedBudget: Number(budget) } : {}),
         ...(requirements.trim() ? { requirements: requirements.trim() } : {}),
       });
+      return response.data as { id: string };
     },
-    onSuccess: () => {
+    onSuccess: async (data) => {
       setRequesting(false);
-      setNotice('Booking request sent.');
+      setNotice('');
       setError('');
+      await qc.invalidateQueries({ queryKey: ['my-bookings'] });
+      router.push({ pathname: '/plan/bookings', params: { highlight: data.id } });
     },
     onError: (err) => setError(apiMessage(err, 'That request could not be sent.')),
   });
@@ -141,6 +149,25 @@ export default function VendorDetail() {
     ? reviews.data
     : (reviews.data?.data ?? []);
   const serviceRows = Array.isArray(services.data) ? services.data : [];
+
+  useEffect(() => {
+    if (serviceRows.length === 1 && !vendorServiceId) {
+      setVendorServiceId(serviceRows[0].id);
+    }
+  }, [serviceRows, vendorServiceId]);
+
+  const availability = useQuery({
+    queryKey: ['vendor-availability', id, eventDate, vendorServiceId],
+    queryFn: async () => {
+      if (!eventDate) return [];
+      const res = await api.get(`/vendors/${id}/availability`, {
+        params: { from: eventDate, to: eventDate, vendorServiceId: vendorServiceId || undefined },
+      });
+      return res.data as { id: string; startTime: string; endTime: string }[];
+    },
+    enabled: Boolean(id && eventDate && requesting),
+    retry: false,
+  });
 
   return (
     <View style={{ flex: 1, backgroundColor: rgb(theme.canvas) }}>
@@ -360,12 +387,82 @@ export default function VendorDetail() {
           {requesting ? (
             <Card style={{ gap: space(3) }}>
               <SectionTitle>Request Booking</SectionTitle>
+              {serviceRows.length > 0 ? (
+                <View style={{ gap: space(1) }}>
+                  <Caption style={{ fontWeight: '600' }}>Service</Caption>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2) }}>
+                    {serviceRows.map((s) => {
+                      const active = vendorServiceId === s.id;
+                      return (
+                        <Pressable
+                          key={s.id}
+                          onPress={() => {
+                            setVendorServiceId(s.id);
+                            setSlotId(''); // reset slot when service changes
+                          }}
+                          style={{
+                            paddingHorizontal: space(3),
+                            paddingVertical: space(1.5),
+                            borderRadius: radius.md,
+                            backgroundColor: active ? rgb(theme.brand) : rgb(theme.surfaceSunken),
+                          }}
+                        >
+                          <Caption
+                            style={{
+                              color: active ? rgb(theme.brandFg) : rgb(theme.ink[700]),
+                            }}
+                          >
+                            {s.name}
+                          </Caption>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              ) : null}
               <DateField
                 label="Event date"
                 value={eventDate}
-                onChange={setEventDate}
+                onChange={(date) => {
+                  setEventDate(date);
+                  setSlotId(''); // reset slot when date changes
+                }}
                 from={new Date().toISOString().slice(0, 10)}
               />
+              {eventDate && availability.data && availability.data.length > 0 ? (
+                <View style={{ gap: space(1) }}>
+                  <Caption style={{ fontWeight: '600' }}>Available slots</Caption>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2) }}>
+                    {availability.data.map((slot) => {
+                      const active = slotId === slot.id;
+                      return (
+                        <Pressable
+                          key={slot.id}
+                          onPress={() => setSlotId(slot.id)}
+                          style={{
+                            paddingHorizontal: space(3),
+                            paddingVertical: space(1.5),
+                            borderRadius: radius.md,
+                            backgroundColor: active ? rgb(theme.brand) : rgb(theme.surfaceSunken),
+                          }}
+                        >
+                          <Caption
+                            style={{
+                              color: active ? rgb(theme.brandFg) : rgb(theme.ink[700]),
+                            }}
+                          >
+                            {slot.startTime} - {slot.endTime}
+                          </Caption>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              ) : eventDate && availability.data && availability.data.length === 0 ? (
+                <Caption tone="muted">
+                  No slots published for this date. You can still send a request.
+                </Caption>
+              ) : null}
               <Field
                 label="Budget (optional)"
                 value={budget}
@@ -381,6 +478,11 @@ export default function VendorDetail() {
               <Button
                 label="Send request"
                 busy={request.isPending}
+                disabled={
+                  request.isPending ||
+                  (serviceRows.length > 0 && !vendorServiceId) ||
+                  (availability.data && availability.data.length > 0 && !slotId)
+                }
                 onPress={() => request.mutate()}
               />
               <Button label="Cancel" variant="outline" onPress={() => setRequesting(false)} />

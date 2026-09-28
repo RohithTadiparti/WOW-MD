@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { api, apiMessage } from '@/lib/api';
-import { humanise, rupees, shortDate } from '@/lib/format';
+import { humanise, money, shortDate } from '@/lib/format';
 import { categoryLabel } from '@/lib/wedding-plan';
 import { Badge } from '@/components/chrome';
 import { BookingChat } from '@/components/bookings/chat';
@@ -171,7 +171,9 @@ export default function PlanBookings() {
                     row.serviceName || row.offeringName,
                     row.providerType ? categoryLabel(row.providerType) : null,
                     row.eventDate ? shortDate(row.eventDate) : null,
-                    row.amount != null && row.amount !== '' ? rupees(row.amount) : null,
+                    row.amount != null && row.amount !== ''
+                      ? money(row.amount, row.currency ?? 'INR')
+                      : null,
                   ]
                     .filter(Boolean)
                     .join(' · ')}
