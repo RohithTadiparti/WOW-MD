@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert as NativeAlert, View } from 'react-native';
+import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarBlank, MapPin, UsersThree } from 'phosphor-react-native';
@@ -58,6 +58,7 @@ export default function Events() {
   const router = useRouter();
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
@@ -86,23 +87,15 @@ export default function Events() {
     onSuccess: () => {
       setError('');
       setNotice('Event removed.');
+      setConfirmingId(null);
       refresh();
     },
     onError: (err) => {
       setNotice('');
       setError(apiMessage(err, 'That event could not be removed.'));
+      setConfirmingId(null);
     },
   });
-
-  const confirmRemove = (row: WeddingEvent) =>
-    NativeAlert.alert(
-      `Remove ${row.name}?`,
-      'It comes off every guest’s invitation. Events with booked vendors cannot be removed.',
-      [
-        { text: 'Keep it', style: 'cancel' },
-        { text: 'Remove', style: 'destructive', onPress: () => remove.mutate(row.id) },
-      ],
-    );
 
   // A plain array, not the paged envelope.
   const rows: WeddingEvent[] = Array.isArray(data) ? data : (data?.data ?? []);
@@ -202,25 +195,56 @@ export default function Events() {
             ) : null}
           </View>
 
-          <View style={{ flexDirection: 'row', gap: space(2) }}>
-            <Button
-              label="Edit"
-              variant="outline"
-              small
-              style={{ flex: 1 }}
-              onPress={() => {
-                setNotice('');
-                setEditingId(row.id);
-              }}
-            />
-            <Button
-              label="Remove"
-              variant="ghost"
-              small
-              style={{ flex: 1 }}
-              busy={remove.isPending && remove.variables === row.id}
-              onPress={() => confirmRemove(row)}
-            />
+          <View style={{ gap: space(2) }}>
+            {confirmingId === row.id ? (
+              <View style={{ gap: space(2) }}>
+                <Caption tone="critical">
+                  Remove {row.name}? It comes off every guest's invitation.
+                </Caption>
+                <View style={{ flexDirection: 'row', gap: space(2) }}>
+                  <Button
+                    label="Cancel"
+                    variant="ghost"
+                    small
+                    style={{ flex: 1 }}
+                    disabled={remove.isPending}
+                    onPress={() => setConfirmingId(null)}
+                  />
+                  <Button
+                    label="Remove Event"
+                    variant="primary"
+                    small
+                    style={{ flex: 1, backgroundColor: rgb(theme.criticalBg) }}
+                    busy={remove.isPending && remove.variables === row.id}
+                    onPress={() => remove.mutate(row.id)}
+                  />
+                </View>
+              </View>
+            ) : (
+              <View style={{ flexDirection: 'row', gap: space(2) }}>
+                <Button
+                  label="Edit"
+                  variant="outline"
+                  small
+                  style={{ flex: 1 }}
+                  onPress={() => {
+                    setNotice('');
+                    setEditingId(row.id);
+                  }}
+                />
+                <Button
+                  label="Remove"
+                  variant="ghost"
+                  small
+                  style={{ flex: 1 }}
+                  onPress={() => {
+                    setNotice('');
+                    setError('');
+                    setConfirmingId(row.id);
+                  }}
+                />
+              </View>
+            )}
           </View>
         </Card>
         )

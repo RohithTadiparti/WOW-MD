@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
-import { Alert, Pressable, View } from 'react-native';
+import { Alert, Pressable, View, ScrollView } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { FileText, LockKey, ShieldCheck, CheckCircle, Info } from 'phosphor-react-native';
 
 import { api, apiMessage } from '@/lib/api';
 import { PAYMENT_LABEL, PAYMENT_TONE } from '@/lib/bookings';
@@ -9,7 +10,7 @@ import { MILESTONE_LABEL, Permission, can } from '@/shared/permissions';
 import { selectPermissions, useAuth } from '@/store/auth';
 import { BUYER_PAYMENT_STATUS_LABEL } from '@/app/escrow';
 import { Badge } from '@/components/chrome';
-import { Alert as UiAlert, Body, Button, Caption, Field } from '@/components/ui';
+import { Alert as UiAlert, Body, Button, Caption, Field, Card } from '@/components/ui';
 import { rgb, space, useTheme, radius } from '@/theme';
 import { Txt } from '@/theme/fonts';
 
@@ -134,7 +135,7 @@ function invalidateMoney(qc: ReturnType<typeof useQueryClient>, bookingId: strin
   void qc.invalidateQueries({ queryKey: ['booking-summary', bookingId] });
 }
 
-export function BuyerMoneyPanel({ booking }: { booking: BuyerMoneyBooking }) {
+export function BuyerMoneyPanel({ booking, isDedicatedScreen }: { booking: BuyerMoneyBooking; isDedicatedScreen?: boolean }) {
   const theme = useTheme();
   const qc = useQueryClient();
   const permissions = useAuth(selectPermissions);
@@ -291,25 +292,27 @@ export function BuyerMoneyPanel({ booking }: { booking: BuyerMoneyBooking }) {
   }
 
   return (
-    <View style={{ gap: space(3) }}>
+    <View style={{ gap: space(4) }}>
       {error ? <UiAlert tone="critical">{error}</UiAlert> : null}
       {notice ? <UiAlert tone="positive">{notice}</UiAlert> : null}
 
       {(quotationsQuery.data?.length ?? 0) > 0 ? (
         <View style={{ gap: space(2) }}>
-          <Caption style={{ fontWeight: '700', textTransform: 'uppercase' }}>Quotations</Caption>
           {(quotationsQuery.data ?? []).slice(0, 4).map((q) => (
-            <View
+            <Card
               key={q.id}
               style={{
-                gap: space(1),
-                padding: space(2),
+                gap: space(3),
+                padding: space(3),
                 borderRadius: radius.md,
-                backgroundColor: rgb(theme.surfaceSunken),
+                backgroundColor: isDedicatedScreen ? rgb(theme.surface) : rgb(theme.surfaceSunken),
               }}
             >
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: space(2) }}>
-                <Body style={{ fontWeight: '600' }}>{money(q.amount, q.currency)}</Body>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(2) }}>
+                  <FileText size={20} color={rgb(theme.brand)} />
+                  <Body style={{ fontWeight: '700' }}>Quotation</Body>
+                </View>
                 <Badge
                   tone={
                     q.status === 'accepted' ? 'positive' : q.status === 'sent' ? 'brand' : 'neutral'
@@ -318,36 +321,33 @@ export function BuyerMoneyPanel({ booking }: { booking: BuyerMoneyBooking }) {
                   {QUOTE_STATUS_LABEL[q.status] ?? q.status.replace(/_/g, ' ')}
                 </Badge>
               </View>
-              {q.notes ? <Caption tone="muted">{q.notes}</Caption> : null}
-              {(q.lines ?? []).map((line, i) => (
-                <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', gap: space(2) }}>
-                  <Caption style={{ flex: 1 }}>{line.description}</Caption>
-                  <Caption>{money(line.amount, q.currency)}</Caption>
-                </View>
-              ))}
-              {q.terms ? <Caption tone="muted">Terms: {q.terms}</Caption> : null}
+
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: space(2), borderBottomWidth: 1, borderBottomColor: rgb(theme.border) }}>
+                <Body style={{ fontSize: 24, fontWeight: '700' }}>{money(q.amount, q.currency)}</Body>
+                <Button label="View Quotation" variant="ghost" small onPress={() => {}} />
+              </View>
+              
               {q.status === 'sent' && q.validUntil ? (
-                <Caption tone="faint">Valid until {shortDate(q.validUntil)}</Caption>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(1) }}>
+                  <CheckCircle size={14} color={rgb(theme.ink[500])} />
+                  <Caption tone="muted">Valid until {shortDate(q.validUntil)}</Caption>
+                </View>
               ) : null}
+
               {liveQuote?.id === q.id && canPay && !terminal ? (
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    flexWrap: 'wrap',
-                    gap: space(2),
-                    marginTop: space(1),
-                  }}
-                >
+                <View style={{ flexDirection: 'row', gap: space(2), marginTop: space(2) }}>
                   <Button
-                    label="Accept quotation"
+                    label="Accept Quotation"
+                    style={{ flex: 1 }}
                     small
                     busy={busy}
                     disabled={busy}
                     onPress={() => run(() => api.put(`/bookings/quotations/${q.id}/accept`, {}))}
                   />
                   <Button
-                    label="Ask to re-quote"
+                    label="Reject Quotation"
                     variant="outline"
+                    style={{ flex: 1 }}
                     small
                     busy={busy}
                     disabled={busy}
@@ -355,47 +355,61 @@ export function BuyerMoneyPanel({ booking }: { booking: BuyerMoneyBooking }) {
                   />
                 </View>
               ) : null}
-            </View>
+            </Card>
           ))}
         </View>
       ) : null}
 
-      <View style={{ gap: space(2) }}>
-        <Caption style={{ fontWeight: '700', textTransform: 'uppercase' }}>Escrow / Milestones</Caption>
+      <Card style={{ padding: space(3), gap: space(3) }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(2) }}>
+            <LockKey size={20} color={rgb(theme.brand)} />
+            <Body style={{ fontWeight: '700' }}>Escrow & Milestones</Body>
+          </View>
+          {milestonesQuery.data?.total ? (
+            <Badge tone={dueNow ? 'caution' : 'neutral'}>
+              {dueNow ? 'Payment Pending' : 'Secured'}
+            </Badge>
+          ) : null}
+        </View>
+
         {!terminal && booking.status !== 'completed' ? (
           <Caption tone="muted">
-            Fund Escrow to secure your booking. Money is held securely until the applicable milestone is completed.
+            Once you accept the quotation, payments are held securely in escrow and released as milestones are completed.
           </Caption>
         ) : null}
+
         {terminal ? (
-          escrowQuery.isPending ? (
-            <Caption tone="muted">Loading payments…</Caption>
-          ) : escrowQuery.isError ? (
-            <UiAlert tone="critical">
-              {apiMessage(escrowQuery.error, 'Payments could not be loaded.')}
-            </UiAlert>
-          ) : !escrowRecord ? (
-            <Caption tone="muted">Nothing was paid on this booking.</Caption>
-          ) : (
-            <Caption>
-              {[
-                Number(escrowRecord.refunded) > 0
-                  ? `Refunded ${money(escrowRecord.refunded, escrowRecord.currency)}`
-                  : null,
-                Number(escrowRecord.heldInEscrow) > 0
-                  ? `Held ${money(escrowRecord.heldInEscrow, escrowRecord.currency)}`
-                  : null,
-                paidOut(escrowRecord, 'pending_payout') > 0
-                  ? `Awaiting payout ${money(paidOut(escrowRecord, 'pending_payout'), escrowRecord.currency)}`
-                  : null,
-                paidOut(escrowRecord, 'released') > 0
-                  ? `Released ${money(paidOut(escrowRecord, 'released'), escrowRecord.currency)}`
-                  : null,
-              ]
-                .filter(Boolean)
-                .join(' · ') || 'Nothing was paid on this booking.'}
-            </Caption>
-          )
+          <View style={{ paddingVertical: space(2) }}>
+            {escrowQuery.isPending ? (
+              <Caption tone="muted">Loading payments…</Caption>
+            ) : escrowQuery.isError ? (
+              <UiAlert tone="critical">
+                {apiMessage(escrowQuery.error, 'Payments could not be loaded.')}
+              </UiAlert>
+            ) : !escrowRecord ? (
+              <Caption tone="muted">Nothing was paid on this booking.</Caption>
+            ) : (
+              <Caption>
+                {[
+                  Number(escrowRecord.refunded) > 0
+                    ? `Refunded ${money(escrowRecord.refunded, escrowRecord.currency)}`
+                    : null,
+                  Number(escrowRecord.heldInEscrow) > 0
+                    ? `Held ${money(escrowRecord.heldInEscrow, escrowRecord.currency)}`
+                    : null,
+                  paidOut(escrowRecord, 'pending_payout') > 0
+                    ? `Awaiting payout ${money(paidOut(escrowRecord, 'pending_payout'), escrowRecord.currency)}`
+                    : null,
+                  paidOut(escrowRecord, 'released') > 0
+                    ? `Released ${money(paidOut(escrowRecord, 'released'), escrowRecord.currency)}`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ') || 'Nothing was paid on this booking.'}
+              </Caption>
+            )}
+          </View>
         ) : milestonesQuery.isPending ? (
           <Caption tone="muted">Loading instalments…</Caption>
         ) : milestonesQuery.isError ? (
@@ -405,113 +419,130 @@ export function BuyerMoneyPanel({ booking }: { booking: BuyerMoneyBooking }) {
         ) : Number(booking.amount ?? milestonesQuery.data?.total ?? 0) <= 0 ? (
           <Caption tone="muted">Instalments appear once you accept a quotation.</Caption>
         ) : (
-          <>
+          <View style={{ gap: space(3) }}>
             {milestonesQuery.data?.total ? (
-              <Caption>
-                Booking total{' '}
-                <Txt style={{ fontWeight: '600' }}>
-                  {money(milestonesQuery.data.total, currency)}
-                </Txt>
-              </Caption>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingBottom: space(2), borderBottomWidth: 1, borderBottomColor: rgb(theme.border) }}>
+                <Body style={{ fontWeight: '600' }}>Total Booking Amount</Body>
+                <Body style={{ fontWeight: '700' }}>{money(milestonesQuery.data.total, currency)}</Body>
+              </View>
             ) : null}
-            {milestones.map((m) => {
+            
+            {milestones.map((m, idx) => {
             const isDue = canPay && !terminal && dueNow === m.milestone;
             return (
-              <View
-                key={m.milestone}
-                style={{
-                  gap: space(1.5),
-                  paddingVertical: space(1.5),
-                  borderBottomWidth: 1,
-                  borderBottomColor: rgb(theme.border),
-                }}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(2) }}>
-                  <Caption style={{ flex: 1, fontWeight: '600' }}>
-                    {MILESTONE_LABEL[m.milestone] ?? m.milestone}
-                  </Caption>
-                  <Caption style={{ fontVariant: ['tabular-nums'] }}>
-                    {money(m.amount, currency)}
-                  </Caption>
-                  {m.status ? (
-                    <Badge tone={PAYMENT_TONE[m.status] ?? 'neutral'}>
-                      {BUYER_PAYMENT_STATUS_LABEL[m.status] ?? PAYMENT_LABEL[m.status] ?? m.status.replace(/_/g, ' ')}
-                    </Badge>
-                  ) : (
-                    <Caption tone={isDue ? 'brand' : 'faint'}>
-                      {isDue
-                        ? 'Due now'
-                        : nextDue?.milestone === m.milestone
-                          ? WAITING_ON[m.milestone]
-                          : 'Not due yet'}
-                    </Caption>
+              <View key={m.milestone} style={{ flexDirection: 'row', gap: space(3) }}>
+                <View style={{ alignItems: 'center' }}>
+                  <View style={{ 
+                    width: 24, height: 24, borderRadius: 12, 
+                    backgroundColor: m.status ? rgb(theme.brand) : rgb(theme.surfaceSunken),
+                    alignItems: 'center', justifyContent: 'center'
+                  }}>
+                    {m.status ? (
+                      <CheckCircle size={14} color={rgb(theme.brandFg)} weight="fill" />
+                    ) : (
+                      <Caption style={{ fontSize: 10, fontWeight: '700', color: rgb(theme.ink[500]) }}>{idx + 1}</Caption>
+                    )}
+                  </View>
+                  {idx !== milestones.length - 1 && (
+                    <View style={{ width: 1, flex: 1, backgroundColor: rgb(theme.border), marginVertical: 4 }} />
                   )}
                 </View>
-                {isDue ? (
-                  <View style={{ gap: space(1.5) }}>
-                    <Caption tone="muted">
-                      Amount to Fund: {money(m.amount, currency)}
-                      {activeMethod !== 'cash' ? ' · Securely held in escrow' : ''}
-                    </Caption>
-                    {availableMethods.length > 1 ? (
-                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(1.5) }}>
-                        {availableMethods.map((mth) => {
-                          const active = activeMethod === mth;
-                          return (
-                            <Pressable
-                              key={mth}
-                              disabled={busy}
-                              onPress={() => setMethod(mth)}
-                              style={{
-                                paddingHorizontal: space(2.5),
-                                paddingVertical: space(1),
-                                borderRadius: radius.md,
-                                borderWidth: 1,
-                                borderColor: active ? rgb(theme.brand) : rgb(theme.border),
-                                backgroundColor: active ? rgb(theme.brandSoft) : 'transparent',
-                              }}
-                            >
-                              <Caption
-                                tone={active ? 'brand' : 'default'}
-                                style={{ fontWeight: '600' }}
-                              >
-                                {METHOD_LABEL[mth] ?? mth}
-                              </Caption>
-                            </Pressable>
-                          );
-                        })}
-                      </View>
-                    ) : null}
-                    {activeMethod === 'cash' ? (
-                      <Caption tone="critical">
-                        Cash is paid directly to the provider and is not held in escrow.
-                      </Caption>
-                    ) : null}
-                    {m.status === 'failed' ? (
-                      <Caption tone="critical" style={{ marginBottom: space(1) }}>Payment failed</Caption>
-                    ) : null}
-                    <Button
-                      label={
-                        busy
-                          ? 'Processing…'
-                          : m.status === 'failed' ? 'Try Again' : `Fund Escrow`
-                      }
-                      small
-                      busy={busy}
-                      disabled={busy}
-                      onPress={() => pay(m.milestone, m.amount)}
-                    />
+                
+                <View style={{ flex: 1, paddingBottom: idx !== milestones.length - 1 ? space(3) : 0, gap: space(1) }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <View>
+                      <Body style={{ fontWeight: '600' }}>
+                        {MILESTONE_LABEL[m.milestone] ?? m.milestone}
+                      </Body>
+                      <Body style={{ fontWeight: '700', marginTop: 2 }}>{money(m.amount, currency)}</Body>
+                    </View>
+                    {m.status ? (
+                      <Badge tone={PAYMENT_TONE[m.status] ?? 'neutral'}>
+                        {BUYER_PAYMENT_STATUS_LABEL[m.status] ?? PAYMENT_LABEL[m.status] ?? m.status.replace(/_/g, ' ')}
+                      </Badge>
+                    ) : (
+                      <Badge tone={isDue ? 'brand' : 'neutral'}>
+                        {isDue ? 'Payment Required' : 'Pending'}
+                      </Badge>
+                    )}
                   </View>
-                ) : null}
+                  
+                  <Caption tone="muted" style={{ marginTop: 2 }}>
+                    {!m.status && isDue
+                      ? 'Pay to secure your booking in escrow.'
+                      : !m.status && nextDue?.milestone === m.milestone
+                        ? WAITING_ON[m.milestone]
+                        : !m.status
+                          ? `Will be available after ${idx === 1 ? 'first' : 'previous'} milestone.`
+                          : m.status === 'failed'
+                            ? 'Payment failed.'
+                            : ''}
+                  </Caption>
+
+                  {isDue ? (
+                    <View style={{ gap: space(2), marginTop: space(2) }}>
+                      {availableMethods.length > 1 ? (
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(1.5) }}>
+                          {availableMethods.map((mth) => {
+                            const active = activeMethod === mth;
+                            return (
+                              <Pressable
+                                key={mth}
+                                disabled={busy}
+                                onPress={() => setMethod(mth)}
+                                style={{
+                                  paddingHorizontal: space(2.5),
+                                  paddingVertical: space(1),
+                                  borderRadius: radius.md,
+                                  borderWidth: 1,
+                                  borderColor: active ? rgb(theme.brand) : rgb(theme.border),
+                                  backgroundColor: active ? rgb(theme.brandSoft) : 'transparent',
+                                }}
+                              >
+                                <Caption
+                                  tone={active ? 'brand' : 'default'}
+                                  style={{ fontWeight: '600' }}
+                                >
+                                  {METHOD_LABEL[mth] ?? mth}
+                                </Caption>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      ) : null}
+                      
+                      <Button
+                        label={
+                          busy
+                            ? 'Processing…'
+                            : m.status === 'failed' ? 'Try Again' : `Fund Escrow`
+                        }
+                        small
+                        busy={busy}
+                        disabled={busy}
+                        onPress={() => pay(m.milestone, m.amount)}
+                        style={{ alignSelf: 'flex-start', paddingHorizontal: space(4) }}
+                      />
+                    </View>
+                  ) : null}
+                </View>
               </View>
             );
           })}
-          </>
+          </View>
         )}
-      </View>
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(2), backgroundColor: rgb(theme.brandSoft), padding: space(2), borderRadius: radius.md, marginTop: space(2) }}>
+          <ShieldCheck size={20} color={rgb(theme.brand)} />
+          <View style={{ flex: 1 }}>
+            <Body style={{ fontWeight: '600', color: rgb(theme.brandStrong) }}>Your Money is Safe</Body>
+            <Caption style={{ color: rgb(theme.brandStrong), opacity: 0.8 }}>Payments are held in secure escrow and released to the vendor only when milestones are completed.</Caption>
+          </View>
+        </View>
+      </Card>
 
       {!terminal && booking.deliveredAt && !booking.deliveryAcceptedAt ? (
-        <View style={{ gap: space(1.5) }}>
+        <Card style={{ gap: space(1.5) }}>
           {booking.deliveryNotes ? (
             <Caption>
               <Caption tone="faint">What was delivered: </Caption>
@@ -541,14 +572,14 @@ export function BuyerMoneyPanel({ booking }: { booking: BuyerMoneyBooking }) {
           <Caption tone="muted">
             Confirming delivery lets held escrow move to the provider.
           </Caption>
-        </View>
+        </Card>
       ) : null}
 
       {!terminal && CANCELABLE.has(booking.status) ? (
-        <View style={{ gap: space(1.5) }}>
+        <Card style={{ gap: space(1.5) }}>
           {!showCancel ? (
             <Button
-              label="Cancel booking"
+              label="Cancel Booking"
               variant="outline"
               small
               disabled={busy}
@@ -574,14 +605,14 @@ export function BuyerMoneyPanel({ booking }: { booking: BuyerMoneyBooking }) {
               />
               <View style={{ flexDirection: 'row', gap: space(2) }}>
                 <Button
-                  label="Keep booking"
+                  label="Keep Booking"
                   variant="ghost"
                   small
                   disabled={busy}
                   onPress={() => setShowCancel(false)}
                 />
                 <Button
-                  label="Confirm cancellation"
+                  label="Confirm Cancellation"
                   small
                   busy={busy}
                   disabled={busy}
@@ -596,14 +627,14 @@ export function BuyerMoneyPanel({ booking }: { booking: BuyerMoneyBooking }) {
               </View>
             </View>
           )}
-        </View>
+        </Card>
       ) : null}
 
       {!terminal && canRaiseCase && DISPUTABLE.has(booking.status) ? (
-        <View style={{ gap: space(1.5) }}>
+        <Card style={{ gap: space(1.5) }}>
           {!showDispute ? (
             <Button
-              label="Raise an issue"
+              label="Raise an Issue"
               variant="outline"
               small
               disabled={busy}
@@ -646,7 +677,7 @@ export function BuyerMoneyPanel({ booking }: { booking: BuyerMoneyBooking }) {
                   onPress={() => setShowDispute(false)}
                 />
                 <Button
-                  label="Submit issue"
+                  label="Submit Issue"
                   small
                   busy={busy}
                   disabled={
@@ -673,7 +704,7 @@ export function BuyerMoneyPanel({ booking }: { booking: BuyerMoneyBooking }) {
               </View>
             </View>
           )}
-        </View>
+        </Card>
       ) : null}
     </View>
   );

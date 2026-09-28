@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, View, Image } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
+import { CaretRight, MapPin, CalendarBlank, Clock, User } from 'phosphor-react-native';
 
 import { api, apiMessage } from '@/lib/api';
 import { humanise, money, shortDate } from '@/lib/format';
 import { categoryLabel } from '@/lib/wedding-plan';
 import { Badge } from '@/components/chrome';
-import { BookingChat } from '@/components/bookings/chat';
-import { BuyerMoneyPanel } from '@/components/bookings/buyer-money';
+import { ProfileSilhouette } from '@/components/profile-silhouette';
 import {
   Alert,
   Body,
@@ -17,21 +17,26 @@ import {
   EmptyState,
   Loading,
   Screen,
+  PageSubtitle,
 } from '@/components/ui';
 import { rgb, space, useTheme, radius } from '@/theme';
 
 type Tab = 'all' | 'upcoming' | 'completed' | 'cancelled';
 
-interface BuyerBooking {
+export interface BuyerBooking {
   id: string;
   providerType?: 'vendor' | 'planner';
   providerId?: string;
   providerName?: string | null;
+  providerImage?: string | null;
   serviceName?: string | null;
   offeringName?: string | null;
   status: string;
   eventDate?: string | null;
+  startTime?: string | null;
   eventName?: string | null;
+  city?: string | null;
+  venue?: string | null;
   amount?: string | null;
   currency?: string | null;
   paymentStatus?: string | null;
@@ -40,6 +45,10 @@ interface BuyerBooking {
   deliveryAcceptedAt?: string | null;
   deliveryNotes?: string | null;
   collectedMilestones?: string[];
+  guests?: number | null;
+  specialRequests?: string | null;
+  ratingAvg?: number;
+  ratingCount?: number;
 }
 
 const TABS: { key: Tab; label: string }[] = [
@@ -61,22 +70,25 @@ const UPCOMING = new Set([
   'in_progress',
 ]);
 
-const BUYER_STATUS_LABEL: Record<string, string> = {
-  requested: 'Requested',
-  quotation_sent: 'Quotation received',
-  quotation_accepted: 'Awaiting provider',
-  payment_pending: 'Advance due',
-  confirmed: 'Confirmed',
-  in_progress: 'In progress',
-  completed_pending_final_payment: 'Delivered',
+export const BUYER_STATUS_LABEL: Record<string, string> = {
+  requested: 'Request Sent',
+  quotation_sent: 'Quotation Received',
+  quotation_accepted: 'Vendor Reviewing',
+  payment_pending: 'Payment Required',
+  confirmed: 'Funds Secured',
+  in_progress: 'In Progress',
+  completed_pending_final_payment: 'Pending Final Payment',
   completed: 'Completed',
-  disputed: 'Under investigation',
+  disputed: 'Dispute Under Review',
   cancelled: 'Cancelled',
+  refunded: 'Refunded',
 };
 
-function statusTone(status: string): 'positive' | 'caution' | 'critical' | 'neutral' {
+export function statusTone(status: string): 'positive' | 'caution' | 'critical' | 'neutral' | 'brand' {
   if (status === 'confirmed' || status === 'completed') return 'positive';
-  if (CANCELLED.has(status)) return 'critical';
+  if (status === 'requested') return 'caution';
+  if (status === 'quotation_sent' || status === 'payment_pending' || status === 'in_progress' || status === 'completed_pending_final_payment') return 'brand';
+  if (CANCELLED.has(status) || status === 'refunded') return 'critical';
   if (UPCOMING.has(status)) return 'caution';
   return 'neutral';
 }
@@ -84,14 +96,7 @@ function statusTone(status: string): 'positive' | 'caution' | 'critical' | 'neut
 export default function PlanBookings() {
   const theme = useTheme();
   const router = useRouter();
-  const params = useLocalSearchParams<{ highlight?: string }>();
-  const highlight = typeof params.highlight === 'string' ? params.highlight : undefined;
   const [tab, setTab] = useState<Tab>('all');
-  const [openId, setOpenId] = useState<string | null>(highlight ?? null);
-
-  useEffect(() => {
-    if (highlight) setOpenId(highlight);
-  }, [highlight]);
 
   const query = useQuery({
     queryKey: ['my-bookings'],
@@ -103,32 +108,40 @@ export default function PlanBookings() {
   });
 
   const qc = useQueryClient();
-  // A new quotation or instalment lives in the panel's own queries, not in this list.
   const refresh = () => {
     for (const key of ['my-bookings', 'buyer-quotations', 'buyer-milestones', 'escrow']) {
       void qc.invalidateQueries({ queryKey: [key] });
     }
   };
 
+  const allRows: BuyerBooking[] = Array.isArray(query.data)
+    ? query.data
+    : (query.data?.data ?? []);
+
+  const counts = {
+    all: allRows.length,
+    upcoming: allRows.filter(r => UPCOMING.has(r.status)).length,
+    completed: allRows.filter(r => COMPLETED.has(r.status)).length,
+    cancelled: allRows.filter(r => CANCELLED.has(r.status)).length,
+  };
+
   const rows = useMemo(() => {
-    const list: BuyerBooking[] = Array.isArray(query.data)
-      ? query.data
-      : (query.data?.data ?? []);
-    return list.filter((row) => {
+    return allRows.filter((row) => {
       if (tab === 'all') return true;
       if (tab === 'completed') return COMPLETED.has(row.status);
       if (tab === 'cancelled') return CANCELLED.has(row.status);
       return UPCOMING.has(row.status);
     });
-  }, [query.data, tab]);
+  }, [allRows, tab]);
 
   return (
     <Screen onRefresh={refresh} refreshing={query.isRefetching}>
-      <Caption tone="muted">
-        Accept a quotation, pay instalments into escrow, then confirm delivery.
-      </Caption>
+      <Stack.Screen options={{ title: 'Bookings' }} />
+      <PageSubtitle style={{ marginBottom: space(4) }}>
+        Manage your vendor and planner bookings, payments and delivery in one place.
+      </PageSubtitle>
 
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2) }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2), marginBottom: space(4) }}>
         {TABS.map((item) => {
           const active = tab === item.key;
           return (
@@ -137,9 +150,11 @@ export default function PlanBookings() {
               onPress={() => setTab(item.key)}
               style={{
                 paddingHorizontal: space(3),
-                paddingVertical: space(1.5),
-                borderRadius: radius.md,
-                backgroundColor: active ? rgb(theme.brand) : rgb(theme.surfaceSunken),
+                paddingVertical: space(2),
+                borderRadius: 20,
+                borderWidth: 1,
+                borderColor: active ? rgb(theme.brand) : 'transparent',
+                backgroundColor: active ? rgb(theme.brandSoft) : rgb(theme.surfaceSunken),
               }}
             >
               <Caption
@@ -148,7 +163,7 @@ export default function PlanBookings() {
                   fontWeight: '600',
                 }}
               >
-                {item.label}
+                {item.label} {counts[item.key] > 0 ? `(${counts[item.key]})` : ''}
               </Caption>
             </Pressable>
           );
@@ -164,121 +179,68 @@ export default function PlanBookings() {
           Request a booking from a vendor or planner listing.
         </EmptyState>
       ) : (
-        rows.map((row) => {
-          const open = openId === row.id;
-          const highlighted = highlight === row.id;
-          return (
-            <Card
-              key={row.id}
-              style={{
-                gap: space(2),
-                borderRadius: radius.md,
-                ...(highlighted ? { borderWidth: 2, borderColor: rgb(theme.brand) } : null),
-              }}
-            >
-              <Pressable onPress={() => setOpenId(open ? null : row.id)}>
-                <View
-                  style={{ flexDirection: 'row', justifyContent: 'space-between', gap: space(2) }}
-                >
-                  <Body style={{ fontWeight: '700', flex: 1 }} numberOfLines={1}>
-                    {row.providerName ?? row.serviceName ?? 'Booking'}
-                  </Body>
-                  <Badge tone={statusTone(row.status)}>
-                    {BUYER_STATUS_LABEL[row.status] ?? humanise(row.status)}
-                  </Badge>
-                </View>
-                <Caption tone="muted">
-                  {[
-                    row.serviceName || row.offeringName,
-                    row.providerType ? categoryLabel(row.providerType) : null,
-                    row.eventDate ? shortDate(row.eventDate) : null,
-                    // A request carries 0 until a quotation prices it.
-                    Number(row.amount) > 0
-                      ? money(row.amount!, row.currency ?? 'INR')
-                      : row.status === 'requested'
-                        ? 'Awaiting quotation'
-                        : null,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </Caption>
-                {row.paymentStatus ? (
-                  <Caption tone="muted" style={{ marginTop: space(0.5) }}>
-                    Payment: {humanise(row.paymentStatus)}
-                  </Caption>
-                ) : null}
-                {row.status === 'payment_pending' ? (
-                  <Caption tone="brand" style={{ marginTop: space(0.5), fontWeight: '600' }}>
-                    Advance due — open to Fund Escrow
-                  </Caption>
-                ) : null}
-                {row.status === 'in_progress' &&
-                !(row.collectedMilestones ?? []).includes('second') ? (
-                  <Caption tone="brand" style={{ marginTop: space(0.5), fontWeight: '600' }}>
-                    Second instalment due — open to Fund Escrow
-                  </Caption>
-                ) : null}
-                {row.status === 'completed_pending_final_payment' &&
-                !(row.collectedMilestones ?? []).includes('final') ? (
-                  <Caption tone="brand" style={{ marginTop: space(0.5), fontWeight: '600' }}>
-                    Final payment due — open to Fund Escrow
-                  </Caption>
-                ) : null}
+        <View style={{ gap: space(3) }}>
+          {rows.map((row) => {
+            return (
+              <Pressable
+                key={row.id}
+                onPress={() => router.push({ pathname: '/plan/booking/[id]', params: { id: row.id } })}
+              >
+                <Card style={{ padding: space(3), borderRadius: radius.md, gap: space(3) }}>
+                  <View style={{ flexDirection: 'row', gap: space(3) }}>
+                    {row.providerImage ? (
+                      <Image source={{ uri: row.providerImage }} style={{ width: 64, height: 64, borderRadius: radius.md }} />
+                    ) : (
+                      <View style={{ width: 64, height: 64, borderRadius: radius.md, backgroundColor: rgb(theme.surfaceSunken), alignItems: 'center', justifyContent: 'center' }}>
+                         <User size={24} color={rgb(theme.ink[400])} />
+                      </View>
+                    )}
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Body style={{ fontWeight: '700' }} numberOfLines={1}>
+                        {row.providerName ?? 'Booking'}
+                      </Body>
+                      <Caption tone="muted" numberOfLines={1}>
+                        {[row.serviceName, row.providerType ? categoryLabel(row.providerType) : null].filter(Boolean).join(' • ')}
+                      </Caption>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(1), marginTop: 2 }}>
+                         <CalendarBlank size={12} color={rgb(theme.ink[600])} />
+                         <Caption tone="muted">{row.eventDate ? shortDate(row.eventDate) : 'Date TBD'}</Caption>
+                         {row.startTime ? (
+                           <>
+                             <Clock size={12} color={rgb(theme.ink[600])} style={{ marginLeft: space(1) }} />
+                             <Caption tone="muted">{row.startTime}</Caption>
+                           </>
+                         ) : null}
+                      </View>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(1), marginTop: 2 }}>
+                         <MapPin size={12} color={rgb(theme.ink[600])} />
+                         <Caption tone="muted" numberOfLines={1}>{row.city || row.venue || 'Location TBD'}</Caption>
+                      </View>
+                    </View>
+                    <CaretRight size={20} color={rgb(theme.ink[400])} style={{ alignSelf: 'center' }} />
+                  </View>
+
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: space(2), borderTopWidth: 1, borderTopColor: rgb(theme.border) }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(2) }}>
+                      <Badge tone={statusTone(row.status)}>
+                        {BUYER_STATUS_LABEL[row.status] ?? humanise(row.status)}
+                      </Badge>
+                      {row.status === 'requested' && <Caption tone="muted">Awaiting quotation from vendor</Caption>}
+                      {row.status === 'quotation_sent' && <Caption tone="muted">Review and accept the quotation</Caption>}
+                      {row.status === 'payment_pending' && <Caption tone="muted">Advance payment is due</Caption>}
+                      {row.status === 'completed_pending_final_payment' && <Caption tone="muted">Final payment is due</Caption>}
+                    </View>
+                    {Number(row.amount) > 0 ? (
+                      <Body style={{ fontWeight: '700' }}>{money(row.amount!, row.currency ?? 'INR')}</Body>
+                    ) : null}
+                  </View>
+                </Card>
               </Pressable>
-              {open ? (
-                <View
-                  style={{
-                    gap: space(2),
-                    paddingTop: space(2),
-                    borderTopWidth: 1,
-                    borderTopColor: rgb(theme.border),
-                  }}
-                >
-                  {row.eventName ? <Caption>Event: {row.eventName}</Caption> : null}
-                  {row.cancellationReason ? (
-                    <Caption>Cancellation: {row.cancellationReason}</Caption>
-                  ) : null}
-                  {row.providerType === 'vendor' && row.providerId ? (
-                    <Pressable
-                      onPress={() =>
-                        router.push({
-                          pathname: '/vendors/[id]',
-                          params: { id: row.providerId! },
-                        })
-                      }
-                    >
-                      <Caption tone="brand" style={{ fontWeight: '600' }}>
-                        View vendor
-                      </Caption>
-                    </Pressable>
-                  ) : null}
-                  {row.providerType === 'planner' && row.providerId ? (
-                    <Pressable
-                      onPress={() =>
-                        router.push({
-                          pathname: '/planners/[id]',
-                          params: { id: row.providerId! },
-                        })
-                      }
-                    >
-                      <Caption tone="brand" style={{ fontWeight: '600' }}>
-                        View planner
-                      </Caption>
-                    </Pressable>
-                  ) : null}
-                  <BuyerMoneyPanel booking={row} />
-                  <BookingChat
-                    bookingId={row.id}
-                    label={
-                      row.providerType === 'planner' ? 'Message the planner' : 'Message the vendor'
-                    }
-                  />
-                </View>
-              ) : null}
-            </Card>
-          );
-        })
+            );
+          })}
+        </View>
       )}
     </Screen>
   );
 }
+

@@ -208,6 +208,7 @@ function Routes() {
       />
       <Stack.Screen name="planners/[id]" options={{ headerShown: false }} />
       {/* The title becomes the other person's name once the thread knows it. */}
+      <Stack.Screen name="chat/index" options={{ headerShown: true, title: 'Chat' }} />
       <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="match/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="visit/[id]" options={{ headerShown: true, title: 'Visit' }} />

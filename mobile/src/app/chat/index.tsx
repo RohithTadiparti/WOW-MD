@@ -58,7 +58,6 @@ export default function Conversations() {
     <ListScreen
       header={
         <View style={{ gap: space(1) }}>
-          <PageTitle>Chat</PageTitle>
           <PageSubtitle>
             Conversations open once both families have accepted an interest.
           </PageSubtitle>
