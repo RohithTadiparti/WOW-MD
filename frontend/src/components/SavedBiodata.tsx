@@ -90,7 +90,7 @@ export default function SavedBiodata({
     return v === null || v === undefined || v === '' ? null : String(v);
   };
 
-  const height = num('heightFeet');
+  const height = num('heightCm');
   const father = bag('father');
   const mother = bag('mother');
 
@@ -252,8 +252,8 @@ export default function SavedBiodata({
             : null}
         </Row>
         <Row label="Height">
-          {num('preferredHeightMinFeet') && num('preferredHeightMaxFeet')
-            ? `${formatHeight(num('preferredHeightMinFeet'))} – ${formatHeight(num('preferredHeightMaxFeet'))}`
+          {num('preferredHeightMinCm') && num('preferredHeightMaxCm')
+            ? `${formatHeight(num('preferredHeightMinCm'))} – ${formatHeight(num('preferredHeightMaxCm'))}`
             : null}
         </Row>
       </Group>

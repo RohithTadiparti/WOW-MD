@@ -8,7 +8,7 @@ import { PersonPhoto } from './ProfileSilhouette';
 interface Details {
   firstName?: string | null;
   lastName?: string | null;
-  heightFeet?: number | null;
+  heightCm?: number | null;
   religion?: string | null;
   caste?: string | null;
   highestQualification?: string | null;
@@ -89,7 +89,7 @@ export default function ProfileCard({
   // The four facts anybody asks first, in the order they ask them.
   const facts = [
     age ? `${age} years` : null,
-    details.heightFeet ? formatHeight(details.heightFeet) : null,
+    details.heightCm ? formatHeight(details.heightCm) : null,
     profile?.city ?? null,
     [details.religion, details.caste].filter(Boolean).join(' · ') || null,
     details.highestQualification ?? null,

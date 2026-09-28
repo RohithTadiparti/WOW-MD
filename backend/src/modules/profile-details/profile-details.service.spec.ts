@@ -66,7 +66,16 @@ describe('ProfileDetailsService section saves', () => {
     save: jest.fn(async (p: Profile) => p),
   } as unknown as Repository<Profile>;
 
-  const redis = { raw: { keys: jest.fn(async () => []) }, del: jest.fn() } as unknown as RedisService;
+  const cachedSuggestionKeys = ['match:suggestions:p1:1:20:', 'match:suggestions:unrelated:1:20:'];
+  const redis = {
+    raw: {
+      scan: jest.fn(async (_cursor: string, _match: string, pattern: string) => [
+        '0',
+        cachedSuggestionKeys.filter((key) => key.startsWith(pattern.replace('*', ''))),
+      ]),
+    },
+    del: jest.fn(),
+  } as unknown as RedisService;
 
   const service = new ProfileDetailsService(
     details,
@@ -83,7 +92,7 @@ describe('ProfileDetailsService section saves', () => {
     ({
       firstName: 'Bhavana',
       lastName: 'Rao',
-      heightFeet: 5.2,
+      heightCm: 168,
       complexion: Complexion.WHEATISH,
       communicationAddress: '12 Test Road, Hyderabad',
       ...over,
@@ -92,7 +101,7 @@ describe('ProfileDetailsService section saves', () => {
   const PERSONAL = {
     firstName: 'Bhavana',
     lastName: 'Rao',
-    heightFeet: 5.2,
+    heightCm: 168,
     complexion: Complexion.WHEATISH,
     communicationAddress: '12 Test Road, Hyderabad',
     alternateMobile: '+919876543210',
@@ -120,7 +129,7 @@ describe('ProfileDetailsService section saves', () => {
     }
     const result = await service.savePreferences(actor, 'p1', {
       preferredAgeMin: 24, preferredAgeMax: 34,
-      preferredHeightMinFeet: 4.9, preferredHeightMaxFeet: 6.2,
+      preferredHeightMinCm: 150, preferredHeightMaxCm: 189,
       preferredPackageMin: 1000000, preferredPackageMax: 2000000,
     });
     expect(result).toMatchObject({ preferredPackageMin: 1000000, preferredPackageMax: 2000000 });
@@ -129,7 +138,7 @@ describe('ProfileDetailsService section saves', () => {
 
   it('validates package API bodies and converts query bounds', async () => {
     const pipe = new ValidationPipe({ transform: true, whitelist: true });
-    const base = { preferredAgeMin: 24, preferredAgeMax: 34, preferredHeightMinFeet: 4.9, preferredHeightMaxFeet: 6.2 };
+    const base = { preferredAgeMin: 24, preferredAgeMax: 34, preferredHeightMinCm: 150, preferredHeightMaxCm: 189 };
     for (const value of [-1, 1.5, 'bad', Number.MAX_SAFE_INTEGER + 1]) {
       await expect(pipe.transform({ ...base, preferredPackageMin: value }, { type: 'body', metatype: PartnerPreferencesDto })).rejects.toThrow();
       await expect(pipe.transform({ packageMax: value }, { type: 'query', metatype: SuggestionsQueryDto })).rejects.toThrow();
@@ -142,7 +151,7 @@ describe('ProfileDetailsService section saves', () => {
 
   it('saves, preserves, edits and clears package bounds without losing other sections', async () => {
     stored = { profileId: 'p1', religion: 'Hindu' };
-    const base = { preferredAgeMin: 24, preferredAgeMax: 34, preferredHeightMinFeet: 4.9, preferredHeightMaxFeet: 6.2 };
+    const base = { preferredAgeMin: 24, preferredAgeMax: 34, preferredHeightMinCm: 150, preferredHeightMaxCm: 189 };
     await service.savePreferences(owner, 'p1', { ...base, preferredPackageMin: 0, preferredPackageMax: 1200000 });
     expect(stored).toMatchObject({ preferredPackageMin: 0, preferredPackageMax: 1200000, religion: 'Hindu' });
     await service.savePreferences(owner, 'p1', base);
@@ -152,7 +161,9 @@ describe('ProfileDetailsService section saves', () => {
     expect(stored).toMatchObject({ preferredPackageMin: 500000, preferredPackageMax: 1200000 });
     await service.savePreferences(owner, 'p1', { ...base, preferredPackageMin: null, preferredPackageMax: null });
     expect(stored).toMatchObject({ preferredPackageMin: null, preferredPackageMax: null, religion: 'Hindu' });
-    expect(redis.raw.keys).toHaveBeenCalledWith('match:suggestions:*');
+    expect(redis.raw.scan).toHaveBeenCalledWith('0', 'MATCH', 'match:suggestions:p1:*', 'COUNT', 100);
+    expect(redis.del).toHaveBeenCalledWith('match:suggestions:p1:1:20:');
+    expect(redis.del).not.toHaveBeenCalledWith('match:suggestions:unrelated:1:20:');
   });
 
   it('keeps the personal section intact while every other section is saved', async () => {
@@ -191,8 +202,8 @@ describe('ProfileDetailsService section saves', () => {
     await service.savePreferences(owner, 'p1', {
       preferredAgeMin: 25,
       preferredAgeMax: 32,
-      preferredHeightMinFeet: 5.4,
-      preferredHeightMaxFeet: 6.2,
+      preferredHeightMinCm: 163,
+      preferredHeightMaxCm: 189,
     } as PartnerPreferencesDto);
 
     expect(stored).toMatchObject(PERSONAL);
@@ -203,10 +214,10 @@ describe('ProfileDetailsService section saves', () => {
     stored = { profileId: 'p1', ...PERSONAL };
 
     // What the web form sends: it has no residence field at all.
-    await service.savePersonal(owner, 'p1', personal({ heightFeet: 5.3 }));
+    await service.savePersonal(owner, 'p1', personal({ heightCm: 165 }));
 
     expect(stored).toMatchObject({
-      heightFeet: 5.3,
+      heightCm: 165,
       residence: PERSONAL.residence,
       alternateMobile: PERSONAL.alternateMobile,
     });
@@ -269,11 +280,10 @@ describe('ProfileDetailsService section saves', () => {
     });
   });
 
-  it('requires family net worth for a groom profile (male gender)', async () => {
+  it('keeps family net worth optional for a groom profile', async () => {
     profile.gender = 'male';
 
-    await expect(
-      service.saveFamily(owner, 'p1', {
+    await expect(service.saveFamily(owner, 'p1', {
         father: { name: 'Ravi Rao' },
         mother: { name: 'Lata Rao' },
         familyType: FamilyType.NUCLEAR,
@@ -281,8 +291,8 @@ describe('ProfileDetailsService section saves', () => {
         brothers: 0,
         sisters: 1,
         // familyNetWorth deliberately omitted
-      } as unknown as FamilyDetailsDto),
-    ).rejects.toThrow('Family net worth is required for a groom profile');
+      } as unknown as FamilyDetailsDto)).resolves.toBeDefined();
+    expect(stored).toMatchObject({ familyType: FamilyType.NUCLEAR });
   });
 
   it('accepts a family section save without net worth for a bride profile (female gender)', async () => {

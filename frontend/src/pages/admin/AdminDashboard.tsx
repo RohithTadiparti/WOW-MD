@@ -18,6 +18,7 @@ import {
 import { api } from '../../lib/api';
 import { BOOKING_STATUS_LABEL } from '../../lib/permissions';
 import { ActivityFeed } from '../../components/AdminConsole';
+import { AnimatedCard, AnimatedCounter } from '../../components/ui/Motion';
 
 interface Analytics {
   totalUsers: number;
@@ -226,25 +227,27 @@ const ACCENT_CHIP: Record<Accent, string> = {
  */
 function SummaryTile({ label, value, to, icon: Glyph, accent }: SummaryCard) {
   return (
-    <Link
-      to={to}
-      className="card group relative overflow-hidden transition-colors duration-200 ease-out hover:border-brand focus-visible:border-brand"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <span className={`inline-flex h-10 w-10 items-center justify-center rounded-[--radius-md] ${ACCENT_CHIP[accent]}`}>
-          <Glyph size={22} weight="duotone" aria-hidden />
-        </span>
-        <TrendUp
-          size={16}
-          className="mt-1 -translate-x-1 text-gray-400 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100"
-          aria-hidden
-        />
-      </div>
-      <p className="mt-3 font-serif text-[2.25rem] font-normal leading-none tabular-nums text-brand">
-        {value}
-      </p>
-      <p className="mt-1.5 text-sm font-medium text-gray-600">{label}</p>
-    </Link>
+    <AnimatedCard intensity="low" className="h-full">
+      <Link
+        to={to}
+        className="card group relative block h-full overflow-hidden transition-colors duration-200 ease-out hover:border-brand focus-visible:border-brand"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <span className={`inline-flex h-10 w-10 items-center justify-center rounded-[--radius-md] ${ACCENT_CHIP[accent]}`}>
+            <Glyph size={22} weight="duotone" aria-hidden />
+          </span>
+          <TrendUp
+            size={16}
+            className="mt-1 -translate-x-1 text-gray-400 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100"
+            aria-hidden
+          />
+        </div>
+        <p className="mt-3 font-serif text-[2.25rem] font-normal leading-none tabular-nums text-brand">
+          {typeof value === 'number' ? <AnimatedCounter value={value} /> : value}
+        </p>
+        <p className="mt-1.5 text-sm font-medium text-gray-600">{label}</p>
+      </Link>
+    </AnimatedCard>
   );
 }
 

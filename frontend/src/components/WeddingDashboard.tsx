@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { formatDate } from '../lib/dates';
+import { AnimatedCounter, AnimatedProgress, AnimatedTimeline } from './ui/Motion';
 
 interface Dashboard {
   countdown: {
@@ -93,9 +94,7 @@ export default function WeddingDashboard({
                   countdown.passed ? 'text-gray-500' : 'text-brand'
                 }`}
               >
-                {countdown.daysAway === 0
-                  ? 'Today'
-                  : Math.abs(countdown.daysAway ?? 0).toLocaleString('en-IN')}
+                {countdown.daysAway === 0 ? 'Today' : <AnimatedCounter value={Math.abs(countdown.daysAway ?? 0)} />}
               </p>
               <p className="text-xs text-gray-500">
                 {formatDate(countdown.weddingDate)}
@@ -138,7 +137,7 @@ export default function WeddingDashboard({
 
         <div className="card">
           <p className="text-xs uppercase tracking-wide text-gray-500">Plan</p>
-          <p className="text-2xl font-semibold tabular-nums text-gray-900">{journey.percent}%</p>
+          <p className="text-2xl font-semibold tabular-nums text-gray-900"><AnimatedCounter value={journey.percent} />%</p>
           <p className={`text-xs ${journey.overdue > 0 ? 'text-amber-700' : 'text-gray-500'}`}>
             {journey.overdue > 0
               ? `${journey.overdue} overdue`
@@ -187,9 +186,11 @@ export default function WeddingDashboard({
                       </span>
                     </div>
                     <div className="mt-1 h-1.5 w-full rounded-sm bg-gray-100">
-                      <div
-                        className={`h-1.5 rounded-sm ${over ? 'bg-red-500' : 'bg-brand'}`}
-                        style={{ width: `${pct}%` }}
+                      <AnimatedProgress
+                        value={pct}
+                        className="h-1.5 w-full rounded-sm bg-gray-100"
+                        barClassName={over ? 'bg-red-500' : 'bg-brand'}
+                        label={`${c.category} budget ${pct}%`}
                       />
                     </div>
                   </div>
@@ -233,6 +234,11 @@ export default function WeddingDashboard({
               <h3 className="mt-4 text-xs font-semibold uppercase tracking-wide text-gray-500">
                 The journey
               </h3>
+              <AnimatedTimeline
+                items={journey.stages.map((stage) => stage.stage.replace(/_/g, ' '))}
+                activeIndex={Math.max(0, journey.stages.findIndex((stage) => stage.done < stage.total))}
+                className="mt-3 rounded-md bg-surface-sunken/45 px-3 py-4"
+              />
               <div className="mt-1 divide-y">
                 {journey.stages.map((sg) => (
                   <div key={sg.stage} className="flex items-center justify-between py-1.5 text-sm">

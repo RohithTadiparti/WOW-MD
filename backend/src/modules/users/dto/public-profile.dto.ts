@@ -98,7 +98,7 @@ export class PublicProfileView {
 }
 
 export interface ProfileCardFacts {
-  heightFeet: number | null;
+  heightCm: number | null;
   religion: string | null;
   caste: string | null;
   motherTongue: string | null;
@@ -132,7 +132,7 @@ export interface ProfileCardFacts {
  * the profile somebody has chosen to open, not on a card in a grid of forty.
  */
 export function toCardFacts(details: {
-  heightFeet: number | null;
+  heightCm: number | null;
   religion: string | null;
   caste: string | null;
   motherTongue: string | null;
@@ -158,7 +158,7 @@ export function toCardFacts(details: {
     padam: text(chart.padam),
     gothram: text(chart.gothram),
     kujaDosham: text(chart.kujaDosham),
-    heightFeet: details.heightFeet,
+    heightCm: details.heightCm,
     religion: details.religion,
     caste: details.caste,
     motherTongue: details.motherTongue,

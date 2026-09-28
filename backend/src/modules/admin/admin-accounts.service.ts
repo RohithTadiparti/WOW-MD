@@ -571,7 +571,7 @@ export class AdminAccountsService {
       details: details
         ? {
             maritalStatus: details.maritalStatus,
-            heightFeet: details.heightFeet,
+            heightCm: details.heightCm,
             highestQualification: details.highestQualification,
             occupationStatus: details.occupationStatus,
           }

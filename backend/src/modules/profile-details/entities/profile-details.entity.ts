@@ -1,4 +1,3 @@
-import { feetTransformer } from '../../../common/util/height';
 import {
   Column,
   CreateDateColumn,
@@ -42,10 +41,9 @@ export class ProfileDetails {
   @Column({ type: 'varchar', length: 80, nullable: true })
   lastName: string | null;
 
-  /** Decimal feet, matching the API and existing migrated databases. */
   @Index()
-  @Column({ type: 'numeric', precision: 3, scale: 1, nullable: true, transformer: feetTransformer })
-  heightFeet: number | null;
+  @Column({ type: 'integer', nullable: true })
+  heightCm: number | null;
 
   @Column({ type: 'varchar', length: 40, nullable: true })
   complexion: string | null;
@@ -271,11 +269,11 @@ export class ProfileDetails {
   @Column({ type: 'int', nullable: true })
   preferredAgeMax: number | null;
 
-  @Column({ type: 'numeric', precision: 3, scale: 1, nullable: true, transformer: feetTransformer })
-  preferredHeightMinFeet: number | null;
+  @Column({ type: 'integer', nullable: true })
+  preferredHeightMinCm: number | null;
 
-  @Column({ type: 'numeric', precision: 3, scale: 1, nullable: true, transformer: feetTransformer })
-  preferredHeightMaxFeet: number | null;
+  @Column({ type: 'integer', nullable: true })
+  preferredHeightMaxCm: number | null;
 
   /**
    * Religion, caste, education, profession, complexion and the locations they

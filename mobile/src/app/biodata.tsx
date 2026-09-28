@@ -5,6 +5,7 @@ import { CheckCircle, CircleDashed } from 'phosphor-react-native';
 import { api } from '@/lib/api';
 import { labelFor } from '@/lib/labels';
 import { formatDate } from '@/shared/dates';
+import { formatHeight } from '@/shared/height';
 import { COMPLEXION_LABEL, MARITAL_LABEL, OCCUPATION_LABEL } from '@/shared/permissions';
 import { HoroscopeSection } from '@/components/biodata/horoscope-section';
 import { PreferencesSection } from '@/components/biodata/preferences-section';
@@ -224,7 +225,7 @@ export default function Biodata() {
             {formatDate(full?.dateOfBirth ?? text('dateOfBirth'), '—')}
           </DetailRow>
           <DetailRow label="Height">
-            {typeof d.heightFeet === 'number' ? `${d.heightFeet} feet` : '—'}
+            {formatHeight(d.heightCm)}
           </DetailRow>
           <DetailRow label="Complexion">{labelFor(COMPLEXION_LABEL, d.complexion) ?? '—'}</DetailRow>
           <DetailRow label="Religion">{text('religion') ?? '—'}</DetailRow>

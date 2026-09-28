@@ -129,7 +129,7 @@ export class ProfileDetailsService {
       // where there is no last name, rather than silently dropped.
       surname: null,
       lastName: lastName,
-      heightFeet: dto.heightFeet,
+      heightCm: dto.heightCm,
       complexion: dto.complexion,
       // Native place moved to the family section. A client still sending it
       // here has it routed rather than dropped; place of birth is no longer
@@ -266,20 +266,6 @@ export class ProfileDetailsService {
   async saveFamily(actor: AuthUser, profileId: string, dto: FamilyDetailsDto) {
     const row = await this.editable(actor, profileId);
 
-    /*
-     * Net worth is required for groom profiles and optional for brides.
-     *
-     * A family publishing a groom's biodata is expected to state what the
-     * family has — it is the first thing the other side asks — so an unset
-     * figure is not a neutral absence, it is a missing answer. Bride profiles
-     * are treated differently: the convention is not symmetric, and forcing a
-     * bride's family to quantify their finances before they can save would
-     * block profiles that have legitimately not answered.
-     */
-    const profile = await this.load(profileId);
-    if (profile.gender === 'male' && dto.familyNetWorth === undefined) {
-      throw new BadRequestException('Family net worth is required for a groom profile');
-    }
     Object.assign(row, {
       father: dto.father as unknown as Record<string, unknown>,
       mother: dto.mother as unknown as Record<string, unknown>,
@@ -366,7 +352,7 @@ export class ProfileDetailsService {
     if (dto.preferredAgeMin > dto.preferredAgeMax) {
       throw new BadRequestException('The minimum age cannot be above the maximum');
     }
-    if (dto.preferredHeightMinFeet > dto.preferredHeightMaxFeet) {
+    if (dto.preferredHeightMinCm > dto.preferredHeightMaxCm) {
       throw new BadRequestException('The minimum height cannot be above the maximum');
     }
 
@@ -383,8 +369,8 @@ export class ProfileDetailsService {
       preferredPackageMax: packageMax,
       preferredAgeMin: dto.preferredAgeMin,
       preferredAgeMax: dto.preferredAgeMax,
-      preferredHeightMinFeet: dto.preferredHeightMinFeet,
-      preferredHeightMaxFeet: dto.preferredHeightMaxFeet,
+      preferredHeightMinCm: dto.preferredHeightMinCm,
+      preferredHeightMaxCm: dto.preferredHeightMaxCm,
       partnerPreferences: {
         ...(dto.preferences ?? {}),
         ...(dto.horoscopeExpectation ? { horoscopeExpectation: dto.horoscopeExpectation } : {}),
@@ -835,7 +821,7 @@ export class ProfileDetailsService {
             motherTongue: detail.motherTongue,
             highestQualification: detail.highestQualification,
             occupationStatus: detail.occupationStatus,
-            heightFeet: detail.heightFeet,
+            heightCm: detail.heightCm,
             horoscopeAvailable: detail.horoscopeAvailable,
             rashi: chart.rashi ?? null,
             star: chart.star ?? null,
@@ -1013,7 +999,7 @@ export class ProfileDetailsService {
         details &&
           has(details.firstName) &&
           has(details.lastName) &&
-          has(details.heightFeet) &&
+          has(details.heightCm) &&
           has(details.complexion) &&
           has(details.communicationAddress),
       ),
@@ -1045,7 +1031,7 @@ export class ProfileDetailsService {
         details && has(details.occupationStatus),
       ),
       preferences: Boolean(
-        details && has(details.preferredAgeMin) && has(details.preferredHeightMinFeet),
+        details && has(details.preferredAgeMin) && has(details.preferredHeightMinCm),
       ),
       identity: Boolean(profile.governmentIdHash),
     };
@@ -1120,12 +1106,24 @@ export class ProfileDetailsService {
    */
   private async persist(row: ProfileDetails): Promise<ProfileDetails> {
     const saved = await this.details.save(row);
-    await this.invalidateSuggestions();
+    await this.invalidateSuggestions(saved.profileId);
     return saved;
   }
 
-  private async invalidateSuggestions(): Promise<void> {
-    const keys = await this.redis.raw.keys('match:suggestions:*');
+  private async invalidateSuggestions(profileId: string): Promise<void> {
+    const keys: string[] = [];
+    let cursor = '0';
+    do {
+      const [next, found] = await this.redis.raw.scan(
+        cursor,
+        'MATCH',
+        `match:suggestions:${profileId}:*`,
+        'COUNT',
+        100,
+      );
+      cursor = next;
+      keys.push(...found);
+    } while (cursor !== '0');
     if (keys.length) await this.redis.del(...keys);
   }
 

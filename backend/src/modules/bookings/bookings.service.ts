@@ -179,6 +179,7 @@ export class BookingsService {
     private readonly outbox: OutboxService,
     private readonly dataSource: DataSource,
     private readonly audit: AuditService,
+    @Inject(forwardRef(() => SupportCasesService))
     private readonly cases: SupportCasesService,
     private readonly matchmaking: MatchmakingService,
     // Bookings and the vendor calendar need each other; the cycle is broken
@@ -1710,7 +1711,9 @@ export class BookingsService {
       const s = (row.status ?? '').toLowerCase().trim();
       const n = Number(row.count) || 0;
       counts.all += n;
-      counts[s] = (counts[s] ?? 0) + n;
+      if (!['confirmed', 'in_progress', 'completed', 'cancelled'].includes(s)) {
+        counts[s] = (counts[s] ?? 0) + n;
+      }
 
       if (s === 'requested' || s === 'quotation_sent' || s === 'quotation_accepted') {
         counts.requests += n;
@@ -1734,7 +1737,7 @@ export class BookingsService {
       .where('b."providerId" IN (:...ids)', { ids: providerIds })
       .andWhere('b."slotId" IS NULL')
       .andWhere('(b."eventDate" IS NOT NULL OR e."eventDate" IS NOT NULL)')
-      .andWhere('b.status IN (:...statuses)', { statuses: REQUEST_STATUSES.map((s) => s.toLowerCase()) })
+      .andWhere('b.status IN (:...statuses)', { statuses: REQUEST_STATUSES })
       .getCount();
 
     return counts;
@@ -1785,7 +1788,9 @@ export class BookingsService {
       const s = (row.status ?? '').toLowerCase().trim();
       const n = Number(row.count) || 0;
       counts.all += n;
-      counts[s] = (counts[s] ?? 0) + n;
+      if (!['requested', 'confirmed', 'in_progress', 'completed', 'cancelled', 'disputed'].includes(s)) {
+        counts[s] = (counts[s] ?? 0) + n;
+      }
 
       if (s === 'requested') {
         counts.requested += n;

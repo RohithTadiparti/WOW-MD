@@ -1,3 +1,4 @@
+import { AnimatedCounter, AnimatedTimeline } from '../components/ui/Motion';
 import { ReactNode, useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
@@ -523,6 +524,9 @@ export default function Verification({
   const activeOfficers = officersWithLoad
     .filter((o) => o.isActive)
     .sort((a, b) => (a.openCount ?? 0) - (b.openCount ?? 0));
+  const verificationStages = ['Assigned', 'In progress', 'Submitted', 'Needs another look', 'Resolved'];
+  const verificationStageStatuses = [['assigned'], ['in_progress'], ['submitted', 'admin_review'], ['additional_review'], ['approved']];
+  const activeVerificationStage = verificationStageStatuses.findIndex((statuses) => sectionCount(statuses) > 0);
 
   return (
     <div className="space-y-6">
@@ -536,6 +540,22 @@ export default function Verification({
 
       {error && <p className="alert-critical">{error}</p>}
       {notice && <p className="alert-positive">{notice}</p>}
+
+      <section className="card border-l-2 border-l-brand">
+        <div className="mb-3 flex items-baseline justify-between gap-3">
+          <div>
+            <h2 className="section-title">Verification workflow</h2>
+            <p className="text-sm text-gray-500">Cases move forward as findings are submitted and reviewed.</p>
+          </div>
+          <span className="font-mono text-xs text-gray-500" aria-live="polite">
+            <AnimatedCounter value={Math.max(0, totalRequests)} /> active
+          </span>
+        </div>
+        <AnimatedTimeline
+          items={verificationStages}
+          activeIndex={activeVerificationStage < 0 ? 0 : activeVerificationStage}
+        />
+      </section>
 
       {/*
         An officer sets whether they are taking fieldwork. Auto-allocation skips

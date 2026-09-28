@@ -573,7 +573,7 @@ function PersonalForm({
     'firstName',
     'lastName',
     'dateOfBirth',
-    'heightFeet',
+    'heightCm',
     'complexion',
     'communicationAddress',
     'alternateMobile',
@@ -587,7 +587,7 @@ function PersonalForm({
     void submitDraft(
       onSave({
         ...draft,
-        heightFeet: Number(draft.heightFeet) || undefined,
+        heightCm: Number(draft.heightCm) || undefined,
         // null, not undefined: an absent field is left alone by the server,
         // so emptying the box has to be said explicitly.
         alternateMobile: draft.alternateMobile || null,
@@ -631,8 +631,8 @@ function PersonalForm({
             />
           </Field>
         )}
-        <Field label="Height (feet)">
-          <HeightInput value={draft.heightFeet} onChange={(value) => set('heightFeet')({ target: { value } })} required />
+        <Field label="Height">
+          <HeightInput value={draft.heightCm} onChange={(value) => set('heightCm')({ target: { value } })} required />
         </Field>
         <Field label="Complexion">
           <select
@@ -1225,7 +1225,6 @@ function FamilyForm({
   initial,
   siblings,
   assets,
-  gender,
   onSave,
   onAddSibling,
   onRemoveSibling,
@@ -1248,7 +1247,7 @@ function FamilyForm({
   onRemoveAsset: (id: string) => void;
   storageKey?: string;
 }) {
-  const isGroom = gender === 'male';
+//  const  something = gender === 'male';
   const father = (initial?.father ?? {}) as Draft;
   const mother = (initial?.mother ?? {}) as Draft;
   // Only an edited draft is written (EZ1-I236); see createDraftGuard.
@@ -1495,11 +1494,7 @@ function FamilyForm({
           */}
           <Field
             label="Family net worth"
-            hint={
-              isGroom
-                ? 'Rupees. Required for groom profiles. Hidden unless you say otherwise.'
-                : 'Rupees. Optional, and hidden unless you say otherwise'
-            }
+            hint="Rupees. Optional, and hidden unless you say otherwise."
           >
             <input
               className="input mt-1"
@@ -1507,7 +1502,6 @@ function FamilyForm({
               min={0}
               value={String(values.familyNetWorth ?? '')}
               onChange={set('familyNetWorth')}
-              required={isGroom}
             />
           </Field>
           <label className="flex items-end gap-2 pb-2 text-sm">
@@ -1991,8 +1985,8 @@ function PreferencesForm({
       preferredPackageMax: initial?.preferredPackageMax ?? '',
       preferredAgeMin: initial?.preferredAgeMin ?? 24,
       preferredAgeMax: initial?.preferredAgeMax ?? 34,
-      preferredHeightMinFeet: initial?.preferredHeightMinFeet ?? 4.9,
-      preferredHeightMaxFeet: initial?.preferredHeightMaxFeet ?? 6.2,
+      preferredHeightMinCm: initial?.preferredHeightMinCm ?? 150,
+      preferredHeightMaxCm: initial?.preferredHeightMaxCm ?? 189,
       religion: prefs.religion ?? '',
       caste: prefs.caste ?? '',
       education: prefs.education ?? '',
@@ -2030,8 +2024,8 @@ function PreferencesForm({
           preferredPackageMax: values.preferredPackageMax === '' || values.preferredPackageMax == null ? null : Number(values.preferredPackageMax),
           preferredAgeMin: Number(values.preferredAgeMin),
           preferredAgeMax: Number(values.preferredAgeMax),
-          preferredHeightMinFeet: Number(values.preferredHeightMinFeet),
-          preferredHeightMaxFeet: Number(values.preferredHeightMaxFeet),
+          preferredHeightMinCm: Number(values.preferredHeightMinCm),
+          preferredHeightMaxCm: Number(values.preferredHeightMaxCm),
           preferences: {
             religion: values.religion || undefined,
             caste: values.caste || undefined,
@@ -2064,11 +2058,11 @@ function PreferencesForm({
         <Field label="Age to">
           <input className="input mt-1" type="number" min={18} max={100} value={String(values.preferredAgeMax ?? '')} onChange={set('preferredAgeMax')} required />
         </Field>
-        <Field label="Height from (feet)">
-          <HeightInput value={values.preferredHeightMinFeet} onChange={(value) => set('preferredHeightMinFeet')({ target: { value } })} required />
+        <Field label="Height from">
+          <HeightInput value={values.preferredHeightMinCm} onChange={(value) => set('preferredHeightMinCm')({ target: { value } })} required />
         </Field>
-        <Field label="Height to (feet)">
-          <HeightInput value={values.preferredHeightMaxFeet} onChange={(value) => set('preferredHeightMaxFeet')({ target: { value } })} required />
+        <Field label="Height to">
+          <HeightInput value={values.preferredHeightMaxCm} onChange={(value) => set('preferredHeightMaxCm')({ target: { value } })} required />
         </Field>
       </div>
       <div className="grid gap-5 sm:grid-cols-2">

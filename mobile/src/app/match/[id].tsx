@@ -8,6 +8,7 @@ import { api, apiMessage } from '@/lib/api';
 import { ageFrom, labelFor, stewardshipLine, type Stewardship } from '@/lib/labels';
 import { isChartImage } from '@/shared/horoscope';
 import { formatDate } from '@/shared/dates';
+import { formatHeight } from '@/shared/height';
 import { FAMILY_TYPE_LABEL, MARITAL_LABEL, OCCUPATION_LABEL } from '@/shared/permissions';
 import { DetailGrid, DetailRow } from '@/components/chrome';
 import {
@@ -167,9 +168,7 @@ export default function MatchProfile() {
           <DetailRow label="Occupation">
             {labelFor(OCCUPATION_LABEL, d.occupationStatus) ?? '—'}
           </DetailRow>
-          {typeof d.heightFeet === 'number' ? (
-            <DetailRow label="Height">{`${d.heightFeet} feet`}</DetailRow>
-          ) : null}
+          {d.heightCm != null ? <DetailRow label="Height">{formatHeight(d.heightCm)}</DetailRow> : null}
         </DetailGrid>
       </Card>
 

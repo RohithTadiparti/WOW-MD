@@ -20,7 +20,7 @@ describe('Package Range API', () => {
   const actors: { token: string; profile: Profile }[] = [];
   let candidate: Profile;
   let candidateToken: string;
-  const base = { preferredAgeMin: 18, preferredAgeMax: 100, preferredHeightMinFeet: 3.9, preferredHeightMaxFeet: 7.5 };
+  const base = { preferredAgeMin: 18, preferredAgeMax: 100, preferredHeightMinCm: 99, preferredHeightMaxCm: 229 };
 
   beforeAll(async () => {
     const module = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -60,7 +60,7 @@ describe('Package Range API', () => {
     const http = () => request(app.getHttpServer());
     await http().put(`/api/profiles/${candidate.id}/details/education`)
       .set('Authorization', `Bearer ${candidateToken}`)
-      .send({ highestQualification: 'Masters', course: 'Engineering', occupationStatus: 'employed', employment: { salary: '1200000' }, incomeVisible: false }).expect(200);
+      .send({ highestQualification: 'Masters', course: 'Engineering', occupationStatus: 'employed', employment: { salary: '1200000' }, incomeVisible: true }).expect(200);
     for (const actor of actors) {
       const save = (bounds: object) => http().put(`/api/profiles/${actor.profile.id}/details/preferences`)
         .set('Authorization', `Bearer ${actor.token}`).send({ ...base, ...bounds });
@@ -74,20 +74,22 @@ describe('Package Range API', () => {
 
       await save({ preferredPackageMin: 1200000, preferredPackageMax: 1200000 }).expect(200);
       expect((await read().expect(200)).body.details).toMatchObject({ preferredPackageMin: 1200000, preferredPackageMax: 1200000 });
-      expect(containsCandidate(await find().expect(200))).toBe(true);
+      const unfiltered = await find().expect(200);
+      expect(containsCandidate(unfiltered)).toBe(true);
+      expect(JSON.stringify(unfiltered.body)).not.toContain('1200000');
       // A different person's salary edit must invalidate this viewer's cached list.
       await http().put(`/api/profiles/${candidate.id}/details/education`)
         .set('Authorization', `Bearer ${candidateToken}`)
         .send({ highestQualification: 'Masters', course: 'Engineering', occupationStatus: 'employed', employment: {}, incomeVisible: false }).expect(200);
-      expect(containsCandidate(await find().expect(200))).toBe(false);
+      expect(containsCandidate(await find().expect(200))).toBe(true);
       await http().put(`/api/profiles/${candidate.id}/details/education`)
         .set('Authorization', `Bearer ${candidateToken}`)
-        .send({ highestQualification: 'Masters', course: 'Engineering', occupationStatus: 'employed', employment: { salary: '1200000' }, incomeVisible: false }).expect(200);
+        .send({ highestQualification: 'Masters', course: 'Engineering', occupationStatus: 'employed', employment: { salary: '1200000' }, incomeVisible: true }).expect(200);
       expect(containsCandidate(await find().expect(200))).toBe(true);
       expect(containsCandidate(await find({ packageMin: 1200001, packageMax: 1500000 }).expect(200))).toBe(false);
       expect(containsCandidate(await find({ packageMin: 0, packageMax: 1200000 }).expect(200))).toBe(true);
       await save({ preferredPackageMin: 1200001, preferredPackageMax: 1500000 }).expect(200);
-      expect(containsCandidate(await find().expect(200))).toBe(false);
+      expect(containsCandidate(await find().expect(200))).toBe(true);
       await save({}).expect(200);
       expect((await read().expect(200)).body.details.preferredPackageMin).toBe(1200001);
       await save({ preferredPackageMin: 1600000 }).expect(400);

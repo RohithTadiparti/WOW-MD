@@ -121,10 +121,10 @@ export default function ProfilePreview({
   })();
 
   const name = data?.profile.displayName ?? 'Profile';
-  const heightFeet = str('heightFeet');
+  const heightCm = str('heightCm');
   const facts = [
     age ? `${age} years` : data?.profile.ageRange || null,
-    heightFeet ? formatHeight(heightFeet) : null,
+    heightCm ? formatHeight(heightCm) : null,
     data?.profile.city || null,
   ].filter(Boolean) as string[];
 

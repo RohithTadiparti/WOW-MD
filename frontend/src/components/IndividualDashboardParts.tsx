@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { TYPE_LABEL, describe, type Notification } from '../lib/notification-copy';
 import { ArrowRight } from '@phosphor-icons/react';
+import { AnimatedCounter, AnimatedProgress } from './ui/Motion';
 
 /**
  * The presentational leaves of the individual dashboard, kept out of the data
@@ -88,7 +89,7 @@ export function Stat({
       <p
         className={`mt-1.5 font-mono text-[1.75rem] font-semibold leading-none tracking-[-0.02em] ${tone ?? 'text-brand-strong'}`}
       >
-        {value}
+        {typeof value === 'number' ? <AnimatedCounter value={value} /> : value}
       </p>
     </Link>
   );
@@ -121,10 +122,7 @@ export function Progress({
         <p className="font-mono text-lg font-semibold leading-none text-brand-strong">{pct}%</p>
       </div>
       <div className="mt-2 h-1.5 w-full rounded-sm bg-gray-100">
-        <div
-          className={`h-1.5 rounded-sm ${progressColor}`}
-          style={{ width: `${pct}%` }}
-        />
+        <AnimatedProgress value={pct} className={`h-1.5 w-full rounded-sm ${progressColor}`} />
       </div>
       <p className="mt-1.5 text-xs text-gray-500">{hint}</p>
     </Link>

@@ -1,4 +1,4 @@
-import { parseFeetQuery } from '../../../common/util/height';
+import { parseHeightCmQuery } from '../../../common/util/height';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
@@ -112,12 +112,12 @@ export class PersonalDetailsDto {
   @IsAdultDate(18, { message: 'The bride/groom must be at least 18 years old' })
   dateOfBirth?: string;
 
-  @ApiProperty({ example: 5.6, minimum: 3, maximum: 8, description: 'Decimal feet (one decimal place)' })
-  @Transform(({ obj, key }) => parseFeetQuery(obj[key]))
-  @IsNumber({ maxDecimalPlaces: 1 })
-  @Min(3)
-  @Max(8)
-  heightFeet: number;
+  @ApiProperty({ example: 168, minimum: 91, maximum: 244, description: 'Height in whole centimetres' })
+  @Transform(({ obj, key }) => parseHeightCmQuery(obj[key]))
+  @IsInt()
+  @Min(91)
+  @Max(244)
+  heightCm: number;
 
   /**
    * One of a closed list. Free text made this unmatchable: "Fair", "fair" and
@@ -645,19 +645,19 @@ export class PartnerPreferencesDto {
   @Max(100)
   preferredAgeMax: number;
 
-  @ApiProperty({ minimum: 3, maximum: 8, description: 'Decimal feet (one decimal place)' })
-  @Transform(({ obj, key }) => parseFeetQuery(obj[key]))
-  @IsNumber({ maxDecimalPlaces: 1 })
-  @Min(3)
-  @Max(8)
-  preferredHeightMinFeet: number;
+  @ApiProperty({ minimum: 91, maximum: 244, description: 'Height in whole centimetres' })
+  @Transform(({ obj, key }) => parseHeightCmQuery(obj[key]))
+  @IsInt()
+  @Min(91)
+  @Max(244)
+  preferredHeightMinCm: number;
 
-  @ApiProperty({ minimum: 3, maximum: 8, description: 'Decimal feet (one decimal place)' })
-  @Transform(({ obj, key }) => parseFeetQuery(obj[key]))
-  @IsNumber({ maxDecimalPlaces: 1 })
-  @Min(3)
-  @Max(8)
-  preferredHeightMaxFeet: number;
+  @ApiProperty({ minimum: 91, maximum: 244, description: 'Height in whole centimetres' })
+  @Transform(({ obj, key }) => parseHeightCmQuery(obj[key]))
+  @IsInt()
+  @Min(91)
+  @Max(244)
+  preferredHeightMaxCm: number;
 
   @ApiPropertyOptional({
     type: Object,

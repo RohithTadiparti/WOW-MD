@@ -17,6 +17,7 @@ import GetStarted from '../components/GetStarted';
 import VendorDashboard from '../components/VendorDashboard';
 import IndividualDashboard from '../components/IndividualDashboard';
 import { ArrowRight } from '@phosphor-icons/react';
+import { AnimatedCard, AnimatedCounter } from '../components/ui/Motion';
 import {
   Bell,
   CalendarCheck,
@@ -877,21 +878,17 @@ function Counter({
   tone?: string;
 }) {
   return (
-    <Link
-      to={to}
-      className="group rounded-lg border border-gray-200 bg-surface p-4 transition-[border-color,box-shadow] duration-200 hover:border-gray-300 hover:shadow-card"
-    >
-      <p className="truncate text-[0.8125rem] text-gray-500">{label}</p>
-      {/*
-        Mono and tabular. These sit in a row and get compared against each
-        other; proportional digits make a column of numbers ripple.
-      */}
-      <p
-        className={`mt-1.5 font-mono text-[1.75rem] font-medium leading-none tracking-[-0.02em] ${tone ?? 'text-gray-900'}`}
+    <AnimatedCard intensity="low" className="h-full">
+      <Link
+        to={to}
+        className="group block h-full rounded-lg border border-gray-200 bg-surface p-4 transition-[border-color,box-shadow] duration-200 hover:border-gray-300 hover:shadow-card"
       >
-        {value}
-      </p>
-    </Link>
+        <p className="truncate text-[0.8125rem] text-gray-500">{label}</p>
+        <p className={`mt-1.5 font-mono text-[1.75rem] font-medium leading-none tracking-[-0.02em] ${tone ?? 'text-gray-900'}`}>
+          {typeof value === 'number' ? <AnimatedCounter value={value} /> : value}
+        </p>
+      </Link>
+    </AnimatedCard>
   );
 }
 
@@ -907,13 +904,15 @@ function PlannerMetric({
   tone: string;
 }) {
   return (
-    <Link
-      to={to}
-      className={`group rounded-lg border border-gray-200 bg-gradient-to-br ${tone} p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-card`}
-    >
-      <p className="truncate text-[0.8125rem] font-medium text-gray-600">{label}</p>
-      <p className="mt-2 font-mono text-[1.75rem] font-medium leading-none text-gray-900">{value}</p>
-    </Link>
+    <AnimatedCard intensity="medium" className="h-full">
+      <Link
+        to={to}
+        className={`group block h-full rounded-lg border border-gray-200 bg-gradient-to-br ${tone} p-4 shadow-sm transition-all duration-200 hover:border-gray-300 hover:shadow-card`}
+      >
+        <p className="truncate text-[0.8125rem] font-medium text-gray-600">{label}</p>
+        <p className="mt-2 font-mono text-[1.75rem] font-medium leading-none text-gray-900">{typeof value === 'number' ? <AnimatedCounter value={value} /> : value}</p>
+      </Link>
+    </AnimatedCard>
   );
 }
 
@@ -931,16 +930,18 @@ function OfficerMetric({
   gradient: string;
 }) {
   return (
-    <Link
-      to={to}
-      className={`group rounded-lg border border-gray-200 bg-gradient-to-br ${gradient} p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-card`}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <p className="truncate text-[0.8125rem] font-medium text-gray-600">{label}</p>
-        <Icon size={20} weight="duotone" className="shrink-0 text-brand-dark" aria-hidden />
-      </div>
-      <p className="mt-2 font-mono text-[1.75rem] font-medium leading-none text-gray-900">{value}</p>
-    </Link>
+    <AnimatedCard intensity="low" className="h-full">
+      <Link
+        to={to}
+        className={`group block h-full rounded-lg border border-gray-200 bg-gradient-to-br ${gradient} p-4 shadow-sm transition-all duration-200 hover:border-gray-300 hover:shadow-card`}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <p className="truncate text-[0.8125rem] font-medium text-gray-600">{label}</p>
+          <Icon size={20} weight="duotone" className="shrink-0 text-brand-dark" aria-hidden />
+        </div>
+        <p className="mt-2 font-mono text-[1.75rem] font-medium leading-none text-gray-900">{typeof value === 'number' ? <AnimatedCounter value={value} /> : value}</p>
+      </Link>
+    </AnimatedCard>
   );
 }
 
@@ -959,15 +960,17 @@ function AgentMetric({ label, value, to, icon: Icon, gradient }: {
   gradient: string;
 }) {
   return (
-    <Link
-      to={to}
-      className={`group rounded-lg border border-gray-200 bg-gradient-to-br ${gradient} p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-card`}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <p className="truncate text-[0.8125rem] font-medium text-gray-600">{label}</p>
-        <Icon size={20} weight="duotone" className="shrink-0 text-brand-dark" aria-hidden />
-      </div>
-      <p className="mt-2 font-mono text-[1.75rem] font-medium leading-none text-gray-900">{value}</p>
-    </Link>
+    <AnimatedCard intensity="medium" className="h-full">
+      <Link
+        to={to}
+        className={`group block h-full rounded-lg border border-gray-200 bg-gradient-to-br ${gradient} p-4 shadow-sm transition-all duration-200 hover:border-gray-300 hover:shadow-card`}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <p className="truncate text-[0.8125rem] font-medium text-gray-600">{label}</p>
+          <Icon size={20} weight="duotone" className="shrink-0 text-brand-dark" aria-hidden />
+        </div>
+        <p className="mt-2 font-mono text-[1.75rem] font-medium leading-none text-gray-900">{typeof value === 'number' ? <AnimatedCounter value={value} /> : value}</p>
+      </Link>
+    </AnimatedCard>
   );
 }

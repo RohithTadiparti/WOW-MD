@@ -73,7 +73,7 @@ interface ProfileDetail {
   /** Personal facts kept on the biodata table, not the profile row (EZ1-I194). */
   details: {
     maritalStatus: string | null;
-    heightFeet: number | null;
+    heightCm: number | null;
     highestQualification: string | null;
     occupationStatus: string | null;
   } | null;
@@ -161,7 +161,7 @@ export default function AdminProfileDetail() {
           <Row label="Date of birth">{p.dateOfBirth ? formatDate(p.dateOfBirth) : '—'}</Row>
           <Row label="Age">{age !== null ? `${age} yrs` : '—'}</Row>
           <Row label="Marital status">{label(d?.maritalStatus)}</Row>
-          <Row label="Height">{d?.heightFeet ? formatHeight(d.heightFeet) : '—'}</Row>
+          <Row label="Height">{d?.heightCm ? formatHeight(d.heightCm) : '—'}</Row>
           <Row label="Education">{dash(d?.highestQualification)}</Row>
           <Row label="Occupation">{label(d?.occupationStatus)}</Row>
           <Row label="City">{dash(p.city)}</Row>

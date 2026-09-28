@@ -36,98 +36,71 @@
    * neutral ramp leans warm toward both, so the greys read as chosen.
    */
   :root {
-    /* Public WOW palette. Keep these names stable so portal-specific work can
-     * add personality without creating a second colour system. */
-    --wow-ivory: 250 246 240;
-    --wow-champagne: 239 225 208;
-    --wow-burgundy: 112 8 47;
-    --wow-rose: 196 38 94;
-    --wow-gold: 219 166 91;
-    --wow-warm-gold: 239 183 112;
-    --wow-charcoal: 48 38 39;
-    --wow-muted-text: 112 96 94;
-    --wow-border: 225 207 190;
-
     /* Warm plum-brown, from the template's text colours: #241017 at the top,
      * #4F3B40 for running text, and hairlines that are that ink at 14%. */
-    --ink-50: var(--wow-ivory);
-    --ink-100: 246 239 232;
-    --ink-200: var(--wow-champagne);
-    --ink-300: var(--wow-border);
-    --ink-400: 183 160 151;
-    --ink-500: 143 121 115;
-    --ink-600: var(--wow-muted-text);
-    --ink-700: 82 65 65;
-    --ink-800: 59 44 44;
-    --ink-900: var(--wow-charcoal);
-    --ink-950: 35 24 25;
+    --ink-50: 247 242 234;
+    --ink-100: 241 234 224;
+    --ink-200: 226 217 208;
+    --ink-300: 205 193 188;
+    --ink-400: 160 145 145;
+    --ink-500: 124 107 110;
+    --ink-600: 98 80 85;
+    --ink-700: 79 59 64;
+    --ink-800: 56 37 43;
+    --ink-900: 36 16 23;
+    --ink-950: 24 10 15;
 
     /* The accent ramp keeps its old name, rose, so no utility changes. The
      * template's maroon, #6E1026, at 600; #8A1230 at 500. */
-    --rose-50: 255 242 239;
-    --rose-100: 252 222 222;
-    --rose-200: 246 181 191;
-    --rose-300: 232 112 137;
-    --rose-400: 215 65 111;
-    --rose-500: var(--wow-rose);
-    --rose-600: var(--wow-burgundy);
-    --rose-700: 157 22 71;
-    --rose-800: 125 15 55;
-    --rose-900: 91 8 39;
+    --rose-50: 248 236 233;
+    --rose-100: 240 220 214;
+    --rose-200: 227 188 188;
+    --rose-300: 204 139 148;
+    --rose-400: 170 72 92;
+    --rose-500: 138 18 48;
+    --rose-600: 110 16 38;
+    --rose-700: 88 12 30;
+    --rose-800: 68 9 23;
+    --rose-900: 50 7 17;
 
     /* Struck gold: the numerals, rules and heart outlines. Ornament only,
      * never text on the ground, where it is too light to read. */
-    --gold: var(--wow-gold);
-    --gold-lit: var(--wow-warm-gold);
-    --gold-deep: 157 103 43;
+    --gold: 169 131 47;
+    --gold-lit: 217 180 95;
+    --gold-deep: 122 90 28;
 
     /* Semantic hues, deliberately separate from the accent. A status colour
      * that doubles as the brand colour cannot signal anything. */
-    --positive-fg: 20 112 91;
-    --positive-bg: 224 247 239;
-    --info-fg: 124 54 91;
-    --info-bg: 250 226 236;
-    --caution-fg: 146 77 11;
-    --caution-bg: 255 242 218;
-    --critical-fg: 164 35 45;
-    --critical-bg: 255 230 227;
-    --wow-primary: var(--wow-rose);
-    --wow-primary-light: var(--rose-400);
-    --wow-accent-gold: var(--wow-gold);
-    --wow-accent-warm: var(--wow-warm-gold);
-    --wow-bg-main: var(--wow-ivory);
-    --wow-bg-secondary: var(--wow-champagne);
-    --wow-surface: var(--surface);
-    --wow-text-main: var(--wow-charcoal);
-    --wow-text-muted: var(--wow-muted-text);
-    --wow-success: var(--positive-fg);
-    --wow-success-bg: var(--positive-bg);
-    --wow-error: var(--critical-fg);
-    --wow-error-bg: var(--critical-bg);
+    --positive-fg: 21 94 76;
+    --positive-bg: 226 243 237;
+    --caution-fg: 124 74 12;
+    --caution-bg: 250 240 222;
+    --critical-fg: 176 42 28;
+    --critical-bg: 253 232 228;
 
     /* ---------------------------------------------------------- tier 2 --
      * Semantic tokens. Components only ever read these.
      */
     /* Ivory and white: the ground is warm so white panels read as panels. */
-    --canvas: var(--wow-ivory);
-    --surface: 255 251 247;
-    --surface-raised: 255 253 250;
-    --surface-sunken: var(--wow-champagne);
-    --border: 231 215 199;
-    --border-strong: 211 185 165;
+    --canvas: 250 246 239;
+    --surface: 255 255 255;
+    --surface-raised: 255 255 255;
+    --surface-sunken: 246 239 228;
+    --border: var(--ink-200);
+    --border-strong: var(--ink-300);
 
     --brand: var(--rose-600);
     --brand-strong: var(--rose-700);
-    --brand-soft: var(--rose-100);
+    --brand-soft: var(--rose-50);
     /* What sits ON the accent. The ivory ground here, near-black in dark mode,
      * because the accent lifts in dark mode and light text on it fails. */
-    --brand-fg: 255 255 255;
+    --brand-fg: 250 246 239;
 
     --focus: var(--rose-400);
 
     /* Shadows tinted to the ground rather than pure black. A black shadow on a
      * pink-white canvas reads as a hole punched in the page. */
-    --shadow-color: 91 34 51;
+    --shadow-color: 36 16 23;
 
     /*
      * The one colour that does not invert.
@@ -142,48 +115,46 @@
     --scrim: 14 8 11;
 
     /* Near-square, as the template draws everything: ruled, not rounded. */
-    --radius-sm: 0.5rem;
-    --radius-md: 0.625rem;
-    --radius-lg: 1rem;
+    --radius-sm: 0.125rem; /* inputs, chips */
+    --radius-md: 0.125rem; /* buttons */
+    --radius-lg: 0.25rem; /* cards, panels */
 
     color-scheme: light;
   }
 
   /*
-   * Dark mode is the same template by candlelight: the ground turns to a deep
-   * plum, panels take the template's own ink (#241017), running text is its
-   * ivory, and the accent passes from maroon to struck gold — the one pairing
-   * of the palette that holds its contrast on a dark ground. Nothing below
-   * this block knows which mode it is in.
+   * Dark mode swaps tier 1 and a handful of tier 2. Nothing below this block
+   * knows which mode it is in, which is the entire point: a component that
+   * hard-codes a dark colour is a component that will be wrong in one mode.
    *
-   * The accent ramp runs maroon → gold in dark mode: its low steps are the
-   * soft backgrounds (maroon tints, where the light theme has blush), its high
-   * steps the foregrounds (gold, then pale gold). Hand-set, not inverted, so
-   * hierarchy survives.
+   * The ramp is inverted but not mirrored. A straight inversion produces muddy
+   * mid-tones and a washed accent; these are hand-set so hierarchy survives.
    */
   .dark {
-    --ink-50: 36 18 25;
-    --ink-100: 46 24 32;
-    --ink-200: 64 38 47;
-    --ink-300: 88 60 68;
-    --ink-400: 126 100 105;
-    --ink-500: 162 140 141;
-    --ink-600: 192 175 172;
-    --ink-700: 218 206 198;
-    --ink-800: 237 229 219;
-    --ink-900: 250 246 239;
-    --ink-950: 255 252 247;
+    --ink-50: 30 21 23;
+    --ink-100: 40 29 32;
+    --ink-200: 55 42 45;
+    --ink-300: 80 64 67;
+    --ink-400: 117 100 101;
+    --ink-500: 155 139 137;
+    --ink-600: 186 172 167;
+    --ink-700: 212 201 193;
+    --ink-800: 232 224 214;
+    --ink-900: 245 239 229;
+    --ink-950: 250 246 239;
 
-    --rose-50: 54 15 27;
-    --rose-100: 72 19 35;
-    --rose-200: 98 25 45;
-    --rose-300: 138 18 48;
-    --rose-400: 190 146 74;
-    --rose-500: 217 180 95;
-    --rose-600: 232 204 138;
-    --rose-700: 240 219 170;
-    --rose-800: 246 233 202;
-    --rose-900: 251 244 226;
+    /* The accent lifts rather than inverting: maroon on a near-black ground is
+     * a smear, so it to a readable rose on the dark ground. */
+    --rose-50: 45 17 24;
+    --rose-100: 60 21 31;
+    --rose-200: 84 28 42;
+    --rose-300: 118 38 58;
+    --rose-400: 168 66 88;
+    --rose-500: 214 122 138;
+    --rose-600: 230 152 165;
+    --rose-700: 240 182 191;
+    --rose-800: 246 210 215;
+    --rose-900: 250 230 233;
 
     --gold: 201 164 86;
     --gold-lit: 232 200 128;
@@ -191,15 +162,13 @@
 
     --positive-fg: 126 214 186;
     --positive-bg: 17 48 40;
-    --info-fg: 240 182 191;
-    --info-bg: 60 21 31;
     --caution-fg: 226 186 116;
     --caution-bg: 54 41 18;
     --critical-fg: 250 160 146;
     --critical-bg: 64 26 22;
 
     --canvas: 20 13 15;
-    --surface: 55 32 39;
+    --surface: 30 21 23;
     --surface-raised: 38 27 30;
     --surface-sunken: 24 16 18;
     --border: 52 40 42;
@@ -207,9 +176,8 @@
 
     --brand: var(--rose-500);
     --brand-strong: var(--rose-600);
-    --brand-soft: var(--rose-50);
-    /* Gold carries plum type, as ivory type sits on the light theme's maroon. */
-    --brand-fg: 26 11 17;
+    --brand-soft: var(--rose-100);
+    --brand-fg: 30 8 14;
 
     --focus: var(--rose-400);
     --shadow-color: 0 0 0;
@@ -236,8 +204,6 @@
     transition:
       background-color 0.3s ease,
       color 0.3s ease;
-    background-image: radial-gradient(circle at 88% 0%, rgb(var(--rose-100) / 0.5), transparent 30rem),
-      linear-gradient(135deg, rgb(var(--wow-ivory)) 0%, rgb(var(--wow-champagne) / 0.34) 100%);
   }
 
   /* Numbers, codes and identifiers. Profile codes are read aloud over the
@@ -272,9 +238,6 @@
    * Cormorant at those sizes turns spindly. */
   .font-serif {
     letter-spacing: 0;
-    /* Cormorant's default figures are old-style, where 1 reads as I and 0 as
-     * O — fine in running prose, wrong on a count or a price. */
-    font-variant-numeric: lining-nums;
   }
 
   /* One visible focus treatment for the whole app. Keyboard users get a ring
@@ -309,21 +272,19 @@
    * to make a considered page look assembled.
    */
 
-  /* The template's buttons: 12px Karla at 500, capitals tracked 0.18em, a
-   * 46px target, square and flat. */
   .btn {
     @apply inline-flex select-none items-center justify-center gap-2 whitespace-nowrap
-      rounded-[--radius-md] bg-brand px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.12em] text-brand-fg
-      shadow-lifted transition-[transform,background-color,box-shadow] duration-150
-      hover:-translate-y-px hover:bg-brand-strong hover:shadow-pop active:translate-y-px active:shadow-none
+      rounded-[--radius-md] bg-brand px-5 py-2.5 text-xs font-medium uppercase tracking-[0.16em] text-brand-fg
+      shadow-btn transition-[transform,background-color,box-shadow] duration-150
+      hover:bg-brand-strong active:translate-y-px active:shadow-none
       disabled:pointer-events-none disabled:opacity-45;
   }
 
   .btn-outline {
     @apply inline-flex select-none items-center justify-center gap-2 whitespace-nowrap
-      rounded-[--radius-md] border border-brand/35 bg-surface-raised px-5 py-2.5 text-xs
-      font-semibold uppercase tracking-[0.12em] text-brand-strong transition-[transform,background-color,border-color] duration-150
-      hover:-translate-y-px hover:border-brand hover:bg-brand/10 active:translate-y-px
+      rounded-[--radius-md] border border-gray-300 bg-surface px-5 py-2.5 text-xs
+      font-medium uppercase tracking-[0.16em] text-gray-700 transition-[transform,background-color,border-color] duration-150
+      hover:border-gray-400 hover:bg-gray-100 active:translate-y-px
       disabled:pointer-events-none disabled:opacity-45;
   }
 
@@ -343,179 +304,39 @@
    * repeated, and repetition is what decides how loud a control should be.
    */
   .btn-sm {
-    @apply min-h-[2.25rem] px-3.5 py-1.5 text-[0.6875rem] tracking-[0.14em];
-  }
-
-  /* The template's fields: 48px tall, a hairline at the ink's 28%, 15px text
-   * on the panel colour, square. */
-  .btn:focus-visible,
-  .btn-outline:focus-visible,
-  .btn-ghost:focus-visible {
-    outline-offset: 3px;
-  }
-
-  .portal-shell button:disabled,
-  .portal-shell input:disabled,
-  .portal-shell select:disabled,
-  .portal-shell textarea:disabled {
-    cursor: not-allowed;
+    @apply px-3 py-1.5 text-[0.6875rem] tracking-[0.12em];
   }
 
   .input {
-    @apply min-h-12 w-full rounded-[--radius-sm] border border-gray-300 bg-surface-raised px-3 py-2.5
-      text-[0.9375rem] text-gray-900 transition-[border-color,box-shadow] duration-150
+    @apply w-full rounded-[--radius-sm] border border-gray-300 bg-surface px-3 py-2.5
+      text-sm text-gray-900 transition-[border-color,box-shadow] duration-150
       placeholder:text-gray-400
       focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/12
       disabled:opacity-55;
   }
 
-  .portal-shell form input:not([type='checkbox']):not([type='radio']):not([type='file']),
-  .portal-shell form select,
-  .portal-shell form textarea {
-    border-color: rgb(var(--border-strong));
-    background-color: rgb(var(--surface));
-    color: rgb(var(--wow-text-main));
-  }
-
-  .portal-shell form input:not([type='checkbox']):not([type='radio']):not([type='file']):focus,
-  .portal-shell form select:focus,
-  .portal-shell form textarea:focus {
-    border-color: rgb(var(--wow-primary));
-    box-shadow: 0 0 0 4px rgb(var(--wow-primary) / 0.12);
-    outline: none;
-  }
-
   select.input {
     @apply cursor-pointer appearance-none bg-[length:1.1em] bg-[right_0.6rem_center] bg-no-repeat pr-9;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237C6B6E' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238A9894' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   }
 
   .card {
-    @apply rounded-[--radius-lg] border border-gold/35 bg-surface p-5 shadow-lifted;
-    box-shadow: 0 1px 0 rgb(var(--wow-gold) / 0.18), 0 10px 30px rgb(var(--shadow-color) / 0.08);
+    @apply rounded-[--radius-lg] border border-gray-200 bg-surface p-5 shadow-card;
   }
 
   /* For the one or two places that genuinely need to sit above a card. */
   .card-raised {
-    @apply rounded-[--radius-lg] border border-gold/40 bg-surface-raised p-5 shadow-pop;
-  }
-
-  /* The template's field label: 11px capitals tracked 0.22em, above the field. */
-  /* -------------------------------------------------------- portal layer --
-   * The shell keeps one WOW identity while these modes tune composition for
-   * the job at hand. They intentionally share tokens and controls; only
-   * density, hierarchy and depth change by portal.
-   */
-  .portal-shell {
-    background:
-      linear-gradient(180deg, rgb(var(--surface) / 0.32), transparent 18rem),
-      rgb(var(--canvas));
-  }
-
-  .portal-shell[data-portal='individual'] {
-    --portal-radius: 0.75rem;
-    background:
-      radial-gradient(circle at 92% 4%, rgb(var(--wow-accent-warm) / 0.12), transparent 20rem),
-      linear-gradient(180deg, rgb(var(--wow-primary) / 0.06), transparent 22rem),
-      rgb(var(--canvas));
-  }
-
-  .portal-shell[data-portal='individual'] .card,
-  .portal-shell[data-portal='individual'] .card-raised {
-    border-radius: var(--portal-radius);
-    box-shadow: 0 12px 34px -28px rgb(var(--wow-primary) / 0.5);
-  }
-
-  .portal-shell[data-portal='individual'] .page-title {
-    color: rgb(var(--wow-primary));
-  }
-
-  .portal-shell[data-portal='planner'] .card,
-  .portal-shell[data-portal='planner'] .card-raised {
-    border-top: 2px solid rgb(var(--wow-accent-gold) / 0.75);
-  }
-
-  .portal-shell[data-portal='planner'] .page-title {
-    color: rgb(var(--wow-text-main));
-  }
-
-  .portal-shell[data-portal='vendor'],
-  .portal-shell[data-portal='agent'],
-  .portal-shell[data-portal='verification'] {
-    --portal-content-width: 78rem;
-  }
-
-  .portal-shell[data-portal='vendor'] .card,
-  .portal-shell[data-portal='agent'] .card,
-  .portal-shell[data-portal='verification'] .card {
-    border-radius: 0.375rem;
-    box-shadow: none;
-  }
-
-  .portal-shell[data-portal='vendor'] .page-title,
-  .portal-shell[data-portal='agent'] .page-title,
-  .portal-shell[data-portal='verification'] .page-title {
-    font-family: 'Karla', 'Helvetica Neue', ui-sans-serif, sans-serif;
-    font-size: clamp(1.65rem, 1.2rem + 1vw, 2.25rem);
-    font-weight: 600;
-    color: rgb(var(--wow-text-main));
-  }
-
-  .portal-shell[data-portal='admin'] .card,
-  .portal-shell[data-portal='admin'] .card-raised {
-    border-radius: 0.25rem;
-    box-shadow: none;
-  }
-
-  .portal-shell[data-portal='admin'] .page-title {
-    font-family: 'Karla', 'Helvetica Neue', ui-sans-serif, sans-serif;
-    font-size: clamp(1.5rem, 1.15rem + 0.8vw, 2rem);
-    font-weight: 600;
-    color: rgb(var(--wow-text-main));
-  }
-
-  .portal-shell[data-portal='admin'] .section-title {
-    font-size: 0.875rem;
-    letter-spacing: 0.01em;
-  }
-
-  .portal-shell[data-portal='admin'] .btn,
-  .portal-shell[data-portal='admin'] .btn-outline,
-  .portal-shell[data-portal='admin'] .btn-sm {
-    border-radius: 0.25rem;
-    letter-spacing: 0.08em;
-  }
-
-  @media (max-width: 639px) {
-    .portal-shell main {
-      overflow-x: clip;
-    }
-
-    .portal-shell[data-portal='individual'] .card,
-    .portal-shell[data-portal='individual'] .card-raised {
-      padding: 1rem;
-    }
+    @apply rounded-[--radius-lg] border border-gray-200 bg-surface-raised p-5 shadow-lifted;
   }
 
   .label {
-    @apply mb-2 block text-[0.6875rem] font-normal uppercase tracking-[0.22em] text-gray-600;
-  }
-
-  /*
-   * The other way fields are written here: a <label> wrapping its caption in a
-   * <span> and the control after it. Forty-odd forms use that shape, so the
-   * caption takes the template's label from the shape rather than from a class
-   * each of them would have to remember.
-   */
-  label:has(.input) > span:first-child {
-    @apply mb-1 block text-[0.6875rem] font-normal uppercase tracking-[0.22em] text-gray-600;
+    @apply mb-1.5 block text-[0.8125rem] font-medium text-gray-700;
   }
 
   /* A page title and its one-line explanation, used at the top of every
    * screen. Written once so the app has a single masthead rhythm. */
   .page-title {
-    @apply plate w-fit border-l-4 border-gold pl-3 font-serif text-[2rem] font-medium leading-[1.1] text-gray-900 sm:text-[2.5rem];
-    text-wrap: balance;
+    @apply plate w-fit font-serif text-[2rem] font-normal leading-[1.1] text-brand sm:text-[2.5rem];
   }
 
   /* Clears the heart field from behind a run of text: a patch of the ground
@@ -537,17 +358,18 @@
 
   /* The template's small uppercase line above or beside a heading. */
   .eyebrow {
-    @apply text-[0.6875rem] uppercase tracking-[0.3em] text-brand-strong;
+    @apply text-[0.6875rem] uppercase tracking-[0.3em] text-gray-600;
   }
 
   .page-subtitle {
     @apply plate mt-1 w-fit max-w-[65ch] text-sm leading-relaxed text-gray-500;
   }
 
-  /* Status tags. Square like everything else in the template; what tells a
-   * state from a control is that it has no border and no hover. */
+  /* Status pills. Fully round, which is the documented exception to the
+   * radius scale: a pill reads as a state, a rounded rectangle reads as a
+   * control you can press. */
   .pill {
-    @apply inline-flex items-center gap-1.5 rounded-[--radius-sm] px-2.5 py-1 text-xs font-medium tracking-[0.02em];
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;
   }
   .pill-neutral {
     @apply pill bg-gray-100 text-gray-600;
@@ -594,128 +416,6 @@
     @apply alert bg-surface-sunken text-gray-600;
   }
 
-  .portal-shell table {
-    border-collapse: separate;
-    border-spacing: 0;
-    color: rgb(var(--wow-text-main));
-  }
-
-  .portal-shell thead {
-    background-color: rgb(var(--wow-bg-secondary) / 0.45);
-  }
-
-  .portal-shell th {
-    color: rgb(var(--wow-text-muted));
-    font-size: 0.6875rem;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  .portal-shell tbody tr {
-    border-color: rgb(var(--border));
-    transition: background-color 150ms ease;
-  }
-
-  .portal-shell tbody tr:hover {
-    background-color: rgb(var(--wow-primary) / 0.04);
-  }
-
-  .portal-shell [role='dialog'] {
-    border-color: rgb(var(--border-strong));
-    background-color: rgb(var(--wow-surface));
-    color: rgb(var(--wow-text-main));
-  }
-
-  .portal-shell [role='tab'][aria-selected='true'] {
-    color: rgb(var(--wow-primary));
-    border-color: rgb(var(--wow-primary));
-  }
-
-  /* The rail supports the work; the header and content establish the product. */
-  .portal-header {
-    box-shadow: 0 1px 0 rgb(var(--wow-gold) / 0.16);
-  }
-
-  .portal-shell main {
-    min-width: 0;
-  }
-
-  .portal-shell[data-portal='individual'] main {
-    background: radial-gradient(circle at 100% 0%, rgb(var(--rose-100) / 0.38), transparent 22rem);
-  }
-
-  .portal-shell[data-portal='individual'] .portal-header {
-    background-color: rgb(var(--surface) / 0.88);
-  }
-
-  .portal-shell[data-portal='individual'] main > div > header,
-  .portal-shell[data-portal='individual'] main > header {
-    background: linear-gradient(135deg, rgb(var(--rose-100) / 0.82), rgb(var(--surface) / 0.96));
-    border-color: rgb(var(--rose-200) / 0.75);
-    color: rgb(var(--wow-charcoal));
-  }
-
-  .portal-shell[data-portal='agent'] .card,
-  .portal-shell[data-portal='vendor'] .card {
-    border-color: rgb(var(--border) / 0.9);
-    box-shadow: 0 8px 24px -22px rgb(var(--shadow-color) / 0.6);
-  }
-
-  .portal-shell[data-portal='agent'] .section-title,
-  .portal-shell[data-portal='vendor'] .section-title {
-    font-family: 'Karla', 'Helvetica Neue', ui-sans-serif, sans-serif;
-    font-size: 0.95rem;
-    font-weight: 600;
-    letter-spacing: 0.01em;
-    color: rgb(var(--wow-charcoal));
-  }
-
-  .portal-shell[data-portal='agent'] .card {
-    border-left: 2px solid rgb(var(--rose-200) / 0.65);
-  }
-
-  .portal-shell[data-portal='vendor'] .card {
-    background: linear-gradient(145deg, rgb(var(--surface-raised)), rgb(var(--wow-ivory) / 0.75));
-  }
-
-  .portal-shell[data-portal='planner'] .portal-header {
-    background: linear-gradient(90deg, rgb(var(--surface) / 0.95), rgb(var(--wow-champagne) / 0.34));
-  }
-
-  .portal-shell[data-portal='planner'] .section-title {
-    color: rgb(var(--wow-charcoal));
-  }
-
-  .portal-shell[data-portal='verification'] .card {
-    border-radius: 0.625rem;
-    box-shadow: 0 3px 14px -14px rgb(var(--shadow-color) / 0.55);
-  }
-
-  .portal-shell[data-portal='verification'] .section-title {
-    font-family: 'Karla', 'Helvetica Neue', ui-sans-serif, sans-serif;
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: rgb(var(--wow-charcoal));
-  }
-
-  .portal-shell[data-portal='admin'] .portal-header {
-    background-color: rgb(var(--surface-raised) / 0.94);
-  }
-
-  .portal-shell[data-portal='admin'] .card {
-    border-color: rgb(var(--border) / 0.8);
-    box-shadow: 0 5px 18px -18px rgb(var(--shadow-color) / 0.7);
-  }
-
-  .portal-shell[data-portal='admin'] .section-title {
-    font-family: 'Karla', 'Helvetica Neue', ui-sans-serif, sans-serif;
-    font-size: 0.875rem;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    color: rgb(var(--wow-charcoal));
-  }
-
   /*
    * A heading inside a page, below the masthead.
    *
@@ -724,7 +424,7 @@
    * a shape. This is the quieter one.
    */
   .section-title {
-    @apply font-serif text-[1.5rem] font-normal leading-[1.15] tracking-normal text-brand;
+    @apply text-base font-semibold tracking-[-0.014em] text-gray-900;
   }
 
   /* The line under a section heading. Same relationship as the page subtitle. */
@@ -758,39 +458,6 @@
   .rule {
     @apply h-px w-full border-0;
     background: linear-gradient(90deg, transparent, rgb(var(--border)) 18%, rgb(var(--border)) 82%, transparent);
-  }
-
-  table {
-    @apply w-full border-collapse;
-  }
-
-  thead {
-    @apply border-b border-gold/35 bg-surface-sunken/45;
-  }
-
-  th {
-    @apply px-4 py-3 text-left text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-gray-500;
-  }
-
-  td {
-    @apply border-b border-gold/20 px-4 py-3 text-sm;
-  }
-
-  tbody tr {
-    @apply transition-colors hover:bg-brand-soft/35;
-  }
-
-  progress {
-    @apply h-2 overflow-hidden rounded-full bg-brand-soft;
-    accent-color: rgb(var(--brand));
-  }
-
-  progress::-webkit-progress-bar {
-    @apply rounded-full bg-brand-soft;
-  }
-
-  progress::-webkit-progress-value {
-    @apply rounded-full bg-brand;
   }
 }
 

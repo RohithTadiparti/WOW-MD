@@ -57,6 +57,7 @@ describe('BookingsService', () => {
     }),
     create: jest.fn((x) => x),
     count: jest.fn(async () => 0),
+    createQueryBuilder: jest.fn(),
   };
   const paymentsRepo = {
     findOne: jest.fn(async () => null),
@@ -137,6 +138,16 @@ describe('BookingsService', () => {
       status: BookingStatus.CONFIRMED,
       ...over,
     }) as Booking;
+
+  const countsBuilder = (rows: { status: string; count: string }[]) => {
+    const builder = {} as Record<string, jest.Mock>;
+    for (const method of ['select', 'addSelect', 'where', 'groupBy', 'leftJoin', 'andWhere']) {
+      builder[method] = jest.fn(() => builder);
+    }
+    builder.getRawMany = jest.fn(async () => rows);
+    builder.getCount = jest.fn(async () => 0);
+    return builder;
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -482,6 +493,27 @@ describe('BookingsService', () => {
       await expect(
         service.create(bride, { ...request, vendorServiceId: 's1' }),
       ).rejects.toThrow(/what you need/);
+    });
+  });
+
+  describe('booking counts', () => {
+    const threeEach = [
+      { status: BookingStatus.CONFIRMED, count: '3' },
+      { status: BookingStatus.IN_PROGRESS, count: '3' },
+      { status: BookingStatus.COMPLETED, count: '3' },
+      { status: BookingStatus.CANCELLED, count: '3' },
+    ];
+
+    it('counts each provider status once and preserves the total', async () => {
+      bookingsRepo.createQueryBuilder.mockReturnValue(countsBuilder(threeEach));
+      const counts = await service.incomingCounts(asUser('vendor-owner', UserRole.VENDOR));
+      expect(counts).toMatchObject({ all: 12, confirmed: 3, in_progress: 3, completed: 3, cancelled: 3 });
+    });
+
+    it('counts each buyer status once and preserves the total', async () => {
+      bookingsRepo.createQueryBuilder.mockReturnValue(countsBuilder(threeEach));
+      const counts = await service.buyerCounts(asUser('buyer', UserRole.BRIDE));
+      expect(counts).toMatchObject({ all: 12, confirmed: 3, in_progress: 3, completed: 3, cancelled: 3 });
     });
   });
 });

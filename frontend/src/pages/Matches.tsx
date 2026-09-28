@@ -1,5 +1,5 @@
 import HeightInput from '../components/HeightInput';
-import { formatHeight, parseHeight } from '../lib/height';
+import { formatHeight } from '../lib/height';
 import PackageRangeFields from '../components/PackageRangeFields';
 import { useEffect, useState } from 'react';
 import { X } from '@phosphor-icons/react';
@@ -82,8 +82,8 @@ interface Filters {
   packageMax: string;
   ageMin: string;
   ageMax: string;
-  heightMinFeet: string;
-  heightMaxFeet: string;
+  heightMinCm: string;
+  heightMaxCm: string;
   religion: string;
   caste: string;
   motherTongue: string;
@@ -111,8 +111,8 @@ const NO_FILTERS: Filters = {
   packageMax: '',
   ageMin: '',
   ageMax: '',
-  heightMinFeet: '',
-  heightMaxFeet: '',
+  heightMinCm: '',
+  heightMaxCm: '',
   religion: '',
   caste: '',
   motherTongue: '',
@@ -159,8 +159,8 @@ const FILTER_LABEL: Partial<Record<keyof Filters, string>> = {
   packageMax: 'Package maximum',
   ageMin: 'Age from',
   ageMax: 'Age to',
-  heightMinFeet: 'Height from',
-  heightMaxFeet: 'Height to',
+  heightMinCm: 'Height from',
+  heightMaxCm: 'Height to',
   religion: 'Religion',
   caste: 'Community',
   motherTongue: 'Mother tongue',
@@ -263,9 +263,9 @@ export default function Matches() {
   // A profile with a fixed match, or one not yet filled in, is refused
   // suggestions by the server; asking anyway was a 403 on every visit. The
   // status says which, and the page already explains it.
-  const validHeightFilters = [filters.heightMinFeet, filters.heightMaxFeet]
-    .every((value) => value === '' || parseHeight(value) !== null)
-    && (!filters.heightMinFeet || !filters.heightMaxFeet || Number(filters.heightMinFeet) <= Number(filters.heightMaxFeet));
+  const validHeightFilters = [filters.heightMinCm, filters.heightMaxCm]
+    .every((value) => value === '' || (/^\d+$/.test(value) && Number(value) >= 91 && Number(value) <= 244))
+    && (!filters.heightMinCm || !filters.heightMaxCm || Number(filters.heightMinCm) <= Number(filters.heightMaxCm));
   const canBrowse = ready && Boolean(status) && !matchmakingGate(status);
 
   const { data, isLoading, error: suggestionsError } = useQuery({
@@ -354,9 +354,9 @@ export default function Matches() {
     num(filters.ageMax) !== null &&
     (num(filters.ageMin) as number) > (num(filters.ageMax) as number);
   const heightInverted =
-    num(filters.heightMinFeet) !== null &&
-    num(filters.heightMaxFeet) !== null &&
-    (num(filters.heightMinFeet) as number) > (num(filters.heightMaxFeet) as number);
+    num(filters.heightMinCm) !== null &&
+    num(filters.heightMaxCm) !== null &&
+    (num(filters.heightMinCm) as number) > (num(filters.heightMaxCm) as number);
 
   // What a chip says after its label — codes read as their labels, and the two
   // "within N days" and "N%" filters carry their unit so the chip stands alone.
@@ -366,7 +366,7 @@ export default function Matches() {
     if (key === 'minScore') return `${value}%`;
     if (key === 'addedWithinDays') return `${value} days`;
     if (key === 'packageMin' || key === 'packageMax') return `${Number(value) / 100000} Lakhs (INR)`;
-    if (key === 'heightMinFeet' || key === 'heightMaxFeet') return formatHeight(value);
+    if (key === 'heightMinCm' || key === 'heightMaxCm') return formatHeight(value);
     return value;
   };
 
@@ -597,11 +597,11 @@ export default function Matches() {
                     a value the list omits.
                   */}
                   <ChoiceField label="City" value={filters.city} onChange={setField('city')} options={CITIES} />
-                  <label className="block text-sm">Height from (feet)
-                    <HeightInput value={filters.heightMinFeet} onChange={setField('heightMinFeet')} />
+                  <label className="block text-sm">Height from
+                    <HeightInput value={filters.heightMinCm} onChange={setField('heightMinCm')} />
                   </label>
-                  <label className="block text-sm">Height to (feet)
-                    <HeightInput value={filters.heightMaxFeet} onChange={setField('heightMaxFeet')} />
+                  <label className="block text-sm">Height to
+                    <HeightInput value={filters.heightMaxCm} onChange={setField('heightMaxCm')} />
                   </label>
                   {heightInverted && (
                     <p className="text-xs text-red-600">
