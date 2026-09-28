@@ -13,7 +13,7 @@ import { PayoutAccount } from '@/components/accounts/payout-account';
 import { ListScreen } from '@/components/layout';
 import { BusinessSwitcher } from '@/components/business/switcher';
 import { Body, Button, Caption, Card, PageSubtitle } from '@/components/ui';
-import { useAuth } from '@/store/auth';
+import { selectPermissions, useAuth } from '@/store/auth';
 import { useBusinesses } from '@/store/business';
 import { radius, rgb, space, useTheme } from '@/theme';
 
@@ -105,7 +105,7 @@ const CARD_STATUSES: Record<string, string[]> = {
 
 export default function Accounts() {
   const router = useRouter();
-  const permissions = useAuth((s) => s.user?.permissions ?? []);
+  const permissions = useAuth(selectPermissions);
   const isVendor = can(permissions, Permission.VENDOR_LISTING_MANAGE);
   /*
    * A planner is a provider too, with one listing addressed as `me`. Without

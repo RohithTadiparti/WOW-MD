@@ -12,7 +12,7 @@ import { describe, type Notification } from '@/shared/notification-copy';
 import { Permission, can, canAny } from '@/shared/permissions';
 import { Body, Caption, Loading, SectionTitle } from '@/components/ui';
 import { NotificationBell } from '@/components/home/notification-bell';
-import { useAuth } from '@/store/auth';
+import { selectPermissions, useAuth } from '@/store/auth';
 import { radius, rgb, space, useTheme } from '@/theme';
 import { ProfileSilhouette } from '@/components/profile-silhouette';
 import { typeface } from '@/theme/fonts';
@@ -30,12 +30,28 @@ function getNotificationIcon(type: string, theme: any, isRead: boolean) {
   return <FileText size={20} color={color} weight={weight} />;
 }
 
-function getAvatarOrIcon(item: Notification, theme: any) {
+function photoOf(item: Notification): string | null {
   const payload = item.payload || {};
   const photoUrl = payload.photoUrl || payload.counterpartImage || payload.image;
+  return typeof photoUrl === 'string' && photoUrl ? photoUrl : null;
+}
+
+/** Whether the avatar slot shows a person; otherwise it already shows the type icon. */
+function showsPerson(item: Notification): boolean {
+  return (
+    Boolean(photoOf(item)) ||
+    item.type.startsWith('match_interest') ||
+    item.type === 'new_message' ||
+    item.type.includes('liked')
+  );
+}
+
+function getAvatarOrIcon(item: Notification, theme: any) {
+  const payload = item.payload || {};
+  const photoUrl = photoOf(item);
   const gender = payload.gender as string | undefined;
 
-  if (photoUrl && typeof photoUrl === 'string') {
+  if (photoUrl) {
     return (
       <Image
         source={{ uri: photoUrl }}
@@ -67,7 +83,7 @@ export default function Notifications() {
   const theme = useTheme();
   const qc = useQueryClient();
   const router = useRouter();
-  const permissions = useAuth((s) => s.user?.permissions ?? []);
+  const permissions = useAuth(selectPermissions);
 
   const canReadIncoming = can(permissions, Permission.BOOKING_READ_INCOMING);
   const canVerify = canAny(permissions, [
@@ -181,28 +197,6 @@ export default function Notifications() {
               <Body tone="muted" style={{ textAlign: 'center' }}>We'll let you know when something important happens.</Body>
             </View>
           }
-          ListFooterComponent={
-            items.length > 0 ? (
-              <View style={{ padding: space(4) }}>
-                <Pressable
-                  accessibilityRole="button"
-                  style={({ pressed }) => [
-                    {
-                      backgroundColor: rgb(theme.brandSoft),
-                      paddingVertical: space(3),
-                      borderRadius: radius.md,
-                      alignItems: 'center',
-                    },
-                    pressed && { opacity: 0.8 },
-                  ]}
-                >
-                  <Text style={[typeface({ fontWeight: '600', fontSize: 14 }), { color: rgb(theme.brandStrong) }]}>
-                    View All Notifications
-                  </Text>
-                </Pressable>
-              </View>
-            ) : null
-          }
           renderItem={({ item, index }) => {
             const route = routeFor(item, { canVerify, canReadIncoming });
             const isLast = index === items.length - 1;
@@ -210,7 +204,12 @@ export default function Notifications() {
             // Try to extract bold name from description if possible (e.g. "Priya Sharma liked your profile")
             const desc = describe(item) || 'Something has changed on your account.';
             const payload = item.payload || {};
-            let title = payload.counterpartName as string || payload.subjectName as string || payload.clientName as string || '';
+            // clientName is the buyer: a title for the seller, the reader's own name for the buyer.
+            let title =
+              (payload.counterpartName as string) ||
+              (payload.subjectName as string) ||
+              (canReadIncoming ? (payload.clientName as string) : '') ||
+              '';
             let restDesc = desc;
 
             if (title && desc.startsWith(title)) {
@@ -247,9 +246,11 @@ export default function Notifications() {
                   pressed && { opacity: 0.7 }
                 ]}
               >
-                <View style={{ width: 32, alignItems: 'center', justifyContent: 'center', marginRight: space(2) }}>
-                  {getNotificationIcon(item.type, theme, item.isRead)}
-                </View>
+                {showsPerson(item) ? (
+                  <View style={{ width: 32, alignItems: 'center', justifyContent: 'center', marginRight: space(2) }}>
+                    {getNotificationIcon(item.type, theme, item.isRead)}
+                  </View>
+                ) : null}
 
                 <View style={{ marginRight: space(3) }}>
                   {getAvatarOrIcon(item, theme)}

@@ -16,6 +16,7 @@ export default function PartnerPreferences() {
 
   const {
     data: full,
+    isFetchedAfterMount,
     isPending,
     isError,
     error,
@@ -23,10 +24,12 @@ export default function PartnerPreferences() {
     queryKey: ['biodata-details', profileId],
     enabled: Boolean(profileId),
     queryFn: async () => (await api.get(`/profiles/${profileId}/details`)).data,
+    // The form copies what it is given once, so it waits for the server rather than start from a cached copy.
+    refetchOnMount: 'always',
     retry: false,
   });
 
-  if (loadingMe || (profileId && isPending)) {
+  if (loadingMe || (profileId && (isPending || !isFetchedAfterMount))) {
     return (
       <Screen>
         <Loading rows={4} />

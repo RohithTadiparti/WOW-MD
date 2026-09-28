@@ -7,6 +7,8 @@ import { formatDate } from '@/shared/dates';
 import { ROLE_LABEL } from '@/shared/permissions';
 import { DetailGrid, DetailRow } from '@/components/chrome';
 import { DateField, SelectField, Textarea } from '@/components/form';
+import { ChoiceField } from '@/components/biodata/choice-field';
+import { CITIES } from '@/shared/reference';
 import {
   Alert,
   Body,
@@ -57,6 +59,13 @@ const EMPTY = {
 
 /** The server's own rule, applied in the field so a typo costs no round trip. */
 const MOBILE_10 = /^[6-9]\d{9}$/;
+
+/** The server refuses anyone under 18, so the calendar stops at that birthday. */
+function latestAdultDob(): string {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - 18);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 const GENDERS = [
   { value: 'male', label: 'Male' },
@@ -175,9 +184,9 @@ export default function Profile() {
             label="Date of birth"
             value={form.dateOfBirth}
             onChange={set('dateOfBirth')}
-            to={new Date().toISOString().slice(0, 10)}
+            to={latestAdultDob()}
           />
-          <Field label="City" value={form.city} onChangeText={set('city')} />
+          <ChoiceField label="City" value={form.city} options={CITIES} onChange={set('city')} placeholder="Choose…" />
           <Field label="Address" value={form.address} onChangeText={set('address')} />
           <Field
             label="Contact number"

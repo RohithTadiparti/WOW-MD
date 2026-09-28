@@ -14,6 +14,7 @@ import { Quotation } from '../bookings/entities/quotation.entity';
 import { VendorService } from '../catalog/entities/vendor-service.entity';
 import { ServiceOffering } from '../catalog/entities/service-offering.entity';
 import { Profile } from '../users/entities/profile.entity';
+import { ServiceCategory } from '../catalog/entities/service-category.entity';
 import { AgentsModule } from '../agents/agents.module';
 import { MatchmakingModule } from '../matchmaking/matchmaking.module';
 import { PlannerService } from './planner.service';
@@ -41,7 +42,7 @@ import { PlannerController } from './planner.controller';
       Payment,
       VendorService,
       ServiceOffering,
-      Profile,
+      ServiceCategory,
       // Read-only: the quotation on a booking the planner is looking at.
       Quotation,
     ]),
@@ -50,7 +51,7 @@ import { PlannerController } from './planner.controller';
     // wedding (EZ1-I160). Nothing in matchmaking's imports reaches back here.
     MatchmakingModule,
   ],
-  providers: [PlannerService, WeddingDashboardService, PlannerClientsService],
+  providers: [PlannerService, WeddingDashboardService, PlannerClientsService, BudgetPlanService],
   controllers: [PlannerController],
   exports: [PlannerService, WeddingDashboardService, PlannerClientsService],
 })

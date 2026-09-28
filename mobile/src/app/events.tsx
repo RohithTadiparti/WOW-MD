@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Share, View } from 'react-native';
+import { Alert as NativeAlert, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarBlank, MapPin, UsersThree } from 'phosphor-react-native';
 
@@ -17,7 +18,6 @@ import {
   Card,
   Field,
   PageSubtitle,
-  PageTitle,
   SectionTitle,
 } from '@/components/ui';
 import { rgb, space, useTheme } from '@/theme';
@@ -30,10 +30,8 @@ import { rgb, space, useTheme } from '@/theme';
  * booking on this platform hangs off one of them. The app could show a vendor
  * the event a booking was for and gave the couple no way to create or read one.
  *
- * Sharing is the part that matters most on a phone, and the part EZ1-I178 was
- * about: the link comes back from the server built on the deployed base URL,
- * and goes straight into the phone's own share sheet — which is where somebody
- * is when they think "send this to my cousin".
+ * There is no invitation per event: a guest gets one wedding invitation that
+ * lists every event here, sent from the guest list.
  */
 interface WeddingEvent {
   id: string;
@@ -57,7 +55,9 @@ interface Summary {
 export default function Events() {
   const theme = useTheme();
   const qc = useQueryClient();
+  const router = useRouter();
   const [creating, setCreating] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
@@ -75,23 +75,34 @@ export default function Events() {
     retry: false,
   });
 
-  const share = useMutation({
-    mutationFn: async (eventId: string) =>
-      (await api.post(`/events/${eventId}/share-link`, {})).data as { url: string },
-    onSuccess: async (link, eventId) => {
+  const refresh = () => {
+    void qc.invalidateQueries({ queryKey: ['events'] });
+    void qc.invalidateQueries({ queryKey: ['events-summary'] });
+    void qc.invalidateQueries({ queryKey: ['wedding-dashboard'] });
+  };
+
+  const remove = useMutation({
+    mutationFn: async (eventId: string) => api.delete(`/events/${eventId}`),
+    onSuccess: () => {
       setError('');
-      const event = rows.find((row) => row.id === eventId);
-      /*
-       * The phone's own share sheet, not a "copied" toast. Somebody asking for
-       * an invitation link is already thinking of the person they are sending
-       * it to, and WhatsApp is one tap from here.
-       */
-      await Share.share({
-        message: `You are invited to ${event?.name ?? 'our wedding'}: ${link.url}`,
-      });
+      setNotice('Event removed.');
+      refresh();
     },
-    onError: (err) => setError(apiMessage(err, 'That link could not be created.')),
+    onError: (err) => {
+      setNotice('');
+      setError(apiMessage(err, 'That event could not be removed.'));
+    },
   });
+
+  const confirmRemove = (row: WeddingEvent) =>
+    NativeAlert.alert(
+      `Remove ${row.name}?`,
+      'It comes off every guest’s invitation. Events with booked vendors cannot be removed.',
+      [
+        { text: 'Keep it', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: () => remove.mutate(row.id) },
+      ],
+    );
 
   // A plain array, not the paged envelope.
   const rows: WeddingEvent[] = Array.isArray(data) ? data : (data?.data ?? []);
@@ -100,12 +111,9 @@ export default function Events() {
     <ListScreen
       header={
         <>
-          <View style={{ gap: space(1) }}>
-            <PageTitle>Events</PageTitle>
-            <PageSubtitle>
-              Every day of the wedding, with its own date, venue and guests. Bookings hang off these.
-            </PageSubtitle>
-          </View>
+          <PageSubtitle>
+            Every day of the wedding, with its own date, venue and guests. Bookings hang off these.
+          </PageSubtitle>
 
           {notice ? <Alert tone="positive">{notice}</Alert> : null}
           {error ? <Alert tone="critical">{error}</Alert> : null}
@@ -124,17 +132,23 @@ export default function Events() {
             variant={creating ? 'outline' : 'primary'}
             onPress={() => setCreating((open) => !open)}
           />
+          {rows.length > 0 ? (
+            <Button label="Invite guests" variant="outline" onPress={() => router.push('/plan/guests')} />
+          ) : null}
+          {rows.length > 0 ? (
+            <Caption tone="muted">
+              Each guest gets one invitation that lists every event below.
+            </Caption>
+          ) : null}
 
           {creating ? (
-            <NewEvent
+            <EventForm
               onCancel={() => setCreating(false)}
-              onCreated={() => {
+              onSaved={() => {
                 setCreating(false);
                 setError('');
                 setNotice('Added. Vendors can be booked against it now.');
-                void qc.invalidateQueries({ queryKey: ['events'] });
-                void qc.invalidateQueries({ queryKey: ['events-summary'] });
-                void qc.invalidateQueries({ queryKey: ['wedding-dashboard'] });
+                refresh();
               }}
               onError={setError}
             />
@@ -148,7 +162,20 @@ export default function Events() {
       onRefresh={() => void refetch()}
       emptyTitle="No events yet"
       emptyBody="Add the mehendi, the reception, the ceremony — whichever days you are planning."
-      renderItem={(row) => (
+      renderItem={(row) =>
+        editingId === row.id ? (
+          <EventForm
+            event={row}
+            onCancel={() => setEditingId(null)}
+            onSaved={() => {
+              setEditingId(null);
+              setError('');
+              setNotice('Saved.');
+              refresh();
+            }}
+            onError={setError}
+          />
+        ) : (
         <Card>
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space(2) }}>
             <SectionTitle style={{ flex: 1 }} numberOfLines={2}>
@@ -175,15 +202,29 @@ export default function Events() {
             ) : null}
           </View>
 
-          <Button
-            label="Share the invitation"
-            variant="outline"
-            small
-            busy={share.isPending}
-            onPress={() => share.mutate(row.id)}
-          />
+          <View style={{ flexDirection: 'row', gap: space(2) }}>
+            <Button
+              label="Edit"
+              variant="outline"
+              small
+              style={{ flex: 1 }}
+              onPress={() => {
+                setNotice('');
+                setEditingId(row.id);
+              }}
+            />
+            <Button
+              label="Remove"
+              variant="ghost"
+              small
+              style={{ flex: 1 }}
+              busy={remove.isPending && remove.variables === row.id}
+              onPress={() => confirmRemove(row)}
+            />
+          </View>
         </Card>
-      )}
+        )
+      }
     />
   );
 }
@@ -198,43 +239,48 @@ function Fact({ icon, children }: { icon: React.ReactNode; children: string }) {
 }
 
 /**
- * A new day of the wedding.
+ * A day of the wedding, new or amended.
  *
  * The name is the only thing demanded. A family adding "Reception" three months
  * out does not yet know the venue, and a form that insists on one is a form
  * they close.
  */
-function NewEvent({
+function EventForm({
+  event,
   onCancel,
-  onCreated,
+  onSaved,
   onError,
 }: {
+  event?: WeddingEvent;
   onCancel: () => void;
-  onCreated: () => void;
+  onSaved: () => void;
   onError: (message: string) => void;
 }) {
   const [form, setForm] = useState({
-    name: '',
-    eventDate: '',
-    startTime: '',
-    venue: '',
-    city: '',
-    expectedGuests: '',
+    name: event?.name ?? '',
+    eventDate: event?.eventDate?.slice(0, 10) ?? '',
+    startTime: event?.startTime?.slice(0, 5) ?? '',
+    venue: event?.venue ?? '',
+    city: event?.city ?? '',
+    expectedGuests: event?.expectedGuests ? String(event.expectedGuests) : '',
   });
 
   const create = useMutation({
     mutationFn: async () => {
-      await api.post('/events', {
+      const body = {
         name: form.name.trim(),
         ...(form.eventDate ? { eventDate: form.eventDate } : {}),
         ...(form.startTime ? { startTime: form.startTime } : {}),
         ...(form.venue.trim() ? { venue: form.venue.trim() } : {}),
         ...(form.city.trim() ? { city: form.city.trim() } : {}),
         ...(form.expectedGuests ? { expectedGuests: Number(form.expectedGuests) } : {}),
-      });
+      };
+      if (event) await api.put(`/events/${event.id}`, body);
+      else await api.post('/events', body);
     },
-    onSuccess: onCreated,
-    onError: (err) => onError(apiMessage(err, 'That event could not be added.')),
+    onSuccess: onSaved,
+    onError: (err) =>
+      onError(apiMessage(err, event ? 'That event could not be saved.' : 'That event could not be added.')),
   });
 
   const set = (key: keyof typeof form) => (value: string) =>
@@ -263,7 +309,7 @@ function NewEvent({
       />
       <View style={{ gap: space(2) }}>
         <Button
-          label="Add the event"
+          label={event ? 'Save changes' : 'Add the event'}
           busy={create.isPending}
           disabled={!form.name.trim()}
           onPress={() => create.mutate()}

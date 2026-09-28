@@ -8,7 +8,7 @@ import { todayIso } from '@/components/calendar';
 import { useActiveListing } from '@/lib/vendor-listing';
 import { isPlannerAccount } from '@/lib/planner-listing';
 import { PlannerListingForm } from '@/components/business/planner-listing';
-import { useAuth } from '@/store/auth';
+import { selectPermissions, useAuth } from '@/store/auth';
 import { GSTIN_PATTERN, PAN_PATTERN } from '@/shared/permissions';
 import { Divider, InfoNote } from '@/components/chrome';
 import { DateField, Textarea } from '@/components/form';
@@ -78,7 +78,7 @@ const MOBILE = /^(\+91)?[6-9]\d{9}$/;
  * writes `/vendors`, which a planner cannot hold, and was all this route did.
  */
 export default function BusinessDetailsRoute() {
-  const permissions = useAuth((s) => s.user?.permissions ?? []);
+  const permissions = useAuth(selectPermissions);
   return isPlannerAccount(permissions) ? <PlannerListingForm /> : <BusinessDetails />;
 }
 

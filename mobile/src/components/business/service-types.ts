@@ -7,6 +7,7 @@ export interface Category {
   slug: string;
   name: string;
   description: string | null;
+  sortOrder: number;
 }
 
 export interface Definition {

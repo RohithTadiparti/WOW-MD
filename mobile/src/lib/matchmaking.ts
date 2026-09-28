@@ -18,7 +18,7 @@ export interface MatchStatus {
 export function matchmakingGate(status?: MatchStatus): string | undefined {
   if (!status) return undefined;
   if (!status.profileCompleted) {
-    return 'Fill in the profile first: basic details, preferences and a photo.';
+    return 'Fill in the profile first: name, gender, date of birth and city.';
   }
   if (status.matchFixedState === 'confirmed') {
     return 'This profile has a fixed match, so matchmaking is closed.';

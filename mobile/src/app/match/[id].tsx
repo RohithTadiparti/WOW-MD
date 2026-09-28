@@ -66,6 +66,11 @@ interface ProfileView {
   contact: { phone?: string | null; email?: string | null } | null;
 }
 
+interface BoardRow {
+  direction: 'incoming' | 'outgoing';
+  counterpart?: { id: string } | null;
+}
+
 interface Conversation {
   withUserId: string;
   displayName: string;
@@ -94,7 +99,9 @@ export default function MatchProfile() {
   const router = useRouter();
   const theme = useTheme();
   const qc = useQueryClient();
-  const [saved, setSaved] = useState(params.shortlisted === 'true');
+  const [savedHere, setSaved] = useState<boolean | null>(
+    params.shortlisted ? params.shortlisted === 'true' : null,
+  );
   const [interaction, setInteraction] = useState(params.interaction || 'none');
   const [menu, setMenu] = useState(false);
   const [error, setError] = useState('');
@@ -113,6 +120,36 @@ export default function MatchProfile() {
     retry: false,
   });
   const conversation = conversations.data?.find((row) => row.profileId === id);
+
+  // Opened from Interests, Chat or a notification there is no interaction in the
+  // route, so the board says where this pair stands.
+  const board = useQuery({
+    queryKey: ['interest-board', params.actingProfileId || null],
+    queryFn: async () =>
+      (await api.get('/matches/interests', { params: clientParam })).data as Partial<
+        Record<'pending' | 'accepted' | 'declined', BoardRow[]>
+      >,
+    retry: false,
+  });
+  const boardInteraction = (() => {
+    const find = (rows?: BoardRow[]) => rows?.find((row) => row.counterpart?.id === id);
+    if (find(board.data?.accepted)) return 'accepted';
+    const pending = find(board.data?.pending);
+    if (pending) return pending.direction === 'outgoing' ? 'interest_sent' : 'interest_received';
+    const declined = find(board.data?.declined);
+    if (declined) return declined.direction === 'outgoing' ? 'declined_by_them' : 'declined_by_you';
+    return undefined;
+  })();
+  const shownInteraction = boardInteraction ?? interaction;
+
+  const shortlistRows = useQuery({
+    queryKey: ['shortlist', params.actingProfileId || null],
+    queryFn: async () =>
+      (await api.get('/matches/shortlist', { params: clientParam })).data as { profile: { id: string } }[],
+    enabled: savedHere === null,
+    retry: false,
+  });
+  const saved = savedHere ?? Boolean(shortlistRows.data?.some((row) => row.profile.id === id));
 
   const shortlist = useMutation({
     mutationFn: () =>
@@ -134,6 +171,7 @@ export default function MatchProfile() {
       setInteraction('interest_sent');
       setError('');
       void qc.invalidateQueries({ queryKey: ['suggestions'] });
+      void qc.invalidateQueries({ queryKey: ['interest-board'] });
     },
     onError: (e) => setError(apiMessage(e, 'That interest could not be sent.')),
   });
@@ -187,7 +225,7 @@ export default function MatchProfile() {
   const chart = { ...bag('horoscope'), ...d };
   const chartUrl = typeof d.horoscopeDocumentUrl === 'string' ? d.horoscopeDocumentUrl : null;
 
-  const interestLabel = INTEREST_LABEL[interaction] ?? 'Send Interest';
+  const interestLabel = INTEREST_LABEL[shownInteraction] ?? 'Send Interest';
 
   return (
     <View style={{ flex: 1, backgroundColor: rgb(theme.canvas) }}>
@@ -242,9 +280,9 @@ export default function MatchProfile() {
               small
               label={interestLabel}
               busy={interest.isPending}
-              disabled={interaction !== 'none' && interaction !== 'interest_received'}
+              disabled={board.isPending || (shownInteraction !== 'none' && shownInteraction !== 'interest_received')}
               onPress={() =>
-                interaction === 'interest_received'
+                shownInteraction === 'interest_received'
                   ? router.push('/(tabs)/interests')
                   : interest.mutate()
               }

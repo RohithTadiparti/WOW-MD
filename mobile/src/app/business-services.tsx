@@ -7,8 +7,9 @@ import { cleanAnswers, validateAnswers, type Answers, type FieldSpec } from '@/s
 import { InfoNote } from '@/components/chrome';
 import { DynamicForm } from '@/components/dynamic-form';
 import { SelectField } from '@/components/form';
+import { useCatalogCategories } from '@/components/business/category-picker';
 import { ServiceCard } from '@/components/business/service-card';
-import type { Category, Definition, VendorService } from '@/components/business/service-types';
+import type { Definition, VendorService } from '@/components/business/service-types';
 import {
   Alert,
   Body,
@@ -165,10 +166,7 @@ function AddService({
   const [capacity, setCapacity] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const { data: categories = [] } = useQuery<Category[]>({
-    queryKey: ['catalog-categories'],
-    queryFn: async () => (await api.get('/catalog/categories')).data,
-  });
+  const { data: categories = [] } = useCatalogCategories();
 
   const { data: definitions = [] } = useQuery<Definition[]>({
     queryKey: ['catalog-definitions', categoryId],

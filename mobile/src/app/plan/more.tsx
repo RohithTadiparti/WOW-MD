@@ -70,23 +70,6 @@ export default function PlanMore() {
       onPress: () => router.push({ pathname: '/plan/[id]', params: { id: plan?.id ?? 'new' } }),
     },
     {
-      title: 'Download Plan (PDF)',
-      hint: 'Export a shareable plan summary',
-      icon: DownloadSimple,
-      onPress: () =>
-        NativeAlert.alert(
-          'Download Plan',
-          'PDF export is not available on mobile yet. You can share a text summary instead.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Share summary',
-              onPress: () => void Share.share({ message: summary }),
-            },
-          ],
-        ),
-    },
-    {
       title: 'Share Plan',
       hint: 'Send a summary to family',
       icon: ShareNetwork,
@@ -103,24 +86,6 @@ export default function PlanMore() {
       hint: 'Get help with your plan',
       icon: Lifebuoy,
       onPress: () => router.push({ pathname: '/support', params: { type: 'help' } }),
-    },
-    {
-      title: 'Delete Plan',
-      hint: 'Remove this wedding plan',
-      icon: Trash,
-      tone: 'critical',
-      onPress: () =>
-        NativeAlert.alert(
-          'Delete Plan',
-          'Deleting a wedding plan is not available on mobile yet. Contact support if you need a plan removed.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Contact support',
-              onPress: () => router.push({ pathname: '/support', params: { type: 'contact' } }),
-            },
-          ],
-        ),
     },
   ];
 

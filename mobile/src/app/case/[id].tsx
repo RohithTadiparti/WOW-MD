@@ -37,7 +37,7 @@ import {
   Screen,
   SectionTitle,
 } from '@/components/ui';
-import { useAuth } from '@/store/auth';
+import { selectPermissions, useAuth } from '@/store/auth';
 import { rgb, space, useTheme } from '@/theme';
 
 /** Which prompt is open, since three of the actions ask for a sentence first. */
@@ -61,9 +61,10 @@ export default function Case() {
   const theme = useTheme();
   const qc = useQueryClient();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const permissions = useAuth((s) => s.user?.permissions ?? []);
+  const permissions = useAuth(selectPermissions);
   const myId = useAuth((s) => s.user?.id ?? null);
   const canAllocate = can(permissions, Permission.VERIFICATION_ALLOCATE);
+  const canInvestigate = can(permissions, Permission.CASE_INVESTIGATE);
 
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -309,7 +310,16 @@ export default function Case() {
         Recording findings and proposing a resolution is the assigned officer's
         step, so an administrator is not shown these controls.
       */}
-      {!canAllocate && !settled && !inReview && (
+      {/* Whoever raised it follows along; the next move is an officer's. */}
+      {!canAllocate && !canInvestigate && !settled && !inReview ? (
+        <Caption tone="faint">
+          {item.status === 'waiting_for_information'
+            ? 'The officer is waiting on more information. Your notifications say what they need.'
+            : 'An officer looks into this and you are told when it moves.'}
+        </Caption>
+      ) : null}
+
+      {!canAllocate && canInvestigate && !settled && !inReview && (
         <>
           <Card>
             <SectionTitle>What the investigation found</SectionTitle>

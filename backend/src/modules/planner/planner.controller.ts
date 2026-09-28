@@ -3,10 +3,12 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { PlannerService } from './planner.service';
 import { WeddingDashboardService } from './wedding-dashboard.service';
 import { PlannerClientsService } from './planner-clients.service';
+import { BudgetPlanService } from './budget-plan.service';
 import {
   AddTaskDto,
   CreatePlanDto,
   EngagePlannerDto,
+  SetBudgetPickDto,
   SetWeddingBudgetDto,
   UpdateTaskStatusDto,
 } from './dto/planner.dto';
@@ -22,6 +24,7 @@ export class PlannerController {
     private readonly planner: PlannerService,
     private readonly weddingDashboard: WeddingDashboardService,
     private readonly clients: PlannerClientsService,
+    private readonly budgetPlans: BudgetPlanService,
   ) {}
 
   /*
@@ -114,7 +117,7 @@ export class PlannerController {
   @ApiOperation({ summary: 'Set (or clear, with null) the overall wedding budget' })
   @Put('budget')
   setBudget(@CurrentUser() actor: AuthUser, @Body() dto: SetWeddingBudgetDto) {
-    return this.planner.setBudget(actor, dto.budget);
+    return this.budgetPlans.setPick(userId, dto.category, dto.choice);
   }
 
   @Get('plans')

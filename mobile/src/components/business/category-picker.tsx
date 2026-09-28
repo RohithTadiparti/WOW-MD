@@ -9,11 +9,24 @@ import { radius, rgb, space, useTheme } from '@/theme';
 /** A business lists under one to five catalogue categories (EZ1-I263). */
 export const MAX_CATEGORIES = 5;
 
+/**
+ * Whether a category belongs in front of a couple or on a listing form.
+ *
+ * The wedding catalogue is seeded in steps of ten (10, 20, …). Rows created
+ * without a place — the QA and audit runs left "QA Cat", "CoerceNum" and
+ * "AAAAAAAA" behind, all active, all at 0 or 1 — are not a catalogue anyone
+ * chose, and the API has no other way to tell them apart.
+ */
+export const isCatalogued = (c: Category) => c.sortOrder >= 10;
+
+const catalogued = (rows: Category[]) => rows.filter(isCatalogued);
+
 /** The catalogue's active categories, under the key the services step already uses. */
 export function useCatalogCategories() {
-  return useQuery<Category[]>({
+  return useQuery<Category[], Error, Category[]>({
     queryKey: ['catalog-categories'],
     queryFn: async () => (await api.get('/catalog/categories')).data,
+    select: catalogued,
     staleTime: 5 * 60_000,
   });
 }

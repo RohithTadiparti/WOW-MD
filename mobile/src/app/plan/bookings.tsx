@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { api, apiMessage } from '@/lib/api';
@@ -61,6 +61,19 @@ const UPCOMING = new Set([
   'in_progress',
 ]);
 
+const BUYER_STATUS_LABEL: Record<string, string> = {
+  requested: 'Requested',
+  quotation_sent: 'Quotation received',
+  quotation_accepted: 'Awaiting provider',
+  payment_pending: 'Advance due',
+  confirmed: 'Confirmed',
+  in_progress: 'In progress',
+  completed_pending_final_payment: 'Delivered',
+  completed: 'Completed',
+  disputed: 'Under investigation',
+  cancelled: 'Cancelled',
+};
+
 function statusTone(status: string): 'positive' | 'caution' | 'critical' | 'neutral' {
   if (status === 'confirmed' || status === 'completed') return 'positive';
   if (CANCELLED.has(status)) return 'critical';
@@ -89,6 +102,14 @@ export default function PlanBookings() {
     retry: false,
   });
 
+  const qc = useQueryClient();
+  // A new quotation or instalment lives in the panel's own queries, not in this list.
+  const refresh = () => {
+    for (const key of ['my-bookings', 'buyer-quotations', 'buyer-milestones', 'escrow']) {
+      void qc.invalidateQueries({ queryKey: [key] });
+    }
+  };
+
   const rows = useMemo(() => {
     const list: BuyerBooking[] = Array.isArray(query.data)
       ? query.data
@@ -102,7 +123,7 @@ export default function PlanBookings() {
   }, [query.data, tab]);
 
   return (
-    <Screen onRefresh={() => void query.refetch()} refreshing={query.isRefetching}>
+    <Screen onRefresh={refresh} refreshing={query.isRefetching}>
       <Caption tone="muted">
         Accept a quotation, pay instalments into escrow, then confirm delivery.
       </Caption>
@@ -162,16 +183,21 @@ export default function PlanBookings() {
                   <Body style={{ fontWeight: '700', flex: 1 }} numberOfLines={1}>
                     {row.providerName ?? row.serviceName ?? 'Booking'}
                   </Body>
-                  <Badge tone={statusTone(row.status)}>{humanise(row.status)}</Badge>
+                  <Badge tone={statusTone(row.status)}>
+                    {BUYER_STATUS_LABEL[row.status] ?? humanise(row.status)}
+                  </Badge>
                 </View>
                 <Caption tone="muted">
                   {[
                     row.serviceName || row.offeringName,
                     row.providerType ? categoryLabel(row.providerType) : null,
                     row.eventDate ? shortDate(row.eventDate) : null,
-                    row.amount != null && row.amount !== ''
-                      ? money(row.amount, row.currency ?? 'INR')
-                      : null,
+                    // A request carries 0 until a quotation prices it.
+                    Number(row.amount) > 0
+                      ? money(row.amount!, row.currency ?? 'INR')
+                      : row.status === 'requested'
+                        ? 'Awaiting quotation'
+                        : null,
                   ]
                     .filter(Boolean)
                     .join(' · ')}
@@ -183,13 +209,19 @@ export default function PlanBookings() {
                 ) : null}
                 {row.status === 'payment_pending' ? (
                   <Caption tone="brand" style={{ marginTop: space(0.5), fontWeight: '600' }}>
-                    Advance due — open to Pay Now
+                    Advance due — open to Fund Escrow
+                  </Caption>
+                ) : null}
+                {row.status === 'in_progress' &&
+                !(row.collectedMilestones ?? []).includes('second') ? (
+                  <Caption tone="brand" style={{ marginTop: space(0.5), fontWeight: '600' }}>
+                    Second instalment due — open to Fund Escrow
                   </Caption>
                 ) : null}
                 {row.status === 'completed_pending_final_payment' &&
                 !(row.collectedMilestones ?? []).includes('final') ? (
                   <Caption tone="brand" style={{ marginTop: space(0.5), fontWeight: '600' }}>
-                    Final payment due — open to Pay Now
+                    Final payment due — open to Fund Escrow
                   </Caption>
                 ) : null}
               </Pressable>
@@ -235,7 +267,12 @@ export default function PlanBookings() {
                     </Pressable>
                   ) : null}
                   <BuyerMoneyPanel booking={row} />
-                  <BookingChat bookingId={row.id} />
+                  <BookingChat
+                    bookingId={row.id}
+                    label={
+                      row.providerType === 'planner' ? 'Message the planner' : 'Message the vendor'
+                    }
+                  />
                 </View>
               ) : null}
             </Card>

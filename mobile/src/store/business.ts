@@ -5,7 +5,7 @@ import { create } from 'zustand';
 
 import { api } from '@/lib/api';
 import { Permission, can } from '@/shared/permissions';
-import { useAuth } from '@/store/auth';
+import { selectPermissions, useAuth } from '@/store/auth';
 
 /**
  * Which of a vendor's businesses every provider screen is about.
@@ -94,7 +94,7 @@ export function useBusinesses() {
    * endpoint actually checks — and asking anyway would collect a 403 on every
    * screen for an account the client already knows cannot hold a listing.
    */
-  const permissions = useAuth((s) => s.user?.permissions ?? []);
+  const permissions = useAuth(selectPermissions);
   const isVendor = can(permissions, Permission.VENDOR_LISTING_MANAGE);
 
   const { data: businesses = [], isLoading } = useQuery<BusinessSummary[]>({

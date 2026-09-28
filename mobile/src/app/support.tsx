@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
-import { useLocalSearchParams, useNavigation } from 'expo-router';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CaretDown, CaretUp, Star } from 'phosphor-react-native';
 
 import { api, apiMessage } from '@/lib/api';
-import { isProvider } from '@/shared/permissions';
+import { dateTime, humanise } from '@/lib/format';
+import { STATUS_TONE, type SupportCase } from '@/lib/verification';
+import { CASE_STATUS_LABEL, isProvider } from '@/shared/permissions';
+import { Badge } from '@/components/chrome';
 import { SelectField, Textarea } from '@/components/form';
 import {
   Alert,
@@ -14,6 +17,7 @@ import {
   Caption,
   Card,
   Field,
+  Loading,
   Screen,
   SectionTitle,
 } from '@/components/ui';
@@ -141,7 +145,50 @@ function ContactSupport() {
   return (
     <Screen>
       <RaiseCase subjects={subjectsFor(role)} submitLabel="Send Message" doneMessage="Sent. Somebody will read it." />
+      <MyCases />
     </Screen>
+  );
+}
+
+/** What this person has raised, which is where a case notification brings them. */
+function MyCases() {
+  const router = useRouter();
+  const cases = useQuery({
+    queryKey: ['support-cases'],
+    queryFn: async () => {
+      const data = (await api.get('/verification/cases')).data as SupportCase[] | { data: SupportCase[] };
+      return Array.isArray(data) ? data : data.data;
+    },
+    retry: false,
+  });
+
+  if (cases.isPending) return <Loading rows={2} />;
+  if (cases.error) return <Alert tone="critical">{apiMessage(cases.error, 'Your requests could not be loaded.')}</Alert>;
+  if (!cases.data?.length) return null;
+
+  return (
+    <View style={{ gap: space(2) }}>
+      <SectionTitle>Your requests</SectionTitle>
+      {cases.data.map((item) => (
+        <Pressable
+          key={item.id}
+          accessibilityRole="button"
+          onPress={() => router.push({ pathname: '/case/[id]', params: { id: item.id } })}
+        >
+          <Card style={{ gap: space(1) }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(2) }}>
+              <Body style={{ flex: 1, fontWeight: '600' }} numberOfLines={1}>
+                {item.title}
+              </Body>
+              <Badge tone={STATUS_TONE[item.status] ?? 'neutral'}>
+                {CASE_STATUS_LABEL[item.status] ?? humanise(item.status)}
+              </Badge>
+            </View>
+            <Caption tone="muted">{`Raised ${dateTime(item.createdAt)}`}</Caption>
+          </Card>
+        </Pressable>
+      ))}
+    </View>
   );
 }
 

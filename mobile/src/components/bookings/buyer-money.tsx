@@ -4,9 +4,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api, apiMessage } from '@/lib/api';
 import { PAYMENT_LABEL, PAYMENT_TONE } from '@/lib/bookings';
-import { money } from '@/lib/format';
+import { money, shortDate } from '@/lib/format';
 import { MILESTONE_LABEL, Permission, can } from '@/shared/permissions';
-import { useAuth } from '@/store/auth';
+import { selectPermissions, useAuth } from '@/store/auth';
+import { BUYER_PAYMENT_STATUS_LABEL } from '@/app/escrow';
 import { Badge } from '@/components/chrome';
 import { Alert as UiAlert, Body, Button, Caption, Field } from '@/components/ui';
 import { rgb, space, useTheme, radius } from '@/theme';
@@ -70,7 +71,19 @@ interface QuotationRow {
   currency: string;
   status: string;
   notes: string | null;
+  terms?: string | null;
+  lines?: { description: string; amount: number }[] | null;
+  validUntil?: string | null;
 }
+
+const QUOTE_STATUS_LABEL: Record<string, string> = {
+  sent: 'Awaiting your answer',
+  accepted: 'Accepted',
+  rejected: 'Re-quote asked',
+  expired: 'Expired',
+  superseded: 'Replaced',
+  withdrawn: 'Withdrawn',
+};
 
 interface EscrowRecord {
   bookingId: string;
@@ -78,6 +91,14 @@ interface EscrowRecord {
   heldInEscrow: string;
   released: string;
   refunded: string;
+  payments?: { amount: string; status: string }[];
+}
+
+/** `released` on the record also counts money still waiting on its payout. */
+function paidOut(record: EscrowRecord, status: string): number {
+  return (record.payments ?? [])
+    .filter((p) => p.status === status)
+    .reduce((sum, p) => sum + Number(p.amount), 0);
 }
 
 interface PaymentMethods {
@@ -116,7 +137,7 @@ function invalidateMoney(qc: ReturnType<typeof useQueryClient>, bookingId: strin
 export function BuyerMoneyPanel({ booking }: { booking: BuyerMoneyBooking }) {
   const theme = useTheme();
   const qc = useQueryClient();
-  const permissions = useAuth((s) => s.user?.permissions ?? []);
+  const permissions = useAuth(selectPermissions);
   const canPay = can(permissions, Permission.BOOKING_PAY);
   const canRaiseCase = can(permissions, Permission.CASE_RAISE);
 
@@ -294,10 +315,20 @@ export function BuyerMoneyPanel({ booking }: { booking: BuyerMoneyBooking }) {
                     q.status === 'accepted' ? 'positive' : q.status === 'sent' ? 'brand' : 'neutral'
                   }
                 >
-                  {q.status.replace(/_/g, ' ')}
+                  {QUOTE_STATUS_LABEL[q.status] ?? q.status.replace(/_/g, ' ')}
                 </Badge>
               </View>
               {q.notes ? <Caption tone="muted">{q.notes}</Caption> : null}
+              {(q.lines ?? []).map((line, i) => (
+                <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', gap: space(2) }}>
+                  <Caption style={{ flex: 1 }}>{line.description}</Caption>
+                  <Caption>{money(line.amount, q.currency)}</Caption>
+                </View>
+              ))}
+              {q.terms ? <Caption tone="muted">Terms: {q.terms}</Caption> : null}
+              {q.status === 'sent' && q.validUntil ? (
+                <Caption tone="faint">Valid until {shortDate(q.validUntil)}</Caption>
+              ) : null}
               {liveQuote?.id === q.id && canPay && !terminal ? (
                 <View
                   style={{
@@ -330,10 +361,12 @@ export function BuyerMoneyPanel({ booking }: { booking: BuyerMoneyBooking }) {
       ) : null}
 
       <View style={{ gap: space(2) }}>
-        <Caption style={{ fontWeight: '700', textTransform: 'uppercase' }}>Instalments</Caption>
-        <Caption tone="muted">
-          Paid in order. Online payments are held in escrow until delivery is accepted.
-        </Caption>
+        <Caption style={{ fontWeight: '700', textTransform: 'uppercase' }}>Escrow / Milestones</Caption>
+        {!terminal && booking.status !== 'completed' ? (
+          <Caption tone="muted">
+            Fund Escrow to secure your booking. Money is held securely until the applicable milestone is completed.
+          </Caption>
+        ) : null}
         {terminal ? (
           escrowQuery.isPending ? (
             <Caption tone="muted">Loading payments…</Caption>
@@ -352,8 +385,11 @@ export function BuyerMoneyPanel({ booking }: { booking: BuyerMoneyBooking }) {
                 Number(escrowRecord.heldInEscrow) > 0
                   ? `Held ${money(escrowRecord.heldInEscrow, escrowRecord.currency)}`
                   : null,
-                Number(escrowRecord.released) > 0
-                  ? `Released ${money(escrowRecord.released, escrowRecord.currency)}`
+                paidOut(escrowRecord, 'pending_payout') > 0
+                  ? `Awaiting payout ${money(paidOut(escrowRecord, 'pending_payout'), escrowRecord.currency)}`
+                  : null,
+                paidOut(escrowRecord, 'released') > 0
+                  ? `Released ${money(paidOut(escrowRecord, 'released'), escrowRecord.currency)}`
                   : null,
               ]
                 .filter(Boolean)
@@ -399,21 +435,23 @@ export function BuyerMoneyPanel({ booking }: { booking: BuyerMoneyBooking }) {
                   </Caption>
                   {m.status ? (
                     <Badge tone={PAYMENT_TONE[m.status] ?? 'neutral'}>
-                      {PAYMENT_LABEL[m.status] ?? m.status.replace(/_/g, ' ')}
+                      {BUYER_PAYMENT_STATUS_LABEL[m.status] ?? PAYMENT_LABEL[m.status] ?? m.status.replace(/_/g, ' ')}
                     </Badge>
                   ) : (
-                    <Caption tone="faint">
-                      {nextDue?.milestone === m.milestone
-                        ? WAITING_ON[m.milestone]
-                        : 'Not due yet'}
+                    <Caption tone={isDue ? 'brand' : 'faint'}>
+                      {isDue
+                        ? 'Due now'
+                        : nextDue?.milestone === m.milestone
+                          ? WAITING_ON[m.milestone]
+                          : 'Not due yet'}
                     </Caption>
                   )}
                 </View>
                 {isDue ? (
                   <View style={{ gap: space(1.5) }}>
                     <Caption tone="muted">
-                      Payable now: {money(m.amount, currency)}
-                      {activeMethod !== 'cash' ? ' · held in escrow after confirmation' : ''}
+                      Amount to Fund: {money(m.amount, currency)}
+                      {activeMethod !== 'cash' ? ' · Securely held in escrow' : ''}
                     </Caption>
                     {availableMethods.length > 1 ? (
                       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(1.5) }}>
@@ -449,11 +487,14 @@ export function BuyerMoneyPanel({ booking }: { booking: BuyerMoneyBooking }) {
                         Cash is paid directly to the provider and is not held in escrow.
                       </Caption>
                     ) : null}
+                    {m.status === 'failed' ? (
+                      <Caption tone="critical" style={{ marginBottom: space(1) }}>Payment failed</Caption>
+                    ) : null}
                     <Button
                       label={
                         busy
-                          ? 'Paying…'
-                          : `Pay Now · ${money(m.amount, currency)}`
+                          ? 'Processing…'
+                          : m.status === 'failed' ? 'Try Again' : `Fund Escrow`
                       }
                       small
                       busy={busy}
@@ -482,7 +523,20 @@ export function BuyerMoneyPanel({ booking }: { booking: BuyerMoneyBooking }) {
             small
             busy={busy}
             disabled={busy}
-            onPress={() => run(() => api.put(`/bookings/${booking.id}/confirm-delivery`, {}))}
+            onPress={() =>
+              Alert.alert(
+                'Accept delivery',
+                'Confirm the work was delivered as agreed. Held escrow can then move to the provider.',
+                [
+                  { text: 'Not yet', style: 'cancel' },
+                  {
+                    text: 'Accept delivery',
+                    onPress: () =>
+                      run(() => api.put(`/bookings/${booking.id}/confirm-delivery`, {})),
+                  },
+                ],
+              )
+            }
           />
           <Caption tone="muted">
             Confirming delivery lets held escrow move to the provider.
@@ -561,7 +615,9 @@ export function BuyerMoneyPanel({ booking }: { booking: BuyerMoneyBooking }) {
           ) : (
             <View style={{ gap: space(2) }}>
               <Caption tone="muted">
-                Held escrow stays frozen until an officer settles the case.
+                {booking.status === 'completed'
+                  ? 'You accepted delivery, so this money is already approved for payout. A case does not freeze it; an officer reviews the case and decides any refund.'
+                  : 'Held escrow stays frozen until an officer settles the case.'}
               </Caption>
               <Field
                 label="In one line"

@@ -27,6 +27,7 @@ import {
 import { ProfileSilhouette } from "@/components/profile-silhouette";
 import {
   Alert,
+  Button,
   Caption,
   EmptyState,
   Loading,
@@ -140,15 +141,6 @@ export default function Matches() {
     onError: (e) =>
       setError(apiMessage(e, "That shortlist could not be updated.")),
   });
-  const interest = useMutation({
-    mutationFn: (id: string) =>
-      api.post("/matches/interest", { toProfileId: id, ...clientParam }),
-    onSuccess: () => {
-      setError("");
-      void qc.invalidateQueries({ queryKey: ["suggestions"] });
-    },
-    onError: (e) => setError(apiMessage(e, "That interest could not be sent.")),
-  });
   if (isLoading || (acting.ready && !settled))
     return (
       <HeartBackdrop style={{ padding: space(4) }}>
@@ -206,24 +198,26 @@ export default function Matches() {
                     paddingHorizontal: space(2),
                   })}
                 />
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Show match filters"
-                  onPress={() => setFilterOpen((v) => !v)}
-                  style={{
-                    width: 40,
-                    height: 40,
-                    marginRight: space(1),
-                    borderRadius: radius.md,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    backgroundColor: rgb(theme.brand),
-                  }}
-                >
-                  <SlidersHorizontal size={18} color={rgb(theme.brandFg)} />
-                </Pressable>
+                {tab === "for-you" ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Sort matches"
+                    onPress={() => setFilterOpen((v) => !v)}
+                    style={{
+                      width: 40,
+                      height: 40,
+                      marginRight: space(1),
+                      borderRadius: radius.md,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      backgroundColor: rgb(theme.brand),
+                    }}
+                  >
+                    <SlidersHorizontal size={18} color={rgb(theme.brandFg)} />
+                  </Pressable>
+                ) : null}
               </View>
-              {filterOpen ? (
+              {filterOpen && tab === "for-you" ? (
                 <View
                   style={{
                     flexDirection: "row",
@@ -305,24 +299,26 @@ export default function Matches() {
               <Caption>
                 {total} profile{total === 1 ? "" : "s"} found
               </Caption>
-              <Pressable
-                onPress={() => setFilterOpen(true)}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: space(1),
-                }}
-              >
-                <Caption style={{ fontWeight: "600" }}>Sort by</Caption>
-                <Caption tone="brand">
-                  {sort === "score"
-                    ? "Relevance"
-                    : sort === "recent"
-                      ? "Newest"
-                      : "Age"}
-                </Caption>
-                <CaretDown size={13} color={rgb(theme.brandStrong)} />
-              </Pressable>
+              {tab === "for-you" ? (
+                <Pressable
+                  onPress={() => setFilterOpen(true)}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: space(1),
+                  }}
+                >
+                  <Caption style={{ fontWeight: "600" }}>Sort by</Caption>
+                  <Caption tone="brand">
+                    {sort === "score"
+                      ? "Relevance"
+                      : sort === "recent"
+                        ? "Newest"
+                        : "Age"}
+                  </Caption>
+                  <CaretDown size={13} color={rgb(theme.brandStrong)} />
+                </Pressable>
+              ) : null}
             </View>
             <ActingClientPicker acting={acting} />
             {error ? <Alert tone="critical">{error}</Alert> : null}
@@ -339,15 +335,23 @@ export default function Matches() {
               Pick a client to browse their matches.
             </EmptyState>
           ) : gate ? (
-            <EmptyState
-              title={
-                status?.profileCompleted
-                  ? "Matchmaking is closed"
-                  : "Finish the profile first"
-              }
-            >
-              {gate}
-            </EmptyState>
+            <View style={{ gap: space(2) }}>
+              <EmptyState
+                title={
+                  status?.profileCompleted
+                    ? "Matchmaking is closed"
+                    : "Finish the profile first"
+                }
+              >
+                {gate}
+              </EmptyState>
+              {!status?.profileCompleted && !acting.profileId ? (
+                <Button
+                  label="Complete your profile"
+                  onPress={() => router.push("/profile")}
+                />
+              ) : null}
+            </View>
           ) : (
             <EmptyState title="No matches to show yet">
               Try changing your search or match tab.
@@ -378,7 +382,6 @@ export default function Matches() {
             shortlistBusy={
               shortlist.isPending && shortlist.variables?.id === item.profile.id
             }
-            onInterest={() => interest.mutate(item.profile.id)}
           />
         )}
       />
@@ -446,13 +449,11 @@ function MatchCard({
   onOpen,
   onShortlist,
   shortlistBusy,
-  onInterest,
 }: {
   suggestion: Suggestion;
   onOpen: () => void;
   onShortlist: () => void;
   shortlistBusy: boolean;
-  onInterest: () => void;
 }) {
   const theme = useTheme();
   const { width } = useWindowDimensions();
@@ -533,11 +534,7 @@ function MatchCard({
             {profile.card.profession}
           </Caption>
         ) : null}
-        <Pressable
-          onPress={(e) => {
-            e.stopPropagation();
-            onInterest();
-          }}
+        <View
           style={{
             marginTop: "auto",
             flexDirection: "row",
@@ -549,7 +546,7 @@ function MatchCard({
           <Caption tone="brand" style={{ fontSize: 11, fontWeight: "700" }}>
             {Math.round(score)}% Match
           </Caption>
-        </Pressable>
+        </View>
       </View>
     </Pressable>
   );

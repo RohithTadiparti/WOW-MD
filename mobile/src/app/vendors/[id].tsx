@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import {
-  Alert as NativeAlert,
   Image,
   Pressable,
   ScrollView,
@@ -50,12 +49,28 @@ type Vendor = {
 
 type Service = {
   id: string;
-  name: string;
+  displayName?: string | null;
   description?: string | null;
+  definition?: { name: string; description?: string | null } | null;
+  active?: boolean;
   bookable?: boolean;
   bookingForm?: FieldSpec[];
-  offerings?: { id: string; name: string; price: string | null; currency?: string }[];
+  offerings?: { id: string; name: string; price: string | null; currency?: string; active?: boolean }[];
 };
+
+const serviceName = (s: Service) => s.displayName || s.definition?.name || 'Service';
+
+/** What `/vendors/search` shows as "From ₹X": the cheapest live offering. */
+function cheapestOffering(services: Service[]): number | null {
+  const prices = services
+    .filter((s) => s.active !== false)
+    .flatMap((s) => s.offerings ?? [])
+    .filter((o) => o.active !== false && o.price != null)
+    .map((o) => Number(o.price));
+  return prices.length ? Math.min(...prices) : null;
+}
+
+type MyBooking = { id: string; providerId?: string; status: string; createdAt?: string };
 
 type Slot = { id: string; startTime: string; endTime: string; remaining: number };
 
@@ -98,7 +113,18 @@ export default function VendorDetail() {
   const services = useQuery({
     queryKey: ['vendor-services', id],
     queryFn: async () => (await api.get(`/vendors/${id}/services`)).data as Service[],
-    enabled: Boolean(id) && (tab === 'packages' || requesting),
+    enabled: Boolean(id),
+    retry: false,
+  });
+
+  // The same list the Bookings screen reads: a chat with a vendor lives on a booking.
+  const myBookings = useQuery({
+    queryKey: ['my-bookings'],
+    queryFn: async () =>
+      (await api.get('/bookings', { params: { limit: 100 } })).data as
+        | { data?: MyBooking[] }
+        | MyBooking[],
+    enabled: Boolean(id),
     retry: false,
   });
 
@@ -201,6 +227,12 @@ export default function VendorDetail() {
   }
 
   const vendor = query.data;
+  const startingPrice = vendor.startingPrice ?? cheapestOffering(serviceRows);
+  const bookingRows: MyBooking[] = Array.isArray(myBookings.data)
+    ? myBookings.data
+    : (myBookings.data?.data ?? []);
+  const withVendor = bookingRows.filter((b) => b.providerId === vendor.id);
+  const existing = withVendor.find((b) => b.status !== 'cancelled') ?? withVendor[0];
   const photos = vendor.portfolio ?? [];
   const saved = shortlist.has(vendor.id);
   const reviewRows: Review[] = Array.isArray(reviews.data)
@@ -286,7 +318,8 @@ export default function VendorDetail() {
             </View>
             <Caption>
               <Star size={13} color={rgb(theme.brand)} weight="fill" />{' '}
-              {vendor.ratingAvg.toFixed(1)} · {vendor.ratingCount} reviews
+              {Number(vendor.ratingAvg).toFixed(1)} · {vendor.ratingCount}{' '}
+              {vendor.ratingCount === 1 ? 'review' : 'reviews'}
             </Caption>
             <Caption>
               <MapPin size={13} color={rgb(theme.ink[400])} />{' '}
@@ -310,6 +343,8 @@ export default function VendorDetail() {
               return (
                 <Pressable
                   key={key}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: active }}
                   onPress={() => setTab(key)}
                   style={{
                     paddingHorizontal: space(3),
@@ -340,10 +375,10 @@ export default function VendorDetail() {
                   <SocialLinksList links={vendor} />
                 </Card>
               ) : null}
-              {vendor.startingPrice !== null ? (
+              {startingPrice !== null ? (
                 <Card>
                   <Caption>Starting Price</Caption>
-                  <SectionTitle>{rupees(vendor.startingPrice)}</SectionTitle>
+                  <SectionTitle>{rupees(startingPrice)}</SectionTitle>
                   <Pressable onPress={() => setTab('packages')}>
                     <Caption tone="brand" style={{ fontWeight: '600', marginTop: space(1) }}>
                       View Packages
@@ -401,8 +436,10 @@ export default function VendorDetail() {
             ) : (
               serviceRows.map((service) => (
                 <Card key={service.id} style={{ gap: space(2) }}>
-                  <Body style={{ fontWeight: '700' }}>{service.name}</Body>
-                  {service.description ? <Caption>{service.description}</Caption> : null}
+                  <Body style={{ fontWeight: '700' }}>{serviceName(service)}</Body>
+                  {service.description || service.definition?.description ? (
+                    <Caption>{service.description || service.definition?.description}</Caption>
+                  ) : null}
                   {(service.offerings ?? []).map((offering) => (
                     <View
                       key={offering.id}
@@ -463,7 +500,7 @@ export default function VendorDetail() {
                               color: active ? rgb(theme.brandFg) : rgb(theme.ink[700]),
                             }}
                           >
-                            {s.name}
+                            {serviceName(s)}
                           </Caption>
                         </Pressable>
                       );
@@ -572,16 +609,16 @@ export default function VendorDetail() {
           <Button
             label="Chat"
             variant="outline"
-            onPress={() =>
-              NativeAlert.alert(
-                'Chat with this vendor',
-                'Vendor inquiries open from Chat once a conversation exists. Browse your conversations from the Chat tab.',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Open Chat', onPress: () => router.push('/chat') },
-                ],
-              )
-            }
+            onPress={() => {
+              if (existing) {
+                router.push({ pathname: '/plan/bookings', params: { highlight: existing.id } });
+                return;
+              }
+              setError('');
+              setNotice(
+                'Messages with a vendor open on your booking. Send a booking request and you can chat with them from Bookings.',
+              );
+            }}
             style={{ flex: 1 }}
           />
           <Button

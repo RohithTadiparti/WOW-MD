@@ -34,27 +34,31 @@ export function MaritalHistoryForm({
   
   const h = (details.maritalHistory as Record<string, unknown>) ?? {};
   
+  // The server keeps divorced people's end date as divorceDate and everyone else's as separationDate.
+  const divorced = details.maritalStatus === 'divorced';
+
   const [form, setForm] = useState<Form>({
     marriageDate: String(h.marriageDate ?? ''),
-    divorceDate: String(h.divorceDate ?? ''),
+    divorceDate: String(h.divorceDate ?? h.separationDate ?? ''),
     yearsMarried: String(h.yearsMarried ?? ''),
-    childrenBoys: String(h.childrenBoys ?? ''),
-    childrenGirls: String(h.childrenGirls ?? ''),
-    livingWith: String(h.livingWith ?? ''),
+    childrenBoys: String(h.boys ?? ''),
+    childrenGirls: String(h.girls ?? ''),
+    livingWith: String(h.childrenLivingWith ?? ''),
   });
 
   const save = useMutation({
     mutationFn: async () => {
+      const boys = form.childrenBoys ? Number(form.childrenBoys) : undefined;
+      const girls = form.childrenGirls ? Number(form.childrenGirls) : undefined;
       const payload = {
-        maritalStatus: details.maritalStatus, // keep existing
-        maritalHistory: {
-          marriageDate: form.marriageDate || undefined,
-          divorceDate: form.divorceDate || undefined,
-          yearsMarried: form.yearsMarried ? Number(form.yearsMarried) : undefined,
-          childrenBoys: form.childrenBoys ? Number(form.childrenBoys) : undefined,
-          childrenGirls: form.childrenGirls ? Number(form.childrenGirls) : undefined,
-          livingWith: form.livingWith.trim() || undefined,
-        },
+        maritalStatus: details.maritalStatus,
+        marriageDate: form.marriageDate || undefined,
+        [divorced ? 'divorceDate' : 'separationDate']: form.divorceDate || undefined,
+        yearsMarried: form.yearsMarried ? Number(form.yearsMarried) : undefined,
+        hasChildren: boys === undefined && girls === undefined ? undefined : (boys ?? 0) + (girls ?? 0) > 0,
+        boys,
+        girls,
+        childrenLivingWith: form.livingWith.trim() || undefined,
       };
       await api.put(`/profiles/${profileId}/details/marital`, payload);
     },
@@ -68,6 +72,7 @@ export function MaritalHistoryForm({
   });
 
   const set = (key: keyof Form) => (value: string) => setForm({ ...form, [key]: value });
+  const setCount = (key: keyof Form) => (value: string) => setForm({ ...form, [key]: value.replace(/\D/g, '') });
 
   return (
     <View style={{ gap: space(4) }}>
@@ -76,12 +81,12 @@ export function MaritalHistoryForm({
       <Card>
         <DateField label="Marriage Date" value={form.marriageDate} onChange={set('marriageDate')} />
         <DateField label="Divorce/Separation Date" value={form.divorceDate} onChange={set('divorceDate')} />
-        <Field label="Years Married" value={form.yearsMarried} onChangeText={set('yearsMarried')} keyboardType="number-pad" />
+        <Field label="Years Married" value={form.yearsMarried} onChangeText={setCount('yearsMarried')} keyboardType="number-pad" maxLength={2} />
       </Card>
       
       <Card>
-        <Field label="Children (Boys)" value={form.childrenBoys} onChangeText={set('childrenBoys')} keyboardType="number-pad" />
-        <Field label="Children (Girls)" value={form.childrenGirls} onChangeText={set('childrenGirls')} keyboardType="number-pad" />
+        <Field label="Children (Boys)" value={form.childrenBoys} onChangeText={setCount('childrenBoys')} keyboardType="number-pad" maxLength={2} />
+        <Field label="Children (Girls)" value={form.childrenGirls} onChangeText={setCount('childrenGirls')} keyboardType="number-pad" maxLength={2} />
         <Field label="Living With" value={form.livingWith} onChangeText={set('livingWith')} hint="E.g. Father, Mother, Self" />
       </Card>
       

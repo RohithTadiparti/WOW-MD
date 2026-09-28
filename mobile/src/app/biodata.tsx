@@ -174,7 +174,10 @@ export default function BiodataWizard() {
         <HoroscopeSection
           profileId={profileId}
           details={d}
-          onSaved={nextStep}
+          onSaved={() => {
+            refresh();
+            nextStep();
+          }}
           onBack={prevStep}
           onSkip={nextStep}
           isWizard
@@ -185,7 +188,10 @@ export default function BiodataWizard() {
         <PreferencesSection
           profileId={profileId}
           details={d}
-          onSaved={nextStep}
+          onSaved={() => {
+            refresh();
+            nextStep();
+          }}
           onBack={prevStep}
           onSkip={nextStep}
           isWizard

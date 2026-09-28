@@ -1,37 +1,43 @@
 import { useCallback, useState, type ReactNode } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { Pressable, StyleSheet, View, ScrollView, Alert as RNAlert } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { PencilSimple, Wallet } from 'phosphor-react-native';
+import { 
+  PencilSimple, Wallet, CaretRight, Sparkle, Buildings, Coffee, Camera, PaintBrush, Hand, MusicNote, ClipboardText, Target, ChartPieSlice, Star
+} from 'phosphor-react-native';
 
 import { api, apiMessage } from '@/lib/api';
 import { money } from '@/lib/format';
 import { fetchWeddingDashboard } from '@/lib/wedding-plan';
 import { SuggestedVendors, useBudgetVendors } from '@/components/plan/suggested-vendors';
-import { Alert, Body, Button, Caption, Card, EmptyState, Field, Loading, Screen } from '@/components/ui';
-import { rgb, space, useTheme } from '@/theme';
+import { Alert, Body, Button, Caption, Card, EmptyState, Field, Loading, Screen, SectionTitle } from '@/components/ui';
+import { rgb, space, useTheme, radius } from '@/theme';
 import type { Channels } from '@/theme/tokens';
+import { useCatalogCategories } from '@/components/business/category-picker';
 
 type EventRow = { id: string; expectedGuests?: number | null };
 
-/**
- * The couple's overall wedding budget, what their bookings have committed
- * against it, and vendors whose prices fit what is left.
- *
- * The total is `wedding_plans.budget` (PUT /planner/budget); committed is the
- * server's sum of live bookings. Events are not budget categories.
- */
+const getCategoryIcon = (slug: string, theme: any) => {
+  const props = { size: 24, color: rgb(theme.brand), weight: 'regular' as const };
+  if (slug.includes('hall') || slug.includes('venue')) return <Buildings {...props} />;
+  if (slug.includes('cater')) return <Coffee {...props} />;
+  if (slug.includes('photo')) return <Camera {...props} />;
+  if (slug.includes('decor')) return <Sparkle {...props} />;
+  if (slug.includes('makeup')) return <PaintBrush {...props} />;
+  if (slug.includes('mehendi')) return <Hand {...props} />;
+  if (slug.includes('music') || slug.includes('dj')) return <MusicNote {...props} />;
+  if (slug.includes('planner')) return <ClipboardText {...props} />;
+  return <Star {...props} />;
+};
+
 export default function PlanBudget() {
   const qc = useQueryClient();
+  const theme = useTheme();
+  const router = useRouter();
   const [editing, setEditing] = useState(false);
 
   const dashboard = useQuery({ queryKey: ['wedding-dashboard'], queryFn: fetchWeddingDashboard, retry: false });
-  // Only for the guest count a per-guest price is estimated with.
-  const events = useQuery({
-    queryKey: ['events'],
-    queryFn: async () => (await api.get('/events')).data,
-    retry: false,
-  });
+  const catalog = useCatalogCategories();
 
   useFocusEffect(
     useCallback(() => {
@@ -42,9 +48,7 @@ export default function PlanBudget() {
   const total = dashboard.data?.budget.total ? Number(dashboard.data.budget.total) : null;
   const committed = Number(dashboard.data?.budget.committed ?? 0);
   const remaining = total === null ? 0 : Number(dashboard.data?.budget.remaining ?? 0);
-  const pricing = useBudgetVendors(Math.max(remaining, 0));
-  const eventRows: EventRow[] = Array.isArray(events.data) ? events.data : (events.data?.data ?? []);
-  const guests = Math.max(0, ...eventRows.map((e) => e.expectedGuests ?? 0)) || null;
+  const pricing = useBudgetVendors(total || 0);
 
   if (dashboard.isPending) {
     return (
@@ -86,12 +90,69 @@ export default function PlanBudget() {
         ) : null}
       </BudgetHeader>
 
-      <SuggestedVendors
-        fits={pricing.evaluate(remaining, guests)}
-        loading={pricing.loading}
-        error={pricing.error}
-        blocked={blocked}
-      />
+      {!editing && (
+        <>
+          <View style={{ marginTop: space(4), gap: space(2) }}>
+            <SectionTitle>Find Vendors Within Your Budget</SectionTitle>
+            <Caption tone="muted">Explore all wedding vendors that fit your overall budget.</Caption>
+            
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2), marginTop: space(2) }}>
+              {catalog.isPending ? (
+                <Loading rows={2} />
+              ) : (
+                catalog.data?.filter(c => ['photography', 'catering', 'venue', 'decor', 'makeup', 'priest', 'transportation', 'planning', 'entertainment'].includes(c.slug)).map((c) => (
+                  <Pressable
+                    key={c.slug}
+                    onPress={() => router.push({ pathname: '/vendors', params: { category: c.slug, fromBudget: 'true' } })}
+                    style={({ pressed }) => ({
+                      width: '23%',
+                      backgroundColor: pressed ? rgb(theme.surfaceSunken) : rgb(theme.surface),
+                      borderRadius: radius.lg,
+                      padding: space(2),
+                      alignItems: 'center',
+                      gap: 4,
+                      borderWidth: 1,
+                      borderColor: rgb(theme.border),
+                    })}
+                  >
+                    <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: rgb(theme.brandSoft), alignItems: 'center', justifyContent: 'center', marginBottom: 4 }}>
+                      {getCategoryIcon(c.slug, theme)}
+                    </View>
+                    <Caption style={{ textAlign: 'center', fontSize: 10, fontWeight: '600' }} numberOfLines={1}>{c.name}</Caption>
+                  </Pressable>
+                ))
+              )}
+            </View>
+          </View>
+
+          <SuggestedVendors
+            fits={pricing.evaluate(total || 0)}
+            loading={pricing.loading}
+            error={pricing.error}
+            blocked={blocked}
+          />
+
+          <Pressable onPress={() => router.push('/plan/personalized-plan')}>
+            <Card style={{ marginTop: space(6), backgroundColor: rgb(theme.brandSoft), padding: space(3) }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(3) }}>
+                <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: rgb(theme.surface), alignItems: 'center', justifyContent: 'center' }}>
+                  <ChartPieSlice size={20} color={rgb(theme.brand)} weight="bold" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Body style={{ fontWeight: '700' }}>Estimated Wedding Plan</Body>
+                  <Caption tone="muted">Get a complete vendor plan that fits your budget</Caption>
+                </View>
+                <CaretRight size={20} color={rgb(theme.ink[400])} />
+              </View>
+            <Button
+              style={{ marginTop: space(3) }}
+              label="Get Personalized Plan"
+              onPress={() => router.push('/plan/personalized-plan')}
+            />
+            </Card>
+          </Pressable>
+        </>
+      )}
     </Screen>
   );
 }
@@ -121,9 +182,10 @@ function BudgetHeader({
             alignItems: 'center',
             justifyContent: 'center',
             backgroundColor: rgb(theme.surface),
+            borderRadius: radius.md,
           }}
         >
-          <Wallet size={24} color={rgb(theme.brand)} />
+          <Wallet size={24} color={rgb(theme.brand)} weight="fill" />
         </View>
         <View style={{ flex: 1, gap: 2 }}>
           <Caption style={{ fontWeight: '600', color: rgb(theme.ink[900]) }}>Total Wedding Budget</Caption>
@@ -143,6 +205,7 @@ function BudgetHeader({
                   alignItems: 'center',
                   justifyContent: 'center',
                   backgroundColor: rgb(theme.surface),
+                  borderRadius: 15,
                 }}
               >
                 <PencilSimple size={16} color={rgb(theme.brand)} />
@@ -182,7 +245,7 @@ function Stat({ label, value, color, first }: { label: string; value: string; co
       <Caption tone="muted" numberOfLines={1}>
         {label}
       </Caption>
-      <Body numberOfLines={1} style={{ fontSize: 15, fontWeight: '700', color: rgb(color ?? theme.ink[900]) }}>
+      <Body numberOfLines={1} style={{ fontSize: 16, fontWeight: '700', color: rgb(color ?? theme.ink[900]) }}>
         {value}
       </Body>
     </View>
@@ -220,7 +283,26 @@ function BudgetEditor({ total, onDone }: { total: number | null; onDone: () => v
       />
       <View style={{ flexDirection: 'row', gap: space(2) }}>
         <Button style={{ flex: 1 }} small variant="outline" label="Cancel" disabled={save.isPending} onPress={onDone} />
-        <Button style={{ flex: 1 }} small label="Save Budget" busy={save.isPending} onPress={() => save.mutate()} />
+        <Button
+          style={{ flex: 1 }}
+          small
+          label="Save Budget"
+          busy={save.isPending}
+          onPress={() => {
+            if (value || total === null) {
+              save.mutate();
+              return;
+            }
+            RNAlert.alert(
+              'Clear your budget?',
+              'Your overall wedding budget will be removed. Bookings stay as they are.',
+              [
+                { text: 'Keep it', style: 'cancel' },
+                { text: 'Clear budget', style: 'destructive', onPress: () => save.mutate() },
+              ],
+            );
+          }}
+        />
       </View>
     </View>
   );
