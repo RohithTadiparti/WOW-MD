@@ -206,6 +206,12 @@ export class BookingMessageDto {
 }
 
 export class BookingSearchDto extends PaginationDto {
+  @ApiPropertyOptional({ description: 'Display bucket; uses the same grouping as the counts endpoint' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  bucket?: string;
+
   @ApiPropertyOptional({ enum: BookingStatus })
   @IsOptional()
   @IsEnum(BookingStatus)

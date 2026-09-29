@@ -1,5 +1,6 @@
+import { synchronizeBookings } from '../lib/booking-queries';
 import { FormEvent, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, apiMessage } from '../lib/api';
 import { CategoryNames } from './CategoryPicker';
@@ -44,6 +45,7 @@ interface BookingContext {
  */
 export default function RequestDialog({ vendor, onClose }: { vendor: RequestVendor; onClose: () => void }) {
   const nav = useNavigate();
+  const qc = useQueryClient();
   // Arriving from an event carries it in. An organiser who pressed "book
   // someone for this day" has already told the app which day, and asking again
   // in a dropdown is asking them to repeat themselves.
@@ -191,6 +193,7 @@ export default function RequestDialog({ vendor, onClose }: { vendor: RequestVend
         // refuses it from anybody else and refuses a wedding they do not run.
         ...(forClient ? { forClientUserId: forClient } : {}),
       });
+      await synchronizeBookings(qc);
       // A planner who raised this for a client cannot see it on /bookings --
       // they hold no BOOKING_READ_OWN, so that page renders their own incoming
       // work instead. The client's page carries it, under Vendors and services.

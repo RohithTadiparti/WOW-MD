@@ -1,4 +1,5 @@
-import { FormEvent, useState } from 'react';
+import { synchronizeBookings } from '../lib/booking-queries';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { api, apiMessage } from '../lib/api';
@@ -158,7 +159,7 @@ const TAB_DEFS: { key: string; label: string; statuses: string[] }[] = [
     statuses: ['in_progress', 'completed_pending_final_payment'],
   },
   { key: 'completed', label: 'Completed', statuses: ['completed'] },
-  { key: 'cancelled', label: 'Cancelled', statuses: ['cancelled', 'disputed'] },
+  { key: 'cancelled', label: 'Cancelled', statuses: ['cancelled'] },
 ];
 
 /** A plain-English line under the technical status, per status (EZ1-I167). */
@@ -226,6 +227,7 @@ export default function Bookings() {
   // (everything not cancelled or completed) rather than one status, so it is
   // filtered on the client; the exact statuses pass straight to the API.
   const [status, setStatus] = useState(params.get('status') ?? '');
+  const [page, setPage] = useState(1);
   const [error, setError] = useState('');
   // Arriving from a fresh request opens that booking straight away, so the
   // person is looking at the thing they just did rather than hunting for it.
@@ -241,38 +243,41 @@ export default function Bookings() {
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
 
-  // Every booking is fetched once and filtered on the client (EZ1-I141): that is
-  // what lets the status tabs carry live counts and switch without a round-trip.
-  //
-  // The whole page the server allows, not its default twenty: the tabs were
-  // counted from the first twenty rows and disagreed with the dashboard, which
-  // counts every booking.
+  // Each tab is filtered before pagination; counts cover the entire shared wedding.
   const { data, isLoading } = useQuery({
-    queryKey: ['bookings'],
-    queryFn: async () => (await api.get('/bookings', { params: { limit: 100 } })).data,
+    queryKey: ['bookings', status, page],
+    queryFn: async ({ signal }) => (await api.get('/bookings', { signal, params: { limit: 100, page, ...(status ? (TAB_DEFS.some(t => t.key === status) || status === 'active' ? { bucket: status } : { status }) : {}) } })).data,
     enabled: canBuy,
   });
 
   // The dashboard & tab tally from server database
   const { data: serverCounts } = useQuery({
     queryKey: ['my-booking-counts'],
-    queryFn: async () =>
-      (await api.get('/bookings/counts')).data as Record<string, number>,
+    queryFn: async ({ signal }) =>
+      (await api.get('/bookings/counts', { signal })).data as Record<string, number>,
     enabled: canBuy,
     retry: false,
   });
 
+  const mutationRunning = useRef(false);
+  const [mutating, setMutating] = useState(false);
+  useEffect(() => {
+    if (data?.meta && page > data.meta.totalPages) setPage(data.meta.totalPages);
+  }, [data, page]);
+
   async function run(fn: () => Promise<unknown>) {
+    if (mutationRunning.current) return;
+    mutationRunning.current = true;
+    setMutating(true);
     setError('');
     try {
       await fn();
-      qc.invalidateQueries({ queryKey: ['bookings'] });
-      qc.invalidateQueries({ queryKey: ['my-booking-counts'] });
-      qc.invalidateQueries({ queryKey: ['quotations'] });
-      qc.invalidateQueries({ queryKey: ['milestones'] });
-      qc.invalidateQueries({ queryKey: ['booking-addons'] });
+      await synchronizeBookings(qc);
     } catch (err) {
       setError(apiMessage(err, 'That action was rejected.'));
+    } finally {
+      mutationRunning.current = false;
+      setMutating(false);
     }
   }
 
@@ -311,28 +316,17 @@ export default function Bookings() {
   }
 
   const allBookings: Booking[] = data?.data ?? [];
-  const matchesTab = (b: Booking, tabKey: string): boolean => {
-    const s = (b.status ?? '').toLowerCase().trim();
-    if (tabKey === '') return true;
-    if (tabKey === 'active') return s !== 'cancelled' && s !== 'completed' && s !== 'disputed';
-    const def = TAB_DEFS.find((t) => t.key === tabKey);
-    if (def && def.statuses.length > 0) {
-      return def.statuses.map((x) => x.toLowerCase()).includes(s);
-    }
-    return s === tabKey.toLowerCase().trim();
-  };
-  const bookings: Booking[] = allBookings.filter((b) => matchesTab(b, status));
+  const bookings: Booking[] = allBookings;
 
   const countFor = (tabKey: string) => {
-    if (serverCounts) {
-      if (tabKey === '') return serverCounts.all ?? 0;
-      if (tabKey in serverCounts) return serverCounts[tabKey] ?? 0;
-      const def = TAB_DEFS.find((t) => t.key === tabKey);
-      if (def && def.statuses.length > 0) {
-        return def.statuses.reduce((sum, s) => sum + (serverCounts[s] ?? 0), 0);
-      }
+    if (!serverCounts) return undefined;
+    const def = TAB_DEFS.find((t) => t.key === tabKey);
+    if (tabKey === '') return serverCounts.all ?? 0;
+    if (def && def.statuses.length > 0) {
+      return def.statuses.reduce((sum, s) => sum + (serverCounts[s] ?? 0), 0);
     }
-    return allBookings.filter((b) => matchesTab(b, tabKey)).length;
+    if (tabKey in serverCounts) return serverCounts[tabKey] ?? 0;
+    return undefined;
   };
   const partialNote = partialListNote(
     allBookings.length,
@@ -362,7 +356,7 @@ export default function Bookings() {
           return (
             <button
               key={t.key || 'all'}
-              onClick={() => setStatus(t.key)}
+              onClick={() => { setStatus(t.key); setPage(1); }}
               className={`shrink-0 whitespace-nowrap rounded-sm border px-3 py-1 text-sm transition-colors ${
                 activeTab
                   ? 'border-brand bg-brand-light text-brand-dark'
@@ -378,6 +372,11 @@ export default function Bookings() {
         })}
       </div>
 
+      <div className="flex items-center gap-3 text-sm">
+        <button className="btn-outline" disabled={page <= 1 || isLoading} onClick={() => setPage(p => p - 1)}>Previous</button>
+        <span>Page {page} of {data?.meta?.totalPages ?? 1}</span>
+        <button className="btn-outline" disabled={isLoading || !data || page >= data.meta.totalPages} onClick={() => setPage(p => p + 1)}>Next</button>
+      </div>
       {error && <p className="alert-critical">{error}</p>}
       {isLoading && <Loading rows={3} />}
       {partialNote && <p className="text-xs text-gray-500">{partialNote}.</p>}
@@ -624,6 +623,7 @@ export default function Bookings() {
                     : `${b.providerName ?? 'The provider'} will be told you no longer need them. This cannot be undone.`
                 }
                 confirmLabel="Confirm cancellation"
+                busy={mutating}
                 cancelLabel="Keep booking"
                 onDismiss={() => {
                   setCancelling(null);
@@ -737,7 +737,7 @@ function ReviewForm({ booking, onCancel }: { booking: Booking; onCancel: () => v
           : {}),
       });
       setDone(true);
-      qc.invalidateQueries({ queryKey: ['bookings'] });
+      await synchronizeBookings(qc);
     } catch (err) {
       setError(apiMessage(err, 'That review could not be submitted.'));
     } finally {

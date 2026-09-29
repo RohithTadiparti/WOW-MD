@@ -189,7 +189,7 @@ OFFICER_TEMP=$(field /tmp/body devPassword)
 
 c=$(req POST /auth/login "{\"email\":\"officer-$STAMP@wow.local\",\"password\":\"$OFFICER_TEMP\"}")
 OFFICER=$(field /tmp/body accessToken)
-req POST /auth/password/change "{\"currentPassword\":\"$OFFICER_TEMP\",\"newPassword\":\"OfficerPass1\"}" "$OFFICER" >/dev/null
+req POST /auth/password/change "{\"currentPassword\":\"$OFFICER_TEMP\",\"newPassword\":\"OfficerPass1\",\"confirmNewPassword\":\"OfficerPass1\"}" "$OFFICER" >/dev/null
 c=$(req POST /auth/login "{\"email\":\"officer-$STAMP@wow.local\",\"password\":\"OfficerPass1\"}")
 OFFICER=$(field /tmp/body accessToken)
 

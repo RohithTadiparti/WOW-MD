@@ -1,3 +1,4 @@
+import { ACTIVE_BOOKING_STATUSES, BUYER_BOOKING_BUCKETS, PROVIDER_BOOKING_BUCKETS, bookingCounts } from './booking-counts';
 import {
   BadRequestException,
   ConflictException,
@@ -1639,7 +1640,19 @@ export class BookingsService {
     }
 
     if (q.status) qb.andWhere('b.status = :status', { status: q.status });
+    if (q.bucket && q.bucket !== 'all' && q.bucket !== 'request_on_date') {
+      const statuses = q.bucket === 'active' ? ACTIVE_BOOKING_STATUSES : BUYER_BOOKING_BUCKETS[q.bucket];
+      if (!statuses) throw new BadRequestException('Unknown booking bucket');
+      qb.andWhere('b.status IN (:...bucketStatuses)', { bucketStatuses: statuses });
+    }
+    if (q.bucket === 'request_on_date') {
+      qb.leftJoin(WeddingEvent, 'bucketEvent', 'bucketEvent.id = b."eventId"')
+        .andWhere('b."slotId" IS NULL')
+        .andWhere('(b."eventDate" IS NOT NULL OR bucketEvent."eventDate" IS NOT NULL)')
+        .andWhere('b.status IN (:...requestStatuses)', { requestStatuses: REQUEST_STATUSES });
+    }
     qb.orderBy('b."createdAt"', 'DESC')
+      .addOrderBy('b.id', 'DESC')
       .skip((q.page - 1) * q.limit)
       .take(q.limit);
 
@@ -1687,7 +1700,7 @@ export class BookingsService {
    */
   async incomingCounts(actor: AuthUser): Promise<Record<string, number>> {
     const providerIds = await this.ownedProviderIds(actor);
-    if (providerIds.length === 0) return {};
+    if (providerIds.length === 0) return { ...bookingCounts([], PROVIDER_BOOKING_BUCKETS), request_on_date: 0 };
 
     const rows = await this.bookings
       .createQueryBuilder('b')
@@ -1697,33 +1710,7 @@ export class BookingsService {
       .groupBy('b.status')
       .getRawMany<{ status: string; count: string }>();
 
-    const counts: Record<string, number> = {
-      all: 0,
-      requests: 0,
-      confirmed: 0,
-      in_progress: 0,
-      completed: 0,
-      cancelled: 0,
-    };
-
-    for (const row of rows) {
-      const s = (row.status ?? '').toLowerCase().trim();
-      const n = Number(row.count) || 0;
-      counts.all += n;
-      counts[s] = (counts[s] ?? 0) + n;
-
-      if (s === 'requested' || s === 'quotation_sent' || s === 'quotation_accepted') {
-        counts.requests += n;
-      } else if (s === 'payment_pending' || s === 'pending' || s === 'confirmed') {
-        counts.confirmed += n;
-      } else if (s === 'in_progress' || s === 'completed_pending_final_payment') {
-        counts.in_progress += n;
-      } else if (s === 'completed') {
-        counts.completed += n;
-      } else if (s === 'cancelled' || s === 'disputed') {
-        counts.cancelled += n;
-      }
-    }
+    const counts = bookingCounts(rows, PROVIDER_BOOKING_BUCKETS);
 
     // Not a status, so not in the tally above. Counted with the same rule as
     // the row's flag, across the whole queue rather than the rows a client
@@ -1763,56 +1750,7 @@ export class BookingsService {
     }
     const rows = await qb.groupBy('b.status').getRawMany<{ status: string; count: string }>();
 
-    const counts: Record<string, number> & {
-      all: number;
-      active: number;
-      cancelled: number;
-      completed: number;
-    } = {
-      all: 0,
-      active: 0,
-      cancelled: 0,
-      completed: 0,
-      requested: 0,
-      quotation: 0,
-      payment: 0,
-      confirmed: 0,
-      in_progress: 0,
-      disputed: 0,
-    };
-
-    for (const row of rows) {
-      const s = (row.status ?? '').toLowerCase().trim();
-      const n = Number(row.count) || 0;
-      counts.all += n;
-      counts[s] = (counts[s] ?? 0) + n;
-
-      if (s === 'requested') {
-        counts.requested += n;
-        counts.active += n;
-      } else if (s === 'quotation_sent' || s === 'quotation_accepted') {
-        counts.quotation += n;
-        counts.active += n;
-      } else if (s === 'payment_pending' || s === 'pending') {
-        counts.payment += n;
-        counts.active += n;
-      } else if (s === 'confirmed') {
-        counts.confirmed += n;
-        counts.active += n;
-      } else if (s === 'in_progress' || s === 'completed_pending_final_payment') {
-        counts.in_progress += n;
-        counts.active += n;
-      } else if (s === 'completed') {
-        counts.completed += n;
-      } else if (s === 'cancelled' || s === 'disputed') {
-        counts.cancelled += n;
-        if (s === 'disputed') counts.disputed += n;
-      } else {
-        counts.active += n;
-      }
-    }
-
-    return counts;
+    return bookingCounts(rows);
   }
 
   /**
@@ -2086,7 +2024,19 @@ export class BookingsService {
       .createQueryBuilder('b')
       .where('b."providerId" IN (:...ids)', { ids: providerIds });
     if (q.status) qb.andWhere('b.status = :status', { status: q.status });
+    if (q.bucket && q.bucket !== 'all' && q.bucket !== 'request_on_date') {
+      const statuses = q.bucket === 'active' ? ACTIVE_BOOKING_STATUSES : PROVIDER_BOOKING_BUCKETS[q.bucket];
+      if (!statuses) throw new BadRequestException('Unknown booking bucket');
+      qb.andWhere('b.status IN (:...bucketStatuses)', { bucketStatuses: statuses });
+    }
+    if (q.bucket === 'request_on_date') {
+      qb.leftJoin(WeddingEvent, 'bucketEvent', 'bucketEvent.id = b."eventId"')
+        .andWhere('b."slotId" IS NULL')
+        .andWhere('(b."eventDate" IS NOT NULL OR bucketEvent."eventDate" IS NOT NULL)')
+        .andWhere('b.status IN (:...requestStatuses)', { requestStatuses: REQUEST_STATUSES });
+    }
     qb.orderBy('b."createdAt"', 'DESC')
+      .addOrderBy('b.id', 'DESC')
       .skip((q.page - 1) * q.limit)
       .take(q.limit);
 

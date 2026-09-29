@@ -50,28 +50,30 @@ describe('WOW API (e2e)', () => {
    * duplicate detection runs against, so it is not optional for them.
    */
   const solo = {
-    email: `solo_${unique}@test.com`,
+    email: `solo_${unique}@gmail.com`,
     password: 'Password123',
     accountType: 'individual',
     role: 'bride',
     displayName: 'Solo Sharma',
+    phone: `98763${String(unique).slice(-5)}`,
   };
   const groom = {
-    email: `groom_${unique}@test.com`,
+    email: `groom_${unique}@gmail.com`,
     password: 'Password123',
     accountType: 'individual',
     role: 'groom',
     displayName: 'Groom Reddy',
+    phone: `98762${String(unique).slice(-5)}`,
   };
   const agent = {
-    email: `agent_${unique}@test.com`,
+    email: `agent_${unique}@gmail.com`,
     password: 'Password123',
     accountType: 'agent',
     displayName: 'Anita Rao',
     phone: `98765${String(unique).slice(-5)}`,
   };
   const vendor = {
-    email: `vendor_${unique}@test.com`,
+    email: `vendor_${unique}@gmail.com`,
     password: 'Password123',
     accountType: 'vendor',
     displayName: 'Vikram Nair',

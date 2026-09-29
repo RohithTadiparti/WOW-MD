@@ -1,5 +1,5 @@
 import { FormEvent, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AxiosError } from 'axios';
 import { api, apiMessage } from '../lib/api';
 import { motion, useReducedMotion } from 'motion/react';
@@ -11,6 +11,7 @@ import OtpSignIn from '../components/OtpSignIn';
 
 export default function Login() {
   const nav = useNavigate();
+  const location = useLocation();
   const setAuth = useAuth((s) => s.setAuth);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -93,6 +94,7 @@ export default function Login() {
             <OtpSignIn onUsePassword={() => setByMobile(false)} onSignedIn={() => nav('/')} />
           ) : (
             <form onSubmit={submit}>
+          {location.state?.passwordChanged && <p role="status" className="rounded-sm bg-brand-light p-3 text-sm text-brand-dark">Password changed successfully. Sign in again to continue.</p>}
           {error && (
             <p
               role="alert"

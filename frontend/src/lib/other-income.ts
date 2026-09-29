@@ -9,6 +9,7 @@ export const OTHER_INCOME_LABELS = {
 export interface OtherIncomeEntry {
   id: string;
   source: keyof typeof OTHER_INCOME_LABELS;
+  otherIncomeSource?: string;
   amount: string;
 }
 

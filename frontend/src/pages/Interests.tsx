@@ -285,7 +285,14 @@ export default function Interests() {
         />
       )}
 
-      <div>
+      <div className="interest-hero">
+        <div className="mb-2 flex items-center gap-2 text-xs font-medium text-gray-500">
+          <Link className="transition-colors hover:text-brand" to="/">
+            Dashboard
+          </Link>
+          <span aria-hidden>/</span>
+          <span className="text-brand">Interests</span>
+        </div>
         <h1 className="page-title">Interests</h1>
         <p className="page-subtitle">
           {isAgency
@@ -345,7 +352,7 @@ export default function Interests() {
 
       {ready && (
         <>
-          <nav className="flex flex-wrap gap-1 border-b border-gray-200">
+          <nav className="interest-tabs flex flex-wrap gap-1 rounded-xl border border-gray-200 bg-surface p-1.5 shadow-card">
             {TABS.map((t) => {
               const count = board?.counts[t.key] ?? 0;
               const isActive = tab === t.key;
@@ -354,7 +361,7 @@ export default function Interests() {
                   key={t.key}
                   onClick={() => switchTab(t.key)}
                   aria-current={isActive ? 'page' : undefined}
-                  className={`-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm transition-colors ${
+                    className={`interest-tab flex items-center gap-1.5 rounded-lg border-b-2 px-3 py-2.5 text-sm transition-colors ${
                     isActive
                       ? 'border-brand font-semibold text-brand-strong'
                       : 'border-transparent text-gray-500 hover:text-gray-800'
@@ -458,7 +465,7 @@ export default function Interests() {
 
           {/* Nothing at all in this tab. */}
           {!isLoading && allRows.length === 0 && (
-            <div className="card">
+            <div className="card interest-empty-state">
               <EmptyState
                 icon={HandHeart}
                 title={`No ${(activeTab?.label ?? '').toLowerCase()} interests`}

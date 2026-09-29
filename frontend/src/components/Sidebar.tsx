@@ -53,7 +53,7 @@ export default function Sidebar({
         return (
           <div key={key}>
             {title && (
-              <h2 className="mb-2 w-fit bg-canvas px-3 text-[0.625rem] font-normal uppercase tracking-[0.24em] text-gray-500">
+              <h2 className="mb-2 px-3 text-[0.625rem] font-semibold uppercase tracking-[0.2em] text-gray-500">
                 {title}
               </h2>
             )}
@@ -68,14 +68,14 @@ export default function Sidebar({
                       to={entry.to}
                       onClick={onNavigate}
                       aria-current={active ? 'page' : undefined}
-                      className={`group relative flex items-center gap-3 rounded-md px-3 py-2 text-sm
-                        transition-colors duration-150 ${
+                      className={`group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium
+                        transition-[background-color,color,transform] duration-150 hover:translate-x-0.5 ${
                           active
                             ? filled
-                              ? 'text-brand-fg'
-                              : 'text-brand-strong'
+                              ? 'text-white'
+                              : 'text-brand-fg'
                             : // The ground colour, so the heart field never runs behind a label.
-                              'bg-canvas text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                              'bg-transparent text-gray-600 hover:bg-brand-soft hover:text-brand-strong'
                         }`}
                     >
                       {/*
@@ -89,11 +89,7 @@ export default function Sidebar({
                       {active && (
                         <motion.span
                           layoutId="nav-active"
-                          className={`absolute inset-0 -z-10 rounded-md ${
-                            filled
-                              ? 'bg-brand'
-                              : 'bg-brand-soft'
-                          }`}
+                          className="absolute inset-0 -z-10 rounded-lg bg-brand"
                           transition={
                             reduce
                               ? { duration: 0 }

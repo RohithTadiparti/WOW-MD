@@ -241,6 +241,8 @@ export class ChangePasswordDto {
   @ApiProperty()
   @IsString()
   @MaxLength(128)
+  @MinLength(1, { message: 'Current password is required.' })
+  @Transform(({ obj }) => obj.currentPassword)
   currentPassword: string;
 
   @ApiProperty({ minLength: 8, maxLength: 128 })
@@ -248,7 +250,15 @@ export class ChangePasswordDto {
   @MinLength(8)
   @MaxLength(128)
   @Matches(PASSWORD_PATTERN, { message: PASSWORD_MESSAGE })
+  @Transform(({ obj }) => obj.newPassword)
   newPassword: string;
+
+  @ApiProperty()
+  @IsString()
+  @MinLength(1, { message: 'Confirm new password is required.' })
+  @MaxLength(128)
+  @Transform(({ obj }) => obj.confirmNewPassword)
+  confirmNewPassword: string;
 }
 
 export class ConfirmMfaDto {

@@ -1,3 +1,4 @@
+import { synchronizeBookings } from '../lib/booking-queries';
 import { FormEvent, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
@@ -100,30 +101,8 @@ export default function ProviderBookings({ canQuote }: { canQuote: boolean }) {
       // action still posts nothing.
       body?: Record<string, unknown>;
     }) => (await api.put(`/bookings/${id}/${path}`, body ?? (path === 'cancel' ? {} : undefined))).data,
-    onSuccess: () => {
-      // Accepting a job spends a window, so the calendar has to be refetched
-      // alongside the booking list or the vendor sees a stale capacity.
-      //
-      // The open detail goes with it: an action that moves a booking also moves
-      // its instalments and writes its timeline, and a card whose head says
-      // "In progress" over a history ending at "Confirmed" is the same booking
-      // disagreeing with itself (EZ1-I259).
-      for (const key of [
-        'incoming-bookings',
-        'incoming-counts',
-        'booking-quotations',
-        'booking-milestones',
-        'booking-summary',
-        'booking-history',
-        'incoming-addons',
-        'earnings',
-        'availability-slots',
-        'availability-summary',
-        'availability-calendar',
-        'availability-bucket',
-      ]) {
-        qc.invalidateQueries({ queryKey: [key] });
-      }
+    onSuccess: async () => {
+      await synchronizeBookings(qc);
       setError('');
     },
     onError: (err) => {
@@ -228,7 +207,8 @@ export default function ProviderBookings({ canQuote }: { canQuote: boolean }) {
             {canQuote && quoting === b.id && (
               <QuotationForm
                 bookingId={b.id}
-                onDone={() => {
+                onDone={async () => {
+                  await synchronizeBookings(qc);
                   setQuoting(null);
                   qc.invalidateQueries({ queryKey: ['incoming-bookings'] });
                   qc.invalidateQueries({ queryKey: ['incoming-counts'] });
@@ -708,7 +688,7 @@ function VendorAddOns({ bookingId }: { bookingId: string }) {
   );
 }
 
-function QuotationForm({ bookingId, onDone }: { bookingId: string; onDone: () => void }) {
+function QuotationForm({ bookingId, onDone }: { bookingId: string; onDone: () => void | Promise<void> }) {
   const isPlanner = can(useAuth((s) => s.user?.permissions ?? []), Permission.PLANNER_LISTING_MANAGE);
   const [amount, setAmount] = useState('');
   const [notes, setNotes] = useState('');
@@ -740,7 +720,7 @@ function QuotationForm({ bookingId, onDone }: { bookingId: string; onDone: () =>
           ? filled.map((l) => ({ description: l.description.trim(), amount: Number(l.amount) }))
           : undefined,
       });
-      onDone();
+      await onDone();
     } catch (err) {
       setMsg(apiMessage(err, 'That quotation was rejected.'));
     }

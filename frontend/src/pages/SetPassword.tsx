@@ -34,7 +34,7 @@ export default function SetPassword() {
     }
     setBusy(true);
     try {
-      await api.post('/auth/password/change', { currentPassword: current, newPassword: next });
+      await api.post('/auth/password/change', { currentPassword: current, newPassword: next, confirmNewPassword: confirm });
       // The server has just revoked every session for this account, including
       // the one this page is running in. Clearing locally keeps the client
       // honest instead of leaving it holding a token the server has retired.

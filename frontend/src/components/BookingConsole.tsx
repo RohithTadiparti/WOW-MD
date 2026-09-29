@@ -93,7 +93,7 @@ const TABS: { key: string; label: string; statuses: string[] }[] = [
   // the balance is unpaid and the job can still be disputed.
   { key: 'in_progress', label: 'In progress', statuses: ['in_progress', 'completed_pending_final_payment'] },
   { key: 'completed', label: 'Completed', statuses: ['completed'] },
-  { key: 'cancelled', label: 'Cancelled', statuses: ['cancelled', 'disputed'] },
+  { key: 'cancelled', label: 'Cancelled', statuses: ['cancelled'] },
 ];
 
 const PAYMENT_TONE: Record<string, string> = {
@@ -134,6 +134,7 @@ export default function BookingConsole({
   const [tab, setTab] = useState(
     TABS.some((t) => t.key === wantedTab) ? (wantedTab as string) : 'all',
   );
+  const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<'newest' | 'oldest' | 'event'>('newest');
   /*
@@ -153,8 +154,8 @@ export default function BookingConsole({
   }, [highlighted]);
 
   const { data, isPending } = useQuery({
-    queryKey: ['incoming-bookings'],
-    queryFn: async () => (await api.get('/bookings/incoming', { params: { limit: 100 } })).data,
+    queryKey: ['incoming-bookings', tab, page],
+    queryFn: async ({ signal }) => (await api.get('/bookings/incoming', { signal, params: { limit: 100, bucket: tab, page } })).data,
     retry: false,
     // A customer accepting a quote or paying an instalment moves this list and
     // its counts too, and nothing pushes that here (EZ1-I266).
@@ -163,10 +164,14 @@ export default function BookingConsole({
 
   const { data: counts } = useQuery({
     queryKey: ['incoming-counts'],
-    queryFn: async () => (await api.get('/bookings/incoming/counts')).data as Record<string, number>,
+    queryFn: async ({ signal }) => (await api.get('/bookings/incoming/counts', { signal })).data as Record<string, number>,
     retry: false,
     refetchInterval: 30_000,
   });
+
+  useEffect(() => {
+    if (data?.meta && page > data.meta.totalPages) setPage(data.meta.totalPages);
+  }, [data, page]);
 
   const all: IncomingBooking[] = data?.data ?? data?.items ?? [];
 
@@ -201,14 +206,14 @@ export default function BookingConsole({
     // Counted by the server across the whole queue, not from the rows loaded
     // (EZ1-I266); the rows are the fallback for a server that predates it.
     if (entry.key === 'request_on_date') {
-      return counts?.request_on_date ?? all.filter(isRequestOnDate).length;
+      return counts?.request_on_date;
     }
     if (!counts) return undefined;
     if (entry.key === 'all') return counts.all ?? 0;
-    if (entry.key in counts) return counts[entry.key] ?? 0;
     if (entry.statuses.length > 0) {
       return entry.statuses.reduce((n, status) => n + (counts[status] ?? 0), 0);
     }
+    if (entry.key in counts) return counts[entry.key] ?? 0;
     return undefined;
   };
 
@@ -220,7 +225,7 @@ export default function BookingConsole({
           return (
             <button
               key={entry.key}
-              onClick={() => setTab(entry.key)}
+              onClick={() => { setTab(entry.key); setPage(1); }}
               className={
                 tab === entry.key
                   ? 'rounded-sm bg-brand px-3 py-1 text-xs font-medium text-brand-fg'
@@ -236,10 +241,14 @@ export default function BookingConsole({
         })}
       </div>
 
-      {/* The tab counts are the whole queue; the rows are the newest hundred.
-          When those differ the list says so rather than looking incomplete. */}
-      {!isPending && partialListNote(all.length, counts?.all) && (
-        <p className="text-xs text-gray-500">{partialListNote(all.length, counts?.all)}.</p>
+      <div className="flex items-center gap-3 text-sm">
+        <button className="btn-outline" disabled={page <= 1 || isPending} onClick={() => setPage(p => p - 1)}>Previous</button>
+        <span>Page {page} of {data?.meta?.totalPages ?? 1}</span>
+        <button className="btn-outline" disabled={isPending || !data || page >= data.meta.totalPages} onClick={() => setPage(p => p + 1)}>Next</button>
+      </div>
+      {/* Counts span the queue; this list is one page of the selected bucket. */}
+      {!isPending && partialListNote(all.length, data?.meta?.total) && (
+        <p className="text-xs text-gray-500">{partialListNote(all.length, data?.meta?.total)}.</p>
       )}
 
       <div className="flex flex-wrap gap-2">

@@ -224,7 +224,7 @@ export default function SavedBiodata({
       {details.occupationStatus === 'employed' && readOtherIncome(bag('employment')).length > 0 && (
         <Group title="Other Income (annual rupees)">
           {readOtherIncome(bag('employment')).map((entry) => (
-            <Row key={entry.id} label={OTHER_INCOME_LABELS[entry.source]}>
+            <Row key={entry.id} label={entry.source === 'other' && entry.otherIncomeSource ? entry.otherIncomeSource : OTHER_INCOME_LABELS[entry.source]}>
               {details.incomeVisible ? String(entry.amount) : 'Kept private'}
             </Row>
           ))}

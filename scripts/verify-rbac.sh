@@ -193,7 +193,7 @@ ensure_officer() {
   temp=$(field /tmp/body devPassword)
   req POST /auth/login "{\"email\":\"officer-$STAMP@wow.local\",\"password\":\"$temp\"}" >/dev/null
   t=$(field /tmp/body accessToken)
-  req POST /auth/password/change "{\"currentPassword\":\"$temp\",\"newPassword\":\"OfficerPass1\"}" "$t" >/dev/null
+  req POST /auth/password/change "{\"currentPassword\":\"$temp\",\"newPassword\":\"OfficerPass1\",\"confirmNewPassword\":\"OfficerPass1\"}" "$t" >/dev/null
   req POST /auth/login "{\"email\":\"officer-$STAMP@wow.local\",\"password\":\"OfficerPass1\"}" >/dev/null
   OFFICER_TOKEN=$(field /tmp/body accessToken)
 }

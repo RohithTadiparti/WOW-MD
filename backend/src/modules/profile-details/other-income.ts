@@ -7,7 +7,10 @@ export function saveEmployment(existing: Record<string, unknown>, incoming?: Rec
   const otherIncome = incoming.otherIncome === undefined
     ? existing.otherIncome
     : (incoming.otherIncome as OtherIncomeEntryDto[]).map((entry) => ({
-      id: entry.id ?? randomUUID(), source: entry.source, amount: String(entry.amount),
+      id: entry.id ?? randomUUID(),
+      source: entry.source,
+      ...(entry.source === 'other' ? { otherIncomeSource: entry.otherIncomeSource?.trim() } : {}),
+      amount: String(entry.amount),
     }));
   // Income-only updates leave primary employment intact. Keep the legacy
   // replacement contract for employment submissions (including {} clearing salary).

@@ -15,7 +15,11 @@ describe('Other Income', () => {
   });
 
   it('validates every source and normalizes zero and numeric amounts on save', async () => {
-    const otherIncome = ['rental', 'business', 'agricultural', 'investment', 'other'].map((source) => ({ source, amount: 0 }));
+    const otherIncome = ['rental', 'business', 'agricultural', 'investment', 'other'].map((source) => ({
+      source,
+      ...(source === 'other' ? { otherIncomeSource: 'Freelance Work' } : {}),
+      amount: 0,
+    }));
     await expect(validate({ ...primary, otherIncome })).resolves.toBeDefined();
     const result = saveEmployment({}, { ...primary, otherIncome });
     expect(result).toMatchObject(primary);
@@ -43,7 +47,7 @@ describe('Other Income', () => {
   });
 
   it('preserves omitted sources, supports independent editing/removal, and clears with []', () => {
-    const saved = saveEmployment({}, { ...primary, otherIncome: [{ source: 'rental', amount: '200' }, { source: 'other', amount: '300' }] });
+    const saved = saveEmployment({}, { ...primary, otherIncome: [{ source: 'rental', amount: '200' }, { source: 'other', otherIncomeSource: 'Pension', amount: '300' }] });
     const entries = saved.otherIncome as Record<string, unknown>[];
     expect(saveEmployment(saved, primary).otherIncome).toEqual(entries);
     expect(saveEmployment(saved)).toEqual(saved);
@@ -54,5 +58,13 @@ describe('Other Income', () => {
     expect(saveEmployment(saved, { otherIncome: [] })).toEqual({ ...primary, otherIncome: [] });
     expect(saveEmployment(saved, {})).toEqual({ otherIncome: entries });
     expect(saveEmployment(saved, { ...primary, salary: null })).toEqual({ ...saved, salary: null });
+  });
+
+  it('requires and persists a custom source only for Other Income', async () => {
+    await expect(validate({ ...primary, otherIncome: [{ source: 'other', amount: '300' }] })).rejects.toThrow();
+    await expect(validate({ ...primary, otherIncome: [{ source: 'rental', amount: '200' }] })).resolves.toBeDefined();
+
+    const saved = saveEmployment({}, { otherIncome: [{ source: 'other', otherIncomeSource: '  Pension  ', amount: '300' }] });
+    expect(saved.otherIncome).toEqual([{ id: expect.any(String), source: 'other', otherIncomeSource: 'Pension', amount: '300' }]);
   });
 });

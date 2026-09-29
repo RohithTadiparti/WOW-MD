@@ -980,6 +980,16 @@ export class MatchmakingService {
     }
     const from = await this.resolveSubject(actor, fromProfileId);
     await this.assertMatchmakingOpen(from);
+    if (
+      isIndividual(actor.role) &&
+      from.userId === actor.userId &&
+      from.idVerifiedAt !== undefined &&
+      !from.idVerifiedAt
+    ) {
+      throw new ForbiddenException(
+        'Verify your identity before sending an interest.',
+      );
+    }
     if (from.id === toProfileId) throw new BadRequestException('Cannot send interest to yourself');
 
     const target = await this.profiles.findOne({ where: { id: toProfileId } });

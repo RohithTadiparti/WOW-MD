@@ -27,6 +27,7 @@ import {
   Images,
   Lifebuoy,
   MagicWand,
+  MagnifyingGlass,
   Receipt,
   SealCheck,
   ShareNetwork,
@@ -680,6 +681,37 @@ function Layout({ children }: { children: ReactNode }) {
             </div>
 
             <div className="flex items-center gap-2">
+              <label className="relative hidden w-64 md:block">
+                <MagnifyingGlass
+                  size={17}
+                  aria-hidden
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-brand"
+                />
+                <input
+                  className="h-10 w-full rounded-full border border-transparent bg-gray-100 pl-9 pr-3 text-sm text-gray-800 placeholder:text-gray-400 focus:border-brand focus:bg-surface focus:outline-none focus:ring-4 focus:ring-brand/10"
+                  placeholder="Search profiles, events, services..."
+                  aria-label="Search profiles, events, and services"
+                />
+              </label>
+              <Link
+                to="/notifications"
+                className="relative grid h-10 w-10 place-items-center rounded-full text-gray-700 transition-colors hover:bg-brand-soft hover:text-brand"
+                aria-label={unread > 0 ? `${unread} unread notifications` : 'Notifications'}
+              >
+                <Bell size={20} weight={unread > 0 ? 'fill' : 'regular'} aria-hidden />
+                {unread > 0 && (
+                  <span className="absolute right-0 top-0 grid min-h-4 min-w-4 place-items-center rounded-full bg-brand px-1 text-[0.625rem] font-bold leading-none text-white">
+                    {unread > 99 ? '99+' : unread}
+                  </span>
+                )}
+              </Link>
+              <Link
+                to="/chat"
+                className="hidden h-10 w-10 place-items-center rounded-full text-gray-700 transition-colors hover:bg-brand-soft hover:text-brand sm:grid"
+                aria-label="Chat"
+              >
+                <ChatCircle size={20} aria-hidden />
+              </Link>
               {/* Only rendered for an account that holds more than one business. */}
               {canAny(permissions, [Permission.VENDOR_LISTING_MANAGE]) && <BusinessSwitcher />}
               <AccountMenu email={user?.email} displayName={accountDisplayName} role={user?.role} onSignOut={signOut} />

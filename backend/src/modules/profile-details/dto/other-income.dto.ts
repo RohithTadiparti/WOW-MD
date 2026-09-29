@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { plainToInstance, Transform } from 'class-transformer';
-import { IsIn, IsOptional, IsString, IsUUID, Matches, validateSync, ValidatorConstraint, ValidatorConstraintInterface } from 'class-validator';
+import { IsIn, IsNotEmpty, IsOptional, IsString, IsUUID, Matches, MaxLength, ValidateIf, validateSync, ValidatorConstraint, ValidatorConstraintInterface } from 'class-validator';
 
 export const OTHER_INCOME_SOURCES = ['rental', 'business', 'agricultural', 'investment', 'other'] as const;
 
@@ -12,6 +12,14 @@ export class OtherIncomeEntryDto {
   @ApiProperty({ enum: OTHER_INCOME_SOURCES })
   @IsIn(OTHER_INCOME_SOURCES)
   source: typeof OTHER_INCOME_SOURCES[number];
+
+  @ApiPropertyOptional({ description: 'Custom income name, required when source is other', maxLength: 160 })
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @ValidateIf((entry) => entry.source === 'other')
+  @IsString()
+  @MaxLength(160)
+  @IsNotEmpty({ message: 'Other income source is required.' })
+  otherIncomeSource?: string;
 
   @ApiProperty({ description: 'Annual income in whole rupees, including zero', example: '120000' })
   @Transform(({ value }) => typeof value === 'number' ? String(value) : value)

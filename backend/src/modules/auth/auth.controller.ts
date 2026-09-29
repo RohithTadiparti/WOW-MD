@@ -472,8 +472,9 @@ export class AuthController {
     @Body() dto: ChangePasswordDto,
     @Res({ passthrough: true }) res: Response,
   ) {
+    const result = await this.auth.changePassword(userId, dto);
     this.clearCookie(res);
-    return this.auth.changePassword(userId, dto);
+    return result;
   }
 
   // --------------------------------------------------------------------- MFA

@@ -241,7 +241,7 @@ export class ProfileDetails {
   @Column({ type: 'jsonb', default: {} })
   employment: Record<string, unknown> & {
     /** Optional additional annual income; stored in the existing JSONB column. */
-    otherIncome?: { id: string; source: string; amount: string }[];
+    otherIncome?: { id: string; source: string; otherIncomeSource?: string; amount: string }[];
   };
 
   /** Repeatable business entries; first-entry fields preserve the legacy API contract. */

@@ -776,30 +776,29 @@ export class AuthService {
   }
 
   async changePassword(userId: string, dto: ChangePasswordDto): Promise<{ success: true }> {
-    const user = await this.users.findOne({
-      where: { id: userId },
-      select: ['id', 'passwordHash'],
+    if (dto.newPassword !== dto.confirmNewPassword) {
+      throw new BadRequestException('Passwords do not match.');
+    }
+    await this.users.manager.transaction(async (manager) => {
+      const users = manager.getRepository(User);
+      const user = await users.findOne({
+        where: { id: userId },
+        select: ['id', 'passwordHash'],
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!user) throw new NotFoundException('Account not found');
+      if (!(await bcrypt.compare(dto.currentPassword, user.passwordHash))) {
+        throw new BadRequestException('Current password is incorrect.');
+      }
+      const passwordHash = await bcrypt.hash(dto.newPassword, this.cfg.auth.bcryptRounds);
+      await users.update(userId, {
+        passwordHash,
+        passwordChangedAt: new Date(),
+        mustResetPassword: false,
+        tokenVersion: () => '"tokenVersion" + 1',
+      });
+      await this.sessions.revokeAllForUser(userId, 'password changed', manager);
     });
-    if (!user) throw new NotFoundException('Account not found');
-
-    const ok = await bcrypt.compare(dto.currentPassword, user.passwordHash);
-    if (!ok) throw new UnauthorizedException('Your current password is not correct');
-
-    const passwordHash = await bcrypt.hash(dto.newPassword, this.cfg.auth.bcryptRounds);
-    // Clearing `mustResetPassword` here is what lifts the lock a provisioned
-    // account starts under. Revoking the sessions immediately afterwards is
-    // deliberate: the temporary credential was emailed in the clear, so the
-    // session it opened is retired with it and the person signs in afresh.
-    await this.users.update(userId, {
-      passwordHash,
-      passwordChangedAt: new Date(),
-      mustResetPassword: false,
-      // Retires every access token already in circulation for this account, so
-      // "signed out everywhere" is true of the short-lived tokens as well as
-      // the refresh sessions revoked just below.
-      tokenVersion: () => '"tokenVersion" + 1',
-    });
-    await this.sessions.revokeAllForUser(userId, 'password changed');
     return { success: true };
   }
 

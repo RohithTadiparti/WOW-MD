@@ -56,7 +56,15 @@ import { AiModule } from './modules/ai/ai.module';
         pinoHttp: {
           level: cfg.runtime.logLevel,
           transport: cfg.isProduction ? undefined : { target: 'pino-pretty' },
-          redact: ['req.headers.authorization', 'req.body.password'],
+          redact: [
+            'req.headers.authorization',
+            'req.headers.cookie',
+            'res.headers["set-cookie"]',
+            'req.body.password',
+            'req.body.currentPassword',
+            'req.body.newPassword',
+            'req.body.confirmNewPassword',
+          ],
         },
       }),
     }),

@@ -39,6 +39,20 @@ describe('Other Income shared by Individual and Agent Biodata', () => {
     expect(onChange).toHaveBeenLastCalledWith([entries[0], entries[2]]);
   });
 
+  it('shows and edits a required custom source only for Other Income', () => {
+    const onChange = vi.fn();
+    const otherEntry: OtherIncomeEntry = { id: 'other', source: 'other', amount: '300000', otherIncomeSource: 'Pension' };
+    const otherNodes = elements(OtherIncomeFields({ entries: [otherEntry], onChange }));
+    const customInput = otherNodes.find((node) => node.type === 'input' && node.props.placeholder === 'Enter income source')!;
+
+    expect(otherNodes.some((node) => node.type === 'label' && node.props.children?.includes('Other income source'))).toBe(true);
+    customInput.props.onChange({ currentTarget: { setCustomValidity: vi.fn() }, target: { value: 'Freelance Work' } });
+    expect(onChange).toHaveBeenLastCalledWith([{ ...otherEntry, otherIncomeSource: 'Freelance Work' }]);
+
+    const regularNodes = elements(OtherIncomeFields({ entries: [entries[0]], onChange }));
+    expect(regularNodes.some((node) => node.type === 'input' && node.props.placeholder === 'Enter income source')).toBe(false);
+  });
+
   it('supports no entries, legacy employment, and reloaded persisted amounts', () => {
     expect(readOtherIncome({ salary: '1200000' })).toEqual([]);
     expect(readOtherIncome(JSON.parse(JSON.stringify({ otherIncome: entries })))).toEqual(entries);
@@ -49,11 +63,16 @@ describe('Other Income shared by Individual and Agent Biodata', () => {
   });
 
   it('renders saved sources separately from salary and respects visibility', () => {
-    const details = { occupationStatus: 'employed', employment: { salary: '1200000', otherIncome: entries }, incomeVisible: true };
+    const details = {
+      occupationStatus: 'employed',
+      employment: { salary: '1200000', otherIncome: [...entries, { id: 'other', source: 'other', otherIncomeSource: 'Freelance Work', amount: '400000' }] },
+      incomeVisible: true,
+    };
     const visible = renderToStaticMarkup(<SavedBiodata details={details} siblings={[]} assets={[]} />);
     expect(visible).toContain('Rental Income');
     expect(visible).toContain('1200000');
     expect(visible).toContain('200000');
+    expect(visible).toContain('Freelance Work');
     const hidden = renderToStaticMarkup(<SavedBiodata details={{ ...details, incomeVisible: false }} siblings={[]} assets={[]} />);
     expect(hidden).not.toContain('200000');
     expect(hidden).not.toContain('1200000');

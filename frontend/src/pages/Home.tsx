@@ -1,5 +1,6 @@
 import { FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { AirplaneTilt, CalendarCheck, ChatCircle, HeartStraight, Images, Storefront } from '@phosphor-icons/react';
 import { ProfileSilhouette } from '../components/ProfileSilhouette';
 
 /**
@@ -12,18 +13,36 @@ import { ProfileSilhouette } from '../components/ProfileSilhouette';
  * may be dressed up as one. Replace SAMPLE_PROFILES and the story when there
  * is consented content to show.
  */
-const STEPS = [
+const FEATURES = [
   {
-    title: 'Create the profile',
-    body: 'The bride or groom can start it, or a parent, or an agency acting for the family. Add the biodata, what you are looking for and a photograph.',
+    title: 'Matchmaking',
+    body: 'Discover meaningful matches and connect families with care.',
+    icon: HeartStraight,
   },
   {
-    title: 'Send an interest',
-    body: 'Matches are suggested for the profile, most compatible first. Send an interest to the ones worth a conversation.',
+    title: 'Family dashboard',
+    body: 'Collaborate on profiles, conversations, and the decisions that matter.',
+    icon: ChatCircle,
   },
   {
-    title: 'Connect privately',
-    body: 'A conversation opens only once both sides accept. When the match is fixed, the wedding’s vendors and planner are booked here too.',
+    title: 'Vendor marketplace',
+    body: 'Discover trusted wedding vendors and keep every booking in view.',
+    icon: Storefront,
+  },
+  {
+    title: 'Wedding planner',
+    body: 'Plan events, tasks, guests, and logistics without losing the thread.',
+    icon: CalendarCheck,
+  },
+  {
+    title: 'Honeymoon travel',
+    body: 'Find and organize the next beautiful chapter together.',
+    icon: AirplaneTilt,
+  },
+  {
+    title: 'Memories',
+    body: 'Preserve the photographs and moments your family will return to.',
+    icon: Images,
   },
 ];
 
@@ -57,7 +76,7 @@ export default function Home() {
           </Link>
           <nav className="flex flex-wrap items-center gap-x-8 gap-y-2">
             <a href="#profiles" className={NAV_LINK}>
-              Profiles
+              People
             </a>
             <a href="#how" className={NAV_LINK}>
               How it works
@@ -74,18 +93,25 @@ export default function Home() {
           </nav>
         </header>
 
-        <section className="flex flex-col items-center gap-5 pt-16 text-center sm:pt-20">
-          <p className="plate eyebrow text-gray-700">Matrimony · weddings · families</p>
-          <h1 className="plate font-serif text-[3rem] font-light leading-[1.05] text-brand sm:text-[5.25rem]">
-            Where two families
-            <br />
-            find each other
-          </h1>
-          <p className="plate max-w-[39rem] text-[1.0625rem] leading-[1.75] text-gray-700">
-            A profile made by the person, their family or a trusted agency. Conversations that open
-            only when both sides agree. And once the match is fixed, the vendors and planner for the
-            wedding, booked in the same place.
-          </p>
+        <section className="relative mt-10 overflow-hidden rounded-[--radius-lg] bg-gradient-to-br from-[#8F2946] to-[#B83A5A] px-6 py-16 text-center text-white shadow-lifted sm:px-12 sm:py-24">
+          <div className="relative z-10 mx-auto flex max-w-[48rem] flex-col items-center gap-6">
+            <p className="eyebrow text-white/75">Matrimony · weddings · families</p>
+            <h1 className="font-serif text-[3.25rem] font-medium leading-[1.02] text-white sm:text-[5.75rem]">
+              World of Weddings
+            </h1>
+            <p className="max-w-[41rem] text-base leading-[1.8] text-white/85 sm:text-lg">
+              An all-in-one platform for matchmaking, family collaboration, vendor discovery,
+              planning, events, honeymoon travel, and memories.
+            </p>
+            <div className="flex flex-wrap justify-center gap-3">
+              <Link to="/register" className="inline-flex min-h-12 items-center justify-center rounded-[--radius-md] bg-white px-6 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-[#8F2946] shadow-lifted transition hover:bg-[#F8E8ED]">
+                Start your journey
+              </Link>
+              <a href="#how" className="inline-flex min-h-12 items-center justify-center rounded-[--radius-md] border border-white/45 px-6 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-white transition hover:bg-white/10">
+                Explore features
+              </a>
+            </div>
+          </div>
         </section>
 
         <form
@@ -116,16 +142,20 @@ export default function Home() {
           </button>
         </form>
 
-        <section id="how" className="grid gap-10 pt-24 md:grid-cols-3 md:pt-28">
-          {STEPS.map((step, i) => (
-            <article key={step.title} className="flex flex-col gap-3">
-              <span className="plate w-fit font-serif text-[2.75rem] leading-none text-gold">
-                {String(i + 1).padStart(2, '0')}
-              </span>
-              <h2 className="plate w-fit font-serif text-[1.75rem] font-normal text-brand">{step.title}</h2>
-              <p className="plate text-[0.9375rem] leading-[1.75] text-gray-700">{step.body}</p>
-            </article>
-          ))}
+        <section id="how" className="pt-24 md:pt-28">
+          <div className="mb-8 max-w-[38rem]">
+            <p className="eyebrow mb-3 text-brand">Everything for your wedding journey</p>
+            <h2 className="font-serif text-[2.5rem] font-medium leading-tight text-gray-900 sm:text-[3.25rem]">One thoughtful place for what comes next.</h2>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {FEATURES.map(({ title, body, icon: Icon }) => (
+              <article key={title} className="group rounded-[--radius-lg] border border-gray-200 bg-surface p-6 transition duration-200 hover:-translate-y-1 hover:border-brand/40 hover:shadow-lifted">
+                <Icon size={28} weight="duotone" className="mb-8 text-brand" aria-hidden />
+                <h3 className="mb-2 font-serif text-[1.55rem] font-medium text-gray-900">{title}</h3>
+                <p className="text-sm leading-7 text-gray-600">{body}</p>
+              </article>
+            ))}
+          </div>
         </section>
 
         <section id="profiles" className="flex flex-col gap-7 pt-24 md:pt-28">
@@ -174,14 +204,14 @@ export default function Home() {
         <section className="flex flex-col items-start justify-between gap-8 border border-gray-200 bg-surface p-8 sm:p-12 md:flex-row md:items-center">
           <div className="flex flex-col gap-2.5">
             <h2 className="font-serif text-[2.25rem] font-normal leading-[1.1] text-brand sm:text-[2.625rem]">
-              Start the profile today
+              Ready to begin your forever?
             </h2>
             <p className="text-[0.9375rem] leading-relaxed text-gray-700">
-              It takes a few minutes, and the biodata can be finished later.
+              Create your account and bring your people, plans, and memories together.
             </p>
           </div>
           <Link to="/register" className="btn min-h-14 shrink-0 px-12 text-[0.8125rem] tracking-[0.24em]">
-            Create profile
+            Create free account
           </Link>
         </section>
 

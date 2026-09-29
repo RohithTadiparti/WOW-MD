@@ -1,3 +1,4 @@
+import { synchronizeBookings } from '../lib/booking-queries';
 import { ComponentType, FormEvent, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { IconProps } from '@phosphor-icons/react';
@@ -414,6 +415,8 @@ function RaiseCase({
   const subject = subjects.find((s) => s.value === subjectType);
   const needsSubject = subjectType === 'booking' || subjectType === 'payment';
 
+  const bookingQueryClient = useQueryClient();
+
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -425,6 +428,7 @@ function RaiseCase({
         description: description.trim(),
         evidence: evidence.length > 0 ? evidence : undefined,
       });
+      await synchronizeBookings(bookingQueryClient);
       onDone('Raised. You will see it move through the stages here.');
       setTitle('');
       setDescription('');

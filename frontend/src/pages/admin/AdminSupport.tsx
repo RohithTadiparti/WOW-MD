@@ -1,3 +1,4 @@
+import { synchronizeBookings } from '../../lib/booking-queries';
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -143,6 +144,7 @@ export default function AdminSupport() {
     setNotice('');
     try {
       await fn();
+      await synchronizeBookings(qc);
       if (done) setNotice(done);
       qc.invalidateQueries({ queryKey: ['verification-cases'] });
       qc.invalidateQueries({ queryKey: ['verification-metrics'] });

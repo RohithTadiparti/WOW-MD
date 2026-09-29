@@ -1,5 +1,8 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
+import PasswordField from '../components/PasswordField';
+import { passwordError } from '../lib/password-policy';
 import { api, apiMessage } from '../lib/api';
 import { useAuth } from '../store/auth';
 
@@ -80,7 +83,7 @@ export default function Security() {
         }}
       />
 
-      <ChangePasswordCard onDone={() => setNotice('Password changed. Sign in again to continue.')} />
+      <ChangePasswordCard />
 
       <div className="card space-y-3">
         <h2 className="section-title">Signed-in devices</h2>
@@ -293,51 +296,56 @@ function TwoFactorCard({
   );
 }
 
-function ChangePasswordCard({ onDone }: { onDone: () => void }) {
+function ChangePasswordCard() {
   const [currentPassword, setCurrent] = useState('');
   const [newPassword, setNew] = useState('');
+  const [confirmNewPassword, setConfirm] = useState('');
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const nav = useNavigate();
+  const submitting = useRef(false);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    setError('');
+    if (submitting.current) return;
+    const validation = !currentPassword ? 'Current password is required.'
+      : Array.from(currentPassword).length > 128 ? 'Current password must be at most 128 characters.'
+      : passwordError(newPassword)
+      || (!confirmNewPassword ? 'Confirm new password is required.'
+        : newPassword !== confirmNewPassword ? 'Passwords do not match.' : '');
+    setError(validation);
+    if (validation) return;
+    submitting.current = true;
+    setBusy(true);
     try {
-      await api.post('/auth/password/change', { currentPassword, newPassword });
+      await api.post('/auth/password/change', { currentPassword, newPassword, confirmNewPassword });
       setCurrent('');
       setNew('');
-      onDone();
+      setConfirm('');
+      useAuth.getState().clear();
+      nav('/login', { replace: true, state: { passwordChanged: true } });
     } catch (err) {
       setError(apiMessage(err));
+    } finally {
+      submitting.current = false;
+      setBusy(false);
     }
   }
 
   return (
-    <form onSubmit={submit} className="card space-y-3">
-      <h2 className="section-title">Change password</h2>
-      {error && <p className="alert-critical">{error}</p>}
+    <form onSubmit={submit} className="card space-y-3" noValidate>
+      <h2 className="section-title">Change Password</h2>
+      {error && <p className="alert-critical" role="alert">{error}</p>}
       <p className="text-sm text-gray-500">
         Changing your password signs out every device, including this one.
       </p>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <input
-          className="input"
-          type="password"
-          placeholder="Current password"
-          value={currentPassword}
-          onChange={(e) => setCurrent(e.target.value)}
-          required
-        />
-        <input
-          className="input"
-          type="password"
-          minLength={8}
-          placeholder="New password"
-          value={newPassword}
-          onChange={(e) => setNew(e.target.value)}
-          required
-        />
-      </div>
-      <button className="btn">Change password</button>
+      <fieldset disabled={busy} className="space-y-3">
+        <PasswordField label="Current Password" value={currentPassword} onChange={setCurrent} autoComplete="current-password" />
+        <PasswordField label="New Password" value={newPassword} onChange={setNew} autoComplete="new-password"
+          hint="Use 8 to 128 characters with an uppercase letter, a lowercase letter and a digit." />
+        <PasswordField label="Confirm New Password" value={confirmNewPassword} onChange={setConfirm} autoComplete="new-password" />
+        <button className="btn" type="submit" disabled={busy}>{busy ? 'Changing Password...' : 'Change Password'}</button>
+      </fieldset>
     </form>
   );
 }

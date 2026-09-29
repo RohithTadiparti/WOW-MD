@@ -193,7 +193,7 @@ function ChangePassword({ onDone }: { onDone: () => void }) {
 
   const change = useMutation({
     mutationFn: async () => {
-      await api.post('/auth/password/change', { currentPassword, newPassword });
+      await api.post('/auth/password/change', { currentPassword, newPassword, confirmNewPassword: confirmPassword });
     },
     onSuccess: () => {
       setCurrent('');

@@ -567,6 +567,7 @@ export class EducationDetailsDto {
     otherIncome: { type: 'array', items: { type: 'object', required: ['source', 'amount'], properties: {
       id: { type: 'string', format: 'uuid' },
       source: { type: 'string', enum: [...OTHER_INCOME_SOURCES] },
+      otherIncomeSource: { type: 'string', maxLength: 160, description: 'Required when source is other' },
       amount: { type: 'string', pattern: '^\\d{1,15}$', description: 'Annual income in whole rupees' },
     } } },
   } })
@@ -598,6 +599,7 @@ export class OccupationDetailsDto {
     otherIncome: { type: 'array', items: { type: 'object', required: ['source', 'amount'], properties: {
       id: { type: 'string', format: 'uuid' },
       source: { type: 'string', enum: [...OTHER_INCOME_SOURCES] },
+      otherIncomeSource: { type: 'string', maxLength: 160, description: 'Required when source is other' },
       amount: { type: 'string', pattern: '^\\d{1,15}$', description: 'Annual income in whole rupees' },
     } } },
   } })

@@ -68,15 +68,8 @@ export default function PasswordField({
             if (e.key === 'Enter' && onEnter) onEnter();
           }}
         />
-        {/*
-          Inside the field rather than beside it, so the row does not reflow
-          when the label wraps. `tabIndex={-1}` keeps it out of the tab order:
-          somebody moving through the form with the keyboard is heading for the
-          submit button, not for a toggle they can reach by clicking.
-        */}
         <button
           type="button"
-          tabIndex={-1}
           onClick={() => setShown(!shown)}
           className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-gray-400 hover:text-gray-600"
           aria-label={shown ? 'Hide password' : 'Show password'}

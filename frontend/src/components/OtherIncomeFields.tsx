@@ -26,6 +26,22 @@ export default function OtherIncomeFields({ entries, onChange }: {
               <input className="input mt-1" inputMode="numeric" required pattern="[0-9]+" maxLength={15}
                 value={entry.amount} onChange={(event) => update(entry.id, { amount: event.target.value.replace(/\D/g, '') })} />
             </label>
+            {entry.source === 'other' && (
+              <label className="block text-sm text-gray-700 sm:col-span-2">
+                Other income source
+                <input
+                  className="input mt-1"
+                  placeholder="Enter income source"
+                  required
+                  value={entry.otherIncomeSource ?? ''}
+                  onChange={(event) => {
+                    event.currentTarget.setCustomValidity('');
+                    update(entry.id, { otherIncomeSource: event.target.value });
+                  }}
+                  onInvalid={(event) => event.currentTarget.setCustomValidity('Other income source is required.')}
+                />
+              </label>
+            )}
           </div>
           <div className="mt-3 flex justify-end">
             <button type="button" className="text-sm text-red-600" onClick={() => onChange(entries.filter((item) => item.id !== entry.id))}>

@@ -142,10 +142,10 @@ export default {
       },
 
       fontFamily: {
-        sans: ['Karla', 'Helvetica Neue', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        serif: ['Cormorant Garamond', 'Georgia', 'serif'],
+        sans: ['Poppins', 'Helvetica Neue', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        serif: ['Playfair Display', 'Georgia', 'serif'],
         // Figures, not code: see .font-mono in index.css.
-        mono: ['Karla', 'Helvetica Neue', 'ui-sans-serif', 'sans-serif'],
+        mono: ['Poppins', 'Helvetica Neue', 'ui-sans-serif', 'sans-serif'],
       },
 
       // A real scale rather than Tailwind's defaults at display sizes: the

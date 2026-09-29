@@ -1,5 +1,6 @@
+import { synchronizeBookings } from '../lib/booking-queries';
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowClockwise,
   CalendarBlank,
@@ -749,6 +750,8 @@ function PlannerDetail({
   const daySlots = (slots ?? []).filter((s) => s.date === checkedDate && s.remaining > 0);
   const hasChecked = Boolean(checkedDate);
 
+  const bookingQueryClient = useQueryClient();
+
   async function book() {
     setBusy(true);
     setError('');
@@ -760,6 +763,7 @@ function PlannerDetail({
       if (amount.trim() && Number.isFinite(quoted) && quoted > 0) payload.amount = quoted;
       if (checkedDate) payload.eventDate = checkedDate;
       await api.post('/bookings', payload);
+      await synchronizeBookings(bookingQueryClient);
       onBooked('Booking requested. Pay to move it into escrow from the Bookings page.');
     } catch (err) {
       setError(apiMessage(err, 'Could not create the booking.'));

@@ -1,6 +1,6 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, LessThan, Repository } from 'typeorm';
+import { EntityManager, IsNull, LessThan, Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
 import { RefreshSession } from './entities/refresh-session.entity';
 import { hashToken } from '../../common/util/tokens';
@@ -124,8 +124,9 @@ export class SessionsService {
   }
 
   /** Sign out everywhere. Used by logout-all, password change and suspension. */
-  async revokeAllForUser(userId: string, reason: string): Promise<void> {
-    await this.sessions.update(
+  async revokeAllForUser(userId: string, reason: string, manager?: EntityManager): Promise<void> {
+    const sessions = manager ? manager.getRepository(RefreshSession) : this.sessions;
+    await sessions.update(
       { userId, revokedAt: IsNull() },
       { revokedAt: new Date(), revokedReason: reason },
     );

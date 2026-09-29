@@ -1,3 +1,4 @@
+import { synchronizeBookings } from '../lib/booking-queries';
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiMessage } from '../lib/api';
@@ -221,6 +222,7 @@ export function PaymentBreakdown({ summary }: { summary: BookingSummaryData }) {
     setReleasing(true);
     try {
       await api.put(`/bookings/${summary.bookingId}/settle`);
+      await synchronizeBookings(qc);
       for (const key of ['booking-summary', 'booking-history', 'incoming-bookings', 'earnings']) {
         qc.invalidateQueries({ queryKey: [key] });
       }

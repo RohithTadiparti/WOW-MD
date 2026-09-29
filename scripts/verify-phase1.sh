@@ -229,7 +229,7 @@ c=$(req GET /verification/requests "" "$OFFICER")
 check "every other route is refused while the temporary password stands" "$c" 403
 body_has 'PASSWORD_RESET_REQUIRED' "the refusal carries a code the client can branch on"
 
-c=$(req POST /auth/password/change "{\"currentPassword\":\"$OFFICER_TEMP\",\"newPassword\":\"OfficerPass1\"}" "$OFFICER")
+c=$(req POST /auth/password/change "{\"currentPassword\":\"$OFFICER_TEMP\",\"newPassword\":\"OfficerPass1\",\"confirmNewPassword\":\"OfficerPass1\"}" "$OFFICER")
 check "the password change itself is allowed through" "$c" 200
 c=$(req GET /verification/requests "" "$OFFICER")
 check "the old session is terminated by the change" "$c" 401
