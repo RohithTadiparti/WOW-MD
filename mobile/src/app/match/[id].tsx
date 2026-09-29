@@ -66,6 +66,7 @@ interface ProfileView {
 
 export default function MatchProfile() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const theme = useTheme();
 
   const { data, isPending, error } = useQuery({
     queryKey: ['profile-view', id],
@@ -120,7 +121,7 @@ export default function MatchProfile() {
       <View style={{ gap: space(1) }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(2) }}>
           <PageTitle>{profile.displayName}</PageTitle>
-          {profile.identityVerified ? <SealCheck size={20} weight="fill" color="#1f8a5b" /> : null}
+          {profile.identityVerified ? <SealCheck size={20} weight="fill" color={rgb(theme.positiveFg)} /> : null}
         </View>
         <PageSubtitle>
           {[age, profile.city, profile.profileCode].filter(Boolean).join(' · ')}

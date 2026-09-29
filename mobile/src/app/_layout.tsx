@@ -162,21 +162,52 @@ function Routes() {
         options={{ headerShown: true, title: 'Review & Submit' }}
       />
       <Stack.Screen name="accounts" options={{ headerShown: true, title: 'Accounts' }} />
+      <Stack.Screen name="escrow" options={{ headerShown: true, title: 'Escrow' }} />
+      <Stack.Screen name="account" options={{ headerShown: true, title: 'Account Information' }} />
       <Stack.Screen name="profile" options={{ headerShown: true, title: 'My Profile' }} />
+      <Stack.Screen name="edit-profile" options={{ headerShown: true, title: 'Edit Profile' }} />
+      <Stack.Screen name="photos" options={{ headerShown: true, title: 'Photos' }} />
+      <Stack.Screen
+        name="preferences"
+        options={{ headerShown: true, title: 'Partner Preferences' }}
+      />
+      <Stack.Screen name="identity" options={{ headerShown: true, title: 'Verification' }} />
+      <Stack.Screen name="shortlisted" options={{ headerShown: true, title: 'Shortlisted' }} />
+      <Stack.Screen name="privacy" options={{ headerShown: true, title: 'Privacy & Safety' }} />
+      <Stack.Screen name="blocked" options={{ headerShown: true, title: 'Blocked Profiles' }} />
       <Stack.Screen name="support" options={{ headerShown: true, title: 'Support' }} />
       <Stack.Screen name="security" options={{ headerShown: true, title: 'Security' }} />
       <Stack.Screen name="my-reviews" options={{ headerShown: true, title: 'My Reviews' }} />
-      <Stack.Screen name="about" options={{ headerShown: true, title: 'About' }} />
+      <Stack.Screen name="about" options={{ headerShown: true, title: 'About WOW' }} />
       <Stack.Screen
         name="transaction/[id]"
         options={{ headerShown: true, title: 'Payment' }}
       />
       <Stack.Screen name="biodata" options={{ headerShown: true, title: 'Biodata' }} />
       <Stack.Screen name="events" options={{ headerShown: true, title: 'Events' }} />
-      <Stack.Screen name="chat/index" options={{ headerShown: true, title: 'Chat' }} />
+      <Stack.Screen name="plan/[id]" options={{ headerShown: true, title: 'My Wedding Plan' }} />
+      <Stack.Screen name="plan/budget" options={{ headerShown: true, title: 'Budget' }} />
+      <Stack.Screen name="plan/guests" options={{ headerShown: true, title: 'Guest List' }} />
+      <Stack.Screen name="plan/bookings" options={{ headerShown: true, title: 'Bookings' }} />
+      <Stack.Screen
+        name="plan/services"
+        options={{ headerShown: true, title: 'Additional Services' }}
+      />
+      <Stack.Screen name="plan/more" options={{ headerShown: true, title: 'Plan More' }} />
+      <Stack.Screen name="vendors/index" options={{ headerShown: true, title: 'Vendors' }} />
+      <Stack.Screen name="vendors/[id]" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="vendors/[id]/gallery"
+        options={{ headerShown: true, title: 'Photos' }}
+      />
+      <Stack.Screen
+        name="planners/index"
+        options={{ headerShown: true, title: 'Hire a Planner' }}
+      />
+      <Stack.Screen name="planners/[id]" options={{ headerShown: false }} />
       {/* The title becomes the other person's name once the thread knows it. */}
-      <Stack.Screen name="chat/[id]" options={{ headerShown: true, title: 'Conversation' }} />
-      <Stack.Screen name="match/[id]" options={{ headerShown: true, title: 'Profile' }} />
+      <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="match/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="visit/[id]" options={{ headerShown: true, title: 'Visit' }} />
       <Stack.Screen name="case/[id]" options={{ headerShown: true, title: 'Case' }} />
     </Stack>

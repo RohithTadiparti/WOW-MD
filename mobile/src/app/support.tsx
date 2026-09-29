@@ -1,11 +1,11 @@
-import { useState } from 'react';
-import { View } from 'react-native';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+import { Pressable, View } from 'react-native';
+import { useLocalSearchParams, useNavigation } from 'expo-router';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { CaretDown, CaretUp, Star } from 'phosphor-react-native';
 
 import { api, apiMessage } from '@/lib/api';
-import { dateTime, humanise, shortDate } from '@/lib/format';
 import { isProvider } from '@/shared/permissions';
-import { Badge, DetailGrid, DetailRow, Divider, type Tone } from '@/components/chrome';
 import { SelectField, Textarea } from '@/components/form';
 import {
   Alert,
@@ -14,91 +14,46 @@ import {
   Caption,
   Card,
   Field,
-  Loading,
-  PageSubtitle,
   Screen,
   SectionTitle,
 } from '@/components/ui';
 import { useAuth } from '@/store/auth';
-import { space } from '@/theme';
+import { rgb, space, useTheme } from '@/theme';
 
-/**
- * Somewhere to say something has gone wrong.
- *
- * The web app's Support page: the same subjects, the same wording, the same
- * warning that raising a case against a booking freezes the money held on it.
- * The subject is asked for rather than inferred, because freezing somebody's
- * money by accident is not a small mistake.
- *
- * Evidence photographs are on the web page and not here. An attachment picker
- * belongs with the upload work in Business Details, not bolted onto a form
- * somebody is filling in because something is already broken.
- */
-interface SupportCase {
-  id: string;
-  subjectType: string;
-  subjectId: string | null;
-  title: string;
-  description: string;
-  status: string;
-  createdAt: string;
-  findings?: string | null;
-  settlementNotes?: string | null;
-  resolvedAt?: string | null;
-  /** What the case is about, as the server fills it in for a booking or a listing. */
-  booking?: {
-    buyerName: string | null;
-    providerName: string | null;
-    serviceName?: string | null;
-    eventDate?: string | null;
-  } | null;
-  business?: { name: string } | null;
-}
+type SupportType = 'help' | 'contact' | 'feedback';
 
-/**
- * What a case is about, in words: the service booked, who it was with and the
- * day, or the business's name. Nothing when the server has no context for it —
- * a truncated id meant nothing to the person who raised the case.
- *
- * A provider is told who the customer was, and a customer who the provider was:
- * each already knows which side of it they are on.
- */
-function aboutLine(row: SupportCase, provider: boolean): string | null {
-  if (row.booking) {
-    const parts = [
-      row.booking.serviceName,
-      provider ? row.booking.buyerName : row.booking.providerName,
-      row.booking.eventDate ? shortDate(row.booking.eventDate) : null,
-    ].filter(Boolean);
-    return parts.length > 0 ? parts.join(' · ') : null;
-  }
-  return row.business?.name ?? null;
-}
-
-const STATUS_LABEL: Record<string, string> = {
-  open: 'Open',
-  triaged: 'Triaged',
-  allocated: 'With an investigator',
-  in_progress: 'Being looked into',
-  waiting_for_information: 'Waiting on you',
-  resolution_submitted: 'Resolution in review',
-  admin_review: 'Resolution in review',
-  reassigned: 'Sent for another look',
-  resolved: 'Resolved',
-  rejected: 'Closed, no action',
-  escalated: 'Escalated for a visit',
-  closed: 'Closed',
+const TITLES: Record<SupportType, string> = {
+  help: 'Help Center',
+  contact: 'Contact Support',
+  feedback: 'Share Feedback',
 };
 
-const STATUS_TONE: Record<string, Tone> = {
-  open: 'caution',
-  waiting_for_information: 'caution',
-  reassigned: 'caution',
-  resolved: 'positive',
-  escalated: 'critical',
-  rejected: 'neutral',
-  closed: 'neutral',
-};
+const FAQS: { q: string; a: string }[] = [
+  {
+    q: 'How do I complete my profile?',
+    a: 'Open More → Edit Profile for your name, age and location. Add biodata, photographs and partner preferences from My Profile. Completion is calculated on the server from what is stored.',
+  },
+  {
+    q: 'How do I find matches?',
+    a: 'Open Find Matches from More, or the Matches tab. Save people to Shortlisted, and send an interest when a profile looks right.',
+  },
+  {
+    q: 'When can I message someone?',
+    a: 'Chat opens after both families accept an interest. Until then, send an interest from the profile.',
+  },
+  {
+    q: 'How does verification work?',
+    a: 'Record a government ID from Verification, or confirm Aadhaar with the code sent to the registered mobile. An officer may also confirm the document in person.',
+  },
+  {
+    q: 'How do I plan wedding events?',
+    a: 'Open Wedding Planning from More to add ceremony days, venues and times. Those events are what bookings hang off.',
+  },
+  {
+    q: 'How do I get help with a problem?',
+    a: 'Use Contact Support for something that has gone wrong. Use Share Feedback for a rating or a suggestion.',
+  },
+];
 
 type Audience = 'provider' | 'seeker';
 
@@ -120,145 +75,164 @@ function subjectsFor(role?: string) {
     if (!subject.audience) return true;
     if (provider) return subject.audience.includes('provider');
     if (seeker) return subject.audience.includes('seeker');
-    // Staff and anyone unclassified see everything.
     return true;
   });
 }
 
 export default function Support() {
-  const qc = useQueryClient();
-  const role = useAuth((s) => s.user?.role);
-  const [raising, setRaising] = useState(false);
-  const [notice, setNotice] = useState('');
-  const [error, setError] = useState('');
-  const [open, setOpen] = useState<string | null>(null);
+  const navigation = useNavigation();
+  const params = useLocalSearchParams<{ type?: string }>();
+  const type: SupportType =
+    params.type === 'help' || params.type === 'feedback' ? params.type : 'contact';
 
-  const { data, isPending } = useQuery({
-    queryKey: ['support-cases'],
-    queryFn: async () => (await api.get('/verification/cases')).data as { data: SupportCase[] },
-    retry: false,
-  });
+  useEffect(() => {
+    navigation.setOptions({ title: TITLES[type] });
+  }, [navigation, type]);
 
-  const rows = data?.data ?? [];
+  if (type === 'help') return <HelpCenter />;
+  if (type === 'feedback') return <ShareFeedback />;
+  return <ContactSupport />;
+}
+
+function HelpCenter() {
+  const [open, setOpen] = useState<string | null>(FAQS[0]?.q ?? null);
 
   return (
     <Screen>
-      <PageSubtitle>
-        Anything that has gone wrong. A booking, a payment, a listing that will not verify. Somebody
-        reads every one of these.
-      </PageSubtitle>
+      {FAQS.map((item) => (
+        <Faq key={item.q} item={item} open={open === item.q} onToggle={() => setOpen((current) => (current === item.q ? null : item.q))} />
+      ))}
+    </Screen>
+  );
+}
 
+function Faq({
+  item,
+  open,
+  onToggle,
+}: {
+  item: { q: string; a: string };
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const theme = useTheme();
+  return (
+    <Card>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        onPress={onToggle}
+        style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space(2) }}
+      >
+        <SectionTitle style={{ flex: 1 }}>{item.q}</SectionTitle>
+        {open ? (
+          <CaretUp size={16} color={rgb(theme.ink[400])} />
+        ) : (
+          <CaretDown size={16} color={rgb(theme.ink[400])} />
+        )}
+      </Pressable>
+      {open ? <Body tone="muted">{item.a}</Body> : null}
+    </Card>
+  );
+}
+
+function ContactSupport() {
+  const role = useAuth((s) => s.user?.role);
+  return (
+    <Screen>
+      <RaiseCase subjects={subjectsFor(role)} submitLabel="Send Message" doneMessage="Sent. Somebody will read it." />
+    </Screen>
+  );
+}
+
+function ShareFeedback() {
+  const theme = useTheme();
+  const [rating, setRating] = useState(0);
+  const [message, setMessage] = useState('');
+  const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
+  const qc = useQueryClient();
+
+  const send = useMutation({
+    mutationFn: async () => {
+      await api.post('/verification/cases', {
+        subjectType: 'other',
+        title: `App feedback (${rating}/5)`,
+        description: message.trim(),
+      });
+    },
+    onSuccess: () => {
+      setMessage('');
+      setRating(0);
+      setError('');
+      setNotice('Thank you. Your feedback has been sent.');
+      void qc.invalidateQueries({ queryKey: ['support-cases'] });
+    },
+    onError: (err) => setError(apiMessage(err, 'Feedback could not be sent.')),
+  });
+
+  return (
+    <Screen>
       {notice ? <Alert tone="positive">{notice}</Alert> : null}
       {error ? <Alert tone="critical">{error}</Alert> : null}
-
-      <Button
-        label={raising ? 'Cancel' : 'Raise an issue'}
-        variant={raising ? 'outline' : 'primary'}
-        onPress={() => setRaising((r) => !r)}
-      />
-
-      {raising ? (
-        <RaiseCase
-          subjects={subjectsFor(role)}
-          onDone={(message) => {
-            setRaising(false);
-            setError('');
-            setNotice(message);
-            void qc.invalidateQueries({ queryKey: ['support-cases'] });
-          }}
-          onError={(message) => {
-            setNotice('');
-            setError(message);
-          }}
+      <Card>
+        <SectionTitle>How would you rate your experience?</SectionTitle>
+        <View style={{ flexDirection: 'row', gap: space(1), marginTop: space(1) }}>
+          {[1, 2, 3, 4, 5].map((star) => (
+            <Pressable
+              key={star}
+              accessibilityRole="button"
+              accessibilityLabel={`${star} star${star === 1 ? '' : 's'}`}
+              onPress={() => setRating(star)}
+              hitSlop={6}
+            >
+              <Star
+                size={28}
+                weight={star <= rating ? 'fill' : 'regular'}
+                color={rgb(star <= rating ? theme.cautionFg : theme.ink[300])}
+              />
+            </Pressable>
+          ))}
+        </View>
+        <Textarea
+          label="Your Feedback"
+          value={message}
+          onChange={setMessage}
+          rows={5}
+          maxLength={500}
+          placeholder="Tell us what you think…"
+          hint="At least 10 characters."
         />
-      ) : null}
-
-      <SectionTitle>Your issues</SectionTitle>
-      {isPending ? (
-        <Loading rows={2} />
-      ) : rows.length === 0 ? (
-        <Card>
-          <Caption tone="faint">
-            Nothing raised. If something is wrong, raising it here is how it reaches a person.
-          </Caption>
-        </Card>
-      ) : (
-        rows.map((row) => (
-          <Card key={row.id}>
-            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space(2) }}>
-              <SectionTitle style={{ flex: 1 }} numberOfLines={2}>
-                {row.title}
-              </SectionTitle>
-              <Badge tone={STATUS_TONE[row.status] ?? 'brand'}>
-                {STATUS_LABEL[row.status] ?? humanise(row.status)}
-              </Badge>
-            </View>
-            <Caption tone="faint">
-              {[
-                SUBJECTS.find((s) => s.value === row.subjectType)?.label ??
-                  humanise(row.subjectType),
-                `raised ${dateTime(row.createdAt)}`,
-              ].join(' · ')}
-            </Caption>
-
-            <Button
-              label={open === row.id ? 'Hide detail' : 'Show detail'}
-              variant="ghost"
-              small
-              onPress={() => setOpen((current) => (current === row.id ? null : row.id))}
-            />
-
-            {open === row.id ? (
-              <>
-                <Divider />
-                <Body tone="muted">{row.description}</Body>
-                <DetailGrid>
-                  <DetailRow label="Reference">{row.id.slice(0, 8)}</DetailRow>
-                  {aboutLine(row, isProvider(role)) ? (
-                    <DetailRow label="About">{aboutLine(row, isProvider(role))}</DetailRow>
-                  ) : null}
-                  {row.resolvedAt ? (
-                    <DetailRow label="Resolved">{dateTime(row.resolvedAt)}</DetailRow>
-                  ) : null}
-                </DetailGrid>
-                {row.findings ? (
-                  <Caption>
-                    <Caption tone="faint">What was found: </Caption>
-                    {row.findings}
-                  </Caption>
-                ) : null}
-                {row.settlementNotes ? (
-                  <Caption>
-                    <Caption tone="faint">Settlement: </Caption>
-                    {row.settlementNotes}
-                  </Caption>
-                ) : null}
-              </>
-            ) : null}
-          </Card>
-        ))
-      )}
+        <Caption tone="faint">{message.length}/500</Caption>
+        <Button
+          label="Submit Feedback"
+          busy={send.isPending}
+          disabled={rating < 1 || message.trim().length < 10}
+          onPress={() => send.mutate()}
+        />
+      </Card>
     </Screen>
   );
 }
 
 function RaiseCase({
   subjects,
-  onDone,
-  onError,
+  submitLabel,
+  doneMessage,
 }: {
   subjects: { value: string; label: string; note?: string }[];
-  onDone: (message: string) => void;
-  onError: (message: string) => void;
+  submitLabel: string;
+  doneMessage: string;
 }) {
   const [subjectType, setSubjectType] = useState('other');
   const [subjectId, setSubjectId] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
 
-  // A booking or a payment is settled against a specific record, so the
-  // reference is asked for rather than guessed at.
   const needsSubject = subjectType === 'booking' || subjectType === 'payment';
+  const qc = useQueryClient();
 
   const raise = useMutation({
     mutationFn: async () => {
@@ -273,51 +247,60 @@ function RaiseCase({
       setTitle('');
       setDescription('');
       setSubjectId('');
-      onDone('Raised. You will see it move through the stages here.');
+      setError('');
+      setNotice(doneMessage);
+      void qc.invalidateQueries({ queryKey: ['support-cases'] });
     },
-    onError: (err) => onError(apiMessage(err, 'That could not be raised.')),
+    onError: (err) => {
+      setNotice('');
+      setError(apiMessage(err, 'That could not be sent.'));
+    },
   });
 
   return (
-    <Card>
-      <SelectField
-        label="What is it about?"
-        value={subjectType}
-        options={subjects}
-        onChange={(value) => {
-          setSubjectType(value);
-          setSubjectId('');
-        }}
-      />
-      {needsSubject ? (
-        <Field
-          label={subjectType === 'booking' ? 'Booking reference' : 'Payment reference'}
-          value={subjectId}
-          onChangeText={setSubjectId}
-          autoCapitalize="none"
-          autoCorrect={false}
-          hint="Any money held on it is frozen until this is settled."
+    <>
+      {notice ? <Alert tone="positive">{notice}</Alert> : null}
+      {error ? <Alert tone="critical">{error}</Alert> : null}
+      <Card>
+        <SelectField
+          label="Subject"
+          value={subjectType}
+          options={subjects}
+          onChange={(value) => {
+            setSubjectType(value);
+            setSubjectId('');
+          }}
         />
-      ) : null}
-      <Field
-        label="In one line"
-        value={title}
-        onChangeText={setTitle}
-        placeholder="What has gone wrong"
-      />
-      <Textarea
-        label="What happened"
-        value={description}
-        onChange={setDescription}
-        rows={5}
-        placeholder="Dates, amounts, names — whatever somebody would need to look into it"
-      />
-      <Button
-        label="Raise it"
-        busy={raise.isPending}
-        disabled={!title.trim() || !description.trim()}
-        onPress={() => raise.mutate()}
-      />
-    </Card>
+        {needsSubject ? (
+          <Field
+            label={subjectType === 'booking' ? 'Booking reference' : 'Payment reference'}
+            value={subjectId}
+            onChangeText={setSubjectId}
+            autoCapitalize="none"
+            autoCorrect={false}
+            hint="Any money held on it is frozen until this is settled."
+          />
+        ) : null}
+        <Field
+          label="In one line"
+          value={title}
+          onChangeText={setTitle}
+          placeholder="What has gone wrong"
+        />
+        <Textarea
+          label="Message"
+          value={description}
+          onChange={setDescription}
+          rows={5}
+          placeholder="Describe your issue"
+        />
+        <Button
+          label={submitLabel}
+          busy={raise.isPending}
+          disabled={title.trim().length < 5 || description.trim().length < 10}
+          onPress={() => raise.mutate()}
+        />
+      </Card>
+    </>
   );
 }

@@ -19,9 +19,11 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        {/* The template's gold hearts, behind every page. */}
-        <HeartField fixed />
-        <App />
+        {/* The template's gold hearts, behind every page and as tall as it. */}
+        <div className="relative isolate min-h-[100dvh]">
+          <HeartField />
+          <App />
+        </div>
       </BrowserRouter>
     </QueryClientProvider>
   </React.StrictMode>,

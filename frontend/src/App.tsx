@@ -47,7 +47,7 @@ import {
 } from '@phosphor-icons/react';
 import Sidebar, { SidebarEntry } from './components/Sidebar';
 import ErrorBoundary from './components/ErrorBoundary';
-import { useTheme } from './store/theme';
+import { DARK_MODE_ENABLED, useTheme } from './store/theme';
 import { motion, useReducedMotion } from 'motion/react';
 import Login from './pages/Login';
 import Home from './pages/Home';
@@ -541,6 +541,7 @@ function AccountMenu({
               <UserCircle size={17} aria-hidden /> My Profile
             </Link>
 
+            {DARK_MODE_ENABLED && (
             <div className="my-1.5 px-2.5">
               <p className="mb-1.5 text-[0.6875rem] font-medium uppercase tracking-[0.09em] text-gray-400">
                 Appearance
@@ -580,6 +581,7 @@ function AccountMenu({
                 ))}
               </div>
             </div>
+            )}
 
             <button
               className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm

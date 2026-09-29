@@ -81,13 +81,15 @@ export async function templateIssues(page: Page, theme: 'light' | 'dark' = 'ligh
   );
 }
 
-/** Both themes: the template in daylight and by candlelight. */
+/**
+ * The page as it renders, with no theme forced. The suite runs with the
+ * browser preferring dark (see playwright.config.ts), so this also proves a
+ * dark-mode machine still gets the template.
+ */
 export async function expectTemplate(page: Page, where: string): Promise<string[]> {
-  const found = [
-    ...(await templateIssues(page, 'light')).map((i) => `${where} [light]: ${i}`),
-    ...(await templateIssues(page, 'dark')).map((i) => `${where} [dark]: ${i}`),
-  ];
-  return found;
+  const rendered = await page.evaluate(() => document.documentElement.classList.contains('dark'));
+  if (rendered) return [`${where}: rendered in the dark theme, not the template`];
+  return (await templateIssues(page, 'light')).map((i) => `${where}: ${i}`);
 }
 
 /**
