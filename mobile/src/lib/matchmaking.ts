@@ -15,10 +15,16 @@ export interface MatchStatus {
   matchFixedState: string;
 }
 
-export function matchmakingGate(status?: MatchStatus): string | undefined {
-  if (!status) return undefined;
-  if (!status.profileCompleted) {
-    return 'Fill in the profile first: name, gender, date of birth and city.';
+export interface BiodataCompletion {
+  complete: boolean;
+  percent: number;
+  missing: string[];
+}
+
+export function matchmakingGate(status?: MatchStatus, biodata?: BiodataCompletion): string | undefined {
+  if (!status || !biodata) return undefined;
+  if (!status.profileCompleted || !biodata.complete) {
+    return 'Complete the profile first — basic details, preferences and at least one photo.';
   }
   if (status.matchFixedState === 'confirmed') {
     return 'This profile has a fixed match, so matchmaking is closed.';
@@ -36,10 +42,27 @@ export function useMatchmakingGate(profileId: string | null, enabled: boolean) {
     enabled,
     retry: false,
   });
+
+  const effectiveProfileId = query.data?.profileId;
+
+  const completionQuery = useQuery({
+    queryKey: ['biodata-completion', effectiveProfileId],
+    queryFn: async () =>
+      (await api.get(`/profiles/${effectiveProfileId}/details/completion`)).data as BiodataCompletion,
+    enabled: enabled && Boolean(effectiveProfileId),
+    retry: false,
+  });
+
+  const hasError = query.isError || completionQuery.isError;
+  const gateMessage = hasError
+    ? 'Complete the profile first — basic details, preferences and at least one photo.'
+    : matchmakingGate(query.data, completionQuery.data);
+
   return {
     status: query.data,
-    gate: matchmakingGate(query.data),
+    biodata: completionQuery.data,
+    gate: gateMessage,
     /** Answered either way, so a failed status check does not hold the list back. */
-    settled: query.isFetched || query.isError,
+    settled: (query.isFetched || query.isError) && (completionQuery.isFetched || completionQuery.isError),
   };
 }

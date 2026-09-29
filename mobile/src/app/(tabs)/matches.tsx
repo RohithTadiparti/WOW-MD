@@ -25,6 +25,7 @@ import {
   useActingClient,
 } from "@/components/matches/acting-client";
 import { ProfileSilhouette } from "@/components/profile-silhouette";
+import { ProfileCompletionCard } from "@/components/profile-completion-card";
 import {
   Alert,
   Button,
@@ -81,10 +82,11 @@ export default function Matches() {
   const [sort, setSort] = useState<"score" | "recent" | "age">("score");
   const [filterOpen, setFilterOpen] = useState(false);
   const [error, setError] = useState("");
-  const { status, gate, settled } = useMatchmakingGate(
+  const { status, biodata, gate, settled } = useMatchmakingGate(
     acting.profileId,
     acting.ready,
   );
+  const isProfileComplete = status?.profileCompleted && biodata?.complete;
   const clientParam = acting.profileId ? { profileId: acting.profileId } : {};
   // These map onto the existing suggestions endpoint: its active view is the
   // closest available proximity/activity signal, and New is server-sorted by creation date.
@@ -127,8 +129,8 @@ export default function Matches() {
     placeholderData: (previous) => previous,
     retry: false,
   });
-  const suggestions: Suggestion[] = data?.data ?? [];
-  const total = data?.meta?.total ?? data?.total ?? suggestions.length;
+  const suggestions: Suggestion[] = gate ? [] : (data?.data ?? []);
+  const total = gate ? 0 : (data?.meta?.total ?? data?.total ?? suggestions.length);
   const shortlist = useMutation({
     mutationFn: ({ id, selected }: { id: string; selected: boolean }) =>
       selected
@@ -335,23 +337,17 @@ export default function Matches() {
               Pick a client to browse their matches.
             </EmptyState>
           ) : gate ? (
-            <View style={{ gap: space(2) }}>
-              <EmptyState
-                title={
-                  status?.profileCompleted
-                    ? "Matchmaking is closed"
-                    : "Finish the profile first"
-                }
-              >
-                {gate}
-              </EmptyState>
-              {!status?.profileCompleted && !acting.profileId ? (
-                <Button
-                  label="Complete your profile"
-                  onPress={() => router.push("/profile")}
-                />
-              ) : null}
-            </View>
+            !isProfileComplete ? (
+              <View style={{ paddingTop: space(2) }}>
+                <ProfileCompletionCard percent={biodata?.percent ?? 0} hideAction={Boolean(acting.profileId)} />
+              </View>
+            ) : (
+              <View style={{ gap: space(2) }}>
+                <EmptyState title="Matchmaking is closed">
+                  {gate}
+                </EmptyState>
+              </View>
+            )
           ) : (
             <EmptyState title="No matches to show yet">
               Try changing your search or match tab.
