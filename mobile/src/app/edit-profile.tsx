@@ -4,7 +4,8 @@ import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api, apiMessage } from '@/lib/api';
-import { DateField, SelectField } from '@/components/form';
+import { SelectField } from '@/components/form';
+import { DobField } from '@/components/biodata/dob-field';
 import {
   Alert,
   Button,
@@ -15,7 +16,8 @@ import {
 } from '@/components/ui';
 import { ChoiceField, canonical } from '@/components/biodata/choice-field';
 import { GENDERS, MARITAL } from '@/components/biodata/constants';
-import { CASTES_BY_RELIGION, CITIES, RELIGIONS } from '@/shared/reference';
+import { CASTES_BY_RELIGION, RELIGIONS } from '@/shared/reference';
+import { STATES_BY_COUNTRY, districtsForState, DISTRICTS_BY_STATE } from '@/shared/locations';
 import { space } from '@/theme';
 
 interface Form {
@@ -26,6 +28,7 @@ interface Form {
   maritalStatus: string;
   religion: string;
   caste: string;
+  state: string;
   location: string;
 }
 
@@ -35,6 +38,15 @@ function formFrom(
 ): Form {
   const d = (full?.details ?? {}) as Record<string, unknown>;
   const religion = canonical(String(d.religion ?? ''), RELIGIONS);
+  const city = String(me.city ?? '');
+  let state = '';
+  for (const [s, cities] of Object.entries(DISTRICTS_BY_STATE)) {
+    if (cities.includes(city)) {
+      state = s;
+      break;
+    }
+  }
+
   return {
     fullName: String(me.displayName ?? ''),
     dateOfBirth: String(me.dateOfBirth ?? full?.dateOfBirth ?? '').slice(0, 10),
@@ -43,7 +55,8 @@ function formFrom(
     maritalStatus: String(d.maritalStatus ?? ''),
     religion,
     caste: canonical(String(d.caste ?? ''), CASTES_BY_RELIGION[religion] ?? []),
-    location: String(me.city ?? ''),
+    state,
+    location: city,
   };
 }
 
@@ -141,7 +154,7 @@ export default function EditProfile() {
       {error ? <Alert tone="critical">{error}</Alert> : null}
 
       <Field label="Full Name" value={form.fullName} onChangeText={set('fullName')} />
-      <DateField label="Date of Birth" value={form.dateOfBirth} onChange={set('dateOfBirth')} />
+      <DobField label="Date of Birth" value={form.dateOfBirth} onChange={set('dateOfBirth')} />
       <SelectField label="Gender" value={form.gender} options={GENDERS} onChange={set('gender')} />
       <Field label="Height (cm)" value={form.heightCm} onChangeText={set('heightCm')} keyboardType="number-pad" maxLength={3} />
       <SelectField
@@ -163,7 +176,19 @@ export default function EditProfile() {
         options={CASTES_BY_RELIGION[form.religion] ?? []}
         onChange={set('caste')}
       />
-      <ChoiceField label="Location" value={form.location} options={CITIES} onChange={set('location')} />
+      <ChoiceField
+        label="State"
+        value={form.state}
+        options={STATES_BY_COUNTRY['India'] ?? []}
+        onChange={(newState) => {
+          setDraft({
+            ...form,
+            state: newState,
+            location: districtsForState(newState).includes(form.location) ? form.location : '',
+          });
+        }}
+      />
+      <ChoiceField label="City" value={form.location} options={districtsForState(form.state)} onChange={set('location')} />
 
       <View style={{ marginTop: space(2) }}>
         <Button

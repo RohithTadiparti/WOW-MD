@@ -6,9 +6,10 @@ import { api, apiMessage } from '@/lib/api';
 import { formatDate } from '@/shared/dates';
 import { ROLE_LABEL } from '@/shared/permissions';
 import { DetailGrid, DetailRow } from '@/components/chrome';
-import { DateField, SelectField, Textarea } from '@/components/form';
+import { SelectField, Textarea } from '@/components/form';
+import { DobField } from '@/components/biodata/dob-field';
 import { ChoiceField } from '@/components/biodata/choice-field';
-import { CITIES } from '@/shared/reference';
+import { STATES_BY_COUNTRY, districtsForState, DISTRICTS_BY_STATE } from '@/shared/locations';
 import {
   Alert,
   Body,
@@ -51,11 +52,20 @@ const EMPTY = {
   displayName: '',
   gender: '',
   dateOfBirth: '',
+  state: '',
   city: '',
   address: '',
   contactPhone: '',
   bio: '',
 };
+
+function getStateForCity(city: string | null | undefined): string {
+  if (!city) return '';
+  for (const [state, cities] of Object.entries(DISTRICTS_BY_STATE)) {
+    if (cities.includes(city)) return state;
+  }
+  return '';
+}
 
 /** The server's own rule, applied in the field so a typo costs no round trip. */
 const MOBILE_10 = /^[6-9]\d{9}$/;
@@ -95,6 +105,7 @@ export default function Profile() {
       displayName: data.displayName ?? '',
       gender: data.gender ?? '',
       dateOfBirth: data.dateOfBirth ?? '',
+      state: getStateForCity(data.city),
       city: data.city ?? '',
       address: data.address ?? '',
       contactPhone: data.contactPhone ?? '',
@@ -180,13 +191,26 @@ export default function Profile() {
             options={GENDERS}
             onChange={set('gender')}
           />
-          <DateField
+          <DobField
             label="Date of birth"
             value={form.dateOfBirth}
             onChange={set('dateOfBirth')}
             to={latestAdultDob()}
           />
-          <ChoiceField label="City" value={form.city} options={CITIES} onChange={set('city')} placeholder="Choose…" />
+          <ChoiceField
+            label="State"
+            value={form.state}
+            options={STATES_BY_COUNTRY['India'] ?? []}
+            onChange={(newState) => {
+              setForm((f) => ({
+                ...f,
+                state: newState,
+                city: districtsForState(newState).includes(f.city) ? f.city : '',
+              }));
+            }}
+            placeholder="Choose…"
+          />
+          <ChoiceField label="City" value={form.city} options={districtsForState(form.state)} onChange={set('city')} placeholder="Choose…" />
           <Field label="Address" value={form.address} onChangeText={set('address')} />
           <Field
             label="Contact number"
@@ -221,6 +245,7 @@ export default function Profile() {
               {GENDERS.find((g) => g.value === data?.gender)?.label ?? '—'}
             </DetailRow>
             <DetailRow label="Date of birth">{formatDate(data?.dateOfBirth, '—')}</DetailRow>
+            <DetailRow label="State">{getStateForCity(data?.city) || '—'}</DetailRow>
             <DetailRow label="City">{data?.city || '—'}</DetailRow>
             <DetailRow label="Address">{data?.address || '—'}</DetailRow>
             <DetailRow label="Contact number">{data?.contactPhone || '—'}</DetailRow>

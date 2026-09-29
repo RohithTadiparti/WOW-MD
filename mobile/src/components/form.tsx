@@ -1,11 +1,12 @@
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { CaretDown, Check } from 'phosphor-react-native';
+import { useState, useMemo, useEffect } from 'react';
+import { Modal, Pressable, ScrollView, StyleSheet, View, TextInput } from 'react-native';
+import { CaretDown, Check, MagnifyingGlass } from 'phosphor-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MonthCalendar, formatLongDate } from '@/components/calendar';
 import { Sheet } from '@/components/sheet';
-import { Body, Button, Caption, Field } from '@/components/ui';
-import { radius, rgb, space, useTheme } from '@/theme';
+import { Body, Button, Caption, Field, SectionTitle } from '@/components/ui';
+import { radius, rgb, rgba, space, useTheme } from '@/theme';
 import { Txt } from '@/theme/fonts';
 
 /**
@@ -38,7 +39,7 @@ function Label({ children }: { children: string }) {
  * Shared by the select, the date and the time so the three read as one family;
  * a date field that did not match the field above it would look like a bug.
  */
-function Trigger({
+export function Trigger({
   value,
   placeholder,
   invalid,
@@ -89,7 +90,7 @@ function Trigger({
   );
 }
 
-function Wrapper({
+export function Wrapper({
   label,
   hint,
   error,
@@ -142,8 +143,24 @@ export function SelectField({
   disabled?: boolean;
 }) {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
+  const [tempValue, setTempValue] = useState(value);
+  const [search, setSearch] = useState('');
   const current = options.find((o) => o.value === value);
+
+  useEffect(() => {
+    if (open) {
+      setTempValue(value);
+      setSearch('');
+    }
+  }, [open, value]);
+
+  const filteredOptions = useMemo(() => {
+    if (!search) return options;
+    const q = search.toLowerCase();
+    return options.filter((o) => o.label.toLowerCase().includes(q));
+  }, [options, search]);
 
   return (
     <Wrapper label={label} hint={hint} error={error}>
@@ -154,44 +171,55 @@ export function SelectField({
         disabled={disabled}
         onPress={() => setOpen(true)}
       />
-      <Sheet visible={open} title={label} onClose={() => setOpen(false)}>
-        <ScrollView style={{ maxHeight: 380 }}>
-          {options.map((option, i) => {
-            const active = option.value === value;
+      <Sheet
+        visible={open}
+        title={`Select ${label}`}
+        subtitle={`Choose your ${label.toLowerCase()} from the list.`}
+        onClose={() => setOpen(false)}
+      >
+        {options.length >= 10 && (
+          <View style={{ paddingHorizontal: space(4), marginBottom: space(2) }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: rgb(theme.surfaceRaised), borderRadius: radius.sm, borderWidth: 1, borderColor: rgb(theme.border), paddingHorizontal: space(3), height: 44 }}>
+              <MagnifyingGlass size={18} color={rgb(theme.ink[400])} style={{ marginRight: space(2) }} />
+              <TextInput style={{ flex: 1, fontSize: 16, color: rgb(theme.ink[900]) }} placeholder="Search..." placeholderTextColor={rgb(theme.ink[400])} value={search} onChangeText={setSearch} />
+            </View>
+          </View>
+        )}
+        <ScrollView style={{ paddingHorizontal: space(4), flexShrink: 1 }}>
+          {filteredOptions.map((option, i) => {
+            const active = option.value === tempValue;
             return (
               <Pressable
                 key={option.value}
                 accessibilityRole="radio"
                 accessibilityState={{ selected: active, disabled: Boolean(option.disabled) }}
                 disabled={option.disabled}
-                onPress={() => {
-                  onChange(option.value);
-                  setOpen(false);
-                }}
+                onPress={() => setTempValue(option.value)}
                 style={({ pressed }) => [
-                  {
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: space(3),
-                    paddingVertical: space(3.5),
-                    borderTopWidth: i === 0 ? 0 : StyleSheet.hairlineWidth,
-                    borderTopColor: rgb(theme.border),
-                    minHeight: 48,
-                  },
-                  pressed && { backgroundColor: rgb(theme.surfaceSunken) },
+                  { flexDirection: 'row', alignItems: 'center', paddingVertical: space(3), paddingHorizontal: space(2), borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: rgb(theme.border), minHeight: 48, borderRadius: radius.sm },
+                  active && { backgroundColor: rgba(theme.brand, 0.08) },
+                  pressed && !active && { backgroundColor: rgb(theme.surfaceSunken) },
                   option.disabled && { opacity: 0.45 },
                 ]}
               >
                 <View style={{ flex: 1, gap: space(0.5) }}>
-                  <Body>{option.label}</Body>
+                  <Body style={{ color: active ? rgb(theme.brandStrong) : rgb(theme.ink[900]) }}>{option.label}</Body>
                   {option.note ? <Caption tone="faint">{option.note}</Caption> : null}
                 </View>
                 {active ? <Check size={18} weight="bold" color={rgb(theme.brandStrong)} /> : null}
               </Pressable>
             );
           })}
-          {options.length === 0 && <Caption tone="faint">Nothing to choose from yet.</Caption>}
+          {filteredOptions.length === 0 && (
+            <View style={{ paddingVertical: space(4), alignItems: 'center' }}>
+              <Caption tone="faint">No options found.</Caption>
+            </View>
+          )}
         </ScrollView>
+        <View style={{ flexDirection: 'row', gap: space(3), paddingHorizontal: space(4), paddingTop: space(4), borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: rgb(theme.border) }}>
+          <Button label="Cancel" variant="outline" onPress={() => setOpen(false)} style={{ flex: 1 }} />
+          <Button label="Done" onPress={() => { onChange(tempValue); setOpen(false); }} style={{ flex: 1 }} />
+        </View>
       </Sheet>
     </Wrapper>
   );

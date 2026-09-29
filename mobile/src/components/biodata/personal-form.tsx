@@ -5,9 +5,11 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, apiMessage } from '@/lib/api';
 import { DateField, SelectField } from '@/components/form';
 import { Alert, Button, Card, Field } from '@/components/ui';
-import { CASTES_BY_RELIGION, CITIES, MOTHER_TONGUES, RELIGIONS } from '@/shared/reference';
+import { CASTES_BY_RELIGION, MOTHER_TONGUES, RELIGIONS } from '@/shared/reference';
+import { STATES_BY_COUNTRY, districtsForState, DISTRICTS_BY_STATE } from '@/shared/locations';
 import { space } from '@/theme';
 import { ChoiceField, canonical } from './choice-field';
+import { DobField } from './dob-field';
 import { GENDERS, MARITAL, COMPLEXIONS, stored } from './constants';
 
 interface Form {
@@ -21,6 +23,7 @@ interface Form {
   subCaste: string;
   motherTongue: string;
   denomination: string;
+  state: string;
   location: string;
   communicationAddress: string;
   alternateMobile: string;
@@ -33,6 +36,15 @@ function formFrom(
 ): Form {
   const d = (full?.details ?? {}) as Record<string, unknown>;
   const religion = canonical(String(d.religion ?? ''), RELIGIONS);
+  const city = String(me.city ?? '');
+  let state = '';
+  for (const [s, cities] of Object.entries(DISTRICTS_BY_STATE)) {
+    if (cities.includes(city)) {
+      state = s;
+      break;
+    }
+  }
+
   return {
     fullName: String(me.displayName ?? ''),
     dateOfBirth: String(me.dateOfBirth ?? full?.dateOfBirth ?? '').slice(0, 10),
@@ -44,7 +56,8 @@ function formFrom(
     subCaste: String(d.subCaste ?? ''),
     motherTongue: canonical(String(d.motherTongue ?? ''), MOTHER_TONGUES),
     denomination: String(d.denomination ?? ''),
-    location: String(me.city ?? ''),
+    state,
+    location: city,
     communicationAddress: String(d.communicationAddress ?? ''),
     alternateMobile: String(d.alternateMobile ?? ''),
     complexion: String(d.complexion ?? ''),
@@ -159,7 +172,7 @@ export function PersonalForm({
       {error ? <Alert tone="critical">{error}</Alert> : null}
       <Card>
         <Field label="Full Name" value={form.fullName} onChangeText={set('fullName')} />
-        <DateField label="Date of Birth" value={form.dateOfBirth} onChange={set('dateOfBirth')} to={maxDob} />
+        <DobField label="Date of Birth" value={form.dateOfBirth} onChange={set('dateOfBirth')} to={maxDob} />
         <SelectField label="Gender" value={form.gender} options={GENDERS} onChange={set('gender')} />
         <Field label="Height (cm)" value={form.heightCm} onChangeText={set('heightCm')} keyboardType="number-pad" maxLength={3} />
         <SelectField label="Complexion" value={form.complexion} options={COMPLEXIONS} onChange={set('complexion')} />
@@ -186,7 +199,19 @@ export function PersonalForm({
       </Card>
 
       <Card>
-        <ChoiceField label="Location (Current City)" value={form.location} options={CITIES} onChange={set('location')} />
+        <ChoiceField
+          label="State"
+          value={form.state}
+          options={STATES_BY_COUNTRY['India'] ?? []}
+          onChange={(newState) => {
+            setDraft({
+              ...form,
+              state: newState,
+              location: districtsForState(newState).includes(form.location) ? form.location : '',
+            });
+          }}
+        />
+        <ChoiceField label="City" value={form.location} options={districtsForState(form.state)} onChange={set('location')} />
         <Field label="Communication Address" value={form.communicationAddress} onChangeText={set('communicationAddress')} />
         <Field label="Alternate Mobile" value={form.alternateMobile} onChangeText={set('alternateMobile')} keyboardType="phone-pad" />
       </Card>
