@@ -16,8 +16,12 @@ import { IsUploadedUrl } from '../../../common/decorators/uploaded-url.decorator
 import { LocationDto, ParentDto } from '../../profile-details/dto/profile-details.dto';
 
 /** Reviewed intake values, stored in the existing profile_details row. */
-const trimAndTruncate = (len: number) =>
-  Transform(({ value }) => (typeof value === 'string' ? value.trim().slice(0, len) : value));
+const trimAndTruncate = (length: number) => {
+  // Length is enforced by the paired @MaxLength decorator; intake must reject
+  // oversized input rather than silently turning it into a different value.
+  void length;
+  return Transform(({ value }) => (typeof value === 'string' ? value.trim() : value));
+};
 
 /**
  * The regular biodata form requires a parent's name. Document extraction often

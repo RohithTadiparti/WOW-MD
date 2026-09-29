@@ -41,6 +41,7 @@ describe.each(Object.values(ProfileVisibility))('profile visibility %s', visibil
         matchFixedState: fixed ? MatchFixedState.CONFIRMED : state === 'proposed' ? 'proposed' : 'none',
       };
       const details = {
+        profileId: target.id,
         ...basic, father: { name: 'protected-family' },
         horoscope: { rashi: 'protected-rashi' },
         horoscopeAvailable: true,
@@ -48,7 +49,7 @@ describe.each(Object.values(ProfileVisibility))('profile visibility %s', visibil
         biodataDocumentUrl: 'secret-document', incomeVisible: false,
       };
       const service = new ProfileDetailsService(
-        { findOne: async () => details } as never,
+        { findOne: async () => details, find: async () => [details] } as never,
         { find: async () => [] } as never,
         { find: async () => [] } as never,
         { findOne: async () => target, find: async () => [viewer] } as never,
@@ -109,7 +110,7 @@ describe.each(Object.values(ProfileVisibility))('profile visibility %s', visibil
       photos: ['photo-1'],
     } as Profile;
     const service = new ProfileDetailsService(
-      { findOne: async () => basic } as never,
+      { findOne: async () => basic, find: async () => [{ ...basic, profileId: clientB.id }] } as never,
       { find: async () => [] } as never,
       { find: async () => [] } as never,
       {

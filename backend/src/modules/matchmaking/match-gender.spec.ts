@@ -137,14 +137,27 @@ describe('MatchmakingService gender rule for a family steward', () => {
     service = moduleRef.get(MatchmakingService);
   });
 
-  it.each(Object.values(ProfileVisibility))('discovers and allows interest for %s', async visibility => {
+  it.each(Object.values(ProfileVisibility))('applies private-profile eligibility for %s', async visibility => {
     const candidate = profile('candidate', { userId: null, gender: 'female', visibility });
     pool = [candidate];
     byId.set(candidate.id, candidate);
     const result = await service.suggestions(family, { page: 1, limit: 10 } as never);
-    expect(result.data.map(row => row.profile.id)).toContain(candidate.id);
     const [{ where }] = profilesRepo.find.mock.calls[0] as unknown as [{ where: object[] }];
-    for (const branch of where) expect(branch).not.toHaveProperty('visibility');
+    for (const branch of where) {
+      expect(branch).toMatchObject({
+        visibility: expect.objectContaining({
+          _type: 'not',
+          _value: ProfileVisibility.PRIVATE,
+        }),
+      });
+    }
+    if (visibility === ProfileVisibility.PRIVATE) {
+      await expect(service.sendInterest(family, candidate.id, son.id)).rejects.toThrow(
+        'not accepting interests',
+      );
+      return;
+    }
+    expect(result.data.map(row => row.profile.id)).toContain(candidate.id);
     await expect(service.sendInterest(family, candidate.id, son.id)).resolves.toMatchObject({
       fromProfileId: son.id, toProfileId: candidate.id,
     });

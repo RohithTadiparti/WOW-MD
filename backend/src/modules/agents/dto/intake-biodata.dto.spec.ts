@@ -6,6 +6,7 @@ describe('IntakeBiodataDto validation', () => {
   const metadata: ArgumentMetadata = { type: 'body', metatype: CreateManagedProfileDto };
   const base = {
     displayName: 'Asha Rao',
+    contactPhone: '+919876543210',
     consent: { method: 'in_person', givenByRelation: 'self', givenAt: '2026-01-01' },
   };
 
@@ -45,14 +46,21 @@ describe('IntakeBiodataDto validation', () => {
 
   it('uses the established text limits and date format', async () => {
     const result = await validate({
-      communicationAddress: 'a'.repeat(501),
-      bio: 'a'.repeat(2001),
-      city: 'a'.repeat(81),
+      communicationAddress: 'a'.repeat(500),
+      bio: 'a'.repeat(2000),
+      city: 'a'.repeat(80),
+      dateOfBirth: '2000-01-01',
     });
     const biodata = (result as CreateManagedProfileDto).biodata!;
     expect(biodata.communicationAddress).toHaveLength(500);
     expect(biodata.bio).toHaveLength(2000);
     expect(biodata.city).toHaveLength(80);
+    expect(biodata.dateOfBirth).toBe('2000-01-01');
+    await expect(validate({ communicationAddress: 'a'.repeat(501) })).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    await expect(validate({ bio: 'a'.repeat(2001) })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(validate({ city: 'a'.repeat(81) })).rejects.toBeInstanceOf(BadRequestException);
     await expect(validate({ dateOfBirth: 'not-a-date' })).rejects.toBeInstanceOf(
       BadRequestException,
     );
