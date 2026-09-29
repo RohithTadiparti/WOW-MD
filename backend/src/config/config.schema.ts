@@ -127,6 +127,8 @@ export const configValidationSchema = Joi.object({
   S3_REGION: Joi.string().allow('').optional(),
   MAX_FILE_SIZE: Joi.number().default(10485760),
   MEDIA_STORAGE_PROVIDER: Joi.string().valid('mock', 's3').default('mock'),
+  MEDIA_MOCK_STORAGE_DIR: Joi.string().allow('').optional(),
+  MEDIA_MOCK_DIR: Joi.string().allow('').optional(),
   MEDIA_SHARE_BASE_URL: Joi.string().allow('').optional(),
   S3_ACCESS_KEY_ID: Joi.string().allow('').optional(),
   S3_SECRET_ACCESS_KEY: Joi.string().allow('').optional(),

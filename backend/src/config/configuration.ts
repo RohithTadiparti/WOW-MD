@@ -1,3 +1,6 @@
+import { mkdirSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+
 /**
  * Central configuration loader.
  *
@@ -17,6 +20,19 @@ const toBool = (value: string | undefined, fallback = false): boolean =>
 
 const toList = (value: string | undefined, fallback: string[] = []): string[] =>
   value ? value.split(',').map((s) => s.trim()).filter(Boolean) : fallback;
+
+const getMockStorageDir = (): string => {
+  const storageProvider = process.env.MEDIA_STORAGE_PROVIDER || 'mock';
+  const mockStorageDir = resolve(
+    process.env.MEDIA_MOCK_STORAGE_DIR ||
+      process.env.MEDIA_MOCK_DIR ||
+      join(process.cwd(), '.tmp', 'media-store'),
+  );
+  if (storageProvider === 'mock') {
+    mkdirSync(mockStorageDir, { recursive: true });
+  }
+  return mockStorageDir;
+};
 
 export default () => ({
   runtime: {
@@ -335,7 +351,7 @@ export default () => ({
      * because "does the photograph survive a refresh" is the question people
      * actually ask, and a restart is a refresh.
      */
-    mockStorageDir: process.env.MEDIA_MOCK_DIR || '/app/media-store',
+    mockStorageDir: getMockStorageDir(),
     /**
      * The origin the browser reaches that storage on.
      *
