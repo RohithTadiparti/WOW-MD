@@ -177,7 +177,7 @@ export class AvailabilityService {
     this.assertWithinWindow(dto.date);
     this.assertTimeOrder(dto.startTime, dto.endTime);
 
-    let capacity = dto.capacity ?? 1;
+    const capacity = dto.capacity ?? 1;
     if (dto.vendorServiceId) {
       const service = await this.services.findService(dto.vendorServiceId);
       if (!service || service.vendorId !== providerId) {
