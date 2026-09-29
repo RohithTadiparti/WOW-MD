@@ -1721,7 +1721,7 @@ export class BookingsService {
       .where('b."providerId" IN (:...ids)', { ids: providerIds })
       .andWhere('b."slotId" IS NULL')
       .andWhere('(b."eventDate" IS NOT NULL OR e."eventDate" IS NOT NULL)')
-      .andWhere('LOWER(b.status) IN (:...statuses)', { statuses: REQUEST_STATUSES.map((s) => s.toLowerCase()) })
+      .andWhere('LOWER(CAST(b.status AS text)) IN (:...statuses)', { statuses: REQUEST_STATUSES.map((s) => s.toLowerCase()) })
       .getCount();
 
     return counts;

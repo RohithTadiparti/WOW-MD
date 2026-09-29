@@ -16,7 +16,11 @@ describe('Other Income API', () => {
   const actors: { user: User; profile: Profile; token: string }[] = [];
   const base = { highestQualification: 'Masters', course: 'Engineering', occupationStatus: 'employed', incomeVisible: false };
   const primary = { company: 'Acme', designation: 'Engineer', workLocation: 'Hyderabad', salary: '1200000' };
-  const sources = ['rental', 'business', 'agricultural', 'investment', 'other'].map((source, index) => ({ source, amount: String(index * 100000) }));
+  const sources = ['rental', 'business', 'agricultural', 'investment', 'other'].map((source, index) => ({
+    source,
+    ...(source === 'other' ? { otherIncomeSource: 'Freelance Work' } : {}),
+    amount: String(index * 100000),
+  }));
 
   beforeAll(async () => {
     const module = await Test.createTestingModule({ imports: [AppModule] }).compile();
