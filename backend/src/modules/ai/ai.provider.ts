@@ -27,7 +27,7 @@ export interface AiProvider {
  */
 @Injectable()
 export class MockAiProvider implements AiProvider {
-  async complete(prompt: string, imageUrl?: string): Promise<string> {
+  async complete(prompt: string): Promise<string> {
     return answerFor(prompt) ?? GENIE_FALLBACK;
   }
 }
