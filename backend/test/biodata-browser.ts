@@ -6,6 +6,7 @@ import { AddressInfo } from 'net';
 import { tmpdir } from 'os';
 import { resolve, join } from 'path';
 import express from 'express';
+import WebSocket from 'ws';
 
 /** Real Chromium smoke test without adding a browser dependency to the app. */
 export async function checkBiodataBrowser(apiOrigin: string, email: string, password: string, png: Buffer) {
