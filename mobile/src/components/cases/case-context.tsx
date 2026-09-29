@@ -97,7 +97,13 @@ export function CaseContext({ item }: { item: SupportCase }) {
       {item.business ? (
         <Card>
           <SectionTitle>{item.business.name}</SectionTitle>
-          <Caption tone="faint">{categoryNames([item.business.category])[0] ?? 'No category'}</Caption>
+          <Caption tone="faint">
+            {categoryNames(
+              item.business.categories?.length
+                ? item.business.categories
+                : [item.business.category],
+            ).join(', ') || 'No category'}
+          </Caption>
           <Body>
             {labelFor(BUSINESS_STATUS_LABEL, item.business.status)}
             {item.business.isApproved ? ' · approved' : ' · not approved'}

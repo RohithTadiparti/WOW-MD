@@ -1,5 +1,6 @@
 import { Tabs } from 'expo-router';
 import { StyleSheet } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
 import {
   Bell,
   Briefcase,
@@ -14,7 +15,8 @@ import {
   type IconProps,
 } from 'phosphor-react-native';
 
-import { Permission, can, canAny } from '@/shared/permissions';
+import { Permission, can, canAny, type PermissionValue } from '@/shared/permissions';
+import { api } from '@/lib/api';
 import { useAuth } from '@/store/auth';
 import { rgb, useTheme } from '@/theme';
 import { typeface } from '@/theme/fonts';
@@ -41,9 +43,19 @@ import { typeface } from '@/theme/fonts';
  * push anyway. The web app agrees about the priority: Notifications sits under
  * "Account" there, below "Your business".
  */
+const emptyPermissions: PermissionValue[] = [];
+
 export default function TabsLayout() {
   const theme = useTheme();
-  const permissions = useAuth((s) => s.user?.permissions ?? []);
+  const permissions = useAuth((s) => s.user?.permissions ?? emptyPermissions);
+  const role = useAuth((s) => s.user?.role);
+  const wowProfile = useQuery({
+    queryKey: ['wow-planner-profile'],
+    queryFn: async () => (await api.get('/planner/profile')).data as { plannerType?: string },
+    enabled: role === 'planner',
+    retry: false,
+  });
+  const isWowEmployee = wowProfile.data?.plannerType === 'wow_employee';
 
   // A seller: a vendor or a wedding planner. Both take bookings against
   // published windows, and both manage a listing.
@@ -119,7 +131,7 @@ export default function TabsLayout() {
         options={{
           title: 'Business',
           tabBarIcon: icon(Briefcase),
-          href: isVendor ? undefined : null,
+          href: isVendor || (isProvider && !isWowEmployee) ? undefined : null,
         }}
       />
       <Tabs.Screen
@@ -129,7 +141,7 @@ export default function TabsLayout() {
           tabBarIcon: icon(Receipt),
           // The seller's queue. A buyer's own bookings are a different screen
           // and are not part of this app yet.
-          href: can(permissions, Permission.BOOKING_READ_INCOMING) ? undefined : null,
+          href: can(permissions, Permission.BOOKING_READ_INCOMING) && !isWowEmployee ? undefined : null,
         }}
       />
       <Tabs.Screen
@@ -137,7 +149,23 @@ export default function TabsLayout() {
         options={{
           title: 'Availability',
           tabBarIcon: icon(CalendarBlank),
-          href: isProvider ? undefined : null,
+          href: isProvider && !isWowEmployee ? undefined : null,
+        }}
+      />
+      <Tabs.Screen
+        name="employee-weddings"
+        options={{
+          title: 'Weddings',
+          tabBarIcon: icon(CalendarBlank),
+          href: isWowEmployee ? undefined : null,
+        }}
+      />
+      <Tabs.Screen
+        name="planner-vendors"
+        options={{
+          title: 'Vendors',
+          tabBarIcon: icon(Briefcase),
+          href: isWowEmployee ? undefined : null,
         }}
       />
       <Tabs.Screen

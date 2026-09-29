@@ -80,6 +80,14 @@ export const AuditAction = {
 
   VENDOR_APPROVED: 'vendor.approved',
   PLANNER_APPROVED: 'planner.approved',
+  WOW_PLANNER_CREATED: 'wow_planner.created',
+  WOW_PLANNER_UPDATED: 'wow_planner.updated',
+  WOW_PLANNER_ACTIVATED: 'wow_planner.activated',
+  WOW_PLANNER_DEACTIVATED: 'wow_planner.deactivated',
+  WOW_PLANNER_PROFILE_UPDATED: 'wow_planner.profile_updated',
+  WOW_PLANNER_HIRED: 'wow_planner.hired',
+  WOW_PLANNER_REASSIGNED: 'wow_planner.reassigned',
+  WOW_PLANNER_ASSIGNED_BY_ADMIN: 'wow_planner.assigned_by_admin',
 
   BOOKING_ESCROW_HELD: 'booking.escrow_held',
   BOOKING_ESCROW_RELEASED: 'booking.escrow_released',

@@ -30,6 +30,7 @@ import {
   PaymentStatus,
   ProfileLifecycle,
   ProviderType,
+  PlannerType,
   UserRole,
   VerificationStatus,
 } from '../../common/enums';
@@ -101,11 +102,11 @@ export class AdminService {
   }
 
   listPendingPlanners() {
-    return this.planners.find({ where: { isApproved: false }, order: { createdAt: 'ASC' } });
+    return this.planners.find({ where: { isApproved: false, plannerType: PlannerType.INDEPENDENT }, order: { createdAt: 'ASC' } });
   }
 
   async approvePlanner(actor: AuthUser, plannerId: string) {
-    const planner = await this.planners.findOne({ where: { id: plannerId } });
+    const planner = await this.planners.findOne({ where: { id: plannerId, plannerType: PlannerType.INDEPENDENT } });
     if (!planner) throw new NotFoundException('Planner not found');
     planner.isApproved = true;
     const saved = await this.planners.save(planner);

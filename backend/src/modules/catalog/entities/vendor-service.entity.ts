@@ -40,17 +40,6 @@ export class VendorService {
   @Column({ type: 'jsonb', default: {} })
   attributes: Record<string, unknown>;
 
-  /**
-   * How many of these the vendor can run at once.
-   *
-   * This is the number the specification's catering example turns on: five
-   * teams means five simultaneous bookings in one window, and one convention
-   * hall means one. It seeds the capacity of every slot published for this
-   * service.
-   */
-  @Column({ type: 'int', default: 1 })
-  concurrentCapacity: number;
-
   /** Vendor-side switch. Taking a service down leaves its bookings intact. */
   @Index()
   @Column({ default: true })

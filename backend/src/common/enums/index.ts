@@ -74,6 +74,16 @@ export enum ProviderType {
   PLANNER = 'planner',
 }
 
+export enum PlannerType {
+  INDEPENDENT = 'independent',
+  WOW_EMPLOYEE = 'wow_employee',
+}
+
+export enum PlannerProfileStatus {
+  INCOMPLETE = 'incomplete',
+  COMPLETE = 'complete',
+}
+
 export enum ProfileVisibility {
   PUBLIC = 'public',
   MATCHES_ONLY = 'matches_only',
@@ -217,6 +227,9 @@ export enum NotificationType {
    */
   EVENT_CHANGED_BY_COUPLE = 'event_changed_by_couple',
   EVENT_CHANGED_BY_PLANNER = 'event_changed_by_planner',
+  WOW_PLANNER_ASSIGNED = 'wow_planner_assigned',
+  WOW_PLANNER_BOOKING_CONFIRMED = 'wow_planner_booking_confirmed',
+  WOW_PLANNER_REASSIGNED = 'wow_planner_reassigned',
 }
 
 /**

@@ -93,6 +93,16 @@
     --caution-bg: 250 240 222;
     --critical-fg: var(--wow-error);
     --critical-bg: var(--wow-error-bg);
+    /* Compatibility aliases used by planner and public pages. */
+    --wow-ivory: var(--wow-bg-main);
+    --wow-champagne: var(--wow-bg-secondary);
+    --wow-burgundy: var(--wow-primary);
+    --wow-rose: var(--wow-primary);
+    --wow-gold: var(--wow-accent-gold);
+    --wow-warm-gold: var(--wow-accent-warm);
+    --wow-charcoal: var(--wow-text-main);
+    --wow-muted-text: var(--wow-text-muted);
+    --wow-border: var(--ink-200);
 
     /* ---------------------------------------------------------- tier 2 --
      * Semantic tokens. Components only ever read these.
@@ -108,15 +118,20 @@
     --brand: var(--wow-primary);
     --brand-strong: var(--wow-primary-light);
     --brand-soft: 251 226 237;
+    /* The template's hairlines are its ink at a fixed strength, not a grey:
+     * 14% for rules and panels, 28% round a field. Translucent, so a rule on
+     * the ivory ground and one on a white panel each come out as it drew them. */
+    --line: rgb(36 16 23 / 0.14);
+    --line-strong: rgb(36 16 23 / 0.28);
     /* What sits ON the accent. The ivory ground here, near-black in dark mode,
      * because the accent lifts in dark mode and light text on it fails. */
-    --brand-fg: 250 246 239;
+    --brand-fg: 255 255 255;
 
     --focus: var(--rose-400);
 
     /* Shadows tinted to the ground rather than pure black. A black shadow on a
      * pink-white canvas reads as a hole punched in the page. */
-    --shadow-color: 36 16 23;
+    --shadow-color: 91 34 51;
 
     /*
      * The one colour that does not invert.
@@ -130,11 +145,10 @@
      */
     --scrim: 14 8 11;
 
-    /* Square, as the template draws everything: ruled, not rounded. The scale
-     * is kept so the one place that ever needs a corner can take it. */
-    --radius-sm: 0; /* inputs, chips */
-    --radius-md: 0; /* buttons */
-    --radius-lg: 0; /* cards, panels */
+    /* Near-square, as the template draws everything: ruled, not rounded. */
+    --radius-sm: 0.5rem;
+    --radius-md: 0.625rem;
+    --radius-lg: 1rem;
 
     color-scheme: light;
   }
@@ -181,17 +195,21 @@
 
     --positive-fg: 126 214 186;
     --positive-bg: 17 48 40;
+    --info-fg: 240 182 191;
+    --info-bg: 60 21 31;
     --caution-fg: 226 186 116;
     --caution-bg: 54 41 18;
     --critical-fg: 250 160 146;
     --critical-bg: 64 26 22;
 
-    --canvas: 26 11 17;
-    --surface: 36 16 23;
-    --surface-raised: 44 21 29;
-    --surface-sunken: 30 13 20;
-    --border: 64 38 47;
-    --border-strong: 88 60 68;
+    --canvas: 20 13 15;
+    --surface: 55 32 39;
+    --surface-raised: 38 27 30;
+    --surface-sunken: 24 16 18;
+    --border: 52 40 42;
+    --border-strong: 72 57 59;
+    --line: rgb(250 246 239 / 0.14);
+    --line-strong: rgb(250 246 239 / 0.28);
 
     --brand: var(--rose-500);
     --brand-strong: var(--rose-600);
@@ -224,6 +242,8 @@
     transition:
       background-color 0.3s ease,
       color 0.3s ease;
+    background-image: radial-gradient(circle at 88% 0%, rgb(var(--rose-100) / 0.5), transparent 30rem),
+      linear-gradient(135deg, rgb(var(--wow-ivory)) 0%, rgb(var(--wow-champagne) / 0.34) 100%);
   }
 
   /* Numbers, codes and identifiers. Profile codes are read aloud over the
@@ -306,10 +326,10 @@
   }
 
   .btn-outline {
-    @apply inline-flex min-h-[2.875rem] select-none items-center justify-center gap-2 whitespace-nowrap
-      rounded-[--radius-md] border border-brand bg-transparent px-6 py-2.5 text-xs
-      font-medium uppercase tracking-[0.18em] text-brand transition-[transform,background-color,border-color] duration-150
-      hover:bg-brand-soft active:translate-y-px
+    @apply inline-flex select-none items-center justify-center gap-2 whitespace-nowrap
+      rounded-[--radius-md] border border-brand/35 bg-surface-raised px-5 py-2.5 text-xs
+      font-semibold uppercase tracking-[0.12em] text-brand-strong transition-[transform,background-color,border-color] duration-150
+      hover:-translate-y-px hover:border-brand hover:bg-brand/10 active:translate-y-px
       disabled:pointer-events-none disabled:opacity-45;
   }
 
@@ -347,8 +367,21 @@
 
   /* The template's fields: 48px tall, a hairline at the ink's 28%, 15px text
    * on the panel colour, square. */
+  .btn:focus-visible,
+  .btn-outline:focus-visible,
+  .btn-ghost:focus-visible {
+    outline-offset: 3px;
+  }
+
+  .portal-shell button:disabled,
+  .portal-shell input:disabled,
+  .portal-shell select:disabled,
+  .portal-shell textarea:disabled {
+    cursor: not-allowed;
+  }
+
   .input {
-    @apply min-h-12 w-full rounded-[--radius-sm] border border-gray-300 bg-surface px-3 py-2.5
+    @apply min-h-12 w-full rounded-[--radius-sm] border border-gray-300 bg-surface-raised px-3 py-2.5
       text-[0.9375rem] text-gray-900 transition-[border-color,box-shadow] duration-150
       placeholder:text-gray-400
       focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/12
@@ -377,12 +410,13 @@
   }
 
   .card {
-    @apply rounded-[--radius-lg] border border-gray-200 bg-surface p-5 shadow-card;
+    @apply rounded-[--radius-lg] border border-gold/35 bg-surface p-5 shadow-lifted;
+    box-shadow: 0 1px 0 rgb(var(--wow-gold) / 0.18), 0 10px 30px rgb(var(--shadow-color) / 0.08);
   }
 
   /* For the one or two places that genuinely need to sit above a card. */
   .card-raised {
-    @apply rounded-[--radius-lg] border border-gray-200 bg-surface-raised p-5 shadow-lifted;
+    @apply rounded-[--radius-lg] border border-gold/40 bg-surface-raised p-5 shadow-pop;
   }
 
   /* -------------------------------------------------------- portal layer --
@@ -482,6 +516,102 @@
   }
 
   /* The template's field label: 11px capitals tracked 0.22em, above the field. */
+  /* -------------------------------------------------------- portal layer --
+   * The shell keeps one WOW identity while these modes tune composition for
+   * the job at hand. They intentionally share tokens and controls; only
+   * density, hierarchy and depth change by portal.
+   */
+  .portal-shell {
+    background:
+      linear-gradient(180deg, rgb(var(--surface) / 0.32), transparent 18rem),
+      rgb(var(--canvas));
+  }
+
+  .portal-shell[data-portal='individual'] {
+    --portal-radius: 0.75rem;
+    background:
+      radial-gradient(circle at 92% 4%, rgb(var(--wow-accent-warm) / 0.12), transparent 20rem),
+      linear-gradient(180deg, rgb(var(--wow-primary) / 0.06), transparent 22rem),
+      rgb(var(--canvas));
+  }
+
+  .portal-shell[data-portal='individual'] .card,
+  .portal-shell[data-portal='individual'] .card-raised {
+    border-radius: var(--portal-radius);
+    box-shadow: 0 12px 34px -28px rgb(var(--wow-primary) / 0.5);
+  }
+
+  .portal-shell[data-portal='individual'] .page-title {
+    color: rgb(var(--wow-primary));
+  }
+
+  .portal-shell[data-portal='planner'] .card,
+  .portal-shell[data-portal='planner'] .card-raised {
+    border-top: 2px solid rgb(var(--wow-accent-gold) / 0.75);
+  }
+
+  .portal-shell[data-portal='planner'] .page-title {
+    color: rgb(var(--wow-text-main));
+  }
+
+  .portal-shell[data-portal='vendor'],
+  .portal-shell[data-portal='agent'],
+  .portal-shell[data-portal='verification'] {
+    --portal-content-width: 78rem;
+  }
+
+  .portal-shell[data-portal='vendor'] .card,
+  .portal-shell[data-portal='agent'] .card,
+  .portal-shell[data-portal='verification'] .card {
+    border-radius: 0.375rem;
+    box-shadow: none;
+  }
+
+  .portal-shell[data-portal='vendor'] .page-title,
+  .portal-shell[data-portal='agent'] .page-title,
+  .portal-shell[data-portal='verification'] .page-title {
+    font-family: 'Karla', 'Helvetica Neue', ui-sans-serif, sans-serif;
+    font-size: clamp(1.65rem, 1.2rem + 1vw, 2.25rem);
+    font-weight: 600;
+    color: rgb(var(--wow-text-main));
+  }
+
+  .portal-shell[data-portal='admin'] .card,
+  .portal-shell[data-portal='admin'] .card-raised {
+    border-radius: 0.25rem;
+    box-shadow: none;
+  }
+
+  .portal-shell[data-portal='admin'] .page-title {
+    font-family: 'Karla', 'Helvetica Neue', ui-sans-serif, sans-serif;
+    font-size: clamp(1.5rem, 1.15rem + 0.8vw, 2rem);
+    font-weight: 600;
+    color: rgb(var(--wow-text-main));
+  }
+
+  .portal-shell[data-portal='admin'] .section-title {
+    font-size: 0.875rem;
+    letter-spacing: 0.01em;
+  }
+
+  .portal-shell[data-portal='admin'] .btn,
+  .portal-shell[data-portal='admin'] .btn-outline,
+  .portal-shell[data-portal='admin'] .btn-sm {
+    border-radius: 0.25rem;
+    letter-spacing: 0.08em;
+  }
+
+  @media (max-width: 639px) {
+    .portal-shell main {
+      overflow-x: clip;
+    }
+
+    .portal-shell[data-portal='individual'] .card,
+    .portal-shell[data-portal='individual'] .card-raised {
+      padding: 1rem;
+    }
+  }
+
   .label {
     @apply mb-2 block text-[0.6875rem] font-normal uppercase tracking-[0.22em] text-gray-600;
   }
@@ -499,7 +629,8 @@
   /* A page title and its one-line explanation, used at the top of every
    * screen. Written once so the app has a single masthead rhythm. */
   .page-title {
-    @apply plate w-fit font-serif text-[2rem] font-normal leading-[1.1] text-brand sm:text-[2.5rem];
+    @apply plate w-fit border-l-4 border-gold pl-3 font-serif text-[2rem] font-medium leading-[1.1] text-gray-900 sm:text-[2.5rem];
+    text-wrap: balance;
   }
 
   /* Clears the heart field from behind a run of text: a patch of the ground
@@ -616,6 +747,90 @@
     border-color: rgb(var(--wow-primary));
   }
 
+  /* The rail supports the work; the header and content establish the product. */
+  .portal-header {
+    box-shadow: 0 1px 0 rgb(var(--wow-gold) / 0.16);
+  }
+
+  .portal-shell main {
+    min-width: 0;
+  }
+
+  .portal-shell[data-portal='individual'] main {
+    background: radial-gradient(circle at 100% 0%, rgb(var(--rose-100) / 0.38), transparent 22rem);
+  }
+
+  .portal-shell[data-portal='individual'] .portal-header {
+    background-color: rgb(var(--surface) / 0.88);
+  }
+
+  .portal-shell[data-portal='individual'] main > div > header,
+  .portal-shell[data-portal='individual'] main > header {
+    background: linear-gradient(135deg, rgb(var(--rose-100) / 0.82), rgb(var(--surface) / 0.96));
+    border-color: rgb(var(--rose-200) / 0.75);
+    color: rgb(var(--wow-charcoal));
+  }
+
+  .portal-shell[data-portal='agent'] .card,
+  .portal-shell[data-portal='vendor'] .card {
+    border-color: rgb(var(--border) / 0.9);
+    box-shadow: 0 8px 24px -22px rgb(var(--shadow-color) / 0.6);
+  }
+
+  .portal-shell[data-portal='agent'] .section-title,
+  .portal-shell[data-portal='vendor'] .section-title {
+    font-family: 'Karla', 'Helvetica Neue', ui-sans-serif, sans-serif;
+    font-size: 0.95rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: rgb(var(--wow-charcoal));
+  }
+
+  .portal-shell[data-portal='agent'] .card {
+    border-left: 2px solid rgb(var(--rose-200) / 0.65);
+  }
+
+  .portal-shell[data-portal='vendor'] .card {
+    background: linear-gradient(145deg, rgb(var(--surface-raised)), rgb(var(--wow-ivory) / 0.75));
+  }
+
+  .portal-shell[data-portal='planner'] .portal-header {
+    background: linear-gradient(90deg, rgb(var(--surface) / 0.95), rgb(var(--wow-champagne) / 0.34));
+  }
+
+  .portal-shell[data-portal='planner'] .section-title {
+    color: rgb(var(--wow-charcoal));
+  }
+
+  .portal-shell[data-portal='verification'] .card {
+    border-radius: 0.625rem;
+    box-shadow: 0 3px 14px -14px rgb(var(--shadow-color) / 0.55);
+  }
+
+  .portal-shell[data-portal='verification'] .section-title {
+    font-family: 'Karla', 'Helvetica Neue', ui-sans-serif, sans-serif;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: rgb(var(--wow-charcoal));
+  }
+
+  .portal-shell[data-portal='admin'] .portal-header {
+    background-color: rgb(var(--surface-raised) / 0.94);
+  }
+
+  .portal-shell[data-portal='admin'] .card {
+    border-color: rgb(var(--border) / 0.8);
+    box-shadow: 0 5px 18px -18px rgb(var(--shadow-color) / 0.7);
+  }
+
+  .portal-shell[data-portal='admin'] .section-title {
+    font-family: 'Karla', 'Helvetica Neue', ui-sans-serif, sans-serif;
+    font-size: 0.875rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: rgb(var(--wow-charcoal));
+  }
+
   /*
    * A heading inside a page, below the masthead.
    *
@@ -658,6 +873,39 @@
   .rule {
     @apply h-px w-full border-0;
     background: linear-gradient(90deg, transparent, rgb(var(--border)) 18%, rgb(var(--border)) 82%, transparent);
+  }
+
+  table {
+    @apply w-full border-collapse;
+  }
+
+  thead {
+    @apply border-b border-gold/35 bg-surface-sunken/45;
+  }
+
+  th {
+    @apply px-4 py-3 text-left text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-gray-500;
+  }
+
+  td {
+    @apply border-b border-gold/20 px-4 py-3 text-sm;
+  }
+
+  tbody tr {
+    @apply transition-colors hover:bg-brand-soft/35;
+  }
+
+  progress {
+    @apply h-2 overflow-hidden rounded-full bg-brand-soft;
+    accent-color: rgb(var(--brand));
+  }
+
+  progress::-webkit-progress-bar {
+    @apply rounded-full bg-brand-soft;
+  }
+
+  progress::-webkit-progress-value {
+    @apply rounded-full bg-brand;
   }
 }
 

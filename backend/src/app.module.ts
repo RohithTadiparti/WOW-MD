@@ -32,6 +32,7 @@ import { CirculationModule } from './modules/circulation/circulation.module';
 import { VerificationModule } from './modules/verification/verification.module';
 import { SupportModule } from './modules/support/support.module';
 import { WeddingPlannersModule } from './modules/wedding-planners/wedding-planners.module';
+import { WowEmployeePlannersModule } from './modules/wedding-planners/wow-employee-planners.module';
 import { UsersModule } from './modules/users/users.module';
 import { ProfileDetailsModule } from './modules/profile-details/profile-details.module';
 import { MatchmakingModule } from './modules/matchmaking/matchmaking.module';
@@ -98,6 +99,7 @@ import { AiModule } from './modules/ai/ai.module';
     SupportModule,
     AgentsModule,
     WeddingPlannersModule,
+    WowEmployeePlannersModule,
     UsersModule,
     ProfileDetailsModule,
     MatchmakingModule,

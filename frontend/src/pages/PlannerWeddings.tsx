@@ -16,6 +16,7 @@ interface Wedding {
   weddingDate: string | null;
   derivedWeddingDate?: string | null;
   location: string | null;
+  paymentStatus?: string | null;
   events: number;
   tasks: { total: number; done: number };
   bookings: { total: number; confirmed: number; pending: number };
@@ -104,6 +105,7 @@ export default function PlannerWeddings() {
           {weddings.map((wedding) => {
             const date = wedding.weddingDate ?? wedding.derivedWeddingDate ?? null;
             const progress = wedding.tasks.total ? Math.round((wedding.tasks.done / wedding.tasks.total) * 100) : 0;
+            const paymentStatus = wedding.paymentStatus ? wedding.paymentStatus.replace(/_/g, ' ') : null;
             return (
               <Link key={wedding.userId} to={`/my-clients/${wedding.userId}`} className="card group transition-shadow hover:shadow-lifted">
                 <div className="flex items-start justify-between gap-3">
@@ -118,6 +120,12 @@ export default function PlannerWeddings() {
                   <div><dt className="text-gray-500">Events</dt><dd className="font-medium text-gray-900">{wedding.events}</dd></div>
                   <div><dt className="text-gray-500">Confirmed vendors</dt><dd className="font-medium text-gray-900">{wedding.bookings.confirmed}</dd></div>
                   <div><dt className="text-gray-500">Pending tasks</dt><dd className="font-medium text-gray-900">{Math.max(0, wedding.tasks.total - wedding.tasks.done)}</dd></div>
+                  {paymentStatus && (
+                    <div className="col-span-2">
+                      <dt className="text-gray-500">Payment status</dt>
+                      <dd className="font-medium text-gray-900">{paymentStatus.charAt(0).toUpperCase() + paymentStatus.slice(1)}</dd>
+                    </div>
+                  )}
                 </dl>
                 <div className="mt-4">
                   <div className="mb-1 flex justify-between text-xs text-gray-500"><span>Planning progress</span><span>{progress}%</span></div>

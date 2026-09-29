@@ -126,4 +126,7 @@ export const NOTIFICATION_TARGET: Record<NotificationType, NotificationTarget> =
   // through the client picker.
   [NotificationType.EVENT_CHANGED_BY_COUPLE]: { module: 'events', action: 'view', idKey: 'eventId' },
   [NotificationType.EVENT_CHANGED_BY_PLANNER]: { module: 'events', action: 'view', idKey: 'eventId' },
+  [NotificationType.WOW_PLANNER_ASSIGNED]: { module: 'planner', action: 'view', idKey: 'weddingPlanId' },
+  [NotificationType.WOW_PLANNER_BOOKING_CONFIRMED]: { module: 'planner', action: 'view', idKey: 'weddingPlanId' },
+  [NotificationType.WOW_PLANNER_REASSIGNED]: { module: 'planner', action: 'view', idKey: 'weddingPlanId' },
 };

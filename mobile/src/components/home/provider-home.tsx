@@ -100,6 +100,12 @@ export function ProviderHome() {
   const permissions = useAuth((s) => s.user?.permissions ?? []);
   const isPlanner = isPlannerAccount(permissions);
   const planner = usePlannerListing(isPlanner);
+  const wowEmployee = useQuery<{ profileStatus: string; completion: number }>({
+    queryKey: ['wow-planner-profile'],
+    queryFn: async () => (await api.get('/planner/profile')).data,
+    enabled: isPlanner,
+    retry: false,
+  });
 
   const vendorRows = useQuery({
     queryKey: ['vendor-me'],
@@ -153,6 +159,23 @@ export function ProviderHome() {
     return sum;
   }, 0);
 
+  if (isPlanner && wowEmployee.data) {
+    return (
+      <View style={{ gap: space(4) }}>
+        <Card>
+          <SectionTitle>WOW Planner · Official WOW Team</SectionTitle>
+          <Caption tone={wowEmployee.data.profileStatus === 'complete' ? 'muted' : 'faint'}>
+            {wowEmployee.data.profileStatus === 'complete' ? 'Your client-facing profile is live.' : `Complete your profile · ${wowEmployee.data.completion}%`}
+          </Caption>
+          {wowEmployee.data.profileStatus !== 'complete' ? (
+            <Pressable onPress={() => router.push('/wow-planner-profile')}><Body tone="brand">Complete planner profile</Body></Pressable>
+          ) : null}
+        </Card>
+        <PlannerBook employeeMode />
+      </View>
+    );
+  }
+
   const row = isPlanner ? planner.data : vendorRows.data?.find((v) => v.id === activeId);
   const ratingAvg = row?.ratingAvg ?? 0;
   const ratingCount = row?.ratingCount ?? 0;
@@ -161,7 +184,21 @@ export function ProviderHome() {
     <View style={{ gap: space(4) }}>
       {isPlanner ? (
         <>
-          <PlannerAgencyCard listing={planner.data ?? null} loading={planner.isLoading} />
+          {wowEmployee.data ? (
+            <Card>
+              <SectionTitle>WOW Planner · Official WOW Team</SectionTitle>
+              <Caption tone={wowEmployee.data.profileStatus === 'complete' ? 'muted' : 'faint'}>
+                {wowEmployee.data.profileStatus === 'complete' ? 'Your client-facing profile is live.' : `Complete your profile · ${wowEmployee.data.completion}%`}
+              </Caption>
+              {wowEmployee.data.profileStatus !== 'complete' ? (
+                <Pressable onPress={() => router.push('/wow-planner-profile')}>
+                  <Body tone="brand">Complete planner profile</Body>
+                </Pressable>
+              ) : null}
+            </Card>
+          ) : (
+            <PlannerAgencyCard listing={planner.data ?? null} loading={planner.isLoading} />
+          )}
           <PlannerBook />
         </>
       ) : (

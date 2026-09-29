@@ -126,13 +126,6 @@ export class CreateDefinitionDto {
   @IsBoolean()
   packagesAllowed?: boolean;
 
-  @ApiPropertyOptional({ default: 1, minimum: 1, maximum: 500 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(500)
-  defaultCapacity?: number;
-
   @ApiPropertyOptional({ default: 0 })
   @IsOptional()
   @IsInt()
@@ -159,7 +152,6 @@ export class UpdateDefinitionDto {
   availabilityModel?: AvailabilityModel;
 
   @ApiPropertyOptional() @IsOptional() @IsBoolean() packagesAllowed?: boolean;
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) @Max(500) defaultCapacity?: number;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() active?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) @Max(1000) sortOrder?: number;
 }
@@ -301,18 +293,6 @@ export class UpsertVendorServiceDto {
   @IsOptional()
   @IsObject()
   attributes?: Record<string, unknown>;
-
-  @ApiPropertyOptional({
-    default: 1,
-    minimum: 1,
-    maximum: 500,
-    description: 'How many of these the vendor can run at once. Five catering teams, one hall.',
-  })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(500)
-  concurrentCapacity?: number;
 
   @ApiPropertyOptional()
   @IsOptional()

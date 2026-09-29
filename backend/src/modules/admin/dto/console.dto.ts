@@ -71,6 +71,21 @@ export class DirectoryQueryDto extends PaginationDto {
   @IsOptional()
   @StrictBoolean()
   active?: boolean | string;
+
+  @ApiPropertyOptional({ format: 'uuid', description: 'Only clients managed by this agent.' })
+  @IsOptional()
+  @IsUUID('4')
+  agentId?: string;
+
+  @ApiPropertyOptional({ description: 'Limit planner accounts to independent marketplace planners.' })
+  @IsOptional()
+  @StrictBoolean()
+  independentPlannerOnly?: boolean | string;
+
+  @ApiPropertyOptional({ enum: ['pending', 'approved', 'rejected'] })
+  @IsOptional()
+  @IsIn(['pending', 'approved', 'rejected'])
+  plannerVerificationStatus?: 'pending' | 'approved' | 'rejected';
 }
 
 export class AdminBookingQueryDto extends PaginationDto {

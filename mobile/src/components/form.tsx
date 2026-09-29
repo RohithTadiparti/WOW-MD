@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { CaretDown, Check } from 'phosphor-react-native';
+import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { CalendarBlank, CaretDown, Check } from 'phosphor-react-native';
 
 import { MonthCalendar, formatLongDate } from '@/components/calendar';
 import { Sheet } from '@/components/sheet';
 import { Body, Button, Caption, Field } from '@/components/ui';
 import { radius, rgb, space, useTheme } from '@/theme';
-import { Txt } from '@/theme/fonts';
+import { Txt, typeface } from '@/theme/fonts';
 
 /**
  * The form controls the portals need beyond a text field.
@@ -249,6 +249,176 @@ export function DateField({
               onChange('');
               setOpen(false);
             }}
+          />
+        ) : null}
+      </Sheet>
+    </Wrapper>
+  );
+}
+
+export function formatDobInput(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 8);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+}
+
+export function dobInputToIso(value: string): string | null {
+  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value);
+  if (!match) return null;
+  const [, dayText, monthText, yearText] = match;
+  const day = Number(dayText);
+  const month = Number(monthText);
+  const year = Number(yearText);
+  const date = new Date(year, month - 1, day);
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+  return `${yearText}-${monthText}-${dayText}`;
+}
+
+export function isoToDobInput(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : '';
+}
+
+export function adultDobMaxIso(): string {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  date.setFullYear(date.getFullYear() - 18);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function dateParts(value: string): { year: number; month: number } {
+  const iso = dobInputToIso(value);
+  if (!iso) {
+    const max = adultDobMaxIso();
+    return { year: Number(max.slice(0, 4)), month: Number(max.slice(5, 7)) - 1 };
+  }
+  return { year: Number(iso.slice(0, 4)), month: Number(iso.slice(5, 7)) - 1 };
+}
+
+const DOB_MONTHS = Array.from({ length: 12 }, (_, month) =>
+  new Date(2000, month, 1).toLocaleDateString(undefined, { month: 'long' }),
+);
+
+export function DobField({
+  label,
+  value,
+  onChange,
+  error,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  error?: string;
+}) {
+  const theme = useTheme();
+  const [open, setOpen] = useState(false);
+  const [step, setStep] = useState<'year' | 'month' | 'date'>('year');
+  const [selection, setSelection] = useState(() => dateParts(value));
+  const maxIso = adultDobMaxIso();
+  const maxYear = Number(maxIso.slice(0, 4));
+  const years = Array.from({ length: 101 }, (_, index) => maxYear - index);
+
+  function openPicker() {
+    setSelection(dateParts(value));
+    setStep('year');
+    setOpen(true);
+  }
+
+  return (
+    <Wrapper label={label} error={error}>
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: rgb(error ? theme.criticalFg : theme.border),
+          backgroundColor: rgb(theme.surface),
+          borderRadius: radius.sm,
+          minHeight: 46,
+        }}
+      >
+        <TextInput
+          value={value}
+          onChangeText={(text) => onChange(formatDobInput(text))}
+          placeholder="DD/MM/YYYY"
+          placeholderTextColor={rgb(theme.ink[400])}
+          keyboardType="number-pad"
+          maxLength={10}
+          style={typeface({
+            flex: 1,
+            paddingHorizontal: space(3),
+            paddingVertical: space(3),
+            fontSize: 16,
+            color: rgb(theme.ink[900]),
+          })}
+        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Choose date of birth from calendar"
+          onPress={openPicker}
+          style={{ paddingHorizontal: space(3), paddingVertical: space(3) }}
+        >
+          <CalendarBlank size={20} color={rgb(theme.ink[500])} />
+        </Pressable>
+      </View>
+      <Sheet visible={open} title={label} onClose={() => setOpen(false)}>
+        {step === 'year' ? (
+          <ScrollView style={{ maxHeight: 360 }}>
+            {years.map((year) => (
+              <Pressable
+                key={year}
+                accessibilityRole="button"
+                onPress={() => {
+                  setSelection((current) => ({ ...current, year }));
+                  setStep('month');
+                }}
+                style={({ pressed }) => [
+                  { paddingVertical: space(3), borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: rgb(theme.border) },
+                  pressed && { backgroundColor: rgb(theme.surfaceSunken) },
+                ]}
+              >
+                <Body>{year}</Body>
+              </Pressable>
+            ))}
+          </ScrollView>
+        ) : null}
+        {step === 'month' ? (
+          <ScrollView style={{ maxHeight: 360 }}>
+            {DOB_MONTHS.map((month, index) => (
+              <Pressable
+                key={month}
+                accessibilityRole="button"
+                onPress={() => {
+                  setSelection((current) => ({ ...current, month: index }));
+                  setStep('date');
+                }}
+                style={({ pressed }) => [
+                  { paddingVertical: space(3), borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: rgb(theme.border) },
+                  pressed && { backgroundColor: rgb(theme.surfaceSunken) },
+                ]}
+              >
+                <Body>{month}</Body>
+              </Pressable>
+            ))}
+          </ScrollView>
+        ) : null}
+        {step === 'date' ? (
+          <MonthCalendar
+            from="1900-01-01"
+            to={maxIso}
+            selected={`${selection.year}-${String(selection.month + 1).padStart(2, '0')}-01`}
+            onSelect={(iso) => {
+              onChange(isoToDobInput(iso));
+              setOpen(false);
+            }}
+            key={`${selection.year}-${selection.month}`}
           />
         ) : null}
       </Sheet>

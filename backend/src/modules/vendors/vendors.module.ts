@@ -19,6 +19,7 @@ import { AvailabilityService } from './availability.service';
 import { AdminReviewsController, VendorsController } from './vendors.controller';
 import { BookingsModule } from '../bookings/bookings.module';
 import { CatalogModule } from '../catalog/catalog.module';
+import { PayoutBankService } from './payout-bank.service';
 
 @Module({
   imports: [
@@ -45,8 +46,8 @@ import { CatalogModule } from '../catalog/catalog.module';
     forwardRef(() => BookingsModule),
     forwardRef(() => CatalogModule),
   ],
-  providers: [VendorsService, AvailabilityService, BusinessLifecycleService],
+  providers: [VendorsService, AvailabilityService, BusinessLifecycleService, PayoutBankService],
   controllers: [VendorsController, AdminReviewsController],
-  exports: [VendorsService, AvailabilityService, TypeOrmModule, BusinessLifecycleService],
+  exports: [VendorsService, AvailabilityService, TypeOrmModule, BusinessLifecycleService, PayoutBankService],
 })
 export class VendorsModule {}

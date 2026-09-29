@@ -36,6 +36,7 @@ import {
   RequirePermissions,
 } from '../../common/decorators/permissions.decorator';
 import { Permission } from '../../common/authz/permissions';
+import { UserRole } from '../../common/enums';
 
 @ApiTags('bookings')
 @ApiBearerAuth()
@@ -135,8 +136,13 @@ export class BookingsController {
   @RequirePermissions(Permission.BOOKING_READ_INCOMING)
   @ApiOperation({ summary: 'Bookings made against your vendor/planner listings' })
   @Get('incoming')
-  incoming(@CurrentUser() actor: AuthUser, @Query() q: BookingSearchDto) {
-    return this.bookings.listIncoming(actor, q);
+  incoming(
+    @CurrentUser() actor: AuthUser,
+    @Query() q: BookingSearchDto,
+    @Query('userId') userId?: string,
+    @Query('role') role?: string,
+  ) {
+    return this.bookings.listIncoming(this.dashboardActor(actor, { userId, role }), q);
   }
 
   @RequirePermissions(Permission.BOOKING_READ_INCOMING)
@@ -147,8 +153,8 @@ export class BookingsController {
       'tab that counts only what is already on screen is worse than one with no number at all.',
   })
   @Get('incoming/counts')
-  incomingCounts(@CurrentUser() actor: AuthUser) {
-    return this.bookings.incomingCounts(actor);
+  incomingCounts(@CurrentUser() actor: AuthUser, @Query('userId') userId?: string, @Query('role') role?: string) {
+    return this.bookings.incomingCounts(this.dashboardActor(actor, { userId, role }));
   }
 
   @RequirePermissions(Permission.BOOKING_READ_INCOMING)
@@ -156,8 +162,14 @@ export class BookingsController {
     summary: 'Your account: earnings, money still in escrow, and the ledger behind both',
   })
   @Get('earnings')
-  earnings(@CurrentUser() actor: AuthUser) {
-    return this.bookings.earnings(actor);
+  earnings(@CurrentUser() actor: AuthUser, @Query('userId') userId?: string, @Query('role') role?: string) {
+    return this.bookings.earnings(this.dashboardActor(actor, { userId, role }));
+  }
+
+  private dashboardActor(actor: AuthUser, query: { userId?: string; role?: string }): AuthUser {
+    if (actor.role !== UserRole.ADMIN || !query.userId) return actor;
+    const role = query.role === 'planner' ? UserRole.PLANNER : UserRole.VENDOR;
+    return { ...actor, userId: query.userId, role };
   }
 
   @RequirePermissions(Permission.BOOKING_READ_INCOMING)

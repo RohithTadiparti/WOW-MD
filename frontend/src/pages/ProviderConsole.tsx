@@ -292,13 +292,16 @@ function VendorBusinessWizard({
           {/*
             Services and their offerings & pricing are managed together here
             (EZ1-I96): one step, not two. VendorServices already owns both — the
-            services list and each service's packages, prices and capacity.
+            services list and each service's packages and prices.
           */}
           <StepIntro>
             Pick the services you offer, then add packages, pricing and capacity to each. This is
             what a buyer sees and what a quotation is built from.
           </StepIntro>
-          <VendorServices vendorId={vendorId} />
+          <VendorServices
+            vendorId={vendorId}
+            selectedCategories={current?.categories ?? (current?.category ? [current.category] : [])}
+          />
           {/* No Review & Submit once verified/live — there is nothing left to
               submit, so the step and its button are both gone (EZ1-I207). */}
           <WizardNav

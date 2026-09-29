@@ -4,6 +4,7 @@ import { ANY_PERMISSIONS_KEY, PERMISSIONS_KEY } from '../decorators/permissions.
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { Permission, permissionsFor } from '../authz/permissions';
 import { AuthUser } from '../decorators/current-user.decorator';
+import { UserRole } from '../enums';
 
 /**
  * Capability check. Runs after JwtAuthGuard, so `request.user` is populated for
@@ -39,6 +40,11 @@ export class PermissionsGuard implements CanActivate {
 
     const { user } = context.switchToHttp().getRequest<{ user?: AuthUser }>();
     if (!user) throw new ForbiddenException('Authentication required');
+
+    // Admin role portals reuse the normal dashboards in read-only mode. They
+    // may reach GET data endpoints, but never inherit role mutations.
+    const request = context.switchToHttp().getRequest<{ method?: string }>();
+    if (user.role === UserRole.ADMIN && request.method === 'GET') return true;
 
     const held = permissionsFor(user.role);
 

@@ -38,6 +38,7 @@ export default {
         brand: {
           ...ramp('rose'),
           DEFAULT: channel('brand'),
+          rose: channel('rose-500'),
           strong: channel('brand-strong'),
           soft: channel('brand-soft'),
           // What sits on top of the accent. White on the light-mode rose,
@@ -91,6 +92,7 @@ export default {
          * than leaving a light-mode alert glowing on a dark page.
          */
         positive: { fg: channel('positive-fg'), bg: channel('positive-bg') },
+        info: { fg: channel('info-fg'), bg: channel('info-bg') },
         caution: { fg: channel('caution-fg'), bg: channel('caution-bg') },
         critical: { fg: channel('critical-fg'), bg: channel('critical-bg') },
 
@@ -127,27 +129,35 @@ export default {
           900: channel('caution-fg'),
         },
         blue: {
+          50: channel('info-bg'),
+          200: channel('rose-200'),
+          700: channel('info-fg'),
+          800: channel('info-fg'),
+          900: channel('info-fg'),
+        },
+        sky: {
+          50: channel('info-bg'),
+          200: channel('rose-200'),
+          300: channel('rose-300'),
+          700: channel('info-fg'),
+          800: channel('info-fg'),
+          900: channel('info-fg'),
+        },
+        rose: {
           50: channel('brand-soft'),
+          100: channel('brand-soft'),
           200: channel('wow-accent-warm'),
           300: channel('wow-accent-warm'),
+          500: channel('rose-500'),
+          600: channel('rose-600'),
           700: channel('brand-strong'),
           800: channel('brand-strong'),
           900: channel('wow-text-main'),
         },
-            rose: {
-              50: channel('brand-soft'),
-              100: channel('brand-soft'),
-              300: channel('wow-primary-light'),
-              500: channel('wow-primary-light'),
-              600: channel('wow-primary'),
-              700: channel('wow-primary'),
-              800: channel('wow-primary'),
-            },
-            violet: {
-              50: channel('brand-soft'),
-              700: channel('brand-strong'),
-              800: channel('brand-strong'),
-            },
+        violet: {
+          50: channel('info-bg'),
+          800: channel('info-fg'),
+        },
       },
 
       // Every step resolves to the template's square corner; `full` stays round

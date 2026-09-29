@@ -173,6 +173,29 @@ function Routes() {
       />
       <Stack.Screen name="biodata" options={{ headerShown: true, title: 'Biodata' }} />
       <Stack.Screen name="events" options={{ headerShown: true, title: 'Events' }} />
+      <Stack.Screen name="wow-planners" options={{ headerShown: true, title: 'WOW Planners' }} />
+      <Stack.Screen name="wow-planner-profile" options={{ headerShown: true, title: 'WOW Planner Profile' }} />
+      <Stack.Screen name="employee-wedding/[userId]" options={{ headerShown: true, title: 'Wedding Workspace' }} />
+      <Stack.Screen name="plan/[id]" options={{ headerShown: true, title: 'My Wedding Plan' }} />
+      <Stack.Screen name="plan/budget" options={{ headerShown: true, title: 'Budget' }} />
+      <Stack.Screen name="plan/guests" options={{ headerShown: true, title: 'Guest List' }} />
+      <Stack.Screen name="plan/bookings" options={{ headerShown: true, title: 'Bookings' }} />
+      <Stack.Screen
+        name="plan/services"
+        options={{ headerShown: true, title: 'Additional Services' }}
+      />
+      <Stack.Screen name="plan/more" options={{ headerShown: true, title: 'Plan More' }} />
+      <Stack.Screen name="vendors/index" options={{ headerShown: true, title: 'Vendors' }} />
+      <Stack.Screen name="vendors/[id]" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="vendors/[id]/gallery"
+        options={{ headerShown: true, title: 'Photos' }}
+      />
+      <Stack.Screen
+        name="planners/index"
+        options={{ headerShown: true, title: 'Hire a Planner' }}
+      />
+      <Stack.Screen name="planners/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="chat/index" options={{ headerShown: true, title: 'Chat' }} />
       {/* The title becomes the other person's name once the thread knows it. */}
       <Stack.Screen name="chat/[id]" options={{ headerShown: true, title: 'Conversation' }} />

@@ -58,7 +58,6 @@ interface Summary {
 interface VendorService {
   id: string;
   displayName: string | null;
-  concurrentCapacity: number;
   definition: { name: string } | null;
 }
 
@@ -582,11 +581,10 @@ function NewSlot({
     if (!serviceId && services.length > 0) setServiceId(services[0].id);
   }, [services, serviceId]);
 
-  const service = services.find((s) => s.id === serviceId);
   // Capacity follows the service unless the vendor overrides it for this one
   // window, which is where "five teams, but only three free that Saturday"
   // gets said.
-  const effectiveCapacity = capacity === '' ? (service?.concurrentCapacity ?? 1) : Number(capacity);
+  const effectiveCapacity = capacity === '' ? 1 : Number(capacity);
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -665,7 +663,7 @@ function NewSlot({
             className="input mt-1 w-24"
             type="number"
             min={1}
-            placeholder={String(service?.concurrentCapacity ?? 1)}
+            placeholder="1"
             value={capacity}
             onChange={(e) => setCapacity(e.target.value)}
           />

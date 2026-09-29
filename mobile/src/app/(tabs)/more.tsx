@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
 import {
   CalendarBlank,
   CaretRight,
@@ -19,6 +20,7 @@ import {
 } from 'phosphor-react-native';
 
 import { signOut } from '@/lib/api';
+import { api } from '@/lib/api';
 import { isPlannerAccount } from '@/lib/planner-listing';
 import { Permission, ROLE_LABEL, can, canAny } from '@/shared/permissions';
 import {
@@ -59,6 +61,12 @@ export default function More() {
   // A planner's listing is one form, not the vendor's guided set-up, so it has
   // no tab of its own and lives here (EZ1-I39).
   const isPlanner = isPlannerAccount(permissions);
+  const wowEmployee = useQuery({
+    queryKey: ['wow-planner-profile'],
+    queryFn: async () => (await api.get('/planner/profile')).data,
+    enabled: isPlanner,
+    retry: false,
+  });
   const isProvider = canAny(permissions, [
     Permission.VENDOR_LISTING_MANAGE,
     Permission.PLANNER_LISTING_MANAGE,
@@ -104,6 +112,16 @@ export default function More() {
             hint="The days of the wedding, and the invitations to them"
             to="/events"
           />
+          {can(permissions, Permission.BOOKING_CREATE) ? (
+            <Row icon={Storefront} label="WOW Planners" hint="Official WOW Team wedding planners" to="/wow-planners" />
+          ) : null}
+        </Group>
+      ) : null}
+
+      {wowEmployee.data ? (
+        <Group title="WOW Planner">
+          <Row icon={CalendarBlank} label="My Weddings" hint="Assigned client weddings and planning progress" to="/employee-weddings" />
+          <Row icon={Storefront} label="Vendors" hint="Search vendors and request bookings for clients" to="/planner-vendors" />
         </Group>
       ) : null}
 
@@ -114,7 +132,15 @@ export default function More() {
           hint="Your name, contact details and what we hold"
           to="/profile"
         />
-        {isPlanner ? (
+        {isPlanner && wowEmployee.data ? (
+          <Row
+            icon={IdentificationCard}
+            label="My WOW Planner Profile"
+            hint="Professional details, services and availability"
+            to="/wow-planner-profile"
+          />
+        ) : null}
+        {isPlanner && !wowEmployee.data ? (
           <Row
             icon={Storefront}
             label="My Listing"

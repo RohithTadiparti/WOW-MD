@@ -19,8 +19,13 @@ import { useAuth, type AuthUser } from '@/store/auth';
  * statuses count as a token problem — is the same reasoning as the web client,
  * and the comments there are worth reading alongside these.
  */
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8085/api';
-
+// Docker exposes the API on port 3000. Android emulators reach the host via
+// 10.0.2.2; iOS simulators and Expo web use localhost. Physical devices should
+// set EXPO_PUBLIC_API_URL to the host's LAN address.
+const DEFAULT_API_URL = Platform.OS === 'android'
+  ? 'http://10.0.2.2:3000/api'
+  : 'http://localhost:3000/api';
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? DEFAULT_API_URL;
 /** Alphanumerics, dot, dash and underscore only: SecureStore rejects the rest. */
 const REFRESH_KEY = 'wow.refreshToken';
 

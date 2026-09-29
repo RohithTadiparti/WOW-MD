@@ -81,6 +81,7 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminBookingDetail from './pages/admin/AdminBookingDetail';
 import AdminPaymentDetail from './pages/admin/AdminPaymentDetail';
 import AdminAccountDetail from './pages/admin/AdminAccountDetail';
+import AdminRoleDashboard from './pages/admin/AdminRoleDashboard';
 import AdminProfileDetail from './pages/admin/AdminProfileDetail';
 import AdminBusinessDetail from './pages/admin/AdminBusinessDetail';
 import AdminSupport from './pages/admin/AdminSupport';
@@ -110,6 +111,9 @@ import Security from './pages/Security';
 import Support from './pages/Support';
 import ProviderConsole from './pages/ProviderConsole';
 import WeddingPlanners from './pages/WeddingPlanners';
+import WowPlannerDiscovery from './pages/WowPlannerDiscovery';
+import WowPlannerProfile from './pages/WowPlannerProfile';
+import WowPlannerPreview from './pages/WowPlannerPreview';
 import Forbidden from './pages/Forbidden';
 import Verification from './pages/Verification';
 import OfficerCases from './pages/OfficerCases';
@@ -310,6 +314,7 @@ const NAV: NavEntry[] = [
   // the marketplace where a planner is hired; the other is the couple's own
   // timeline. The labels now say which is which.
   { to: '/wedding-planners', label: 'Hire a Planner', requires: [Permission.BOOKING_CREATE], group: 'wedding', icon: ClipboardText },
+    { to: '/wow-planners', label: 'WOW Planners', requires: [Permission.BOOKING_CREATE], group: 'wedding', icon: HandHeart },
   {
     to: '/console',
     label: 'My Business',
@@ -622,6 +627,13 @@ function Layout({ children }: { children: ReactNode }) {
               : 'individual';
   const unread = useUnreadCount();
   const navCounts = useNavigationCounts();
+  const wowEmployeeProfile = useQuery({
+    queryKey: ['wow-planner-profile'],
+    queryFn: async () => (await api.get('/planner/profile')).data as { plannerType?: string },
+    enabled: user?.role === 'planner',
+    retry: false,
+  });
+  const isWowEmployee = wowEmployeeProfile.data?.plannerType === 'wow_employee';
 
   /*
    * For an administrator the left rail *is* the admin portal navigation
@@ -649,6 +661,7 @@ function Layout({ children }: { children: ReactNode }) {
     : NAV.filter(
         (n) =>
           !(user && navDenied(n, user.role)) &&
+          !(isWowEmployee && ['/console', '/availability', '/planner-reviews'].includes(n.to)) &&
           (n.requires.length === 0 || canAny(permissions, n.requires)),
       ).map((n) => ({
         to: n.to,
@@ -675,17 +688,17 @@ function Layout({ children }: { children: ReactNode }) {
         content column keeps its own scroll position.
       */}
       <div className="mx-auto flex w-full max-w-content gap-8 px-4 sm:px-6 lg:px-8">
-        <aside className="sticky top-0 hidden h-[100dvh] w-[15.5rem] shrink-0 flex-col gap-5 py-5 lg:flex">
+        <aside className="sticky top-0 hidden h-[100dvh] w-[13rem] shrink-0 flex-col gap-5 border-r border-gold/35 bg-surface/55 py-5 pr-4 lg:flex">
           <Wordmark />
           <div className="-mr-2 flex-1 overflow-y-auto pr-2">
-            <Sidebar entries={entries} groups={groups} filled={isAdmin} />
+            <Sidebar entries={entries} groups={groups} />
           </div>
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header
-            className="sticky top-0 z-20 -mx-4 flex h-16 items-center justify-between gap-3
-              border-b border-gray-200 bg-canvas/80 px-4 backdrop-blur-xl sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0"
+            className="portal-header sticky top-0 z-20 -mx-4 flex h-16 items-center justify-between gap-3
+              border-b border-brand/12 bg-canvas/90 px-4 backdrop-blur-xl sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0"
           >
             <div className="flex min-w-0 items-center gap-3">
               <button
@@ -711,8 +724,8 @@ function Layout({ children }: { children: ReactNode }) {
           </header>
 
           {user && !user.isVerified && (
-            <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-caution-fg/25 bg-caution-bg px-4 py-3 text-sm text-caution-fg">
-              <Warning size={17} className="mt-0.5 shrink-0" aria-hidden />
+            <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-gold/75 bg-surface-sunken px-4 py-3 text-sm text-gray-800">
+              <Warning size={17} className="mt-0.5 shrink-0 text-gold-deep" aria-hidden />
               <p>
                 Please confirm your email address.{' '}
                 <Link className="font-medium underline underline-offset-2" to="/security">
@@ -740,7 +753,7 @@ function Layout({ children }: { children: ReactNode }) {
             initial={reduce ? false : { opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-            className="flex-1 py-6 pb-20"
+            className="flex-1 py-8 pb-20"
           >
             {/*
               Keyed on the path, so leaving a screen that failed clears the
@@ -768,14 +781,12 @@ function Layout({ children }: { children: ReactNode }) {
             initial={reduce ? false : { x: '-100%' }}
             animate={{ x: 0 }}
             transition={{ type: 'spring', stiffness: 380, damping: 36 }}
-            className="absolute inset-y-0 left-0 flex w-[17rem] flex-col gap-5 overflow-y-auto
-              border-r border-gray-200 bg-surface p-5"
+            className="absolute inset-y-0 left-0 flex w-[15rem] flex-col gap-5 overflow-y-auto border-r border-gold/35 bg-surface p-5"
           >
             <Wordmark />
             <Sidebar
               entries={entries}
               groups={groups}
-              filled={isAdmin}
               onNavigate={() => setDrawer(false)}
             />
           </motion.div>
@@ -793,12 +804,12 @@ function Layout({ children }: { children: ReactNode }) {
  * as the first heading on the page. No drawn logo: an invented glyph would be a decoration standing in
  * for an identity the brand has not decided on yet.
  */
-function Wordmark({ compact = false }: { compact?: boolean }) {
+function Wordmark({ compact = false, light = false }: { compact?: boolean; light?: boolean }) {
   return (
     <Link to="/" className="flex items-baseline gap-2 px-3 py-1">
-      <span className="font-serif text-[1.5rem] uppercase tracking-[0.18em] text-brand">WOW</span>
+      <span className={`font-serif text-[1.5rem] uppercase tracking-[0.18em] ${light ? 'text-brand-fg' : 'text-brand'}`}>WOW</span>
       {!compact && (
-        <span className="text-[0.625rem] uppercase tracking-[0.22em] text-gray-500">
+        <span className={`text-[0.625rem] uppercase tracking-[0.22em] ${light ? 'text-brand-fg/65' : 'text-gray-500'}`}>
           World of Weddingz
         </span>
       )}
@@ -1082,6 +1093,38 @@ export default function App() {
         }
       />
       <Route
+        path="/wow-planners"
+        element={
+          <Protected requires={[Permission.BOOKING_CREATE]}>
+            <WowPlannerDiscovery />
+          </Protected>
+        }
+      />
+      <Route
+        path="/wow-planners/:userId"
+        element={
+          <Protected requires={[Permission.BOOKING_CREATE]}>
+            <WowPlannerDiscovery />
+          </Protected>
+        }
+      />
+      <Route
+        path="/planner/profile"
+        element={
+          <Protected requires={[Permission.PLAN_MANAGE_ENGAGED]}>
+            <WowPlannerProfile />
+          </Protected>
+        }
+      />
+      <Route
+        path="/planner/profile/preview"
+        element={
+          <Protected requires={[Permission.PLAN_MANAGE_ENGAGED]}>
+            <WowPlannerPreview />
+          </Protected>
+        }
+      />
+      <Route
         path="/console"
         element={
           <Protected
@@ -1096,6 +1139,23 @@ export default function App() {
         element={
           <Protected requires={[Permission.PLAN_MANAGE_ENGAGED]}>
             <PlannerClients />
+          </Protected>
+        }
+      />
+      <Route path="/my-weddings" element={<Navigate to="/weddings" replace />} />
+      <Route
+        path="/weddings"
+        element={
+          <Protected requires={[Permission.PLAN_MANAGE_ENGAGED]}>
+            <PlannerWeddings />
+          </Protected>
+        }
+      />
+      <Route
+        path="/tasks"
+        element={
+          <Protected requires={[Permission.PLAN_MANAGE_ENGAGED]}>
+            <PlannerTasks />
           </Protected>
         }
       />
@@ -1290,14 +1350,19 @@ export default function App() {
           routes render one component keyed by the account id.
         */}
         <Route path="clients/:id" element={<AdminAccountDetail kind="client" />} />
+        <Route path="clients/:clientId" element={<AdminAccountDetail kind="client" />} />
         <Route path="agents" element={<AdminAgents />} />
-        <Route path="agents/:id" element={<AdminAccountDetail kind="agent" />} />
+        <Route path="agents/:id" element={<AdminRoleDashboard role="agent" />} />
+        <Route path="agents/:agentId" element={<AdminRoleDashboard role="agent" />} />
         <Route path="vendors" element={<AdminVendors />} />
-        <Route path="vendors/:id" element={<AdminAccountDetail kind="vendor" />} />
+        <Route path="vendors/:id" element={<AdminRoleDashboard role="vendor" />} />
+        <Route path="vendors/:vendorId" element={<AdminRoleDashboard role="vendor" />} />
         <Route path="officers" element={<AdminOfficers />} />
-        <Route path="officers/:id" element={<AdminAccountDetail kind="officer" />} />
+        <Route path="officers/:id" element={<AdminRoleDashboard role="officer" />} />
+        <Route path="officers/:officerId" element={<AdminRoleDashboard role="officer" />} />
         <Route path="planners" element={<AdminPlanners />} />
         <Route path="planners/:id" element={<AdminAccountDetail kind="planner" />} />
+        <Route path="planners/:plannerId" element={<AdminAccountDetail kind="planner" />} />
         {/* Drill-downs from an account: one profile, one business, in full (EZ1-I185/I188). */}
         <Route path="profiles/:id" element={<AdminProfileDetail />} />
         <Route path="businesses/:id" element={<AdminBusinessDetail />} />

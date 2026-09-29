@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -23,6 +23,7 @@ import {
   SectionTitle,
 } from '@/components/ui';
 import { useBusinesses } from '@/store/business';
+import { useActiveListing } from '@/lib/vendor-listing';
 import { space } from '@/theme';
 
 /**
@@ -42,6 +43,7 @@ import { space } from '@/theme';
 export default function BusinessServices() {
   const qc = useQueryClient();
   const { activeId } = useBusinesses();
+  const { listing } = useActiveListing(activeId);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [adding, setAdding] = useState(false);
@@ -68,7 +70,12 @@ export default function BusinessServices() {
     }
   }
 
-  const taken = useMemo(() => services.map((s) => s.definitionId), [services]);
+  const selectedCategories = listing?.categories ?? (listing?.category ? [listing.category] : []);
+  const visibleServices = useMemo(
+    () => services.filter((service) => service.category?.slug && selectedCategories.includes(service.category.slug)),
+    [services, selectedCategories],
+  );
+  const taken = useMemo(() => visibleServices.map((s) => s.definitionId), [visibleServices]);
 
   if (!activeId) {
     return (
@@ -98,6 +105,7 @@ export default function BusinessServices() {
         <AddService
           vendorId={activeId}
           taken={taken}
+          selectedCategories={selectedCategories}
           onAdd={async (body) => {
             const ok = await act(
               () => api.post(`/vendors/${activeId}/services`, body),
@@ -110,13 +118,13 @@ export default function BusinessServices() {
 
       {isPending && <Loading rows={2} />}
 
-      {!isPending && services.length === 0 && !adding && (
+      {!isPending && visibleServices.length === 0 && !adding && (
         <EmptyState title="Nothing listed yet">
           Add a service to start taking requests.
         </EmptyState>
       )}
 
-      {services.map((service) => (
+      {visibleServices.map((service) => (
         <ServiceCard
           key={service.id}
           vendorId={activeId}
@@ -135,8 +143,7 @@ function Header() {
     // needed here.
     <View style={{ gap: space(1) }}>
       <PageSubtitle>
-        What you sell, what it costs, and how many you can run at once. Clients see these, and the
-        questions they are asked come from the service they pick.
+        What you sell, what it costs, and the questions clients are asked when they pick a service.
       </PageSubtitle>
     </View>
   );
@@ -153,22 +160,36 @@ function Header() {
 function AddService({
   vendorId,
   taken,
+  selectedCategories,
   onAdd,
 }: {
   vendorId: string;
   taken: string[];
+  selectedCategories: string[];
   onAdd: (body: unknown) => void;
 }) {
   const [categoryId, setCategoryId] = useState('');
   const [definitionId, setDefinitionId] = useState('');
   const [answers, setAnswers] = useState<Answers>({});
-  const [capacity, setCapacity] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ['catalog-categories'],
     queryFn: async () => (await api.get('/catalog/categories')).data,
   });
+
+  const availableCategories = useMemo(
+    () => categories.filter((category) => selectedCategories.includes(category.slug)),
+    [categories, selectedCategories],
+  );
+
+  useEffect(() => {
+    if (categoryId && !availableCategories.some((category) => category.id === categoryId)) {
+      setCategoryId('');
+      setDefinitionId('');
+      setAnswers({});
+    }
+  }, [availableCategories, categoryId]);
 
   const { data: definitions = [] } = useQuery<Definition[]>({
     queryKey: ['catalog-definitions', categoryId],
@@ -188,11 +209,7 @@ function AddService({
     const found = validateAnswers(fields, answers);
     setErrors(found);
     if (Object.keys(found).length > 0) return;
-    onAdd({
-      definitionId,
-      attributes: cleanAnswers(fields, answers),
-      concurrentCapacity: capacity ? Number(capacity) : undefined,
-    });
+    onAdd({ definitionId, attributes: cleanAnswers(fields, answers) });
   }
 
   return (
@@ -207,7 +224,7 @@ function AddService({
           setDefinitionId('');
           setAnswers({});
         }}
-        options={categories.map((c) => ({ value: c.id, label: c.name }))}
+        options={availableCategories.map((c) => ({ value: c.id, label: c.name }))}
       />
 
       <SelectField
@@ -240,15 +257,6 @@ function AddService({
             answers={answers}
             errors={errors}
             onChange={(key, value) => setAnswers((a) => ({ ...a, [key]: value }))}
-          />
-
-          <Field
-            label="How many at once?"
-            value={capacity}
-            onChangeText={setCapacity}
-            keyboardType="number-pad"
-            placeholder={String(described.definition.defaultCapacity)}
-            hint="Five if you have five teams, one for a hall. This seeds the capacity of every window you publish."
           />
 
           <Button label="Add this service" onPress={submit} />

@@ -14,6 +14,7 @@ import {
   X,
 } from '@phosphor-icons/react';
 import { api, apiMessage } from '../lib/api';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../store/auth';
 import { Permission, can } from '../lib/permissions';
 import { EmptyState, LoadingCards } from '../components/ui/Feedback';
@@ -223,6 +224,7 @@ export default function WeddingPlanners() {
           Compare approved planners side by side — ratings, experience and pricing at a glance —
           then open one to see their packages, portfolio and availability before you request.
         </p>
+        <Link className="btn-outline mt-3 inline-flex" to="/wow-planners">Browse WOW Planners · Free WOW Planning Service</Link>
       </header>
 
       {/* Search and filter bar. */}

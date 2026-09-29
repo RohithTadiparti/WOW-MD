@@ -2,17 +2,20 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PlannerProfile } from './entities/planner-profile.entity';
+import { WowEmployeePlannerProfile } from './entities/wow-employee-planner-profile.entity';
 import { PlannerSearchDto, UpsertPlannerProfileDto } from './dto/wedding-planner.dto';
 import { RedisService } from '../../platform/redis/redis.service';
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
 import { VerificationService } from '../verification/verification.service';
-import { ApplicantType } from '../../common/enums';
+import { ApplicantType, PlannerType } from '../../common/enums';
 import { likeEscape } from '../../common/util/like';
 
 @Injectable()
 export class WeddingPlannersService {
   constructor(
     @InjectRepository(PlannerProfile) private readonly planners: Repository<PlannerProfile>,
+    @InjectRepository(WowEmployeePlannerProfile)
+    private readonly wowEmployees: Repository<WowEmployeePlannerProfile>,
     private readonly redis: RedisService,
     private readonly verification: VerificationService,
   ) {}
@@ -22,6 +25,7 @@ export class WeddingPlannersService {
    * so a planner cannot spam the directory with duplicate profiles.
    */
   async upsertOwn(ownerUserId: string, dto: UpsertPlannerProfileDto): Promise<PlannerProfile> {
+    await this.assertIndependentPlanner(ownerUserId);
     let profile = await this.planners.findOne({ where: { ownerUserId } });
     if (!profile) {
       profile = this.planners.create({ ownerUserId, isApproved: false });
@@ -55,6 +59,7 @@ export class WeddingPlannersService {
   }
 
   async getOwn(ownerUserId: string): Promise<PlannerProfile> {
+    await this.assertIndependentPlanner(ownerUserId);
     const profile = await this.planners.findOne({ where: { ownerUserId } });
     if (!profile) throw new NotFoundException('You have not created a planner listing yet');
     return profile;
@@ -79,6 +84,12 @@ export class WeddingPlannersService {
     return this.planners.save(profile);
   }
 
+  private async assertIndependentPlanner(ownerUserId: string): Promise<void> {
+    if (await this.wowEmployees.exist({ where: { userId: ownerUserId } })) {
+      throw new NotFoundException('WOW Employee Planners do not have marketplace listings');
+    }
+  }
+
   /** Resolves the listing a booking points at, and its owner. */
   async findByIdOrFail(id: string): Promise<PlannerProfile> {
     const profile = await this.planners.findOne({ where: { id } });
@@ -91,7 +102,8 @@ export class WeddingPlannersService {
     return this.redis.wrap(cacheKey, 60, async () => {
       const qb = this.planners
         .createQueryBuilder('p')
-        .where('p."isApproved" = :approved', { approved: true });
+        .where('p."isApproved" = :approved', { approved: true })
+        .andWhere('p."plannerType" = :plannerType', { plannerType: PlannerType.INDEPENDENT });
       if (q.city) {
         // Same partial match as the vendor search, for the same reason: this
         // was an equality, so a half-typed city found nobody. The serves-cities
@@ -114,7 +126,7 @@ export class WeddingPlannersService {
   }
 
   async findOne(id: string): Promise<PlannerProfile> {
-    const profile = await this.planners.findOne({ where: { id, isApproved: true } });
+    const profile = await this.planners.findOne({ where: { id, isApproved: true, plannerType: PlannerType.INDEPENDENT } });
     if (!profile) throw new NotFoundException('Planner not found');
     return profile;
   }

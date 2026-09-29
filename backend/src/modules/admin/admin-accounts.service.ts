@@ -14,7 +14,15 @@ import { SupportCase } from '../verification/entities/support-case.entity';
 import { VerificationRequest } from '../verification/entities/verification-request.entity';
 import { AgentCharge } from '../agents/entities/agent-charge.entity';
 import { DirectoryQueryDto } from './dto/console.dto';
-import { InterestStatus, MatchFixedState, PaymentStatus, UserRole } from '../../common/enums';
+import {
+  InterestStatus,
+  MatchFixedState,
+  ApplicantType,
+  PaymentStatus,
+  ProviderType,
+  UserRole,
+  VerificationStatus,
+} from '../../common/enums';
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
 import { AdminBookingsService } from './admin-bookings.service';
 
@@ -58,6 +66,7 @@ export class AdminAccountsService {
       .select([
         'u.id',
         'u.email',
+        'u.phone',
         'u.role',
         'u.isActive',
         'u.isVerified',
@@ -66,11 +75,61 @@ export class AdminAccountsService {
       ]);
 
     if (q.role) qb.andWhere('u.role = :role', { role: q.role });
+    if (q.role === UserRole.PLANNER && q.independentPlannerOnly === true) {
+      qb.andWhere(
+        `EXISTS (${qb.subQuery()
+          .select('1')
+          .from(PlannerProfile, 'independentPlanner')
+          .where('independentPlanner."ownerUserId" = u.id')
+          .getQuery()})`,
+      );
+    }
+    if (q.role === UserRole.PLANNER && q.plannerVerificationStatus === 'approved') {
+      qb.andWhere(`EXISTS (${qb.subQuery()
+        .select('1')
+        .from(PlannerProfile, 'approvedPlanner')
+        .where('approvedPlanner."ownerUserId" = u.id')
+        .andWhere('approvedPlanner."isApproved" = true')
+        .getQuery()})`);
+    } else if (q.role === UserRole.PLANNER && q.plannerVerificationStatus === 'pending') {
+      qb.andWhere(`EXISTS (${qb.subQuery()
+        .select('1')
+        .from(PlannerProfile, 'pendingPlanner')
+        .where('pendingPlanner."ownerUserId" = u.id')
+        .andWhere('pendingPlanner."isApproved" = false')
+        .andWhere(`NOT EXISTS (SELECT 1 FROM "verification_requests" "rejectedPlannerRequest" WHERE "rejectedPlannerRequest"."applicantType" = :plannerApplicantType AND "rejectedPlannerRequest"."applicantUserId" = u.id AND "rejectedPlannerRequest"."status" = :plannerRejectedStatus)`)
+        .getQuery()})`, {
+          plannerApplicantType: ApplicantType.PLANNER,
+          plannerRejectedStatus: VerificationStatus.REJECTED,
+        });
+    } else if (q.role === UserRole.PLANNER && q.plannerVerificationStatus === 'rejected') {
+      qb.andWhere(`EXISTS (${qb.subQuery()
+        .select('1')
+        .from(PlannerProfile, 'rejectedPlanner')
+        .where('rejectedPlanner."ownerUserId" = u.id')
+        .andWhere('rejectedPlanner."isApproved" = false')
+        .andWhere(`EXISTS (SELECT 1 FROM "verification_requests" "rejectedPlannerRequest" WHERE "rejectedPlannerRequest"."applicantType" = :plannerApplicantType AND "rejectedPlannerRequest"."applicantUserId" = u.id AND "rejectedPlannerRequest"."status" = :plannerRejectedStatus)`)
+        .getQuery()})`, {
+          plannerApplicantType: ApplicantType.PLANNER,
+          plannerRejectedStatus: VerificationStatus.REJECTED,
+        });
+    }
     if (q.active !== undefined) {
       qb.andWhere('u.isActive = :active', { active: q.active === true });
     }
+    if (q.agentId) qb.andWhere('u.managedByAgentId = :agentId', { agentId: q.agentId });
     if (q.q) {
-      qb.andWhere('LOWER(u.email) LIKE :needle', { needle: `%${q.q.toLowerCase()}%` });
+      const needle = `%${q.q.trim().toLowerCase()}%`;
+      if (q.role === UserRole.PLANNER && q.independentPlannerOnly === true) {
+        qb.andWhere(`(LOWER(u.email) LIKE :needle OR EXISTS (${qb.subQuery()
+          .select('1')
+          .from(PlannerProfile, 'searchedPlanner')
+          .where('searchedPlanner."ownerUserId" = u.id')
+          .andWhere('(LOWER(searchedPlanner."agencyName") LIKE :needle OR LOWER(COALESCE(searchedPlanner."contactPerson", \'\')) LIKE :needle)')
+          .getQuery()}))`, { needle });
+      } else {
+        qb.andWhere('LOWER(u.email) LIKE :needle', { needle });
+      }
     }
 
     qb.orderBy('u.createdAt', 'DESC')
@@ -78,6 +137,54 @@ export class AdminAccountsService {
       .take(q.limit);
 
     const [data, total] = await qb.getManyAndCount();
+    if (q.role === UserRole.PLANNER && q.independentPlannerOnly === true && data.length > 0) {
+      const userIds = data.map((user) => user.id);
+      const plannerProfiles = await this.planners.find({
+        where: { ownerUserId: In(userIds) },
+        select: ['id', 'ownerUserId', 'agencyName', 'contactPerson', 'isApproved', 'packages', 'createdAt'],
+      });
+      const profileByOwner = new Map(plannerProfiles.map((planner) => [planner.ownerUserId, planner]));
+      const profileIds = plannerProfiles.map((planner) => planner.id);
+      const [verificationRequests, bookings] = await Promise.all([
+        this.verifications.find({
+          where: { applicantType: ApplicantType.PLANNER, applicantUserId: In(userIds) },
+          order: { createdAt: 'DESC' },
+        }),
+        profileIds.length
+          ? this.bookings.find({ where: { providerType: ProviderType.PLANNER, providerId: In(profileIds) }, select: ['providerId'] })
+          : Promise.resolve([]),
+      ]);
+      const latestVerificationByUser = new Map<string, VerificationRequest>();
+      for (const request of verificationRequests) {
+        if (!latestVerificationByUser.has(request.applicantUserId)) latestVerificationByUser.set(request.applicantUserId, request);
+      }
+      const bookingsByProfile = new Map<string, number>();
+      for (const booking of bookings) {
+        bookingsByProfile.set(booking.providerId, (bookingsByProfile.get(booking.providerId) ?? 0) + 1);
+      }
+      const enriched = data.map((user) => {
+        const planner = profileByOwner.get(user.id);
+        const verification = latestVerificationByUser.get(user.id);
+        const verificationStatus = planner?.isApproved
+          ? 'approved'
+          : verification?.status === VerificationStatus.REJECTED
+            ? 'rejected'
+            : 'pending';
+        return {
+          ...user,
+          name: planner?.contactPerson ?? planner?.agencyName ?? user.email,
+          plannerType: 'INDEPENDENT',
+          verificationStatus,
+          verificationRequestStatus: verification?.status ?? null,
+          verificationRequestId: verification?.id ?? null,
+          accountStatus: user.isActive ? 'ACTIVE' : 'SUSPENDED',
+          plannerProfileId: planner?.id ?? null,
+          bookingCount: planner ? (bookingsByProfile.get(planner.id) ?? 0) : 0,
+          packageCount: planner?.packages?.length ?? 0,
+        };
+      });
+      return paginate(enriched, total, q.page, q.limit);
+    }
     return paginate(data as unknown as Record<string, unknown>[], total, q.page, q.limit);
   }
 
@@ -149,6 +256,43 @@ export class AdminAccountsService {
           }),
         )
       : [];
+
+    // Aggregates use the complete relationships; the arrays above remain
+    // bounded recent activity for a fast detail page.
+    const providerMetrics = providerIds.length
+      ? await Promise.all([
+          this.bookings.count({ where: { providerId: In(providerIds) } }),
+          ...[PaymentStatus.HELD_IN_ESCROW, PaymentStatus.RELEASED].map(async (status) =>
+            this.payments
+              .createQueryBuilder('p')
+              .innerJoin('bookings', 'b', 'b.id = p.bookingId')
+              .where('b.providerId IN (:...providerIds)', { providerIds })
+              .andWhere('p.status = :status', { status })
+              .select('COALESCE(SUM(p.amount), 0)', 'total')
+              .getRawOne<{ total: string }>(),
+          ),
+        ]).then(([bookings, escrow, released]) => ({
+          bookings,
+          inEscrow: escrow?.total ?? '0',
+          released: released?.total ?? '0',
+        }))
+      : { bookings: 0, inEscrow: '0', released: '0' };
+
+    const agentMetrics = user.role === UserRole.AGENT
+      ? await Promise.all([
+          this.users.count({ where: { managedByAgentId: userId } }),
+          this.bookings.count({ where: { bookedByUserId: userId } }),
+        ]).then(([clients, bookings]) => ({ clients, bookings }))
+      : null;
+
+    const officerMetrics = user.role === UserRole.IN_PERSON
+      ? await Promise.all(
+          Object.values(VerificationStatus).map(async (status) => [
+            status,
+            await this.verifications.count({ where: { assignedToUserId: userId, status } }),
+          ] as const),
+        ).then((rows) => Object.fromEntries(rows))
+      : null;
 
     /*
      * The parts that only make sense for some accounts.
@@ -235,6 +379,7 @@ export class AdminAccountsService {
         id: v.id,
         name: v.name,
         category: v.category,
+        categories: v.categories ?? [],
         status: v.status,
         isApproved: v.isApproved,
       })),
@@ -243,6 +388,11 @@ export class AdminAccountsService {
       bookings: await this.adminBookings.attachParties(placed),
       /** Bookings made *with* this account (vendor/planner), newest first. */
       providerBookings,
+      metrics: {
+        provider: providerMetrics,
+        agent: agentMetrics,
+        officer: officerMetrics,
+      },
       /**
        * A planner's own agency record(s) — the vendor equivalent is `businesses`.
        * The full agency detail (packages, coverage, contact) rides along so the

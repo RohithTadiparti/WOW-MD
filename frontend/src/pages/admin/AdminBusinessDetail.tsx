@@ -14,7 +14,7 @@ import { EmptyState, Loading } from '../../components/ui/Feedback';
  * Reached by clicking a business on a vendor account. It exposes everything the
  * platform holds about the listing: business info and description, registration
  * and compliance, the whole services catalogue with its offerings and
- * concurrency (availability), uploaded documents, verification history and the
+ * selected categories, uploaded documents, verification history and the
  * bookings taken against it.
  */
 
@@ -34,8 +34,8 @@ interface ServiceRow {
   id: string;
   displayName: string | null;
   description: string | null;
-  concurrentCapacity: number;
   active: boolean;
+  category?: { name?: string } | null;
   offerings: Offering[];
 }
 
@@ -94,6 +94,14 @@ interface BusinessDetail {
     amountPaid: string;
     /** The newest offer on a request with no agreed amount yet. */
     quotation?: { amount: string; currency?: string; stage?: string } | null;
+  }[];
+  reviews: {
+    id: string;
+    rating: number;
+    comment: string | null;
+    status: string;
+    moderationReason: string | null;
+    createdAt: string;
   }[];
 }
 
@@ -206,7 +214,7 @@ export default function AdminBusinessDetail() {
         </div>
       )}
 
-      {/* Services & catalogue, with concurrency as the availability signal. */}
+      {/* Services & catalogue, grouped by their selected category. */}
       <div className="card">
         <h2 className="section-title mb-1">Services &amp; catalogue</h2>
         {data.services.length === 0 ? (
@@ -220,13 +228,13 @@ export default function AdminBusinessDetail() {
                     {s.displayName || 'Service'}
                   </span>
                   <span className="flex items-center gap-2 text-xs text-gray-500">
-                    <span>Runs {s.concurrentCapacity} at once</span>
                     <span className={`pill ${s.active ? 'bg-positive-bg text-positive-fg' : 'bg-gray-100 text-gray-500'}`}>
                       {s.active ? 'Active' : 'Off'}
                     </span>
                   </span>
                 </div>
                 {s.description && <p className="mt-1 text-xs text-gray-500">{s.description}</p>}
+                {s.category?.name && <p className="mt-1 text-xs text-gray-500">{s.category.name}</p>}
                 {s.offerings.length > 0 && (
                   <div className="mt-2 divide-y">
                     {s.offerings.map((o) => (
@@ -298,6 +306,27 @@ export default function AdminBusinessDetail() {
           </div>
         </div>
       )}
+
+      <div className="card">
+        <h2 className="section-title mb-2">Reviews</h2>
+        {data.reviews.length === 0 ? (
+          <p className="py-2 text-sm text-gray-400">No reviews recorded.</p>
+        ) : (
+          <div className="divide-y">
+            {data.reviews.map((review) => (
+              <div key={review.id} className="py-2">
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span className="font-medium text-amber-700">{'★'.repeat(review.rating)}{'☆'.repeat(Math.max(0, 5 - review.rating))}</span>
+                  <span className="pill bg-gray-100 text-gray-600">{review.status}</span>
+                </div>
+                {review.comment && <p className="mt-1 text-sm text-gray-700">{review.comment}</p>}
+                <p className="mt-1 text-xs text-gray-400">{formatDate(review.createdAt)}</p>
+                {review.moderationReason && <p className="mt-1 text-xs text-gray-500">{review.moderationReason}</p>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {data.bookings.length > 0 && (
         <div className="card">

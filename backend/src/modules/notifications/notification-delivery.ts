@@ -213,4 +213,19 @@ export const DELIVERY: Record<NotificationType, DeliverySpec> = {
     },
     whatsappTemplate: null,
   },
+  [NotificationType.WOW_PLANNER_ASSIGNED]: {
+    title: 'New WOW wedding assignment',
+    body: (p) => `${str(p, 'clientName', 'A client')} hired you as their WOW Planner.`,
+    whatsappTemplate: null,
+  },
+  [NotificationType.WOW_PLANNER_BOOKING_CONFIRMED]: {
+    title: 'WOW Planner Booking Confirmed',
+    body: (p) => `${str(p, 'plannerName', 'Your WOW Planner')} is assigned to your wedding.`,
+    whatsappTemplate: null,
+  },
+  [NotificationType.WOW_PLANNER_REASSIGNED]: {
+    title: 'Your WOW Planner assignment changed',
+    body: (p) => `${str(p, 'plannerName', 'A new WOW Planner')} is now assigned to your wedding.`,
+    whatsappTemplate: null,
+  },
 };

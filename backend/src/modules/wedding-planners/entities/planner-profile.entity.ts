@@ -6,6 +6,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { PlannerType } from '../../../common/enums';
 
 export interface PlannerPackage {
   name: string;
@@ -25,6 +26,14 @@ export class PlannerProfile {
   @Index({ unique: true })
   @Column('uuid')
   ownerUserId: string;
+
+  @Column({
+    type: 'enum',
+    enum: PlannerType,
+    enumName: 'planner_profiles_type_enum',
+    default: PlannerType.INDEPENDENT,
+  })
+  plannerType: PlannerType;
 
   @Column()
   agencyName: string;

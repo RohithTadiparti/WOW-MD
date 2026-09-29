@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { VerificationModule } from '../verification/verification.module';
 import { PlannerProfile } from './entities/planner-profile.entity';
+import { WowEmployeePlannerProfile } from './entities/wow-employee-planner-profile.entity';
 import { PlannerReview } from './entities/planner-review.entity';
 import { WeddingPlannersService } from './wedding-planners.service';
 import { PlannerReviewsService } from './planner-reviews.service';
@@ -24,6 +25,7 @@ import { Vendor } from '../vendors/entities/vendor.entity';
   imports: [
     TypeOrmModule.forFeature([
       PlannerProfile,
+      WowEmployeePlannerProfile,
       PlannerReview,
       Booking,
       User,

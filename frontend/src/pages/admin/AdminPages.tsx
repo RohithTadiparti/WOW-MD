@@ -1,18 +1,18 @@
 import { useState, type ReactNode } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiMessage } from '../../lib/api';
 import { MOBILE_10_PATTERN } from '../../lib/permissions';
-import { milestoneLabel, paymentStatusLabel } from '../../lib/labels';
+import { BUSINESS_STATUS_LABEL, labelFrom, milestoneLabel, paymentStatusLabel } from '../../lib/labels';
 import {
   AllBookings,
-  Businesses,
   Directory,
 } from '../../components/AdminConsole';
 import ReviewModeration from '../../components/ReviewModeration';
 import CatalogAdmin from '../../components/CatalogAdmin';
 import AdminReportsDashboard from '../../components/AdminReportsDashboard';
 import { Loading, EmptyState } from '../../components/ui/Feedback';
+import PhotoUploader from '../../components/PhotoUploader';
 
 /*
  * The dedicated module pages of the Admin Portal (EZ1-I153).
@@ -115,6 +115,7 @@ export function AdminUsers() {
         roles={[role]}
         hideRoleFilter
         detailBase="/admin/clients"
+        agentId={params.get('agentId') ?? undefined}
       />
     </div>
   );
@@ -140,25 +141,506 @@ export function AdminAgents() {
 }
 
 export function AdminVendors() {
+  const [params, setParams] = useSearchParams();
+  const filter = params.get('status') ?? 'all';
+  const search = params.get('q') ?? '';
+  const setFilter = (status: string) => {
+    const next = new URLSearchParams(params);
+    next.set('status', status);
+    setParams(next, { replace: true });
+  };
+
+  const { data: businesses, isLoading: businessesLoading } = useQuery<{
+    data: VendorBusinessRow[];
+    meta: { total: number };
+  }>({
+    queryKey: ['admin-vendor-businesses', search],
+    queryFn: async () =>
+      (await api.get('/admin/businesses', { params: { limit: 100, q: search || undefined } })).data,
+    refetchInterval: 60000,
+  });
+
+  const { data: accounts } = useQuery<{ data: VendorAccountRow[]; meta: { total: number } }>({
+    queryKey: ['admin-vendor-accounts'],
+    queryFn: async () =>
+      (await api.get('/admin/directory', { params: { limit: 100, role: 'vendor' } })).data,
+    refetchInterval: 60000,
+  });
+
+  const accountById = new Map((accounts?.data ?? []).map((account) => [account.id, account]));
+  const rows = (businesses?.data ?? []).filter((business) => {
+    const account = accountById.get(business.ownerUserId);
+    if (filter === 'active') return account?.isActive === true;
+    if (filter === 'suspended') return account?.isActive === false;
+    if (filter === 'draft') return business.status === 'draft';
+    if (filter === 'rejected') return business.status === 'rejected';
+    return true;
+  });
+
+  const counts = useVendorCounts();
+  const cards = [
+    { key: 'all', label: 'All Vendors', value: counts.all, tone: 'bg-brand-soft text-brand-strong' },
+    { key: 'active', label: 'Active', value: counts.active, tone: 'bg-positive-bg text-positive-fg' },
+    { key: 'draft', label: 'Draft', value: counts.draft, tone: 'bg-caution-bg text-caution-fg' },
+    { key: 'rejected', label: 'Rejected', value: counts.rejected, tone: 'bg-critical-bg text-critical-fg' },
+    { key: 'suspended', label: 'Suspended', value: counts.suspended, tone: 'bg-gray-100 text-gray-700' },
+  ];
+
   return (
-    <div className="space-y-6">
-      <Masthead title="Vendors">The people who sell on the marketplace, and the businesses they hold.</Masthead>
-      <Directory title="Vendor accounts" initialRole="vendor" roles={['vendor']} detailBase="/admin/vendors" />
-      <Businesses />
+    <div className="space-y-5">
+      <div>
+        <h1 className="page-title">Vendors</h1>
+        <p className="page-subtitle">Manage vendor accounts, businesses, verification and activity.</p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        {cards.map((card) => (
+          <button
+            key={card.key}
+            type="button"
+            onClick={() => setFilter(card.key)}
+            className={`card text-left transition-shadow hover:shadow-pop ${filter === card.key ? 'ring-2 ring-brand' : ''}`}
+          >
+            <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${card.tone}`}>{card.label}</span>
+            <span className="mt-3 block text-2xl font-semibold tabular-nums text-gray-900">
+              {counts.loading ? '—' : card.value}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <div className="card overflow-hidden p-0">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 p-4">
+          <div>
+            <h2 className="section-title">Vendor Accounts</h2>
+            <p className="text-xs text-gray-500">{businesses?.meta.total ?? 0} businesses from the backend</p>
+          </div>
+          <input
+            className="input w-full sm:w-80"
+            placeholder="Search by business name"
+            value={search}
+            onChange={(event) => {
+              const next = new URLSearchParams(params);
+              if (event.target.value) next.set('q', event.target.value);
+              else next.delete('q');
+              setParams(next, { replace: true });
+            }}
+          />
+        </div>
+
+        {businessesLoading ? <Loading rows={5} /> : rows.length === 0 ? (
+          <p className="p-6 text-sm text-gray-400">No vendors match this filter.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+                <tr>
+                  <th className="px-4 py-3">Name / Email</th>
+                  <th className="px-4 py-3">Business Name</th>
+                  <th className="px-4 py-3">Categories</th>
+                  <th className="px-4 py-3">Account Status</th>
+                  <th className="px-4 py-3">Verification Status</th>
+                  <th className="px-4 py-3">Joined Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {rows.map((business) => {
+                  const account = accountById.get(business.ownerUserId);
+                  return (
+                    <tr key={business.id} className="hover:bg-brand-soft/30">
+                      <td className="px-4 py-3">
+                        <Link className="block font-medium text-gray-900 hover:text-brand-strong" to={`/admin/vendors/${business.ownerUserId}`}>
+                          {account?.email ?? 'Unknown account'}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Link className="font-medium text-brand-strong hover:underline" to={`/admin/businesses/${business.id}`}>
+                          {business.name}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 text-gray-600">{business.categories?.join(', ') || business.category || '—'}</td>
+                      <td className="px-4 py-3"><StatusPill active={account?.isActive !== false} /></td>
+                      <td className="px-4 py-3"><span className="pill bg-gray-100 text-gray-700">{labelFrom(BUSINESS_STATUS_LABEL, business.status)}</span></td>
+                      <td className="px-4 py-3 text-gray-600">{new Date(account?.createdAt ?? business.createdAt).toLocaleDateString()}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
+interface VendorBusinessRow {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  category: string;
+  categories?: string[];
+  status: string;
+  createdAt: string;
+}
+
+interface VendorAccountRow {
+  id: string;
+  email: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+function StatusPill({ active }: { active: boolean }) {
+  return <span className={`pill ${active ? 'bg-positive-bg text-positive-fg' : 'bg-critical-bg text-critical-fg'}`}>{active ? 'Active' : 'Suspended'}</span>;
+}
+
+function useVendorCounts() {
+  const all = useQuery<{ meta: { total: number } }>({
+    queryKey: ['admin-vendor-count', 'all'],
+    queryFn: async () => (await api.get('/admin/businesses', { params: { limit: 1 } })).data,
+    refetchInterval: 60000,
+  });
+  const draft = useQuery<{ meta: { total: number } }>({
+    queryKey: ['admin-vendor-count', 'draft'],
+    queryFn: async () => (await api.get('/admin/businesses', { params: { limit: 1, status: 'draft' } })).data,
+    refetchInterval: 60000,
+  });
+  const rejected = useQuery<{ meta: { total: number } }>({
+    queryKey: ['admin-vendor-count', 'rejected'],
+    queryFn: async () => (await api.get('/admin/businesses', { params: { limit: 1, status: 'rejected' } })).data,
+    refetchInterval: 60000,
+  });
+  const active = useQuery<{ meta: { total: number } }>({
+    queryKey: ['admin-vendor-count', 'active'],
+    queryFn: async () => (await api.get('/admin/directory', { params: { limit: 1, role: 'vendor', active: 'true' } })).data,
+    refetchInterval: 60000,
+  });
+  const suspended = useQuery<{ meta: { total: number } }>({
+    queryKey: ['admin-vendor-count', 'suspended'],
+    queryFn: async () => (await api.get('/admin/directory', { params: { limit: 1, role: 'vendor', active: 'false' } })).data,
+    refetchInterval: 60000,
+  });
+  return {
+    all: all.data?.meta.total ?? 0,
+    draft: draft.data?.meta.total ?? 0,
+    rejected: rejected.data?.meta.total ?? 0,
+    active: active.data?.meta.total ?? 0,
+    suspended: suspended.data?.meta.total ?? 0,
+    loading: all.isLoading || draft.isLoading || rejected.isLoading || active.isLoading || suspended.isLoading,
+  };
+}
+
 export function AdminPlanners() {
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState({
+    firstName: '', lastName: '', officialEmail: '', mobileNumber: '', employeeId: '', joiningDate: '',
+    alternateMobile: '', profilePhotoUrl: '', isActive: 'true',
+  });
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [reassignment, setReassignment] = useState({ weddingPlanId: '', newPlannerUserId: '', reason: '' });
+  const [adminAssignment, setAdminAssignment] = useState({ weddingPlanId: '', plannerUserId: '', weddingDate: '', reason: '' });
+  const [error, setError] = useState('');
+  const { data: wowPlanners = [], isPending } = useQuery<Array<{
+    userId: string; employeeId: string; firstName: string; lastName: string;
+    officialEmail: string | null; mobileNumber: string | null; accountStatus: string;
+    joiningDate: string; alternateMobile: string | null; profilePhotoUrl: string | null;
+    profileStatus: string; profileCompletion: number; assignedWeddingCount: number;
+  }>>({
+    queryKey: ['admin-wow-planners'],
+    queryFn: async () => (await api.get('/admin/wow-planners')).data,
+  });
+  const { data: wowAssignments = [] } = useQuery<Array<{
+    id: string; weddingPlanId: string; weddingDate: string; plannerUserId: string;
+    plannerName: string; clientName: string;
+  }>>({
+    queryKey: ['admin-wow-planner-assignments'],
+    queryFn: async () => (await api.get('/admin/wow-planners/assignments')).data,
+  });
+  const { data: availableWowWeddings = [] } = useQuery<Array<{
+    weddingPlanId: string; clientUserId: string; clientName: string; weddingDate: string | null;
+  }>>({
+    queryKey: ['admin-wow-planner-available-weddings'],
+    queryFn: async () => (await api.get('/admin/wow-planners/available-weddings')).data,
+  });
+
+  async function createWowPlanner(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError('');
+    try {
+      if (editingUserId) {
+        const { employeeId: _employeeId, isActive: _isActive, ...updateFields } = form;
+        await api.patch(`/admin/wow-planners/${editingUserId}`, updateFields);
+      } else {
+        const { employeeId, joiningDate, isActive, ...createFields } = form;
+        await api.post('/admin/wow-planners', { ...createFields, employeeId, joiningDate, isActive: isActive === 'true' });
+      }
+      setEditingUserId(null);
+      setForm({ firstName: '', lastName: '', officialEmail: '', mobileNumber: '', employeeId: '', joiningDate: '', alternateMobile: '', profilePhotoUrl: '', isActive: 'true' });
+      await queryClient.invalidateQueries({ queryKey: ['admin-wow-planners'] });
+    } catch (err) {
+      setError(apiMessage(err, 'The WOW Planner account could not be created.'));
+    }
+  }
+
+  async function toggleWowPlanner(userId: string, isActive: boolean) {
+    setError('');
+    try {
+      await api.patch(`/admin/wow-planners/${userId}/status`, { isActive: !isActive });
+      await queryClient.invalidateQueries({ queryKey: ['admin-wow-planners'] });
+    } catch (err) {
+      setError(apiMessage(err, 'The account status could not be changed.'));
+    }
+  }
+
+  async function reassignWowPlanner(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError('');
+    try {
+      await api.post('/admin/wow-planners/reassignments', reassignment);
+      setReassignment({ weddingPlanId: '', newPlannerUserId: '', reason: '' });
+      await queryClient.invalidateQueries({ queryKey: ['admin-wow-planner-assignments'] });
+      await queryClient.invalidateQueries({ queryKey: ['admin-wow-planners'] });
+    } catch (err) {
+      setError(apiMessage(err, 'The wedding could not be reassigned.'));
+    }
+  }
+
+  async function assignWowPlanner(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError('');
+    try {
+      await api.post('/admin/wow-planners/assignments', adminAssignment);
+      setAdminAssignment({ weddingPlanId: '', plannerUserId: '', weddingDate: '', reason: '' });
+      await queryClient.invalidateQueries({ queryKey: ['admin-wow-planner-assignments'] });
+      await queryClient.invalidateQueries({ queryKey: ['admin-wow-planner-available-weddings'] });
+      await queryClient.invalidateQueries({ queryKey: ['admin-wow-planners'] });
+    } catch (err) {
+      setError(apiMessage(err, 'The wedding could not be assigned.'));
+    }
+  }
+
   return (
     <div className="space-y-4">
-      <Masthead title="Wedding Planners">Planners who run weddings end to end for the families here.</Masthead>
-      <Directory
-        title="Planner accounts"
-        initialRole="planner"
-        roles={['planner']}
-        detailBase="/admin/planners"
-      />
+      <Masthead title="Wedding Planners">Manage official WOW employee planners separately from independent marketplace planners.</Masthead>
+      <section className="space-y-3" aria-labelledby="wow-planner-heading">
+        <div>
+          <h2 id="wow-planner-heading" className="section-title">WOW Employee Planners</h2>
+          <p className="text-sm text-gray-600">Official WOW Team accounts. Planning service is free to clients; no marketplace approval or planner pricing.</p>
+        </div>
+        {error && <p className="alert-critical">{error}</p>}
+        <form onSubmit={createWowPlanner} className="card grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {editingUserId && <p className="col-span-full text-sm font-medium text-brand">Editing employee information</p>}
+          {([
+            ['firstName', 'First name', 'text'], ['lastName', 'Last name', 'text'],
+            ['officialEmail', 'Official email', 'email'], ['mobileNumber', 'Mobile number', 'tel'],
+            ['employeeId', 'Employee ID', 'text'], ['joiningDate', 'Joining date', 'date'],
+            ['alternateMobile', 'Alternate mobile (optional)', 'tel'],
+          ] as const).map(([key, label, type]) => (
+            <label key={key} className="label">
+              {label}
+              <input className="input mt-1" type={type} required={!['alternateMobile'].includes(key) && !(editingUserId && key === 'employeeId')} value={form[key]} disabled={Boolean(editingUserId && key === 'employeeId')} onChange={(e) => setForm((current) => ({ ...current, [key]: e.target.value }))} />
+            </label>
+          ))}
+          {!editingUserId && <label className="label">Account status<select className="input mt-1" value={form.isActive} onChange={(e) => setForm((current) => ({ ...current, isActive: e.target.value }))}><option value="true">Active</option><option value="false">Inactive</option></select></label>}
+          <div className="space-y-1"><span className="label">Profile photo (optional)</span><PhotoUploader label="Upload profile photo" onUploaded={(url) => setForm((current) => ({ ...current, profilePhotoUrl: url }))} /></div>
+          <div className="flex items-end gap-2"><button className="btn" type="submit">{editingUserId ? 'Save employee information' : 'Create WOW Planner'}</button>{editingUserId && <button className="btn-outline" type="button" onClick={() => { setEditingUserId(null); setForm({ firstName: '', lastName: '', officialEmail: '', mobileNumber: '', employeeId: '', joiningDate: '', alternateMobile: '', profilePhotoUrl: '', isActive: 'true' }); }}>Cancel edit</button>}</div>
+        </form>
+        <div className="card overflow-x-auto p-0">
+          {isPending ? <Loading rows={3} /> : wowPlanners.length === 0 ? <EmptyState title="No WOW employee planners">Create an employee account to begin.</EmptyState> : (
+            <table className="w-full min-w-[760px] text-left text-sm">
+              <thead className="border-b border-gray-200 bg-surface-sunken text-xs uppercase text-gray-500"><tr><th className="px-4 py-3">Employee</th><th className="px-4 py-3">Contact</th><th className="px-4 py-3">Assigned weddings</th><th className="px-4 py-3">Profile</th><th className="px-4 py-3">Account</th><th className="px-4 py-3">Manage</th></tr></thead>
+              <tbody className="divide-y divide-gray-100">{wowPlanners.map((planner) => (
+                <tr key={planner.userId}>
+                  <td className="px-4 py-3"><p className="font-medium">{planner.firstName} {planner.lastName}</p><p className="text-xs text-gray-500">{planner.employeeId}</p></td>
+                  <td className="px-4 py-3">{planner.officialEmail}<br /><span className="text-gray-500">{planner.mobileNumber}</span></td>
+                  <td className="px-4 py-3"><details><summary className="cursor-pointer text-brand underline">{planner.assignedWeddingCount}</summary><div className="absolute z-10 mt-1 max-h-56 min-w-64 overflow-auto rounded border border-gray-200 bg-surface p-2 shadow-lifted">{wowAssignments.filter((assignment) => assignment.plannerUserId === planner.userId).length ? wowAssignments.filter((assignment) => assignment.plannerUserId === planner.userId).map((assignment) => <p key={assignment.id} className="py-1 text-xs">{assignment.clientName} · {assignment.weddingDate}</p>) : <p className="text-xs text-gray-500">No assigned weddings</p>}</div></details></td>
+                  <td className="px-4 py-3">{planner.profileStatus === 'complete' ? 'Complete' : `Incomplete · ${planner.profileCompletion}%`}</td>
+                  <td className="px-4 py-3">{planner.accountStatus}</td>
+                  <td className="flex gap-2 px-4 py-3"><button className="btn-outline btn-sm" onClick={() => { setEditingUserId(planner.userId); setForm({ firstName: planner.firstName, lastName: planner.lastName, officialEmail: planner.officialEmail ?? '', mobileNumber: planner.mobileNumber ?? '', employeeId: planner.employeeId, joiningDate: planner.joiningDate, alternateMobile: planner.alternateMobile ?? '', profilePhotoUrl: planner.profilePhotoUrl ?? '', isActive: planner.accountStatus === 'ACTIVE' ? 'true' : 'false' }); }}>Edit</button><button className="btn-outline btn-sm" onClick={() => void toggleWowPlanner(planner.userId, planner.accountStatus === 'ACTIVE')}>{planner.accountStatus === 'ACTIVE' ? 'Deactivate' : 'Activate'}</button></td>
+                </tr>
+              ))}</tbody>
+            </table>
+          )}
+        </div>
+        <form onSubmit={assignWowPlanner} className="card grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <label className="label">Unassigned wedding<select className="input mt-1" required value={adminAssignment.weddingPlanId} onChange={(event) => { const wedding = availableWowWeddings.find((row) => row.weddingPlanId === event.target.value); setAdminAssignment((current) => ({ ...current, weddingPlanId: event.target.value, weddingDate: wedding?.weddingDate ?? current.weddingDate })); }}><option value="">Select wedding</option>{availableWowWeddings.map((wedding) => <option key={wedding.weddingPlanId} value={wedding.weddingPlanId}>{wedding.clientName} · {wedding.weddingDate ?? 'Date not set'}</option>)}</select></label>
+          <label className="label">WOW Planner<select className="input mt-1" required value={adminAssignment.plannerUserId} onChange={(event) => setAdminAssignment((current) => ({ ...current, plannerUserId: event.target.value }))}><option value="">Select active planner</option>{wowPlanners.filter((planner) => planner.accountStatus === 'ACTIVE' && planner.profileStatus === 'complete').map((planner) => <option key={planner.userId} value={planner.userId}>{planner.firstName} {planner.lastName}</option>)}</select></label>
+          <label className="label">Wedding date<input className="input mt-1" type="date" required value={adminAssignment.weddingDate} onChange={(event) => setAdminAssignment((current) => ({ ...current, weddingDate: event.target.value }))} /></label>
+          <label className="label">Reason<textarea className="input mt-1 min-h-12" required minLength={5} maxLength={1000} value={adminAssignment.reason} onChange={(event) => setAdminAssignment((current) => ({ ...current, reason: event.target.value }))} /></label>
+          <div className="flex items-end"><button className="btn" type="submit" disabled={!availableWowWeddings.length}>Assign wedding</button></div>
+        </form>
+        <form onSubmit={reassignWowPlanner} className="card grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <label className="label">Assigned wedding<select className="input mt-1" required value={reassignment.weddingPlanId} onChange={(e) => setReassignment((current) => ({ ...current, weddingPlanId: e.target.value }))}><option value="">Select wedding</option>{wowAssignments.map((assignment) => <option key={assignment.id} value={assignment.weddingPlanId}>{assignment.clientName} · {assignment.weddingDate} · {assignment.plannerName}</option>)}</select></label>
+          <label className="label">Replacement WOW Planner<select className="input mt-1" required value={reassignment.newPlannerUserId} onChange={(e) => setReassignment((current) => ({ ...current, newPlannerUserId: e.target.value }))}><option value="">Select active planner</option>{wowPlanners.filter((planner) => planner.accountStatus === 'ACTIVE' && planner.profileStatus === 'complete' && planner.userId !== wowAssignments.find((assignment) => assignment.weddingPlanId === reassignment.weddingPlanId)?.plannerUserId).map((planner) => <option key={planner.userId} value={planner.userId}>{planner.firstName} {planner.lastName}</option>)}</select></label>
+          <label className="label">Reason<textarea className="input mt-1 min-h-12" required minLength={5} maxLength={1000} value={reassignment.reason} onChange={(e) => setReassignment((current) => ({ ...current, reason: e.target.value }))} /></label>
+          <div className="flex items-end"><button className="btn-outline" type="submit" disabled={!wowAssignments.length}>Reassign wedding</button></div>
+        </form>
+      </section>
+      <section className="space-y-3" aria-labelledby="independent-planner-heading">
+        <div><h2 id="independent-planner-heading" className="section-title">Independent Wedding Planners</h2><p className="text-sm text-gray-600">Marketplace listings, approval, packages and paid bookings.</p></div>
+        <IndependentPlannersDirectory />
+      </section>
+    </div>
+  );
+}
+
+type PlannerFilter = 'all' | 'pending' | 'approved' | 'rejected' | 'active' | 'suspended';
+
+interface IndependentPlannerRow {
+  id: string;
+  email: string | null;
+  phone: string | null;
+  name: string;
+  role: string;
+  isActive: boolean;
+  createdAt: string;
+  plannerType: 'INDEPENDENT';
+  verificationStatus: 'pending' | 'approved' | 'rejected';
+  verificationRequestStatus: string | null;
+  verificationRequestId: string | null;
+  accountStatus: 'ACTIVE' | 'SUSPENDED';
+  plannerProfileId: string;
+  bookingCount: number;
+  packageCount: number;
+}
+
+const PLANNER_FILTERS: { key: PlannerFilter; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'pending', label: 'Pending' },
+  { key: 'approved', label: 'Approved' },
+  { key: 'rejected', label: 'Rejected' },
+  { key: 'active', label: 'Active' },
+  { key: 'suspended', label: 'Suspended' },
+];
+
+function IndependentPlannersDirectory() {
+  const queryClient = useQueryClient();
+  const [filter, setFilter] = useState<PlannerFilter>('all');
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [rejecting, setRejecting] = useState<string | null>(null);
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState('');
+  const limit = 25;
+  const active = filter === 'active' ? true : filter === 'suspended' ? false : undefined;
+  const verificationStatus = ['pending', 'approved', 'rejected'].includes(filter) ? filter : undefined;
+
+  const counts = useQuery<Record<PlannerFilter, number>>({
+    queryKey: ['admin-independent-planner-counts'],
+    queryFn: async () => {
+      const filters: { key: PlannerFilter; params: Record<string, unknown> }[] = [
+        { key: 'all', params: {} },
+        { key: 'pending', params: { plannerVerificationStatus: 'pending' } },
+        { key: 'approved', params: { plannerVerificationStatus: 'approved' } },
+        { key: 'rejected', params: { plannerVerificationStatus: 'rejected' } },
+        { key: 'active', params: { active: true } },
+        { key: 'suspended', params: { active: false } },
+      ];
+      const rows = await Promise.all(filters.map(async ({ key, params }) => {
+        const { data } = await api.get('/admin/directory', {
+          params: { role: 'planner', independentPlannerOnly: true, page: 1, limit: 1, ...params },
+        });
+        return [key, data.meta.total as number] as const;
+      }));
+      return Object.fromEntries(rows) as Record<PlannerFilter, number>;
+    },
+  });
+
+  const planners = useQuery<{ data: IndependentPlannerRow[]; meta: { page: number; total: number; totalPages: number } }>({
+    queryKey: ['admin-independent-planners', search, filter, page],
+    queryFn: async () => (await api.get('/admin/directory', {
+      params: {
+        role: 'planner', independentPlannerOnly: true, page, limit,
+        ...(search.trim() ? { q: search.trim() } : {}),
+        ...(active !== undefined ? { active } : {}),
+        ...(verificationStatus ? { plannerVerificationStatus: verificationStatus } : {}),
+      },
+    })).data,
+  });
+
+  async function approve(planner: IndependentPlannerRow) {
+    setError('');
+    try {
+      await api.put(`/admin/planners/${planner.plannerProfileId}/approve`);
+      await queryClient.invalidateQueries({ queryKey: ['admin-independent-planners'] });
+      await queryClient.invalidateQueries({ queryKey: ['admin-independent-planner-counts'] });
+    } catch (cause) {
+      setError(apiMessage(cause, 'The planner could not be approved.'));
+    }
+  }
+
+  async function reject(planner: IndependentPlannerRow) {
+    if (!planner.verificationRequestId || reason.trim().length < 5) return;
+    setError('');
+    try {
+      await api.put(`/verification/requests/${planner.verificationRequestId}/decide`, {
+        status: 'rejected', remarks: reason.trim(),
+      });
+      setRejecting(null);
+      setReason('');
+      await queryClient.invalidateQueries({ queryKey: ['admin-independent-planners'] });
+      await queryClient.invalidateQueries({ queryKey: ['admin-independent-planner-counts'] });
+    } catch (cause) {
+      setError(apiMessage(cause, 'The planner could not be rejected.'));
+    }
+  }
+
+  async function setAccountStatus(planner: IndependentPlannerRow) {
+    setError('');
+    try {
+      await api.put(`/admin/users/${planner.id}/status`, { isActive: !planner.isActive });
+      await queryClient.invalidateQueries({ queryKey: ['admin-independent-planners'] });
+      await queryClient.invalidateQueries({ queryKey: ['admin-independent-planner-counts'] });
+    } catch (cause) {
+      setError(apiMessage(cause, 'The account status could not be changed.'));
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      {error && <p className="alert-critical" role="alert">{error}</p>}
+      <div className="flex flex-wrap items-center gap-2" aria-label="Filter independent planners">
+        {PLANNER_FILTERS.map(({ key, label }) => (
+          <button key={key} className={filter === key ? 'btn btn-sm' : 'btn-outline btn-sm'} aria-pressed={filter === key} onClick={() => { setFilter(key); setPage(1); }}>
+            {label} {counts.data ? `(${counts.data[key]})` : ''}
+          </button>
+        ))}
+        <input className="input ml-auto min-w-52 flex-1 sm:max-w-xs" placeholder="Search by name or email" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} />
+      </div>
+      <div className="card overflow-x-auto p-0">
+        {planners.isPending ? <Loading rows={4} /> : planners.isError ? (
+          <p className="alert-critical m-4" role="alert">Independent wedding planners could not be loaded. The planner records remain unchanged; try again.</p>
+        ) : planners.data.data.length === 0 ? (
+          <EmptyState title="No independent wedding planners found.">The existing planner profile query returned no matching records.</EmptyState>
+        ) : (
+          <table className="w-full min-w-[980px] text-left text-sm">
+            <thead className="border-b border-gray-200 bg-surface-sunken text-xs uppercase text-gray-500"><tr>
+              <th className="px-4 py-3">Planner</th><th className="px-4 py-3">Email / Phone</th><th className="px-4 py-3">Planner Type</th><th className="px-4 py-3">Verification</th><th className="px-4 py-3">Account</th><th className="px-4 py-3">Bookings</th><th className="px-4 py-3">Created</th><th className="px-4 py-3">Manage</th>
+            </tr></thead>
+            <tbody className="divide-y divide-gray-100">{planners.data.data.map((planner) => (
+              <tr key={planner.id}>
+                <td className="px-4 py-3"><span className="font-medium">{planner.name}</span><span className="block text-xs text-gray-500">{planner.packageCount} package{planner.packageCount === 1 ? '' : 's'}</span></td>
+                <td className="px-4 py-3">{planner.email ?? 'No email'}<span className="block text-gray-500">{planner.phone ?? 'No phone'}</span></td>
+                <td className="px-4 py-3">Independent</td>
+                <td className="px-4 py-3"><span className={planner.verificationStatus === 'approved' ? 'pill-positive' : planner.verificationStatus === 'rejected' ? 'pill-critical' : 'pill-caution'}>{planner.verificationStatus}</span></td>
+                <td className="px-4 py-3">{planner.accountStatus}</td>
+                <td className="px-4 py-3 tabular-nums">{planner.bookingCount}</td>
+                <td className="px-4 py-3">{new Date(planner.createdAt).toLocaleDateString()}</td>
+                <td className="px-4 py-3"><div className="flex flex-wrap gap-1">
+                  <Link className="btn-outline btn-sm" to={`/admin/planners/${planner.id}`}>View</Link>
+                  {planner.verificationStatus === 'pending' && <button className="btn-outline btn-sm" onClick={() => void approve(planner)}>Approve</button>}
+                  {planner.verificationRequestStatus === 'admin_review' && planner.verificationRequestId && <button className="btn-outline btn-sm" onClick={() => { setRejecting(rejecting === planner.id ? null : planner.id); setReason(''); }}>Reject</button>}
+                  <button className="btn-outline btn-sm" onClick={() => void setAccountStatus(planner)}>{planner.isActive ? 'Suspend' : 'Activate'}</button>
+                </div>
+                  {rejecting === planner.id && <div className="mt-2 min-w-56 space-y-2"><textarea className="input" aria-label="Rejection reason" placeholder="Reason (at least 5 characters)" value={reason} onChange={(event) => setReason(event.target.value)} /><button className="btn btn-sm" disabled={reason.trim().length < 5} onClick={() => void reject(planner)}>Confirm rejection</button></div>}
+                </td>
+              </tr>
+            ))}</tbody>
+          </table>
+        )}
+      </div>
+      {!planners.isPending && !planners.isError && planners.data && planners.data.meta.totalPages > 1 && <div className="flex items-center justify-end gap-2"><span className="text-xs text-gray-500">Page {planners.data.meta.page} of {planners.data.meta.totalPages} · {planners.data.meta.total} planners</span><button className="btn-outline btn-sm" disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button><button className="btn-outline btn-sm" disabled={page >= planners.data.meta.totalPages} onClick={() => setPage((value) => value + 1)}>Next</button></div>}
     </div>
   );
 }

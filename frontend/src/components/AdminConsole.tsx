@@ -98,6 +98,8 @@ export function Directory({
   roles = ROLES,
   detailBase,
   hideRoleFilter = false,
+  agentId,
+  independentPlannerOnly = false,
 }: {
   title?: string;
   initialRole?: string;
@@ -113,6 +115,8 @@ export function Directory({
    * the one-option select would be dead weight (EZ1-I192).
    */
   hideRoleFilter?: boolean;
+  agentId?: string;
+  independentPlannerOnly?: boolean;
 } = {}) {
   const navigate = useNavigate();
   const [role, setRole] = useState(initialRole);
@@ -121,7 +125,7 @@ export function Directory({
   const [openId, setOpenId] = useState<string | null>(null);
 
   const { data } = useQuery<{ data: DirectoryRow[]; meta: { total: number } }>({
-    queryKey: ['admin-directory', role, q, active],
+    queryKey: ['admin-directory', role, q, active, agentId, independentPlannerOnly],
     queryFn: async () =>
       (
         await api.get('/admin/directory', {
@@ -130,6 +134,8 @@ export function Directory({
             role: role || undefined,
             q: q || undefined,
             active: active === '' ? undefined : active,
+            agentId: agentId || undefined,
+            independentPlannerOnly: independentPlannerOnly || undefined,
           },
         })
       ).data,
@@ -409,7 +415,8 @@ export function AllBookings({ initialStatus = '' }: { initialStatus?: string } =
   const from = params.get('from') ?? '';
   const to = params.get('to') ?? '';
   const providerId = params.get('providerId') ?? '';
-  const narrowed = Boolean(from || to || providerId);
+  const userId = params.get('userId') ?? '';
+  const narrowed = Boolean(from || to || providerId || userId);
   const setStatus = (next: string) => {
     const p = new URLSearchParams(params);
     if (next) p.set('status', next);
@@ -439,7 +446,7 @@ export function AllBookings({ initialStatus = '' }: { initialStatus?: string } =
   const counts = (windowed?.byStatus ?? analytics?.bookingsByStatus) ?? {};
 
   const { data, isLoading } = useQuery<{ data: AdminBookingRow[]; meta: { total: number } }>({
-    queryKey: ['admin-bookings', status, from, to, providerId],
+    queryKey: ['admin-bookings', status, from, to, providerId, userId],
     queryFn: async () =>
       (
         await api.get('/admin/bookings', {
@@ -449,6 +456,7 @@ export function AllBookings({ initialStatus = '' }: { initialStatus?: string } =
             from: from || undefined,
             to: to || undefined,
             providerId: providerId || undefined,
+            userId: userId || undefined,
           },
         })
       ).data,
@@ -472,8 +480,8 @@ export function AllBookings({ initialStatus = '' }: { initialStatus?: string } =
         <h1 className="page-title">Bookings</h1>
         {narrowed && (
           <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-gray-600">
-            <span className="rounded-sm bg-brand-soft px-2.5 py-0.5 text-brand-strong">
-              {providerId ? 'One provider' : 'Filtered'}
+            <span className="rounded-full bg-brand-soft px-2.5 py-0.5 text-brand-strong">
+              {providerId ? 'One provider' : userId ? 'One client or agent' : 'Filtered'}
               {from && to ? `, placed ${from} to ${to}` : ''}
             </span>
             {providerId && (
@@ -486,6 +494,7 @@ export function AllBookings({ initialStatus = '' }: { initialStatus?: string } =
                 p.delete('from');
                 p.delete('to');
                 p.delete('providerId');
+                p.delete('userId');
                 setParams(p, { replace: true });
               }}
             >

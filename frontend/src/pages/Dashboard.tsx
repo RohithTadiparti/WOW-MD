@@ -2,13 +2,10 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useAuth } from '../store/auth';
-import { navDenied } from '../lib/nav-access';
 import { useBusinesses } from '../store/business';
 import {
   Permission,
-  PermissionValue,
   ROLE_LABEL,
-  UserRole,
   VERIFICATION_LABEL,
   canAny,
 } from '../lib/permissions';
@@ -19,7 +16,6 @@ import ClaimRequests from '../components/ClaimRequests';
 import GetStarted from '../components/GetStarted';
 import VendorDashboard from '../components/VendorDashboard';
 import IndividualDashboard from '../components/IndividualDashboard';
-import { motion, useReducedMotion } from 'motion/react';
 import {
   ArrowRight,
   Bell,
@@ -38,20 +34,11 @@ import {
   WarningCircle,
 } from '@phosphor-icons/react';
 
-interface Tile {
-  to: string;
-  title: string;
-  desc: string;
-  requires: PermissionValue[];
-  /** Mirrors the navbar: a role that holds the capability but not the entry. */
-  hideFor?: UserRole[];
-}
-
 /**
  * One tile catalogue for every persona; each tile declares what it needs, and
  * the dashboard renders only the ones the signed-in account can actually use.
  */
-const TILES: Tile[] = [
+const TILES = [
   {
     to: '/profile',
     title: 'Your Profile',
@@ -161,27 +148,43 @@ const TILES: Tile[] = [
   },
 ];
 
-export default function Dashboard() {
+void TILES;
+
+export default function Dashboard({
+  adminUserId,
+  readOnly = false,
+  adminView = false,
+  roleOverride,
+}: {
+  adminUserId?: string;
+  readOnly?: boolean;
+  adminView?: boolean;
+  roleOverride?: 'agent' | 'vendor' | 'planner' | 'officer';
+}) {
+  void readOnly;
+  void adminView;
+  const adminScope = adminUserId ? { userId: adminUserId, role: roleOverride } : undefined;
   const user = useAuth((s) => s.user);
   // Read reactively: the Overdue tasks tile links back into this same page with
   // ?tasks=overdue, so the panel below has to notice the change (EZ1-I230).
   const [taskParams] = useSearchParams();
   const permissions = user?.permissions ?? [];
 
-  const isProvider = canAny(permissions, [Permission.BOOKING_READ_INCOMING]);
+  const isProvider = roleOverride === 'vendor' || roleOverride === 'planner' || canAny(permissions, [Permission.BOOKING_READ_INCOMING]);
   const isBuyer = canAny(permissions, [Permission.BOOKING_READ_OWN]);
 
   const { data: profile } = useQuery({
     queryKey: ['me'],
     queryFn: async () => (await api.get('/users/me')).data,
     retry: false,
+    enabled: !adminUserId,
   });
 
   // A dashboard that only links to other pages tells you nothing you did not
   // already know. These are the three numbers each persona opens the app for.
   const { data: unread } = useQuery({
     queryKey: ['unread-count'],
-    queryFn: async () => (await api.get('/notifications/unread-count')).data,
+    queryFn: async () => (await api.get('/notifications/unread-count', { params: adminScope })).data,
     retry: false,
   });
 
@@ -200,7 +203,7 @@ export default function Dashboard() {
   };
   const { data: incoming } = useQuery({
     queryKey: ['incoming-bookings-count'],
-    queryFn: async () => (await api.get('/bookings/incoming', { params: { limit: 1 } })).data,
+    queryFn: async () => (await api.get('/bookings/incoming', { params: { limit: 1, ...adminScope } })).data,
     ...liveCount,
   });
 
@@ -210,13 +213,13 @@ export default function Dashboard() {
   const { data: newRequests } = useQuery({
     queryKey: ['new-requests-count'],
     queryFn: async () =>
-      (await api.get('/bookings/incoming', { params: { limit: 1, status: 'requested' } })).data,
+      (await api.get('/bookings/incoming', { params: { limit: 1, status: 'requested', ...adminScope } })).data,
     ...liveCount,
   });
 
   const { data: earnings } = useQuery({
     queryKey: ['earnings'],
-    queryFn: async () => (await api.get('/bookings/earnings')).data,
+    queryFn: async () => (await api.get('/bookings/earnings', { params: adminScope })).data,
     retry: false,
     enabled: isProvider,
     refetchOnMount: 'always',
@@ -224,7 +227,7 @@ export default function Dashboard() {
 
   // A vendor's own summary, for the business the header switcher has selected.
   // Everything here is a number they would otherwise open three pages to find.
-  const isVendor = canAny(permissions, [Permission.VENDOR_LISTING_MANAGE]);
+  const isVendor = roleOverride === 'vendor' || canAny(permissions, [Permission.VENDOR_LISTING_MANAGE]);
   const { active, businesses } = useBusinesses();
 
   const { data: quoted } = useQuery({
@@ -247,11 +250,17 @@ export default function Dashboard() {
   // A wedding planner is a provider who is not a vendor. Their dashboard opens
   // onto their clients rather than a shop window, so it carries an "action
   // required" band of the things waiting on them (EZ1-I39).
-  const isPlanner = isProvider && !isVendor;
+  const isPlanner = roleOverride === 'planner' || (isProvider && !isVendor);
+    const { data: wowEmployeeProfile } = useQuery<{ profileStatus: string; completion: number }>({
+      queryKey: ['wow-planner-profile'],
+      queryFn: async () => (await api.get('/planner/profile')).data,
+      enabled: isPlanner && !adminUserId,
+      retry: false,
+    });
   const { data: plannerBook } = useQuery({
     queryKey: ['planner-clients-summary'],
     queryFn: async () =>
-      (await api.get('/planner/clients')).data as {
+      (await api.get('/planner/clients', { params: adminScope })).data as {
         clients: {
           userId: string;
           planId: string;
@@ -284,7 +293,7 @@ export default function Dashboard() {
   const { data: plannerOverview } = useQuery({
     queryKey: ['planner-overview'],
     queryFn: async () =>
-      (await api.get('/planner/overview')).data as {
+      (await api.get('/planner/overview', { params: adminScope })).data as {
         weddings: number;
         active: number;
         upcoming: number;
@@ -325,10 +334,11 @@ export default function Dashboard() {
     .sort((a, b) => new Date(a.weddingDate!).getTime() - new Date(b.weddingDate!).getTime())
     .slice(0, 4);
 
-  const isAgent = canAny(permissions, [Permission.AGENCY_MANAGE]);
+  // Admin inspection uses the same account-scoped dashboard as agent self-service.
+  const isAgent = roleOverride === 'agent' || canAny(permissions, [Permission.AGENCY_MANAGE]);
   const { data: agentStats } = useQuery({
-    queryKey: ['agent-dashboard'],
-    queryFn: async () => (await api.get('/agents/dashboard')).data as {
+    queryKey: ['agent-dashboard', adminUserId],
+    queryFn: async () => (await api.get('/agents/dashboard', { params: adminScope })).data as {
       totalClients: number;
       matchesFixed: number;
       remainingClients: number;
@@ -349,11 +359,11 @@ export default function Dashboard() {
   // (EZ1-I92): how many verifications are new, in progress or submitted, and
   // which have a deadline coming up. VERIFICATION_FIELDWORK is held by officers
   // and never by an administrator, so it identifies the persona cleanly.
-  const isOfficer = canAny(permissions, [Permission.VERIFICATION_FIELDWORK]);
+  const isOfficer = roleOverride === 'officer' || canAny(permissions, [Permission.VERIFICATION_FIELDWORK]);
   const { data: officerQueue } = useQuery({
     queryKey: ['officer-queue'],
     queryFn: async () =>
-      (await api.get('/verification/requests', { params: { limit: 100 } })).data as {
+      (await api.get('/verification/requests', { params: { limit: 100, ...adminScope } })).data as {
         data: Visit[];
       },
     retry: false,
@@ -400,17 +410,7 @@ export default function Dashboard() {
         (b.slaDeadline ? new Date(b.slaDeadline).getTime() : Infinity),
     );
 
-  const reduce = useReducedMotion();
   const firstName = (profile?.displayName ?? '').trim().split(' ')[0];
-
-  // The same question the sidebar asks, from the same place. This list used to
-  // carry its own hideFor, which is how a planner ended up with no Chat in the
-  // rail and a Messages tile on their dashboard pointing at it.
-  const tiles = TILES.filter(
-    (t) =>
-      !(user && navDenied(t, user.role)) &&
-      (t.requires.length === 0 || canAny(permissions, t.requires)),
-  );
 
   // The vendor's home is a dedicated, backend-driven dashboard (EZ1-I147). All
   // the hooks above still run so the hook order is stable across a role change;
@@ -428,17 +428,19 @@ export default function Dashboard() {
         and the one part of it that is actionable, an unfinished profile, gets
         to be a control instead of a sentence.
       */}
-      <header>
-        <p className="text-sm text-gray-500">
+      <header className="relative overflow-hidden rounded-lg border border-brand/35 bg-gradient-to-br from-brand-strong via-brand to-brand-rose px-6 py-6 text-brand-fg shadow-lifted sm:px-8">
+        <span aria-hidden className="absolute -right-8 -top-10 h-32 w-32 rounded-full border border-gold/60" />
+        <span aria-hidden className="absolute -bottom-16 right-20 h-28 w-28 rounded-full border border-gold-lit/50" />
+        <p className="relative text-sm text-brand-fg/75">
           Signed in as {user ? (ROLE_LABEL[user.role] ?? user.role) : ''}
           {user?.managedByAgentId ? ', represented by an agent' : ''}
         </p>
-        <h1 className="page-title mt-1">
+        <h1 className="relative mt-1 border-0 pl-0 font-serif text-[2.25rem] font-normal leading-[1.1] text-brand-fg sm:text-[3rem]">
           {greeting()}
           {firstName ? `, ${firstName}` : ''}
         </h1>
         {profile && !profile.profileCompleted && (
-          <div className="mt-5 flex flex-wrap items-center gap-4 rounded-lg border border-gray-200 bg-surface p-4">
+          <div className="relative mt-5 flex flex-wrap items-center gap-4 rounded-md border border-gold/60 bg-surface-raised/95 p-4 text-gray-900">
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-gray-900">Your profile is not finished</p>
               <p className="mt-0.5 text-sm text-gray-500">
@@ -653,6 +655,13 @@ export default function Dashboard() {
       */}
       {isPlanner && (
         <section className="space-y-4">
+          {wowEmployeeProfile && wowEmployeeProfile.profileStatus !== 'complete' && (
+            <div className="card border-l-4 border-l-brand">
+              <h2 className="section-title">Complete Your WOW Planner Profile</h2>
+              <p className="mt-1 text-sm text-gray-600">Profile completion: {wowEmployeeProfile.completion}%</p>
+              <Link className="btn mt-3 inline-flex" to="/planner/profile">Continue profile</Link>
+            </div>
+          )}
           <h2 className="section-title">Action required</h2>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <PlannerMetric label="New quotation requests" value={plannerRequests} to="/bookings?status=requested" tone="from-brand-soft to-surface" />
@@ -746,8 +755,8 @@ export default function Dashboard() {
             <Link className="btn-outline" to="/availability">
               Set availability
             </Link>
-            <Link className="btn-outline" to="/events">
-              View events
+            <Link className="btn-outline" to="/my-clients">
+              View clients
             </Link>
           </div>
 
@@ -755,7 +764,12 @@ export default function Dashboard() {
               planner opens the app to see, not just their counts (EZ1-I52). */}
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
             <div className="card">
-              <h3 className="section-title text-sm">Upcoming weddings</h3>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h3 className="section-title text-sm">Upcoming weddings</h3>
+                <Link className="text-xs text-brand-dark hover:underline" to="/weddings">
+                  Open weddings
+                </Link>
+              </div>
               {upcomingWeddings.length === 0 ? (
                 <p className="mt-1 text-sm text-gray-500">No dated weddings yet.</p>
               ) : (
@@ -817,43 +831,6 @@ export default function Dashboard() {
         </section>
       )}
 
-      {/*
-        Where to go next.
-
-        Rows, not a grid of identical cards. Equal boxes side by side give every
-        destination the same weight and stop being scannable at about the sixth
-        one; a divided column reads top to bottom the way a list of choices is
-        actually read, and keeps each description on one line instead of
-        wrapping it into a paragraph nobody finishes.
-      */}
-      <section>
-        <h2 className="mb-3 text-sm font-medium text-gray-500">Where to go next</h2>
-        <ul className="divide-y divide-gray-200 overflow-hidden rounded-lg border border-gray-200 bg-surface">
-          {tiles.map((t, i) => (
-            <motion.li
-              key={t.to}
-              initial={reduce ? false : { opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: Math.min(i, 8) * 0.035, ease: [0.16, 1, 0.3, 1] }}
-            >
-              <Link
-                to={t.to}
-                className="group flex items-center gap-4 px-5 py-4 transition-colors hover:bg-gray-100"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium text-gray-900">{t.title}</p>
-                  <p className="mt-0.5 truncate text-sm text-gray-500">{t.desc}</p>
-                </div>
-                <ArrowRight
-                  size={17}
-                  className="shrink-0 text-gray-300 transition-[transform,color] duration-200 group-hover:translate-x-0.5 group-hover:text-brand-strong"
-                  aria-hidden
-                />
-              </Link>
-            </motion.li>
-          ))}
-        </ul>
-      </section>
     </div>
   );
 }

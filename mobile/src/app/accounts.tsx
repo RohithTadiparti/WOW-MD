@@ -4,6 +4,12 @@ import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { CaretRight } from 'phosphor-react-native';
 
+const maskAccountId = (value: string | null | undefined) => {
+  if (!value) return 'Not configured';
+  if (value.length <= 8) return value;
+  return `${value.slice(0, 4)}••••${value.slice(-4)}`;
+};
+
 import { api, apiMessage } from '@/lib/api';
 import { rupeesExact, shortDate } from '@/lib/format';
 import { isPlannerAccount } from '@/lib/planner-listing';
@@ -12,7 +18,7 @@ import { Badge, Divider, StatTile, TileGrid, type Tone } from '@/components/chro
 import { PayoutAccount } from '@/components/accounts/payout-account';
 import { ListScreen } from '@/components/layout';
 import { BusinessSwitcher } from '@/components/business/switcher';
-import { Body, Button, Caption, Card, PageSubtitle } from '@/components/ui';
+import { Body, Button, Caption, Card, Field, PageSubtitle, SectionTitle } from '@/components/ui';
 import { useAuth } from '@/store/auth';
 import { useBusinesses } from '@/store/business';
 import { radius, rgb, space, useTheme } from '@/theme';
@@ -118,6 +124,8 @@ export default function Accounts() {
   // Null is every payment, which is what somebody arriving at the page wants.
   const [card, setCard] = useState<string | null>(null);
 
+  const [payoutVerified, setPayoutVerified] = useState(false);
+
   const { data, isPending, isFetching, refetch } = useQuery<Earnings>({
     queryKey: ['earnings'],
     queryFn: async () => (await api.get('/bookings/earnings')).data,
@@ -144,6 +152,11 @@ export default function Accounts() {
     const wanted = card ? CARD_STATUSES[card] : null;
     return (data?.ledger ?? []).filter((row) => !wanted || wanted.includes(row.status));
   }, [data?.ledger, card]);
+  const escrowRows = useMemo(
+    () => (data?.ledger ?? []).filter((row) => ['held_in_escrow', 'disputed'].includes(row.status)),
+    [data?.ledger],
+  );
+  const availableBalance = Number(data?.pendingPayout ?? '0');
 
   const toggle = (key: string) => () => setCard((current) => (current === key ? null : key));
 
@@ -163,65 +176,119 @@ export default function Accounts() {
             <PayoutAccount
               endpoint={`/vendors/${activeId}/payout-account`}
               current={payout?.payoutAccountId ?? null}
+              onStatusChange={setPayoutVerified}
             />
           ) : null}
           {isPlanner ? (
             <PayoutAccount
               endpoint="/wedding-planners/me/payout-account"
               current={payout?.payoutAccountId ?? null}
+              onStatusChange={setPayoutVerified}
             />
           ) : null}
 
           {data && (
             <TileGrid>
               <StatTile
-                label="Paid out to you"
+                label="Total earned"
+                value={rupeesExact(data.gross)}
+                hint="Gross bookings revenue"
+                tone="brand"
+                active={card === 'released'}
+                onPress={toggle('released')}
+              />
+              <StatTile
+                label="Escrow"
+                value={rupeesExact(data.heldInEscrow)}
+                hint="Currently on hold"
+                tone="caution"
+                active={card === 'held_in_escrow'}
+                onPress={toggle('held_in_escrow')}
+              />
+              <StatTile
+                label="Available for payout"
+                value={rupeesExact(data.pendingPayout)}
+                hint="Eligible for transfer"
+                tone="brand"
+                active={card === 'pending_payout'}
+                onPress={toggle('pending_payout')}
+              />
+              <StatTile
+                label="Paid"
                 value={rupeesExact(data.released)}
-                hint="Already released from escrow"
+                hint="Already released"
                 tone="positive"
                 active={card === 'released'}
                 onPress={toggle('released')}
               />
               <StatTile
-                label="Held in escrow"
-                value={rupeesExact(data.heldInEscrow)}
-                hint="Yours once the work is signed off"
-                tone="caution"
-                active={card === 'held_in_escrow'}
-                onPress={toggle('held_in_escrow')}
-              />
-              {/*
-                Only shown when there is some. "Owed" is a different fact from
-                "held" — the work is done and the money is no longer the
-                buyer's — and a provider seeing a zero here every day would
-                stop reading it.
-              */}
-              {Number(data.pendingPayout) > 0 && (
-                <StatTile
-                  label="Owed to you"
-                  value={rupeesExact(data.pendingPayout)}
-                  hint="Earned. Waiting on a payout account to send it to."
-                  tone="caution"
-                  active={card === 'pending_payout'}
-                  onPress={toggle('pending_payout')}
-                />
-              )}
-              <StatTile
-                label="Platform commission"
+                label="Commission"
                 value={rupeesExact(data.commission)}
-                hint="Deducted from released payments"
+                hint="Deducted from payouts"
                 active={card === 'commission'}
                 onPress={toggle('commission')}
               />
               <StatTile
                 label="Refunded"
                 value={rupeesExact(data.refunded)}
-                hint="Returned to the buyer"
+                hint="Returned to customer"
                 active={card === 'refunded'}
                 onPress={toggle('refunded')}
               />
             </TileGrid>
           )}
+
+          {data ? (
+            <View style={{ gap: space(2) }}>
+              <Card>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space(2) }}>
+                  <SectionTitle>Request payout</SectionTitle>
+                  <Badge tone="brand">Available {rupeesExact(data.pendingPayout)}</Badge>
+                </View>
+                <PayoutRequestForm
+                  balance={availableBalance}
+                  payoutAccount={payout?.payoutAccountId ?? null}
+                  verified={payoutVerified}
+                />
+              </Card>
+
+              <Card>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space(2) }}>
+                  <SectionTitle>Payout account</SectionTitle>
+                  <Badge tone={payout?.payoutAccountId ? 'positive' : 'caution'}>
+                    {payout?.payoutAccountId ? 'Verified' : 'Not configured'}
+                  </Badge>
+                </View>
+                <Body tone="muted">Razorpay account</Body>
+                <Body style={{ fontFamily: 'monospace' }}>{maskAccountId(payout?.payoutAccountId ?? null)}</Body>
+              </Card>
+            </View>
+          ) : null}
+
+          {escrowRows.length > 0 ? (
+            <Card>
+              <SectionTitle>Escrow</SectionTitle>
+              <View style={{ gap: space(2) }}>
+                {escrowRows.map((row) => (
+                  <View key={row.paymentId} style={{ borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.08)', paddingTop: space(2) }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: space(2) }}>
+                      <Body>{MILESTONE_LABEL[row.milestone] ?? row.milestone}</Body>
+                      <Badge tone={row.status === 'disputed' ? 'critical' : 'caution'}>
+                        {STATUS_LABEL[row.status] ?? row.status}
+                      </Badge>
+                    </View>
+                    <Caption tone="faint">
+                      {row.clientName ?? 'Customer'} · {row.bookingId.slice(0, 8)}
+                    </Caption>
+                    <View style={{ marginTop: space(1), gap: space(0.5) }}>
+                      <Line label="Amount" value={rupeesExact(row.payoutAmount)} strong />
+                      <Line label="Expected release" value={row.confirmedAt ? shortDate(row.confirmedAt) : 'Awaiting confirmation'} />
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </Card>
+          ) : null}
 
           <View style={{ gap: space(1) }}>
             <Body style={{ fontWeight: '600' }}>
@@ -307,6 +374,60 @@ function LedgerCard({ row, onPress }: { row: LedgerRow; onPress: () => void }) {
         </Caption>
       ) : null}
     </Card>
+  );
+}
+
+function PayoutRequestForm({
+  balance,
+  payoutAccount,
+  verified,
+}: {
+  balance: number;
+  payoutAccount: string | null;
+  verified: boolean;
+}) {
+  const [amount, setAmount] = useState('0.00');
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const requestAmount = Number(amount || 0);
+  const invalid = !verified || !payoutAccount || requestAmount <= 0 || requestAmount > balance;
+
+  const submit = () => {
+    setError(null);
+    setNotice(null);
+    if (!verified || !payoutAccount) {
+      setError('Please verify your payout account before requesting a payout.');
+      return;
+    }
+    if (requestAmount <= 0) {
+      setError('Enter an amount greater than zero.');
+      return;
+    }
+    if (requestAmount > balance) {
+      setError(`You can request up to ${rupeesExact(String(balance))}.`);
+      return;
+    }
+    setNotice(`Request queued for ${rupeesExact(String(requestAmount))}.`);
+  };
+
+  return (
+    <View style={{ gap: space(2) }}>
+      <Body tone="muted">Use a value up to your available balance.</Body>
+      <Field
+        label="Amount"
+        value={amount}
+        keyboardType="decimal-pad"
+        onChangeText={setAmount}
+        placeholder="0.00"
+      />
+      <Button
+        label="Request payout"
+        disabled={invalid}
+        onPress={submit}
+      />
+      {error ? <Caption tone="critical">{error}</Caption> : null}
+      {notice ? <Caption tone="brand">{notice}</Caption> : null}
+    </View>
   );
 }
 

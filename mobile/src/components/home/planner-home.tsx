@@ -90,7 +90,7 @@ export function PlannerAgencyCard({
 }
 
 /** The book at a glance: how many weddings, what is waiting, what is coming. */
-export function PlannerBook() {
+export function PlannerBook({ employeeMode = false }: { employeeMode?: boolean }) {
   const router = useRouter();
   const live = { retry: false, refetchOnMount: 'always' as const, refetchInterval: 30_000 };
 
@@ -131,13 +131,13 @@ export function PlannerBook() {
             />
             <StatTile label="Active" value={o?.active} hint="Planning under way" />
             <StatTile label="Upcoming" value={o?.upcoming} hint="Not started yet" />
-            <StatTile
+            {!employeeMode ? <StatTile
               label="Requests waiting"
               value={book.isLoading ? undefined : requests}
               tone={requests > 0 ? 'caution' : undefined}
               hint={requests > 0 ? 'Couples waiting on your answer' : undefined}
               onPress={() => router.push({ pathname: '/bookings', params: { tab: 'requests' } })}
-            />
+            /> : null}
             <StatTile
               label="Vendor bookings"
               value={o?.bookings.total}
@@ -149,12 +149,12 @@ export function PlannerBook() {
               tone={(o?.tasks.overdue ?? 0) > 0 ? 'critical' : undefined}
               hint={o ? `${o.tasks.done} of ${o.tasks.total} done` : undefined}
             />
-            <StatTile
+            {!employeeMode ? <StatTile
               label="Escrow held"
               value={o ? money(o.escrowHeld, o.currency) : undefined}
               hint="Yours once the work is signed off"
               onPress={() => router.push('/accounts')}
-            />
+            /> : null}
           </TileGrid>
         )}
       </View>

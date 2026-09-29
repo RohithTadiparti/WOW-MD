@@ -192,6 +192,7 @@ export class SupportCase {
     id: string;
     name: string;
     category: string;
+    categories: string[];
     city: string | null;
     status: string;
     isApproved: boolean;
