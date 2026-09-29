@@ -274,6 +274,10 @@ export class MatchmakingService {
     actor: AuthUser,
     q: SuggestionsQueryDto,
   ): Promise<PaginatedResult<Suggestion> & { counts?: MatchViewCounts }> {
+    if (q.packageMin !== undefined && q.packageMax !== undefined && q.packageMin > q.packageMax) {
+      throw new BadRequestException('packageMin must be less than or equal to packageMax');
+    }
+
     const { page, limit } = q;
     // A client whose profile an agent built does not browse the directory
     // themselves — the agent runs their matchmaking. Once they log in with
@@ -755,6 +759,8 @@ export class MatchmakingService {
     add('ageMax', q.ageMax);
     add('hMin', q.heightMinCm);
     add('hMax', q.heightMaxCm);
+    add('pkgMin', q.packageMin);
+    add('pkgMax', q.packageMax);
     add('rel', q.religion);
     add('cst', q.caste);
     add('tng', q.motherTongue);
@@ -843,6 +849,8 @@ export class MatchmakingService {
     const wantsBiodata =
       q.heightMinCm !== undefined ||
       q.heightMaxCm !== undefined ||
+      q.packageMin !== undefined ||
+      q.packageMax !== undefined ||
       Boolean(q.religion) ||
       Boolean(q.caste) ||
       Boolean(q.motherTongue) ||
@@ -875,6 +883,21 @@ export class MatchmakingService {
       if (!d) return false;
       if (q.heightMinCm !== undefined && (d.heightCm ?? 0) < q.heightMinCm) return false;
       if (q.heightMaxCm !== undefined && (d.heightCm ?? 999) > q.heightMaxCm) return false;
+      if (q.packageMin !== undefined || q.packageMax !== undefined) {
+        if (!d.incomeVisible) return false;
+        const salary = d.employment?.salary;
+        const packageValue =
+          typeof salary === 'string' && /^\d+$/.test(salary)
+            ? Number(salary)
+            : typeof salary === 'number'
+              ? salary
+              : null;
+        if (packageValue === null || !Number.isSafeInteger(packageValue) || packageValue < 0) {
+          return false;
+        }
+        if (q.packageMin !== undefined && packageValue < q.packageMin) return false;
+        if (q.packageMax !== undefined && packageValue > q.packageMax) return false;
+      }
       if (!same(d.religion, q.religion)) return false;
       if (!same(d.caste, q.caste)) return false;
       if (!same(d.motherTongue, q.motherTongue)) return false;
