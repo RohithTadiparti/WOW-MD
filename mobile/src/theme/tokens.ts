@@ -139,8 +139,13 @@ export const lightTheme: Theme = {
   surface: [255, 255, 255],
   surfaceRaised: [255, 255, 255],
   surfaceSunken: [246, 239, 228],
-  border: lightInk[200],
-  borderStrong: lightInk[300],
+  /*
+   * The template's hairlines are its ink at 14% (28% round a field). React
+   * Native paints a border over the view's own white, so these are that ink
+   * laid on white — exactly the colour the template's rules come out as.
+   */
+  border: [224, 222, 222],
+  borderStrong: [194, 188, 190],
 
   brand: lightRose[600],
   brandStrong: lightRose[700],
@@ -198,9 +203,9 @@ export const darkTheme: Theme = {
   scrim: [14, 8, 11],
 };
 
-/** Inputs and chips, buttons, cards: near-square, the web app's 2/2/4 scale
- *  from the matrimony home template. */
-export const radius = { sm: 2, md: 2, lg: 4 } as const;
+/** Inputs and chips, buttons, cards: square, as the matrimony home template
+ *  draws everything and as the web app does. */
+export const radius = { sm: 0, md: 0, lg: 0 } as const;
 
 /**
  * The spacing step. Four points, like Tailwind's, so a gap named here and a gap

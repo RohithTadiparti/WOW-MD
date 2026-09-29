@@ -1,89 +1,51 @@
-import { View } from 'react-native';
+import { useState } from 'react';
+import { View, ScrollView } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle, CircleDashed } from 'phosphor-react-native';
+import { useRouter } from 'expo-router';
 
 import { api } from '@/lib/api';
-import { labelFor } from '@/lib/labels';
-import { formatDate } from '@/shared/dates';
-import { COMPLEXION_LABEL, MARITAL_LABEL, OCCUPATION_LABEL } from '@/shared/permissions';
-import { HoroscopeSection } from '@/components/biodata/horoscope-section';
-import { PreferencesSection } from '@/components/biodata/preferences-section';
-import { DetailGrid, DetailRow } from '@/components/chrome';
+import {
+  PersonalForm,
+  MaritalHistoryForm,
+  EducationCareerForm,
+  FamilyBackgroundForm,
+  HoroscopeSection,
+  PreferencesSection,
+} from '@/components/biodata';
 import { MediaStrip, PhotoPicker } from '@/components/uploader';
 import { ProfileSilhouette } from '@/components/profile-silhouette';
 import {
   Body,
+  Button,
   Caption,
   Card,
   Loading,
-  PageSubtitle,
   Screen,
   SectionTitle,
 } from '@/components/ui';
 import { radius, rgb, space, useTheme } from '@/theme';
 
-/**
- * The biodata, on a phone (EZ1-I261).
- *
- * The web page is ten sections of form. This is not a transcription of it: a
- * ten-section form on a phone is a form people abandon in the third section,
- * and the parts of a biodata that actually change after it is first written are
- * few. So this screen answers the three questions somebody opens it with —
- * how far am I, what does it say about me, and can I fix the two things that
- * move — and says plainly where the rest is edited.
- *
- * What is editable here is what a family changes with the phone in their hand:
- * the photographs, the horoscope chart (which is usually a picture taken of a
- * piece of paper), and the partner preferences, which are the thing people
- * revise as the search goes on.
- *
- * Completeness is computed by the server from what is stored, so it cannot
- * drift from the truth the way a stored "complete" flag would.
- */
-interface Completion {
-  profileId: string;
-  complete: boolean;
-  percent: number;
-  sections: { section: string; complete: boolean; label: string }[];
-  missing: string[];
-}
-
-/** What `GET /profiles/:id/details` answers: the biodata is one field of it. */
 interface BiodataResponse {
   profileId: string;
   details: Record<string, unknown> | null;
-  /** The profile's own date of birth, which is kept on the profile, not the biodata. */
   dateOfBirth: string | null;
 }
 
-export default function Biodata() {
+export default function BiodataWizard() {
   const theme = useTheme();
   const qc = useQueryClient();
+  const router = useRouter();
 
-  // Whose biodata. An individual acts as themselves; the id comes from the
-  // profile the account owns rather than being asked for.
+  const [step, setStep] = useState(1);
+
   const { data: me, isPending: loadingMe } = useQuery({
     queryKey: ['me'],
     queryFn: async () =>
-      (await api.get('/users/me')).data as { id?: string | null; gender?: string | null },
+      (await api.get('/users/me')).data as { id?: string | null; gender?: string | null; displayName?: string | null; dateOfBirth?: string | null; city?: string | null },
     retry: false,
   });
-  // `/users/me` answers with the profile itself, so its id is the profile id.
   const profileId = me?.id ?? null;
 
-  const { data: completion } = useQuery({
-    queryKey: ['biodata-completion', profileId],
-    enabled: Boolean(profileId),
-    queryFn: async () =>
-      (await api.get(`/profiles/${profileId}/details/completion`)).data as Completion,
-    retry: false,
-  });
-
-  // The biodata is `details` inside the answer, beside the siblings, the assets,
-  // the contact numbers and the profile's own date of birth. Reading the whole
-  // answer as the biodata printed a dash on every row, read the horoscope as
-  // unavailable, and seeded the preferences form with defaults that a save then
-  // wrote back over the real ones.
   const { data: full, isPending } = useQuery({
     queryKey: ['biodata-details', profileId],
     enabled: Boolean(profileId),
@@ -114,8 +76,7 @@ export default function Biodata() {
         <Card>
           <SectionTitle>No profile yet</SectionTitle>
           <Body tone="muted">
-            This account has no matrimony profile. An agent creates one for the clients on their
-            book; an individual gets one on sign-up.
+            This account has no matrimony profile.
           </Body>
         </Card>
       </Screen>
@@ -123,12 +84,22 @@ export default function Biodata() {
   }
 
   const d = (full?.details ?? {}) as Record<string, unknown>;
-  const text = (key: string): string | null => {
-    const value = d[key];
-    return typeof value === 'string' && value.trim() ? value : null;
-  };
-  const bag = (key: string): Record<string, unknown> =>
-    (d[key] as Record<string, unknown> | undefined) ?? {};
+  const showMarital = d.maritalStatus && d.maritalStatus !== 'never_married';
+
+  const steps = [
+    { id: 'personal', title: 'Basic Information' },
+    ...(showMarital ? [{ id: 'marital', title: 'Marital History' }] : []),
+    { id: 'education', title: 'Education & Career' },
+    { id: 'family', title: 'Family Background' },
+    { id: 'horoscope', title: 'Horoscope' },
+    { id: 'preferences', title: 'Partner Preferences' },
+    { id: 'photos', title: 'Photographs' }
+  ];
+
+  const totalSteps = steps.length;
+  // Make sure step doesn't exceed totalSteps if marital status changes back to never_married
+  const currentStepIndex = Math.min(step - 1, totalSteps - 1);
+  const currentStep = steps[currentStepIndex];
 
   const refresh = () => {
     for (const key of ['biodata-details', 'biodata-completion', 'biodata-photos']) {
@@ -136,118 +107,127 @@ export default function Biodata() {
     }
   };
 
+  const nextStep = () => {
+    if (step < totalSteps) {
+      setStep(step + 1);
+    } else {
+      router.back();
+    }
+  };
+
+  const prevStep = () => {
+    if (step > 1) {
+      setStep(step - 1);
+    }
+  };
+
   return (
     <Screen>
-      <PageSubtitle>
-        What families read before they decide whether to ask about you. The more of it there is, the
-        more often that happens.
-      </PageSubtitle>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: space(2) }}>
+        <SectionTitle>{currentStep.title}</SectionTitle>
+        <Caption tone="muted" style={{ fontWeight: '600' }}>
+          Step {currentStepIndex + 1} of {totalSteps}
+        </Caption>
+      </View>
 
-      {completion ? (
-        <Card>
-          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: space(2) }}>
-            <SectionTitle style={{ flex: 1 }}>
-              {completion.complete ? 'Complete' : 'Still to finish'}
-            </SectionTitle>
-            <Body style={{ fontWeight: '600', fontVariant: ['tabular-nums'] }}>
-              {completion.percent}%
+      {currentStep.id === 'personal' && (
+        <PersonalForm
+          profileId={profileId}
+          me={me as Record<string, unknown>}
+          full={full}
+          onSaved={nextStep}
+        />
+      )}
+
+      {currentStep.id === 'marital' && (
+        <MaritalHistoryForm
+          profileId={profileId}
+          details={d}
+          onSaved={nextStep}
+          onBack={prevStep}
+          onSkip={nextStep}
+        />
+      )}
+
+      {currentStep.id === 'education' && (
+        <EducationCareerForm
+          profileId={profileId}
+          details={d}
+          onSaved={nextStep}
+          onBack={prevStep}
+          onSkip={nextStep}
+        />
+      )}
+
+      {currentStep.id === 'family' && (
+        <FamilyBackgroundForm
+          profileId={profileId}
+          details={d}
+          onSaved={nextStep}
+          onBack={prevStep}
+          onSkip={nextStep}
+        />
+      )}
+
+      {currentStep.id === 'horoscope' && (
+        <HoroscopeSection
+          profileId={profileId}
+          details={d}
+          onSaved={nextStep}
+          onBack={prevStep}
+          onSkip={nextStep}
+          isWizard
+        />
+      )}
+
+      {currentStep.id === 'preferences' && (
+        <PreferencesSection
+          profileId={profileId}
+          details={d}
+          onSaved={nextStep}
+          onBack={prevStep}
+          onSkip={nextStep}
+          isWizard
+        />
+      )}
+
+      {currentStep.id === 'photos' && (
+        <View style={{ gap: space(4) }}>
+          <Card>
+            <Body tone="muted">
+              A profile with photographs is asked about several times more often than one without.
             </Body>
-          </View>
-          <View
-            style={{
-              height: 6,
-              borderRadius: 3,
-              overflow: 'hidden',
-              backgroundColor: rgb(theme.surfaceSunken),
-            }}
-          >
-            <View
-              style={{
-                height: '100%',
-                width: `${completion.percent}%`,
-                backgroundColor: rgb(theme.brand),
+            {photos && (photos.photos ?? []).length === 0 ? (
+              <ProfileSilhouette
+                gender={me?.gender}
+                style={{ width: 116, height: 84, borderRadius: radius.sm }}
+              />
+            ) : null}
+            <MediaStrip
+              urls={photos?.photos ?? []}
+              onRemove={(url) => {
+                void api
+                  .delete(`/profiles/${profileId}/details/photos`, { data: { url } })
+                  .then(refresh);
               }}
             />
+            <PhotoPicker
+              label="Add a photograph"
+              onUploaded={(url) => {
+                void api.post(`/profiles/${profileId}/details/photos`, { url }).then(refresh);
+              }}
+            />
+          </Card>
+          <View style={{ flexDirection: 'row', gap: space(2) }}>
+            <Button
+              label="Back"
+              variant="outline"
+              onPress={prevStep}
+            />
+            <Button style={{ flex: 1 }} label="Finish" onPress={nextStep} />
           </View>
-          {completion.sections.map((section) => (
-            <View
-              key={section.section}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: space(2) }}
-            >
-              {section.complete ? (
-                <CheckCircle size={16} weight="fill" color={rgb(theme.positiveFg)} />
-              ) : (
-                <CircleDashed size={16} color={rgb(theme.ink[400])} />
-              )}
-              <Caption tone={section.complete ? 'muted' : 'default'}>{section.label}</Caption>
-            </View>
-          ))}
-        </Card>
-      ) : null}
-
-      <Card>
-        <SectionTitle>Photographs</SectionTitle>
-        <Body tone="muted">
-          A profile with photographs is asked about several times more often than one without.
-        </Body>
-        {/* The empty slot holds the groom or bride silhouette until a photo is added. */}
-        {photos && (photos.photos ?? []).length === 0 ? (
-          <ProfileSilhouette
-            gender={me?.gender}
-            style={{ width: 116, height: 84, borderRadius: radius.sm }}
-          />
-        ) : null}
-        <MediaStrip
-          urls={photos?.photos ?? []}
-          onRemove={(url) => {
-            void api
-              .delete(`/profiles/${profileId}/details/photos`, { data: { url } })
-              .then(refresh);
-          }}
-        />
-        <PhotoPicker
-          label="Add a photograph"
-          onUploaded={(url) => {
-            void api.post(`/profiles/${profileId}/details/photos`, { url }).then(refresh);
-          }}
-        />
-      </Card>
-
-      <Card>
-        <SectionTitle>Personal</SectionTitle>
-        <DetailGrid>
-          <DetailRow label="Name">
-            {[text('firstName'), text('lastName') ?? text('surname')].filter(Boolean).join(' ') ||
-              '—'}
-          </DetailRow>
-          <DetailRow label="Date of birth">
-            {formatDate(full?.dateOfBirth ?? text('dateOfBirth'), '—')}
-          </DetailRow>
-          <DetailRow label="Height">
-            {typeof d.heightCm === 'number' ? `${d.heightCm} cm` : '—'}
-          </DetailRow>
-          <DetailRow label="Complexion">{labelFor(COMPLEXION_LABEL, d.complexion) ?? '—'}</DetailRow>
-          <DetailRow label="Religion">{text('religion') ?? '—'}</DetailRow>
-          <DetailRow label="Caste">{text('caste') ?? '—'}</DetailRow>
-          <DetailRow label="Mother tongue">{text('motherTongue') ?? '—'}</DetailRow>
-          <DetailRow label="Qualification">{text('highestQualification') ?? '—'}</DetailRow>
-          <DetailRow label="Occupation">
-            {labelFor(OCCUPATION_LABEL, d.occupationStatus) ?? '—'}
-          </DetailRow>
-          <DetailRow label="Marital status">
-            {labelFor(MARITAL_LABEL, d.maritalStatus) ?? '—'}
-          </DetailRow>
-          <DetailRow label="Father">{(bag('father').name as string) || '—'}</DetailRow>
-          <DetailRow label="Mother">{(bag('mother').name as string) || '—'}</DetailRow>
-        </DetailGrid>
-        <Caption tone="faint">
-          These are edited on the web app, where the full form is. Everything below is editable
-          here.
-        </Caption>
-      </Card>
-
-      <HoroscopeSection profileId={profileId} details={d} onSaved={refresh} />
-      <PreferencesSection profileId={profileId} details={d} onSaved={refresh} />
+        </View>
+      )}
     </Screen>
   );
 }

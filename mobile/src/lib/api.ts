@@ -26,10 +26,8 @@ import { useAuth, type AuthUser } from '@/store/auth';
  * machine instead of trying to reach its own localhost. A production build
  * should always provide EXPO_PUBLIC_API_URL.
  */
-
-
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http:// 192.168.0.20:3000/api' ;
-
+const expoHost = Constants.expoConfig?.hostUri?.split(':')[0] ?? 'localhost';
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? `http://${expoHost}:3000/api`;
 /** Alphanumerics, dot, dash and underscore only: SecureStore rejects the rest. */
 const REFRESH_KEY = 'wow.refreshToken';
 
@@ -125,12 +123,12 @@ export async function signOutLocally(): Promise<void> {
  */
 export async function signOut(): Promise<void> {
   const stored = await keystore.get();
+  await signOutLocally();
   try {
     await api.post('/auth/logout', stored ? { refreshToken: stored } : {});
   } catch {
     /* revoked or unreachable; the local clear below is what the user asked for */
   }
-  await signOutLocally();
 }
 
 /**

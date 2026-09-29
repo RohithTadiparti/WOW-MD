@@ -5,6 +5,14 @@ export type ThemeChoice = 'light' | 'dark' | 'system';
 const STORAGE_KEY = 'wow-theme';
 
 /**
+ * Off while the product runs on the matrimony home template alone: that
+ * template is light only, so every page renders its ivory, maroon and gold
+ * whatever the operating system prefers. The dark tokens in index.css and the
+ * choice below are kept, so turning this back on is the whole of the work.
+ */
+export const DARK_MODE_ENABLED = false;
+
+/**
  * Resolves `system` against the operating system, and writes the answer onto
  * `<html>` as a class.
  *
@@ -15,7 +23,7 @@ const STORAGE_KEY = 'wow-theme';
  */
 function apply(choice: ThemeChoice): void {
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  const dark = choice === 'dark' || (choice === 'system' && prefersDark);
+  const dark = DARK_MODE_ENABLED && (choice === 'dark' || (choice === 'system' && prefersDark));
   document.documentElement.classList.toggle('dark', dark);
   document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
 }
