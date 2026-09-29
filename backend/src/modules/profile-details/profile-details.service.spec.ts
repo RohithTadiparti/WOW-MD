@@ -6,6 +6,7 @@ import { ProfileAsset } from './entities/profile-asset.entity';
 import { Profile } from '../users/entities/profile.entity';
 import { User } from '../auth/entities/user.entity';
 import { Interest } from '../matchmaking/entities/interest.entity';
+import { AiService } from '../ai/ai.service';
 import { RedisService } from '../../platform/redis/redis.service';
 import { ModerationService } from '../../platform/moderation/moderation.service';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
@@ -74,6 +75,7 @@ describe('ProfileDetailsService section saves', () => {
     redis,
     {} as ModerationService,
     {} as Repository<Interest>,
+    {} as AiService,
   );
 
   const personal = (over: Partial<PersonalDetailsDto> = {}) =>
