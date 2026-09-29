@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api, apiMessage } from '@/lib/api';
 import { SelectField } from '@/components/form';
-import { DobField } from '@/components/biodata/dob-field';
+import { WowCalendar } from '@/components/common/WowCalendar';
 import {
   Alert,
   Button,
@@ -154,7 +154,7 @@ export default function EditProfile() {
       {error ? <Alert tone="critical">{error}</Alert> : null}
 
       <Field label="Full Name" value={form.fullName} onChangeText={set('fullName')} />
-      <DobField label="Date of Birth" value={form.dateOfBirth} onChange={set('dateOfBirth')} />
+      <WowCalendar title="Select Date of Birth" label="Date of Birth" value={form.dateOfBirth} onChange={set('dateOfBirth')} />
       <SelectField label="Gender" value={form.gender} options={GENDERS} onChange={set('gender')} />
       <Field label="Height (cm)" value={form.heightCm} onChangeText={set('heightCm')} keyboardType="number-pad" maxLength={3} />
       <SelectField

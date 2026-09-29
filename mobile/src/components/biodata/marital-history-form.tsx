@@ -3,7 +3,8 @@ import { View } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api, apiMessage } from '@/lib/api';
-import { DateField, SelectField } from '@/components/form';
+import { SelectField } from '@/components/form';
+import { WowCalendar } from '@/components/common/WowCalendar';
 import { Alert, Button, Card, Field } from '@/components/ui';
 import { space } from '@/theme';
 
@@ -79,8 +80,8 @@ export function MaritalHistoryForm({
       {error ? <Alert tone="critical">{error}</Alert> : null}
       
       <Card>
-        <DateField label="Marriage Date" value={form.marriageDate} onChange={set('marriageDate')} />
-        <DateField label="Divorce/Separation Date" value={form.divorceDate} onChange={set('divorceDate')} />
+        <WowCalendar label="Marriage Date" title="Marriage Date" value={form.marriageDate} onChange={set('marriageDate')} />
+        <WowCalendar label="Divorce/Separation Date" title="Divorce/Separation Date" value={form.divorceDate} onChange={set('divorceDate')} />
         <Field label="Years Married" value={form.yearsMarried} onChangeText={setCount('yearsMarried')} keyboardType="number-pad" maxLength={2} />
       </Card>
       

@@ -3,13 +3,13 @@ import { View } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api, apiMessage } from '@/lib/api';
-import { DateField, SelectField } from '@/components/form';
+import { SelectField } from '@/components/form';
 import { Alert, Button, Card, Field } from '@/components/ui';
 import { CASTES_BY_RELIGION, MOTHER_TONGUES, RELIGIONS } from '@/shared/reference';
 import { STATES_BY_COUNTRY, districtsForState, DISTRICTS_BY_STATE } from '@/shared/locations';
 import { space } from '@/theme';
 import { ChoiceField, canonical } from './choice-field';
-import { DobField } from './dob-field';
+import { WowCalendar } from '@/components/common/WowCalendar';
 import { GENDERS, MARITAL, COMPLEXIONS, stored } from './constants';
 
 interface Form {
@@ -22,7 +22,6 @@ interface Form {
   caste: string;
   subCaste: string;
   motherTongue: string;
-  denomination: string;
   state: string;
   location: string;
   communicationAddress: string;
@@ -55,7 +54,6 @@ function formFrom(
     caste: canonical(String(d.caste ?? ''), CASTES_BY_RELIGION[religion] ?? []),
     subCaste: String(d.subCaste ?? ''),
     motherTongue: canonical(String(d.motherTongue ?? ''), MOTHER_TONGUES),
-    denomination: String(d.denomination ?? ''),
     state,
     location: city,
     communicationAddress: String(d.communicationAddress ?? ''),
@@ -122,7 +120,6 @@ export function PersonalForm({
           caste: form.caste.trim(),
           subCaste: form.subCaste.trim(),
           motherTongue: form.motherTongue.trim(),
-          denomination: form.denomination.trim() || undefined,
         });
       }
 
@@ -172,7 +169,7 @@ export function PersonalForm({
       {error ? <Alert tone="critical">{error}</Alert> : null}
       <Card>
         <Field label="Full Name" value={form.fullName} onChangeText={set('fullName')} />
-        <DobField label="Date of Birth" value={form.dateOfBirth} onChange={set('dateOfBirth')} to={maxDob} />
+        <WowCalendar label="Date of Birth" title="Select Date of Birth" value={form.dateOfBirth} onChange={set('dateOfBirth')} maximumDate={maxDob} />
         <SelectField label="Gender" value={form.gender} options={GENDERS} onChange={set('gender')} />
         <Field label="Height (cm)" value={form.heightCm} onChangeText={set('heightCm')} keyboardType="number-pad" maxLength={3} />
         <SelectField label="Complexion" value={form.complexion} options={COMPLEXIONS} onChange={set('complexion')} />
@@ -195,7 +192,6 @@ export function PersonalForm({
         />
         <Field label="Sub-Caste" value={form.subCaste} onChangeText={set('subCaste')} maxLength={60} />
         <ChoiceField label="Mother Tongue" value={form.motherTongue} options={MOTHER_TONGUES} onChange={set('motherTongue')} />
-        <Field label="Denomination" value={form.denomination} onChangeText={set('denomination')} maxLength={60} />
       </Card>
 
       <Card>

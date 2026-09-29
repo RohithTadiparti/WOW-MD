@@ -16,19 +16,25 @@ const MONTHS = [
 
 const WEEKDAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
-export function DobField({
+export function WowCalendar({
   label,
   value,
   onChange,
-  to,
+  minimumDate,
+  maximumDate,
+  title,
+  subtitle,
   hint,
   error,
-  placeholder = 'Select date of birth',
+  placeholder = 'Select date',
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
-  to?: string;
+  minimumDate?: string;
+  maximumDate?: string;
+  title?: string;
+  subtitle?: string;
   hint?: string;
   error?: string;
   placeholder?: string;
@@ -37,11 +43,11 @@ export function DobField({
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
   const [viewing, setViewing] = useState<'calendar' | 'month' | 'year'>('calendar');
-  
+
   const [tempValue, setTempValue] = useState(value);
-  
+
   const [cursor, setCursor] = useState(() => {
-    let anchor = value || to || new Date().toISOString().split('T')[0];
+    let anchor = value || maximumDate || minimumDate || new Date().toISOString().split('T')[0];
     return {
       year: Number(anchor.slice(0, 4)),
       month: Number(anchor.slice(5, 7)) - 1
@@ -52,17 +58,17 @@ export function DobField({
     if (open) {
       setTempValue(value);
       setViewing('calendar');
-      let anchor = value || to || new Date().toISOString().split('T')[0];
+      let anchor = value || maximumDate || minimumDate || new Date().toISOString().split('T')[0];
       setCursor({
         year: Number(anchor.slice(0, 4)),
         month: Number(anchor.slice(5, 7)) - 1
       });
     }
-  }, [open, value, to]);
+  }, [open, value, maximumDate, minimumDate]);
 
-  const maxYear = to ? Number(to.slice(0, 4)) : new Date().getFullYear();
-  const minYear = maxYear - 100;
-  
+  const maxYear = maximumDate ? Number(maximumDate.slice(0, 4)) : new Date().getFullYear() + 10;
+  const minYear = minimumDate ? Number(minimumDate.slice(0, 4)) : new Date().getFullYear() - 100;
+
   const years = useMemo(() => {
     const y = [];
     for (let i = maxYear; i >= minYear; i--) y.push(i);
@@ -74,22 +80,22 @@ export function DobField({
     const days = new Date(cursor.year, cursor.month + 1, 0).getDate();
     const firstDay = first.getDay();
     const prevDays = new Date(cursor.year, cursor.month, 0).getDate();
-    
+
     const arr = [];
     for (let i = 0; i < firstDay; i++) {
       arr.push({ type: 'prev', day: prevDays - firstDay + i + 1, iso: '' });
     }
-    
+
     for (let d = 1; d <= days; d++) {
       const iso = `${cursor.year}-${String(cursor.month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       arr.push({ type: 'current', day: d, iso });
     }
-    
+
     let nextDay = 1;
     while (arr.length % 7 !== 0) {
       arr.push({ type: 'next', day: nextDay++, iso: '' });
     }
-    
+
     return arr;
   }, [cursor.year, cursor.month]);
 
@@ -128,10 +134,12 @@ export function DobField({
           >
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: space(4) }}>
               <View style={{ flex: 1, paddingRight: space(2) }}>
-                <SectionTitle style={{ color: rgb(theme.brandStrong), marginBottom: space(1) }}>Select your date of birth</SectionTitle>
-                <Txt style={{ fontSize: 13, color: rgb(theme.ink[500]) }}>
-                  Your date of birth helps us find better matches for you.
-                </Txt>
+                <SectionTitle style={{ color: rgb(theme.brandStrong), marginBottom: space(1) }}>{title || `Select ${label}`}</SectionTitle>
+                {subtitle ? (
+                  <Txt style={{ fontSize: 13, color: rgb(theme.ink[500]) }}>
+                    {subtitle}
+                  </Txt>
+                ) : null}
               </View>
               <Pressable
                 onPress={handleClose}
@@ -203,7 +211,7 @@ export function DobField({
                           </View>
                         );
                       }
-                      const disabled = to ? cell.iso > to : false;
+                      const disabled = (maximumDate ? cell.iso > maximumDate : false) || (minimumDate ? cell.iso < minimumDate : false);
                       const isSelected = cell.iso === tempValue;
                       const isToday = cell.iso === todayIso;
 
@@ -312,10 +320,10 @@ export function DobField({
             {viewing === 'calendar' && (
               <View style={{ flexDirection: 'row', gap: space(3), paddingTop: space(4), marginTop: space(4), borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: rgb(theme.border) }}>
                 <Button label="Cancel" variant="outline" onPress={handleClose} style={{ flex: 1 }} />
-                <Button label="Done" onPress={handleSave} style={{ flex: 1 }} />
+                <Button label="Done" onPress={handleSave} style={{ flex: 1 }} disabled={!tempValue} />
               </View>
             )}
-            
+
             {viewing !== 'calendar' && (
               <View style={{ flexDirection: 'row', gap: space(3), paddingTop: space(4), marginTop: space(4), borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: rgb(theme.border) }}>
                 <Button label="Back" variant="outline" onPress={() => setViewing('calendar')} style={{ flex: 1 }} />

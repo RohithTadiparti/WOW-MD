@@ -15,7 +15,7 @@ import { api, apiMessage } from '@/lib/api';
 import { hhmm, money, rupees } from '@/lib/format';
 import { loadVendorShortlist, toggleVendorShortlist } from '@/lib/plan-shortlist';
 import { cleanAnswers, validateAnswers, type Answers, type FieldSpec } from '@/shared/dynamic-form';
-import { DateField } from '@/components/form';
+import { WowCalendar } from '@/components/common/WowCalendar';
 import { DynamicForm } from '@/components/dynamic-form';
 import { SOCIAL_KEYS, SocialLinksList, type SocialLinks } from '@/components/social-links';
 import {
@@ -508,14 +508,14 @@ export default function VendorDetail() {
                   </View>
                 </View>
               ) : null}
-              <DateField
+              <WowCalendar
                 label="Event date"
                 value={eventDate}
                 onChange={(date) => {
                   setEventDate(date);
                   setSlotId('');
                 }}
-                from={new Date().toISOString().slice(0, 10)}
+                minimumDate={new Date().toISOString().slice(0, 10)}
               />
               {eventDate && availability.isFetching ? (
                 <Loading rows={1} />

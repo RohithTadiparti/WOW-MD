@@ -406,11 +406,11 @@ function GuestForm({
     mutationFn: async () => {
       const body = {
         name: name.trim(),
-        ...(digits ? { phone: digits } : {}),
-        contact: email.trim(),
-        relation: relation.trim(),
+        phone: digits || null,
+        contact: email.trim() || null,
+        relation: relation.trim() || null,
         partySize,
-        notes: notes.trim(),
+        notes: notes.trim() || null,
       };
       return (guest ? await api.put(`/events/guests/${guest.id}`, body) : await api.post('/events/guests', body))
         .data as Guest;

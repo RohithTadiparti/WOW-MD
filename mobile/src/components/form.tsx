@@ -145,16 +145,14 @@ export function SelectField({
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
-  const [tempValue, setTempValue] = useState(value);
   const [search, setSearch] = useState('');
   const current = options.find((o) => o.value === value);
 
   useEffect(() => {
     if (open) {
-      setTempValue(value);
       setSearch('');
     }
-  }, [open, value]);
+  }, [open]);
 
   const filteredOptions = useMemo(() => {
     if (!search) return options;
@@ -185,16 +183,19 @@ export function SelectField({
             </View>
           </View>
         )}
-        <ScrollView style={{ paddingHorizontal: space(4), flexShrink: 1 }}>
+        <ScrollView style={{ paddingHorizontal: space(4), flexShrink: 1, marginBottom: insets.bottom + space(4) }}>
           {filteredOptions.map((option, i) => {
-            const active = option.value === tempValue;
+            const active = option.value === value;
             return (
               <Pressable
                 key={option.value}
                 accessibilityRole="radio"
                 accessibilityState={{ selected: active, disabled: Boolean(option.disabled) }}
                 disabled={option.disabled}
-                onPress={() => setTempValue(option.value)}
+                onPress={() => {
+                  onChange(option.value);
+                  setOpen(false);
+                }}
                 style={({ pressed }) => [
                   { flexDirection: 'row', alignItems: 'center', paddingVertical: space(3), paddingHorizontal: space(2), borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: rgb(theme.border), minHeight: 48, borderRadius: radius.sm },
                   active && { backgroundColor: rgba(theme.brand, 0.08) },
@@ -216,69 +217,6 @@ export function SelectField({
             </View>
           )}
         </ScrollView>
-        <View style={{ flexDirection: 'row', gap: space(3), paddingHorizontal: space(4), paddingTop: space(4), borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: rgb(theme.border) }}>
-          <Button label="Cancel" variant="outline" onPress={() => setOpen(false)} style={{ flex: 1 }} />
-          <Button label="Done" onPress={() => { onChange(tempValue); setOpen(false); }} style={{ flex: 1 }} />
-        </View>
-      </Sheet>
-    </Wrapper>
-  );
-}
-
-// ------------------------------------------------------------------- date --
-
-export function DateField({
-  label,
-  value,
-  onChange,
-  from,
-  to,
-  hint,
-  error,
-  placeholder = 'Pick a date',
-}: {
-  label: string;
-  /** `YYYY-MM-DD`, which is what every one of these endpoints takes. */
-  value: string;
-  onChange: (value: string) => void;
-  from?: string;
-  to?: string;
-  hint?: string;
-  error?: string;
-  placeholder?: string;
-}) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <Wrapper label={label} hint={hint} error={error}>
-      <Trigger
-        value={value ? formatLongDate(value) : undefined}
-        placeholder={placeholder}
-        invalid={Boolean(error)}
-        onPress={() => setOpen(true)}
-      />
-      <Sheet visible={open} title={label} onClose={() => setOpen(false)}>
-        <MonthCalendar
-          from={from}
-          to={to}
-          selected={value || undefined}
-          onSelect={(date) => {
-            onChange(date);
-            setOpen(false);
-          }}
-        />
-        {/* Clearing matters on the optional dates — a trading-since or a
-            quotation expiry entered by mistake has to be removable. */}
-        {value ? (
-          <Button
-            label="Clear"
-            variant="ghost"
-            onPress={() => {
-              onChange('');
-              setOpen(false);
-            }}
-          />
-        ) : null}
       </Sheet>
     </Wrapper>
   );

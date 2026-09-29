@@ -9,7 +9,8 @@ import { humanise, shortDate } from '@/lib/format';
 import { EVENT_STATUS_LABEL, clockTime } from '@/lib/labels';
 import { todayIso } from '@/shared/dates';
 import { Badge, StatTile, TileGrid } from '@/components/chrome';
-import { DateField, TimeField } from '@/components/form';
+import { TimeField } from '@/components/form';
+import { WowCalendar } from '@/components/common/WowCalendar';
 import { ListScreen } from '@/components/layout';
 import {
   Alert,
@@ -293,11 +294,11 @@ function EventForm({
     mutationFn: async () => {
       const body = {
         name: form.name.trim(),
-        ...(form.eventDate ? { eventDate: form.eventDate } : {}),
-        ...(form.startTime ? { startTime: form.startTime } : {}),
-        ...(form.venue.trim() ? { venue: form.venue.trim() } : {}),
-        ...(form.city.trim() ? { city: form.city.trim() } : {}),
-        ...(form.expectedGuests ? { expectedGuests: Number(form.expectedGuests) } : {}),
+        eventDate: form.eventDate || null,
+        startTime: form.startTime || null,
+        venue: form.venue.trim() || null,
+        city: form.city.trim() || null,
+        expectedGuests: form.expectedGuests ? Number(form.expectedGuests) : null,
       };
       if (event) await api.put(`/events/${event.id}`, body);
       else await api.post('/events', body);
@@ -320,7 +321,7 @@ function EventForm({
       />
       {/* A wedding is planned, not recorded: the day being added has not
           happened yet. */}
-      <DateField label="Day" value={form.eventDate} onChange={set('eventDate')} from={todayIso()} />
+      <WowCalendar label="Day" value={form.eventDate} onChange={set('eventDate')} minimumDate={todayIso()} />
       <TimeField label="Starts" value={form.startTime} onChange={set('startTime')} />
       <Field label="Venue" value={form.venue} onChangeText={set('venue')} />
       <Field label="City" value={form.city} onChangeText={set('city')} />

@@ -12,7 +12,7 @@ import { ArrowLeft, Heart, MapPin, Star } from 'phosphor-react-native';
 
 import { api, apiMessage } from '@/lib/api';
 import { loadPlannerShortlist, togglePlannerShortlist } from '@/lib/plan-shortlist';
-import { DateField } from '@/components/form';
+import { WowCalendar } from '@/components/common/WowCalendar';
 import { SocialLinksList, type SocialLinks } from '@/components/social-links';
 import {
   Alert,
@@ -343,11 +343,11 @@ export default function PlannerDetail() {
           {requesting ? (
             <Card style={{ gap: space(3) }}>
               <SectionTitle>Request Planner</SectionTitle>
-              <DateField
+              <WowCalendar
                 label="Wedding / event date"
                 value={eventDate}
                 onChange={setEventDate}
-                from={new Date().toISOString().slice(0, 10)}
+                minimumDate={new Date().toISOString().slice(0, 10)}
               />
               <Field
                 label="Budget (optional)"

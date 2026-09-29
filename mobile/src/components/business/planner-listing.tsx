@@ -161,13 +161,13 @@ export function PlannerListingForm() {
         portfolio,
       };
       // A blank is dropped rather than sent: an empty phone or email fails the
-      // server's format checks, and a field left out keeps what was saved.
+      // server's format checks, so we send null to clear it instead of dropping it.
       for (const key of ['city', 'contactPerson', 'contactPhone', 'contactEmail', 'address'] as const) {
-        if (form[key].trim()) payload[key] = form[key].trim();
+        payload[key] = form[key].trim() ? form[key].trim() : null;
       }
       // Always sent: a blank social link is how one is removed.
       for (const key of SOCIAL_KEYS) payload[key] = form[key].trim();
-      if (form.yearsExperience.trim()) payload.yearsExperience = Number(form.yearsExperience);
+      payload.yearsExperience = form.yearsExperience.trim() ? Number(form.yearsExperience) : null;
 
       await api.put('/wedding-planners/me', payload);
       for (const key of ['planner-me', 'payout-account', 'planner']) {

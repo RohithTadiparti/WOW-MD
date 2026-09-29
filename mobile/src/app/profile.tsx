@@ -7,7 +7,7 @@ import { formatDate } from '@/shared/dates';
 import { ROLE_LABEL } from '@/shared/permissions';
 import { DetailGrid, DetailRow } from '@/components/chrome';
 import { SelectField, Textarea } from '@/components/form';
-import { DobField } from '@/components/biodata/dob-field';
+import { WowCalendar } from '@/components/common/WowCalendar';
 import { ChoiceField } from '@/components/biodata/choice-field';
 import { STATES_BY_COUNTRY, districtsForState, DISTRICTS_BY_STATE } from '@/shared/locations';
 import {
@@ -191,11 +191,12 @@ export default function Profile() {
             options={GENDERS}
             onChange={set('gender')}
           />
-          <DobField
+          <WowCalendar
             label="Date of birth"
+            title="Select date of birth"
             value={form.dateOfBirth}
             onChange={set('dateOfBirth')}
-            to={latestAdultDob()}
+            maximumDate={latestAdultDob()}
           />
           <ChoiceField
             label="State"

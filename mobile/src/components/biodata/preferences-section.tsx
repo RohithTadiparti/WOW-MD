@@ -257,7 +257,7 @@ export function PreferencesSection({
           </>
         )}
       </Card>
-      
+
       {isWizard && (
         <View style={{ gap: space(2) }}>
           <View style={{ flexDirection: 'row', gap: space(2) }}>

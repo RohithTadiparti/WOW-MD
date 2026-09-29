@@ -11,7 +11,8 @@ import { PlannerListingForm } from '@/components/business/planner-listing';
 import { selectPermissions, useAuth } from '@/store/auth';
 import { GSTIN_PATTERN, PAN_PATTERN } from '@/shared/permissions';
 import { Divider, InfoNote } from '@/components/chrome';
-import { DateField, Textarea } from '@/components/form';
+import { Textarea } from '@/components/form';
+import { WowCalendar } from '@/components/common/WowCalendar';
 import { useCompletion, useRefreshBusiness } from '@/components/business/completion';
 import { VerifiedDetails } from '@/components/business/verified-details';
 import { CategoryPicker } from '@/components/business/category-picker';
@@ -234,8 +235,8 @@ function BusinessDetails() {
           'contactPhone',
         ] as const) {
           // An empty string is not "not provided" — sending one fails the
-          // format checks on GST and PAN, so blanks are dropped instead.
-          if (form[key]) payload[key] = form[key];
+          // format checks on GST and PAN, so we send null to clear it instead of dropping it.
+          payload[key] = form[key] ? form[key] : null;
         }
       }
       // Always sent: a blank social link is how one is removed.
@@ -444,11 +445,11 @@ function BusinessDetails() {
                 so families can see how long the business has run. Today or
                 earlier only; a future trading-since date is not a real one, and
                 the API enforces this too. */}
-            <DateField
+            <WowCalendar
               label="Trading since"
               value={form.tradingSince}
               onChange={set('tradingSince')}
-              to={todayIso()}
+              maximumDate={todayIso()}
               hint="Today or earlier."
             />
             <Textarea

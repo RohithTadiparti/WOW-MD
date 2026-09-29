@@ -5,7 +5,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiMessage } from '@/lib/api';
 import { todayIso } from '@/shared/dates';
 import { Badge } from '@/components/chrome';
-import { DateField, SelectField } from '@/components/form';
+import { SelectField } from '@/components/form';
+import { WowCalendar } from '@/components/common/WowCalendar';
 import { Alert, Body, Button, Card, Field, SectionTitle } from '@/components/ui';
 import { space } from '@/theme';
 
@@ -148,7 +149,7 @@ export function MyAvailability() {
 
           {onLeave && (
             <>
-              <DateField
+              <WowCalendar
                 label="From"
                 value={from}
                 onChange={(value) => {
@@ -158,14 +159,14 @@ export function MyAvailability() {
                   // it wrong.
                   if (to !== '' && to < value) setTo('');
                 }}
-                from={kept && kept < today ? kept : today}
+                minimumDate={kept && kept < today ? kept : today}
                 error={startInPast ? 'Leave cannot start before today.' : undefined}
               />
-              <DateField
+              <WowCalendar
                 label="To"
                 value={to}
                 onChange={setTo}
-                from={from || today}
+                minimumDate={from || today}
                 error={endBeforeStart ? 'End date cannot be before the start date.' : undefined}
               />
               <Field
