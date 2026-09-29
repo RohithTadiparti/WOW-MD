@@ -101,7 +101,7 @@ async function bootstrap() {
   // Bind all local interfaces so a phone on the same Wi-Fi can reach the API.
   // CORS remains configured above for browser clients; native Expo requests do
   // not use the browser Origin model.
-  await app.listen(cfg.runtime.port, '0.0.0.0');
+  await app.listen(cfg.runtime.port, cfg.runtime.host);
 }
 
 void bootstrap();

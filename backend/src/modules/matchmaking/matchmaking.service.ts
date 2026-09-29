@@ -20,6 +20,7 @@ import {
   MatchFixedState,
   ProfileClaimStatus,
   ProfileLifecycle,
+  ProfileVisibility,
   UserRole,
   isIndividual,
 } from '../../common/enums';
@@ -304,6 +305,7 @@ export class MatchmakingService {
           candidates = await this.profiles.find({
             where: {
               id: In(ids),
+              visibility: Not(ProfileVisibility.PRIVATE),
               lifecycle: ProfileLifecycle.ACTIVE,
             },
           });
@@ -327,6 +329,7 @@ export class MatchmakingService {
          */
         const base = {
           id: Not(me.id),
+          visibility: Not(ProfileVisibility.PRIVATE),
           lifecycle: ProfileLifecycle.ACTIVE,
         };
         const bases = want ? genderWhere(want).map((g) => ({ ...base, ...g })) : [base];
@@ -977,6 +980,9 @@ export class MatchmakingService {
     if (!target) throw new NotFoundException('That profile is unavailable');
     if (target.lifecycle !== ProfileLifecycle.ACTIVE) {
       throw new NotFoundException('That profile is unavailable');
+    }
+    if (target.visibility === ProfileVisibility.PRIVATE) {
+      throw new ForbiddenException('That profile is not accepting interests');
     }
     // Opposite genders only (EZ1-I134): a bride is matched to a groom and vice
     // versa. The suggestions already filter on this, but an interest sent by

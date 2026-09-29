@@ -27,6 +27,7 @@ import {
   MatchFixedState,
   NetworkVisibility,
   ProfileLifecycle,
+  ProfileVisibility,
   InterestStatus,
   ShareAudience,
   UserRole,
@@ -93,6 +94,11 @@ export class SharingService {
     const stewards = profile.managedByUserId === actor.userId;
     if (!owns && !stewards && actor.role !== UserRole.ADMIN) {
       throw new ForbiddenException('That profile is not yours to circulate');
+    }
+    if (profile.visibility === ProfileVisibility.PRIVATE) {
+      throw new BadRequestException(
+        'This profile is marked private. Change its visibility before circulating it.',
+      );
     }
     await this.consent.assertMayCirculate(profile);
     await this.assertBiodataComplete(profile);
@@ -397,6 +403,7 @@ export class SharingService {
     const qb = this.profiles
       .createQueryBuilder('p')
       .where('p."networkVisibility" = :pool', { pool: NetworkVisibility.POOL })
+      .andWhere('p.visibility != :private', { private: ProfileVisibility.PRIVATE })
       .andWhere('(p."managedByUserId" IS NULL OR p."managedByUserId" != :me)', { me: actor.userId })
       /*
        * Somebody whose match is fixed is not available.

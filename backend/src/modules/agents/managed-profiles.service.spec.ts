@@ -73,7 +73,7 @@ describe('managed profile biodata intake', () => {
 
   it('does not invent missing marital, employment or family facts', async () => {
     const { service, detailsRepo } = await setup();
-    await service.create(actor, { ...dto, contactPhone: undefined, biodata: { firstName: 'Rahul' } });
+    await service.create(actor, { ...dto, contactPhone: '9876543211', biodata: { firstName: 'Rahul' } });
     expect(detailsRepo.save).toHaveBeenCalledWith({ profileId: 'profile-1', biodataDocumentUrl: null, firstName: 'Rahul' });
   });
 

@@ -226,10 +226,11 @@ export class CirculationController {
   @Get('pool')
   async searchPool(@CurrentUser() actor: AuthUser, @Query() q: PoolSearchDto) {
     const page = await this.sharing.searchPool(actor, q);
-    return { ...page, data: await Promise.all(page.data.map(async profile => ({
-      ...(await this.details.findViewable(actor, profile.id)).profile,
-      basic: await this.details.basicCard(profile.id),
-    }))) };
+    const cards = await this.details.basicCards(page.data.map((profile) => profile.id));
+    return {
+      ...page,
+      data: page.data.map((profile) => toBiodata(profile, cards.get(profile.id))),
+    };
   }
 
   @ApiBearerAuth()

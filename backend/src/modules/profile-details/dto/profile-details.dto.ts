@@ -47,7 +47,7 @@ import {
  * until they have decided what they want their partner's caste to be.
  */
 
-class LocationDto {
+export class LocationDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(80) country?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(80) state?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(80) district?: string;
@@ -312,7 +312,7 @@ export class MaritalDetailsDto {
   childrenLivingWith?: string;
 }
 
-class ParentDto {
+export class ParentDto {
   @ApiProperty()
   @IsString()
   @Transform(normaliseName)

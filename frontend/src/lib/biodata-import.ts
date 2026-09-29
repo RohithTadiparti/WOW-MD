@@ -258,7 +258,14 @@ export async function readBiodata(file: File): Promise<Record<string, string>> {
   if (!(pdf || png || jpeg)) throw new Error('Choose a valid PDF, JPG or PNG file.');
   let worker: Awaited<ReturnType<typeof import('tesseract.js').createWorker>> | undefined;
   const ocr = async (source: File | HTMLCanvasElement) => {
-    worker ??= await (await import('tesseract.js')).createWorker('eng');
+    // All OCR runtime files are served with the application. Tesseract's defaults
+    // point at a public CDN, which would otherwise make uploads depend on it.
+    const ocrBase = `${import.meta.env.BASE_URL}ocr`;
+    worker ??= await (await import('tesseract.js')).createWorker('eng', undefined, {
+      workerPath: `${ocrBase}/worker.min.js`,
+      corePath: `${ocrBase}/core/tesseract-core.wasm.js`,
+      langPath: `${ocrBase}/lang`,
+    });
     const { data } = await worker.recognize(source);
     if (data.confidence < 60) throw new Error('This scan is not clear enough to import reliably. Use a clearer image or enter the details manually.');
     return data.text;

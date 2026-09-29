@@ -131,14 +131,13 @@ export class CreateManagedProfileDto {
   @MaxLength(120)
   displayName: string;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     example: '+919876543210',
-    description: 'The primary way to reach this family.',
+    description: 'The primary way to reach this family. Required.',
   })
-  @IsOptional()
   @Transform(normaliseMobile)
   @Matches(MOBILE_PATTERN, { message: MOBILE_MESSAGE })
-  contactPhone?: string;
+  contactPhone: string;
 
   @ApiPropertyOptional({
     example: 'priya@example.com',

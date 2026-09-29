@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
@@ -25,6 +26,9 @@ import {
 } from '../../common/enums';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { MOBILE_MESSAGE, MOBILE_PATTERN } from '../../common/util/identity-fields';
+
+const INVITATION_OTP_TTL_SECONDS = 10 * 60;
+const INVITATION_OTP_MAX_ATTEMPTS = 5;
 
 /** What the public invitation-landing page is allowed to see. */
 export interface InvitationPreview {
@@ -254,18 +258,51 @@ export class InvitationsService {
   }
 
   /** Sends an OTP to the mobile number on an SMS-only invitation for verification. */
-  async sendOtp(token: string): Promise<{ sent: true; devCode?: string }> {
+  async sendOtp(token: string): Promise<{ sent: true }> {
     const invitation = await this.loadPending(token);
-    if (!invitation.phone) {
-      throw new BadRequestException('This invitation does not have a mobile number');
+    if (invitation.email || !invitation.phone) {
+      throw new BadRequestException('Mobile verification is only required for SMS-only invitations');
     }
+    const redis = this.redis?.raw;
+    if (!redis) throw new ServiceUnavailableException('Mobile verification is temporarily unavailable');
     const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
-    if (this.redis?.raw) {
-      await this.redis.raw.set(`invitation:otp:${invitation.id}`, hashToken(code), 'EX', 600);
-    }
+    const otpKey = `invitation:otp:${invitation.id}`;
+    const attemptsKey = `invitation:otp:attempts:${invitation.id}`;
+    await redis.multi().set(otpKey, hashToken(code), 'EX', INVITATION_OTP_TTL_SECONDS)
+      .del(attemptsKey).exec();
     await this.sms.sendPhoneVerification({ to: invitation.phone, code });
-    const dev = this.cfg.mail.provider === 'log' ? { devCode: code } : {};
-    return { sent: true, ...dev };
+    return { sent: true };
+  }
+
+  /** Atomically checks, consumes, and rate-limits a single invitation OTP. */
+  private async verifyInvitationOtp(invitationId: string, code: string): Promise<boolean> {
+    const redis = this.redis?.raw;
+    if (!redis) throw new ServiceUnavailableException('Mobile verification is temporarily unavailable');
+    const otpKey = `invitation:otp:${invitationId}`;
+    const attemptsKey = `invitation:otp:attempts:${invitationId}`;
+    const result = await redis.eval(
+      `local stored = redis.call('GET', KEYS[1])
+       if stored and stored == ARGV[1] then
+         redis.call('DEL', KEYS[1])
+         redis.call('DEL', KEYS[2])
+         return { 1, 0 }
+       end
+       local attempts = redis.call('INCR', KEYS[2])
+       if attempts == 1 then redis.call('EXPIRE', KEYS[2], ARGV[2]) end
+       if attempts >= tonumber(ARGV[3]) then redis.call('DEL', KEYS[1]) end
+       return { 0, attempts }`,
+      2,
+      otpKey,
+      attemptsKey,
+      hashToken(code),
+      String(INVITATION_OTP_TTL_SECONDS),
+      String(INVITATION_OTP_MAX_ATTEMPTS),
+    ) as [number, number];
+    if (result[0] === 1) return true;
+    if (result[1] >= INVITATION_OTP_MAX_ATTEMPTS) {
+      throw new BadRequestException('Too many incorrect verification codes. Request a new code.');
+    }
+    return false;
   }
 
   /**
@@ -334,12 +371,16 @@ export class InvitationsService {
         if (numberTaken) throw new ConflictException('That mobile number already has an account');
       }
 
-      if (!invitation.email && invitation.phone && otpCode && this.redis?.raw) {
-        const stored = await this.redis.raw.get(`invitation:otp:${invitation.id}`);
-        if (!stored || stored !== hashToken(otpCode)) {
+      const smsOnly = !invitation.email && Boolean(invitation.phone);
+      let phoneVerifiedAt: Date | null = null;
+      if (smsOnly) {
+        if (!otpCode) {
+          throw new BadRequestException('Enter the mobile verification code to claim this invitation');
+        }
+        if (!(await this.verifyInvitationOtp(invitation.id, otpCode))) {
           throw new BadRequestException('Invalid or expired mobile verification code');
         }
-        await this.redis.raw.del(`invitation:otp:${invitation.id}`);
+        phoneVerifiedAt = new Date();
       }
 
       const passwordHash = await bcrypt.hash(password, this.cfg.auth.bcryptRounds);
@@ -358,7 +399,7 @@ export class InvitationsService {
           // nothing, so that account starts unverified like any other.
           isVerified: Boolean(invitation.email),
           emailVerifiedAt: invitation.email ? new Date() : null,
-          phoneVerifiedAt: invitation.phone ? new Date() : null,
+          phoneVerifiedAt,
         }),
       );
 

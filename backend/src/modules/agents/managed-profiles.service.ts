@@ -135,8 +135,8 @@ export class ManagedProfilesService {
           if (biodata.firstName) row.firstName = biodata.firstName;
           if (biodata.lastName) row.lastName = biodata.lastName;
           else if (biodata.surname) row.lastName = biodata.surname;
-          if (biodata.residence) row.residence = biodata.residence;
-          if (biodata.business) row.business = biodata.business;
+          if (biodata.residence) row.residence = biodata.residence as Record<string, string>;
+          if (biodata.business) row.business = biodata.business as Record<string, unknown>;
           if (biodata.heightCm) row.heightCm = Number(biodata.heightCm) || null;
           if (biodata.complexion) row.complexion = biodata.complexion;
           if (biodata.nativePlace) row.nativePlace = biodata.nativePlace;

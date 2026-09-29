@@ -561,8 +561,17 @@ export class ProfileDetailsService {
    * decide, without the native place, which stays behind a fixed match.
    */
   async basicCard(profileId: string) {
-    const row = await this.details.findOne({ where: { profileId } });
-    if (!row) return null;
+    return (await this.basicCards([profileId])).get(profileId) ?? null;
+  }
+
+  /** Card facts for a page of profiles, fetched in one details query. */
+  async basicCards(profileIds: string[]) {
+    if (!profileIds.length) return new Map();
+    const rows = await this.details.find({ where: { profileId: In(profileIds) } });
+    return new Map(rows.map((row) => [row.profileId, this.cardFor(row)]));
+  }
+
+  private cardFor(row: ProfileDetails) {
     const card = toCardFacts(row);
     return {
       religion: card.religion,
@@ -748,7 +757,7 @@ export class ProfileDetailsService {
       actor.role === UserRole.ADMIN;
 
     const basicOnly = !(await this.canSeeFull(actor, profile));
-    if (!controlsIt && profile.lifecycle !== ProfileLifecycle.ACTIVE && basicOnly) {
+    if (!controlsIt && profile.lifecycle !== ProfileLifecycle.ACTIVE) {
       throw new NotFoundException('That profile is not available');
     }
     if (basicOnly) {

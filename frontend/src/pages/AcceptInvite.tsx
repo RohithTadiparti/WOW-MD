@@ -50,16 +50,9 @@ export default function AcceptInvite() {
     setError('');
     setOtpNotice('');
     try {
-      const res = await api.post('/auth/invitations/send-otp', { token });
+      await api.post('/auth/invitations/send-otp', { token });
       setOtpSent(true);
-      setOtpNotice(
-        res.data?.devCode
-          ? `Code sent! (Dev code: ${res.data.devCode})`
-          : 'A 6-digit verification code has been sent to your mobile phone.',
-      );
-      if (res.data?.devCode) {
-        setOtpCode(res.data.devCode);
-      }
+      setOtpNotice('A 6-digit verification code has been sent to your mobile phone.');
     } catch (err) {
       setError(apiMessage(err, 'Failed to send verification code.'));
     } finally {
