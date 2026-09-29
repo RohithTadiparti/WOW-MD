@@ -1,0 +1,3 @@
+[submodule "docker/WOW-MD"]
+	path = docker/WOW-MD
+	url = https://github.com/Tadipartirohith/WOW-MD.git
