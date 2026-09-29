@@ -72,6 +72,8 @@ jobs:
 
       - run: npm test -- --coverage
       - run: npm run migration:run
+      - run: npm ci --prefix ../frontend
+      - run: npm run build --prefix ../frontend
       - run: npm run test:e2e
 
   frontend:
