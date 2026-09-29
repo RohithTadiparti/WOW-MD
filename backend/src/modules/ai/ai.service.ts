@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, forwardRef } from '@nestjs/common';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { MatchmakingService } from '../matchmaking/matchmaking.service';
 import { VendorsService } from '../vendors/vendors.service';
@@ -17,8 +17,8 @@ import { BUDGET_ALLOCATION } from './genie-knowledge';
 @Injectable()
 export class AiService {
   constructor(
-    private readonly matchmaking: MatchmakingService,
-    private readonly vendors: VendorsService,
+    @Inject(forwardRef(() => MatchmakingService)) private readonly matchmaking: MatchmakingService,
+    @Inject(forwardRef(() => VendorsService)) private readonly vendors: VendorsService,
     @Inject(AI_PROVIDER) private readonly ai: AiProvider,
   ) {}
 
@@ -91,5 +91,32 @@ export class AiService {
   async assistant(question: string) {
     const answer = await this.ai.complete(question);
     return { question, answer };
+  }
+
+  async extractBiodata(documentUrl: string) {
+    const prompt = `You are a biodata extraction assistant. Please extract all the available biodata fields from this image and return them as a JSON object matching this exact structure:
+{
+  "firstName": "string (required if found)",
+  "lastName": "string",
+  "dateOfBirth": "YYYY-MM-DD",
+  "heightCm": "number (in cm)",
+  "complexion": "string (Fair, Wheatish, Dark)",
+  "communicationAddress": "string",
+  "alternateMobile": "string",
+  "religion": "string",
+  "caste": "string",
+  "subCaste": "string",
+  "motherTongue": "string",
+  "maritalStatus": "string (never_married, divorced, widowed, awaiting_divorce)",
+  "education": { "highestQualification": "string", "course": "string", "institution": "string", "occupationStatus": "string (employed, self_employed, not_working)" },
+  "family": { "father": { "name": "string", "profession": "string" }, "mother": { "name": "string", "profession": "string" } }
+}
+Do not invent values. If a field is not present in the document, omit it or set it to null. Return ONLY raw JSON, without markdown formatting or code blocks.`;
+    const responseText = await this.ai.complete(prompt, documentUrl);
+    try {
+      return JSON.parse(responseText.replace(/^```json|```$/g, '').trim());
+    } catch {
+      return {};
+    }
   }
 }

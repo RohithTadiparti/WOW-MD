@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Put } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags, ApiBody } from '@nestjs/swagger';
 import { ProfileDetailsService } from './profile-details.service';
 import {
   AssetDto,
@@ -138,6 +138,16 @@ export class ProfileDetailsController {
   @Delete('details')
   clearBiodata(@CurrentUser() actor: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.details.clearBiodata(actor, id);
+  }
+
+  @Post('details/extract')
+  @ApiBody({ schema: { type: 'object', properties: { documentUrl: { type: 'string' } } } })
+  async extractBiodata(
+    @CurrentUser() actor: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body('documentUrl') documentUrl: string,
+  ) {
+    return this.details.extractBiodata(actor, id, documentUrl);
   }
 
   // -------------------------------------------------------------- photographs

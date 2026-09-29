@@ -1,4 +1,4 @@
-import { useState } from 'react';
+  import { useState, useEffect } from 'react';
 import { View, ScrollView } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
@@ -11,6 +11,7 @@ import {
   FamilyBackgroundForm,
   HoroscopeSection,
   PreferencesSection,
+  UploadFlow,
 } from '@/components/biodata';
 import { MediaStrip, PhotoPicker } from '@/components/uploader';
 import { ProfileSilhouette } from '@/components/profile-silhouette';
@@ -36,7 +37,8 @@ export default function BiodataWizard() {
   const qc = useQueryClient();
   const router = useRouter();
 
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(0);
+  const [autofilledKeys, setAutofilledKeys] = useState<Set<string>>(new Set());
 
   const { data: me, isPending: loadingMe } = useQuery({
     queryKey: ['me'],
@@ -61,6 +63,16 @@ export default function BiodataWizard() {
       (await api.get(`/profiles/${profileId}/details/photos`)).data as { photos: string[] },
     retry: false,
   });
+
+  // Skip selection screen if already has details
+  useEffect(() => {
+    if (step === 0 && full !== undefined) {
+      const hasDetails = Object.keys(full?.details ?? {}).length > 0;
+      if (hasDetails) {
+        setStep(1);
+      }
+    }
+  }, [step, full]);
 
   if (loadingMe || (profileId && isPending)) {
     return (
@@ -121,6 +133,59 @@ export default function BiodataWizard() {
     }
   };
 
+  if (step === 0) {
+    return (
+      <Screen scroll={false}>
+        <UploadFlow
+          profileId={profileId}
+          onCustom={() => setStep(1)}
+          onExtracted={(data) => {
+            const flatData = {
+              ...data,
+              ...(data.education || {}),
+              father: data.family?.father ?? data.father,
+              mother: data.family?.mother ?? data.mother,
+            };
+            delete flatData.education;
+            delete flatData.family;
+
+            const keys = new Set<string>();
+            const traverse = (obj: any, prefix = '') => {
+              if (!obj || typeof obj !== 'object') return;
+              for (const [k, v] of Object.entries(obj)) {
+                if (v) {
+                  keys.add(prefix ? `${prefix}.${k}` : k);
+                  traverse(v, prefix ? `${prefix}.${k}` : k);
+                }
+              }
+            };
+            traverse(flatData);
+            setAutofilledKeys(keys);
+
+            // Update local cache
+            qc.setQueryData(['me'], (old: any) => ({
+              ...old,
+              displayName: data.firstName ? `${data.firstName} ${data.lastName ?? ''}`.trim() : old?.displayName,
+              dateOfBirth: data.dateOfBirth ?? old?.dateOfBirth,
+              gender: data.gender ?? old?.gender,
+            }));
+
+            qc.setQueryData(['biodata-details', profileId], (old: any) => {
+              return {
+                ...old,
+                details: {
+                  ...(old?.details ?? {}),
+                  ...flatData,
+                }
+              };
+            });
+            setStep(1);
+          }}
+        />
+      </Screen>
+    );
+  }
+
   return (
     <Screen>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: space(2) }}>
@@ -137,6 +202,7 @@ export default function BiodataWizard() {
           full={full}
           onSaved={nextStep}
           onBack={prevStep}
+          autofilledKeys={autofilledKeys}
         />
       )}
 
@@ -147,6 +213,7 @@ export default function BiodataWizard() {
           onSaved={nextStep}
           onBack={prevStep}
           onSkip={nextStep}
+          autofilledKeys={autofilledKeys}
         />
       )}
 
@@ -157,6 +224,7 @@ export default function BiodataWizard() {
           onSaved={nextStep}
           onBack={prevStep}
           onSkip={nextStep}
+          autofilledKeys={autofilledKeys}
         />
       )}
 
@@ -167,6 +235,7 @@ export default function BiodataWizard() {
           onSaved={nextStep}
           onBack={prevStep}
           onSkip={nextStep}
+          autofilledKeys={autofilledKeys}
         />
       )}
 

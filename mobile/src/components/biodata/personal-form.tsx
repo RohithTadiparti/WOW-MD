@@ -68,12 +68,14 @@ export function PersonalForm({
   full,
   onSaved,
   onBack,
+  autofilledKeys,
 }: {
   profileId: string | null;
   me: Record<string, unknown>;
   full?: { details?: Record<string, unknown> | null; dateOfBirth?: string | null };
   onSaved: () => void;
   onBack?: () => void;
+  autofilledKeys?: Set<string>;
 }) {
   const qc = useQueryClient();
   const [error, setError] = useState('');
@@ -168,12 +170,12 @@ export function PersonalForm({
     <View style={{ gap: space(4) }}>
       {error ? <Alert tone="critical">{error}</Alert> : null}
       <Card>
-        <Field label="Full Name" value={form.fullName} onChangeText={set('fullName')} />
-        <WowCalendar label="Date of Birth" title="Select Date of Birth" value={form.dateOfBirth} onChange={set('dateOfBirth')} maximumDate={maxDob} />
-        <SelectField label="Gender" value={form.gender} options={GENDERS} onChange={set('gender')} />
-        <Field label="Height (cm)" value={form.heightCm} onChangeText={set('heightCm')} keyboardType="number-pad" maxLength={3} />
-        <SelectField label="Complexion" value={form.complexion} options={COMPLEXIONS} onChange={set('complexion')} />
-        <SelectField label="Marital Status" value={form.maritalStatus} options={MARITAL} onChange={set('maritalStatus')} />
+        <Field label="Full Name" value={form.fullName} onChangeText={set('fullName')} required autoFilled={autofilledKeys?.has('firstName') || autofilledKeys?.has('lastName')} />
+        <WowCalendar label="Date of Birth" title="Select Date of Birth" value={form.dateOfBirth} onChange={set('dateOfBirth')} maximumDate={maxDob} required autoFilled={autofilledKeys?.has('dateOfBirth')} />
+        <SelectField label="Gender" value={form.gender} options={GENDERS} onChange={set('gender')} required autoFilled={autofilledKeys?.has('gender')} />
+        <Field label="Height (cm)" value={form.heightCm} onChangeText={set('heightCm')} keyboardType="number-pad" maxLength={3} required autoFilled={autofilledKeys?.has('heightCm')} />
+        <SelectField label="Complexion" value={form.complexion} options={COMPLEXIONS} onChange={set('complexion')} required autoFilled={autofilledKeys?.has('complexion')} />
+        <SelectField label="Marital Status" value={form.maritalStatus} options={MARITAL} onChange={set('maritalStatus')} required autoFilled={autofilledKeys?.has('maritalStatus')} />
       </Card>
 
       <Card>
@@ -182,6 +184,8 @@ export function PersonalForm({
           value={form.religion}
           options={RELIGIONS}
           onChange={(religion) => setDraft({ ...form, religion, caste: '' })}
+          required
+          autoFilled={autofilledKeys?.has('religion')}
         />
         <ChoiceField
           key={`caste-${form.religion}`}
@@ -189,9 +193,11 @@ export function PersonalForm({
           value={form.caste}
           options={CASTES_BY_RELIGION[form.religion] ?? []}
           onChange={set('caste')}
+          required
+          autoFilled={autofilledKeys?.has('caste')}
         />
-        <Field label="Sub-Caste" value={form.subCaste} onChangeText={set('subCaste')} maxLength={60} />
-        <ChoiceField label="Mother Tongue" value={form.motherTongue} options={MOTHER_TONGUES} onChange={set('motherTongue')} />
+        <Field label="Sub-Caste" value={form.subCaste} onChangeText={set('subCaste')} maxLength={60} required autoFilled={autofilledKeys?.has('subCaste')} />
+        <ChoiceField label="Mother Tongue" value={form.motherTongue} options={MOTHER_TONGUES} onChange={set('motherTongue')} required autoFilled={autofilledKeys?.has('motherTongue')} />
       </Card>
 
       <Card>
@@ -206,10 +212,11 @@ export function PersonalForm({
               location: districtsForState(newState).includes(form.location) ? form.location : '',
             });
           }}
+          autoFilled={autofilledKeys?.has('state')}
         />
-        <ChoiceField label="City" value={form.location} options={districtsForState(form.state)} onChange={set('location')} />
-        <Field label="Communication Address" value={form.communicationAddress} onChangeText={set('communicationAddress')} />
-        <Field label="Alternate Mobile" value={form.alternateMobile} onChangeText={set('alternateMobile')} keyboardType="phone-pad" />
+        <ChoiceField label="City" value={form.location} options={districtsForState(form.state)} onChange={set('location')} autoFilled={autofilledKeys?.has('location')} />
+        <Field label="Communication Address" value={form.communicationAddress} onChangeText={set('communicationAddress')} required autoFilled={autofilledKeys?.has('communicationAddress')} />
+        <Field label="Alternate Mobile" value={form.alternateMobile} onChangeText={set('alternateMobile')} keyboardType="phone-pad" autoFilled={autofilledKeys?.has('alternateMobile')} />
       </Card>
 
       <View style={{ flexDirection: 'row', gap: space(2) }}>

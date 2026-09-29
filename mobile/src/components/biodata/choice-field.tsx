@@ -20,6 +20,8 @@ export function ChoiceField({
   options,
   allowOther = true,
   placeholder = 'Not stated',
+  required,
+  autoFilled,
 }: {
   label: string;
   value: string;
@@ -27,6 +29,8 @@ export function ChoiceField({
   options: readonly string[];
   allowOther?: boolean;
   placeholder?: string;
+  required?: boolean;
+  autoFilled?: boolean;
 }) {
   const [otherPicked, setOtherPicked] = useState(false);
   const showOther = allowOther && (otherPicked || isOffList(value, options));
@@ -38,6 +42,8 @@ export function ChoiceField({
         label={label}
         value={showOther ? OTHER : value}
         placeholder={placeholder}
+        required={required}
+        autoFilled={autoFilled}
         options={[{ value: '', label: placeholder }, ...list.map((o) => ({ value: o, label: o }))]}
         onChange={(next) => {
           setOtherPicked(next === OTHER && allowOther);
@@ -51,6 +57,8 @@ export function ChoiceField({
           onChangeText={onChange}
           placeholder={`Type the ${label.toLowerCase()}`}
           maxLength={60}
+          required={required}
+          autoFilled={autoFilled}
         />
       ) : null}
     </>
@@ -64,12 +72,16 @@ export function DependentLocation({
   district,
   onChange,
   labels = { country: 'Country', state: 'State', district: 'District' },
+  required,
+  autoFilled,
 }: {
   country: string;
   state: string;
   district: string;
   onChange: (next: { country: string; state: string; district: string }) => void;
   labels?: { country: string; state: string; district: string };
+  required?: boolean;
+  autoFilled?: boolean;
 }) {
   return (
     <>
@@ -78,6 +90,8 @@ export function DependentLocation({
         value={country}
         options={COUNTRIES}
         onChange={(v) => onChange({ country: v, state: '', district: '' })}
+        required={required}
+        autoFilled={autoFilled}
       />
       <ChoiceField
         key={`state-${country}`}
@@ -85,6 +99,8 @@ export function DependentLocation({
         value={state}
         options={statesForCountry(country)}
         onChange={(v) => onChange({ country, state: v, district: '' })}
+        required={required}
+        autoFilled={autoFilled}
       />
       <ChoiceField
         key={`district-${country}-${state}`}
@@ -92,6 +108,8 @@ export function DependentLocation({
         value={district}
         options={districtsForState(state)}
         onChange={(v) => onChange({ country, state, district: v })}
+        required={required}
+        autoFilled={autoFilled}
       />
     </>
   );

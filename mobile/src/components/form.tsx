@@ -26,10 +26,20 @@ import { Txt } from '@/theme/fonts';
 
 // ------------------------------------------------------------------ label --
 
-function Label({ children }: { children: string }) {
+function Label({ children, required, autoFilled }: { children: string; required?: boolean; autoFilled?: boolean }) {
   const theme = useTheme();
   return (
-    <Txt style={{ fontSize: 13, fontWeight: '500', color: rgb(theme.ink[600]) }}>{children}</Txt>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(1) }}>
+      <Txt style={{ fontSize: 13, fontWeight: '500', color: rgb(theme.ink[600]) }}>
+        {children}
+        {required ? <Txt style={{ color: rgb(theme.criticalFg) }}> *</Txt> : null}
+      </Txt>
+      {autoFilled && (
+        <View style={{ backgroundColor: rgb(theme.positiveBg), paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, flexDirection: 'row', alignItems: 'center' }}>
+          <Txt style={{ color: rgb(theme.positiveFg), fontSize: 10, fontWeight: '700' }}>AUTO-FILLED</Txt>
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -94,16 +104,20 @@ export function Wrapper({
   label,
   hint,
   error,
+  required,
+  autoFilled,
   children,
 }: {
   label: string;
   hint?: string;
   error?: string;
+  required?: boolean;
+  autoFilled?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <View style={{ gap: space(1.5) }}>
-      <Label>{label}</Label>
+      <Label required={required} autoFilled={autoFilled}>{label}</Label>
       {children}
       {error ? <Caption tone="critical">{error}</Caption> : null}
       {hint && !error ? <Caption tone="faint">{hint}</Caption> : null}
@@ -132,6 +146,8 @@ export function SelectField({
   hint,
   error,
   disabled,
+  required,
+  autoFilled,
 }: {
   label: string;
   value: string;
@@ -141,6 +157,8 @@ export function SelectField({
   hint?: string;
   error?: string;
   disabled?: boolean;
+  required?: boolean;
+  autoFilled?: boolean;
 }) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -161,7 +179,7 @@ export function SelectField({
   }, [options, search]);
 
   return (
-    <Wrapper label={label} hint={hint} error={error}>
+    <Wrapper label={label} hint={hint} error={error} required={required} autoFilled={autoFilled}>
       <Trigger
         value={current?.label}
         placeholder={placeholder}

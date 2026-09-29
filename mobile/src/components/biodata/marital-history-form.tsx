@@ -23,12 +23,14 @@ export function MaritalHistoryForm({
   onSaved,
   onBack,
   onSkip,
+  autofilledKeys,
 }: {
   profileId: string;
   details: Record<string, unknown>;
   onSaved: () => void;
   onBack?: () => void;
   onSkip?: () => void;
+  autofilledKeys?: Set<string>;
 }) {
   const qc = useQueryClient();
   const [error, setError] = useState('');
@@ -80,15 +82,15 @@ export function MaritalHistoryForm({
       {error ? <Alert tone="critical">{error}</Alert> : null}
       
       <Card>
-        <WowCalendar label="Marriage Date" title="Marriage Date" value={form.marriageDate} onChange={set('marriageDate')} />
-        <WowCalendar label="Divorce/Separation Date" title="Divorce/Separation Date" value={form.divorceDate} onChange={set('divorceDate')} />
-        <Field label="Years Married" value={form.yearsMarried} onChangeText={setCount('yearsMarried')} keyboardType="number-pad" maxLength={2} />
+        <WowCalendar label="Marriage Date" title="Marriage Date" value={form.marriageDate} onChange={set('marriageDate')} autoFilled={autofilledKeys?.has('maritalHistory.marriageDate') || autofilledKeys?.has('marriageDate')} />
+        <WowCalendar label="Divorce/Separation Date" title="Divorce/Separation Date" value={form.divorceDate} onChange={set('divorceDate')} autoFilled={autofilledKeys?.has('maritalHistory.divorceDate') || autofilledKeys?.has('maritalHistory.separationDate') || autofilledKeys?.has('divorceDate')} />
+        <Field label="Years Married" value={form.yearsMarried} onChangeText={setCount('yearsMarried')} keyboardType="number-pad" maxLength={2} autoFilled={autofilledKeys?.has('maritalHistory.yearsMarried') || autofilledKeys?.has('yearsMarried')} />
       </Card>
       
       <Card>
-        <Field label="Children (Boys)" value={form.childrenBoys} onChangeText={setCount('childrenBoys')} keyboardType="number-pad" maxLength={2} />
-        <Field label="Children (Girls)" value={form.childrenGirls} onChangeText={setCount('childrenGirls')} keyboardType="number-pad" maxLength={2} />
-        <Field label="Living With" value={form.livingWith} onChangeText={set('livingWith')} hint="E.g. Father, Mother, Self" />
+        <Field label="Children (Boys)" value={form.childrenBoys} onChangeText={setCount('childrenBoys')} keyboardType="number-pad" maxLength={2} autoFilled={autofilledKeys?.has('maritalHistory.boys') || autofilledKeys?.has('boys')} />
+        <Field label="Children (Girls)" value={form.childrenGirls} onChangeText={setCount('childrenGirls')} keyboardType="number-pad" maxLength={2} autoFilled={autofilledKeys?.has('maritalHistory.girls') || autofilledKeys?.has('girls')} />
+        <Field label="Living With" value={form.livingWith} onChangeText={set('livingWith')} hint="E.g. Father, Mother, Self" autoFilled={autofilledKeys?.has('maritalHistory.childrenLivingWith') || autofilledKeys?.has('childrenLivingWith')} />
       </Card>
       
       <View style={{ gap: space(2) }}>

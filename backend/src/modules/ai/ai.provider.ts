@@ -8,7 +8,7 @@ import { GENIE_FALLBACK, answerFor } from './genie-knowledge';
  * Both implement the same interface (selected via AI_PROVIDER).
  */
 export interface AiProvider {
-  complete(prompt: string): Promise<string>;
+  complete(prompt: string, imageUrl?: string): Promise<string>;
 }
 
 /**
@@ -27,7 +27,7 @@ export interface AiProvider {
  */
 @Injectable()
 export class MockAiProvider implements AiProvider {
-  async complete(prompt: string): Promise<string> {
+  async complete(prompt: string, imageUrl?: string): Promise<string> {
     return answerFor(prompt) ?? GENIE_FALLBACK;
   }
 }
@@ -38,12 +38,20 @@ export class OpenAiProvider implements AiProvider {
 
   constructor(private readonly cfg: AppConfigService) {}
 
-  async complete(prompt: string): Promise<string> {
+  async complete(prompt: string, imageUrl?: string): Promise<string> {
     const { apiKey, model, baseUrl } = this.cfg.ai;
     // Configured for a model and missing the key: answer from what is known
     // rather than telling the person about a configuration problem they cannot
     // do anything about.
     if (!apiKey) return answerFor(prompt) ?? GENIE_FALLBACK;
+
+    const userContent = imageUrl 
+      ? [
+          { type: 'text', text: prompt },
+          { type: 'image_url', image_url: { url: imageUrl } }
+        ]
+      : prompt;
+
     const res = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
@@ -51,9 +59,9 @@ export class OpenAiProvider implements AiProvider {
         model,
         messages: [
           { role: 'system', content: 'You are WOW Genie, a concise Indian wedding planning assistant.' },
-          { role: 'user', content: prompt },
+          { role: 'user', content: userContent },
         ],
-        temperature: 0.7,
+        temperature: 0.1,
       }),
     });
     if (!res.ok) {

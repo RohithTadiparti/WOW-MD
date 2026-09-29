@@ -15,7 +15,7 @@ import { randomBytes } from 'crypto';
  *   bookings/{bookingId}/references/…  what the couple shows the provider
  */
 export type KeyScope =
-  | { owner: 'users'; id: string; area: 'profile' | 'albums' | 'attachments' }
+  | { owner: 'users'; id: string; area: 'profile' | 'albums' | 'attachments' | 'biodata' }
   | { owner: 'vendors'; id: string; area: 'portfolio' }
   | { owner: 'bookings'; id: string; area: 'deliveries' | 'references' };
 

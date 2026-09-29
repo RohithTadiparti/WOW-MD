@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { ProfileDetails } from './entities/profile-details.entity';
@@ -30,6 +30,7 @@ import {
 } from '../../common/enums';
 import { Interest } from '../matchmaking/entities/interest.entity';
 import { ageBand } from '../users/dto/public-profile.dto';
+import { AiService } from '../ai/ai.service';
 
 /** The most brothers and sisters a profile may list (EZ1-I102). */
 export const SIBLING_LIMIT = 10;
@@ -87,6 +88,7 @@ export class ProfileDetailsService {
     private readonly redis: RedisService,
     private readonly moderation: ModerationService,
     @InjectRepository(Interest) private readonly interests: Repository<Interest>,
+    @Inject(forwardRef(() => AiService)) private readonly ai: AiService,
   ) {}
 
   // ------------------------------------------------------------- sections
@@ -525,6 +527,11 @@ export class ProfileDetailsService {
     await this.profiles.save(profile);
 
     return { success: true };
+  }
+
+  async extractBiodata(actor: AuthUser, profileId: string, documentUrl: string) {
+    await this.editable(actor, profileId);
+    return this.ai.extractBiodata(documentUrl);
   }
 
   async listPhotos(actor: AuthUser, profileId: string) {

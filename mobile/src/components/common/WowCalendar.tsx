@@ -27,6 +27,8 @@ export function WowCalendar({
   hint,
   error,
   placeholder = 'Select date',
+  required,
+  autoFilled,
 }: {
   label: string;
   value: string;
@@ -38,6 +40,8 @@ export function WowCalendar({
   hint?: string;
   error?: string;
   placeholder?: string;
+  required?: boolean;
+  autoFilled?: boolean;
 }) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -110,7 +114,7 @@ export function WowCalendar({
   const todayIso = new Date().toISOString().split('T')[0];
 
   return (
-    <Wrapper label={label} hint={hint} error={error}>
+    <Wrapper label={label} hint={hint} error={error} required={required} autoFilled={autoFilled}>
       <Trigger
         value={value ? formatLongDate(value) : undefined}
         placeholder={placeholder}

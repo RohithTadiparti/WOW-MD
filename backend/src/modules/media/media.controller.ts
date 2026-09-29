@@ -91,6 +91,24 @@ export class MediaController {
     return this.media.presignProfilePhoto(actor, dto, requestOrigin(req));
   }
 
+  @ApiBearerAuth()
+  @RequirePermissions(Permission.PROFILE_MANAGE_OWN)
+  @ApiOperation({ summary: 'Get an upload URL for a biodata document' })
+  @Post('biodata/presign')
+  @RawMediaRefs()
+  presignBiodata(
+    @CurrentUser() actor: AuthUser,
+    @Body() dto: PresignAttachmentDto,
+    @Req() req: Request,
+  ) {
+    return this.media.presignUpload(
+      actor,
+      { owner: 'users', id: actor.userId, area: 'biodata' },
+      dto,
+      requestOrigin(req),
+    );
+  }
+
   /**
    * An upload slot for something a person is attaching as proof.
    *
