@@ -45,39 +45,43 @@ describe('WOW API (e2e)', () => {
    * fixtures used to read "E2E Solo", which the platform now — correctly —
    * refuses, so uniqueness lives in the email address where it belongs.
    *
-   * A business account must also carry a mobile number. In this market that is
-   * the channel a vendor or an agency is actually reached on, and it is the key
-   * duplicate detection runs against, so it is not optional for them.
+   * Every account registers with a Gmail address (EZ1-I104) and its own mobile
+   * number (EZ1-I258), so the fixtures carry both. That matters beyond the
+   * happy path: a rejection test has to fail on the rule it is named after,
+   * and with any other address every registration is refused for the Gmail
+   * rule before the rule under test is reached.
    */
+  const mail = (tag: string) => `wow.e2e.${tag}.${unique}@gmail.com`;
+  const mobile = (prefix: string) => `${prefix}${String(unique).slice(-5)}`;
   const solo = {
-    email: `solo_${unique}@gmail.com`,
+    email: mail('solo'),
     password: 'Password123',
     accountType: 'individual',
     role: 'bride',
     displayName: 'Solo Sharma',
-    phone: `98763${String(unique).slice(-5)}`,
+    phone: mobile('98763'),
   };
   const groom = {
-    email: `groom_${unique}@gmail.com`,
+    email: mail('groom'),
     password: 'Password123',
     accountType: 'individual',
     role: 'groom',
     displayName: 'Groom Reddy',
-    phone: `98762${String(unique).slice(-5)}`,
+    phone: mobile('98762'),
   };
   const agent = {
-    email: `agent_${unique}@gmail.com`,
+    email: mail('agent'),
     password: 'Password123',
     accountType: 'agent',
     displayName: 'Anita Rao',
-    phone: `98765${String(unique).slice(-5)}`,
+    phone: mobile('98765'),
   };
   const vendor = {
-    email: `vendor_${unique}@gmail.com`,
+    email: mail('vendor'),
     password: 'Password123',
     accountType: 'vendor',
     displayName: 'Vikram Nair',
-    phone: `98764${String(unique).slice(-5)}`,
+    phone: mobile('98764'),
   };
 
   let soloToken: string;
@@ -150,30 +154,52 @@ describe('WOW API (e2e)', () => {
     // reaches other families on a biodata, so it has to read as a person.
     await http()
       .post('/api/auth/register')
-      .send({ ...solo, email: `digits_${unique}@test.com`, displayName: 'E2E Solo' })
+      .send({ ...solo, email: mail('digits'), displayName: 'E2E Solo' })
       .expect(400);
 
     await http()
       .post('/api/auth/register')
-      .send({ ...solo, email: `symbols_${unique}@test.com`, displayName: 'Priya <script>' })
+      .send({ ...solo, email: mail('symbols'), displayName: 'Priya <script>' })
       .expect(400);
   });
 
-  it('insists a business account carries a mobile number', async () => {
-    // An individual may sign up on an email alone — proven by `solo` above,
-    // which carries no phone — while a vendor or an agency is reached on their
-    // number, and duplicate detection keys on it.
+  it('insists every new account carries a mobile number', async () => {
+    // Every portal but Admin signs in with the number (EZ1-I258), so an
+    // account created without one would have a sign-in route it can never
+    // use. Individuals included: they used to be allowed an email alone.
+    const { phone: _soloPhone, ...soloWithoutPhone } = solo;
+    const refused = await http()
+      .post('/api/auth/register')
+      .send({ ...soloWithoutPhone, email: mail('nophone.solo') })
+      .expect(400);
+    expect(JSON.stringify(refused.body)).toContain('mobile number');
+
     const { phone: _agentPhone, ...agentWithoutPhone } = agent;
     await http()
       .post('/api/auth/register')
-      .send({ ...agentWithoutPhone, email: `nophone_agent_${unique}@test.com` })
+      .send({ ...agentWithoutPhone, email: mail('nophone.agent') })
       .expect(400);
 
     const { phone: _vendorPhone, ...vendorWithoutPhone } = vendor;
     await http()
       .post('/api/auth/register')
-      .send({ ...vendorWithoutPhone, email: `nophone_vendor_${unique}@test.com` })
+      .send({ ...vendorWithoutPhone, email: mail('nophone.vendor') })
       .expect(400);
+  });
+
+  it('refuses a second account on the same mobile number', async () => {
+    await http()
+      .post('/api/auth/register')
+      .send({ ...solo, email: mail('samephone') })
+      .expect(409);
+  });
+
+  it('refuses registration with an address that is not Gmail', async () => {
+    const refused = await http()
+      .post('/api/auth/register')
+      .send({ ...solo, email: `wow.e2e.${unique}@example.com`, phone: mobile('98761') })
+      .expect(400);
+    expect(JSON.stringify(refused.body)).toContain('gmail.com');
   });
 
   it('lets a solo user sign in on their own, with no agent involved', async () => {
@@ -255,17 +281,17 @@ describe('WOW API (e2e)', () => {
   it('refuses to mint privileged roles through registration', async () => {
     await http()
       .post('/api/auth/register')
-      .send({ ...solo, email: `esc1_${unique}@test.com`, role: 'admin' })
+      .send({ ...solo, email: mail('esc1'), role: 'admin' })
       .expect(400);
 
     await http()
       .post('/api/auth/register')
-      .send({ email: `esc2_${unique}@test.com`, password: 'Password123', accountType: 'admin' })
+      .send({ email: mail('esc2'), password: 'Password123', accountType: 'admin' })
       .expect(400);
 
     await http()
       .post('/api/auth/register')
-      .send({ ...solo, email: `esc3_${unique}@test.com`, role: 'vendor' })
+      .send({ ...solo, email: mail('esc3'), role: 'vendor' })
       .expect(400);
   });
 
@@ -278,13 +304,13 @@ describe('WOW API (e2e)', () => {
     // whitelist + forbidNonWhitelisted: server-owned fields cannot be injected.
     await http()
       .post('/api/auth/register')
-      .send({ ...solo, email: `extra_${unique}@test.com`, isVerified: true })
+      .send({ ...solo, email: mail('extra'), isVerified: true })
       .expect(400);
 
     // Weak passwords are refused everywhere, not just at the client.
     await http()
       .post('/api/auth/register')
-      .send({ ...solo, email: `weak_${unique}@test.com`, password: 'alllowercase' })
+      .send({ ...solo, email: mail('weak'), password: 'alllowercase' })
       .expect(400);
   });
 
@@ -396,12 +422,32 @@ describe('WOW API (e2e)', () => {
       .expect(200);
   };
 
-  it('will not let an unverified profile send an interest', async () => {
+  /*
+   * Identity verification no longer gates an interest (EZ1-I70): an in-person
+   * check is not part of the individual flow, so sending, accepting and fixing
+   * all proceed without one. What still closes the door is an incomplete
+   * profile — a half-filled biodata wastes the time of everyone it reaches.
+   */
+  it('will not let an incomplete profile send an interest', async () => {
+    const reg = await http()
+      .post('/api/auth/register')
+      .send({ ...solo, email: mail('incomplete'), phone: mobile('98760'), displayName: 'Meera Iyer' })
+      .expect(201);
+    const token = reg.body.accessToken;
+
+    // No city: saved, but not complete.
     await http()
+      .put('/api/users/me/profile')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ displayName: 'Meera', gender: 'Female', dateOfBirth: '1997-03-01' })
+      .expect(200);
+
+    const refused = await http()
       .post('/api/matches/interest')
-      .set('Authorization', `Bearer ${soloToken}`)
+      .set('Authorization', `Bearer ${token}`)
       .send({ toProfileId: groomProfileId })
       .expect(403);
+    expect(JSON.stringify(refused.body)).toContain('Complete the profile');
   });
 
   it('runs the interest to accept flow between two individuals', async () => {
@@ -502,7 +548,7 @@ describe('WOW API (e2e)', () => {
     it('never reveals whether an address is registered', async () => {
       await http()
         .post('/api/auth/password/forgot')
-        .send({ email: `nobody_${unique}@test.com` })
+        .send({ email: mail('nobody') })
         .expect(200);
     });
 

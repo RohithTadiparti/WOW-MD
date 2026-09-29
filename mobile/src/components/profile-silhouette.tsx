@@ -39,8 +39,7 @@ export const ProfileSilhouette = memo(function ProfileSilhouette({
     <View
       accessible={false}
       importantForAccessibility="no-hide-descendants"
-      pointerEvents="none"
-      style={[{ overflow: 'hidden', backgroundColor: rgb(theme.surfaceSunken) }, style]}
+      style={[{ pointerEvents: 'none', overflow: 'hidden', backgroundColor: rgb(theme.surfaceSunken) }, style]}
     >
       <Svg width="100%" height="100%" viewBox={SILHOUETTE_VIEWBOX} preserveAspectRatio="xMidYMax meet">
         {SILHOUETTES[silhouetteFor(gender)].map((s, i) =>

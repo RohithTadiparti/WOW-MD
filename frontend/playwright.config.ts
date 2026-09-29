@@ -23,7 +23,9 @@ export default defineConfig({
     baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:8080',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
-    colorScheme: 'light',
+    // A machine set to dark mode, on purpose: the template is light only and
+    // must be what every page shows whatever the system prefers.
+    colorScheme: 'dark',
   },
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } } },

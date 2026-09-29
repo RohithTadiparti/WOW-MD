@@ -66,7 +66,8 @@ export default function Home() {
 
   return (
     <div className="relative isolate min-h-[100dvh] overflow-hidden">
-      <div className="mx-auto flex min-h-[100dvh] w-full max-w-[70rem] flex-col px-5 sm:px-8">
+      {/* The template's 1120px column: 74rem less the 2rem gutter each side. */}
+      <div className="mx-auto flex min-h-[100dvh] w-full max-w-[74rem] flex-col px-5 sm:px-8">
         <header className="flex min-h-[6.25rem] flex-wrap items-center justify-between gap-x-10 gap-y-3 border-b border-gray-200 py-4">
           <Link
             to="/"
@@ -137,7 +138,7 @@ export default function Home() {
           <Field id="city" label="City">
             <input id="city" className="input" placeholder="Hyderabad" />
           </Field>
-          <button type="submit" className="btn min-h-12">
+          <button type="submit" className="btn min-h-12 tracking-[0.2em]">
             Find matches
           </button>
         </form>

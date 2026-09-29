@@ -83,6 +83,11 @@
     --surface-sunken: 248 232 237;
     --border: var(--ink-200);
     --border-strong: var(--ink-300);
+    /* The template's hairlines are its ink at a fixed strength, not a grey:
+     * 14% for rules and panels, 28% round a field. Translucent, so a rule on
+     * the ivory ground and one on a white panel each come out as it drew them. */
+    --line: rgb(36 16 23 / 0.14);
+    --line-strong: rgb(36 16 23 / 0.28);
 
     --brand: var(--rose-500);
     --brand-strong: var(--rose-700);
@@ -168,6 +173,8 @@
     --surface-sunken: 45 17 34;
     --border: 95 50 70;
     --border-strong: 126 76 98;
+    --line: rgb(250 246 239 / 0.14);
+    --line-strong: rgb(250 246 239 / 0.28);
 
     --brand: var(--rose-500);
     --brand-strong: var(--rose-600);
@@ -185,7 +192,8 @@
   }
 
   body {
-    @apply bg-canvas text-gray-800 antialiased;
+    /* #4F3B40, the template's running text. */
+    @apply bg-canvas text-gray-700 antialiased;
     font-family:
       'Poppins',
       'Helvetica Neue',
@@ -235,9 +243,14 @@
   .font-serif {
     font-family: 'Playfair Display', Georgia, serif;
     letter-spacing: 0;
-    /* Cormorant's default figures are old-style, where 1 reads as I and 0 as
-     * O — fine in running prose, wrong on a count or a price. */
-    font-variant-numeric: lining-nums;
+  }
+
+  /* Cormorant's figures are old-style, as the template sets its 01 02 03 —
+   * right for ornament, wrong for data, where 1 reads as I and 0 as O. A
+   * figure marked tabular is data, so it gets lining digits. */
+  .font-serif.tabular-nums,
+  .font-serif .tabular-nums {
+    font-variant-numeric: lining-nums tabular-nums;
   }
 
   /* One visible focus treatment for the whole app. Keyboard users get a ring
@@ -277,7 +290,7 @@
     @apply inline-flex min-h-[2.875rem] select-none items-center justify-center gap-2 whitespace-nowrap
       rounded-[--radius-md] bg-brand px-6 py-2.5 text-xs font-medium uppercase tracking-[0.18em] text-brand-fg
       shadow-btn transition-[transform,background-color,box-shadow] duration-150
-      hover:bg-brand-strong active:translate-y-px active:shadow-none
+      hover:bg-brand-500 active:translate-y-px active:shadow-none
       disabled:pointer-events-none disabled:opacity-45;
   }
 
@@ -336,7 +349,7 @@
 
   /* The template's field label: 11px capitals tracked 0.22em, above the field. */
   .label {
-    @apply mb-2 block text-[0.6875rem] font-normal uppercase tracking-[0.22em] text-gray-600;
+    @apply mb-2 block text-[0.6875rem] font-normal uppercase tracking-[0.22em] text-gray-900/80;
   }
 
   /*
@@ -346,7 +359,7 @@
    * each of them would have to remember.
    */
   label:has(.input) > span:first-child {
-    @apply mb-1 block text-[0.6875rem] font-normal uppercase tracking-[0.22em] text-gray-600;
+    @apply mb-1 block text-[0.6875rem] font-normal uppercase tracking-[0.22em] text-gray-900/80;
   }
 
   /* A page title and its one-line explanation, used at the top of every
@@ -374,11 +387,11 @@
 
   /* The template's small uppercase line above or beside a heading. */
   .eyebrow {
-    @apply text-[0.6875rem] uppercase tracking-[0.3em] text-gray-600;
+    @apply text-[0.6875rem] uppercase tracking-[0.3em] text-gray-900/80;
   }
 
   .page-subtitle {
-    @apply plate mt-1 w-fit max-w-[65ch] text-sm leading-relaxed text-gray-500;
+    @apply plate mt-1 w-fit max-w-[65ch] text-[0.9375rem] leading-[1.75] text-gray-700;
   }
 
   .interest-hero {
@@ -476,7 +489,7 @@
 
   /* The line under a section heading. Same relationship as the page subtitle. */
   .section-subtitle {
-    @apply mt-0.5 max-w-[70ch] text-sm leading-relaxed text-gray-500;
+    @apply mt-0.5 max-w-[70ch] text-sm leading-relaxed text-gray-700;
   }
 
   /*
@@ -504,7 +517,7 @@
    * hard ruled-paper look of a full-bleed border. */
   .rule {
     @apply h-px w-full border-0;
-    background: linear-gradient(90deg, transparent, rgb(var(--border)) 18%, rgb(var(--border)) 82%, transparent);
+    background: linear-gradient(90deg, transparent, var(--line) 18%, var(--line) 82%, transparent);
   }
 }
 

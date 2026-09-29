@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { CaretLeft, CaretRight } from 'phosphor-react-native';
+import { CaretLeft, CaretRight, CaretDoubleLeft, CaretDoubleRight } from 'phosphor-react-native';
 
 import { Caption, SectionTitle } from '@/components/ui';
 import { radius, rgb, space, useTheme, type Theme } from '@/theme';
@@ -96,7 +96,13 @@ export function MonthCalendar({
   // Opened on the selected day's month, or the start of the window, or now —
   // in that order, so returning to this screen lands where the person left it.
   const [cursor, setCursor] = useState(() => {
-    const anchor = selected || from || todayIso();
+    let anchor = selected;
+    if (!anchor) {
+      const today = todayIso();
+      if (from && from > today) anchor = from;
+      else if (to && to < today) anchor = to;
+      else anchor = today;
+    }
     return { year: Number(anchor.slice(0, 4)), month: Number(anchor.slice(5, 7)) - 1 };
   });
 
@@ -108,7 +114,12 @@ export function MonthCalendar({
   const lastOfPrev = isoDate(cursor.year, cursor.month, 1);
   const firstOfNext = isoDate(cursor.year, cursor.month + 1, 1);
   const canGoBack = !from || from < lastOfPrev;
-  const canGoOn = !to || (to >= firstOfNext && firstOfNext <= to);
+  const canGoOn = !to || to >= firstOfNext;
+
+  const lastOfPrevYear = isoDate(cursor.year - 1, cursor.month, 1);
+  const firstOfNextYear = isoDate(cursor.year + 1, cursor.month, 1);
+  const canGoBackYear = !from || from < lastOfPrevYear;
+  const canGoOnYear = !to || to >= firstOfNextYear;
 
   const step = (by: number) =>
     setCursor((c) => {
@@ -120,11 +131,17 @@ export function MonthCalendar({
     <View style={{ gap: space(2.5) }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(2) }}>
         <SectionTitle style={{ flex: 1 }}>{monthLabel(cursor.year, cursor.month)}</SectionTitle>
+        <Stepper label="Previous year" disabled={!canGoBackYear} onPress={() => step(-12)}>
+          <CaretDoubleLeft size={18} color={rgb(canGoBackYear ? theme.ink[700] : theme.ink[300])} />
+        </Stepper>
         <Stepper label="Previous month" disabled={!canGoBack} onPress={() => step(-1)}>
           <CaretLeft size={18} color={rgb(canGoBack ? theme.ink[700] : theme.ink[300])} />
         </Stepper>
         <Stepper label="Next month" disabled={!canGoOn} onPress={() => step(1)}>
           <CaretRight size={18} color={rgb(canGoOn ? theme.ink[700] : theme.ink[300])} />
+        </Stepper>
+        <Stepper label="Next year" disabled={!canGoOnYear} onPress={() => step(12)}>
+          <CaretDoubleRight size={18} color={rgb(canGoOnYear ? theme.ink[700] : theme.ink[300])} />
         </Stepper>
       </View>
 
@@ -207,7 +224,7 @@ export function MonthCalendar({
                 style={{
                   width: 12,
                   height: 12,
-                  borderRadius: 3,
+                  borderRadius: radius.md,
                   backgroundColor: toneColours(theme, tone).bg,
                 }}
               />
