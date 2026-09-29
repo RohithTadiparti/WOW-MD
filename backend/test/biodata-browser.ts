@@ -38,6 +38,40 @@ export async function checkBiodataBrowser(apiOrigin: string, email: string, pass
     'about:blank',
   ], { windowsHide: true, stdio: 'ignore' });
   let socket: WebSocket | undefined;
+  const diagnostics = {
+    consoleErrors: [] as string[],
+    runtimeErrors: [] as string[],
+    failedRequests: [] as string[],
+    evaluationErrors: [] as string[],
+  };
+  const remember = (list: string[], message: string) => {
+    if (list.length < 20) list.push(message.slice(0, 500));
+  };
+  const redact = (value: string) => {
+    let safe = value
+      .replace(/Bearer\s+\S+/gi, 'Bearer [redacted]')
+      .replace(/eyJ[\w.-]+/g, '[redacted token]')
+      .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[redacted email]')
+      .replace(/\+?91[6-9]\d{9}|\b[6-9]\d{9}\b/g, '[redacted phone]')
+      .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi, '[redacted id]');
+    for (const [sensitive, label] of [[email, 'email'], [password, 'password'], ['Ada Rao', 'name'], ['Biodata Test', 'name']] as const) {
+      if (sensitive) safe = safe.split(sensitive).join(`[redacted ${label}]`);
+    }
+    return safe;
+  };
+  const safeUrl = (value: string) => {
+    try {
+      const url = new URL(value);
+      url.search = '';
+      url.hash = '';
+      url.pathname = url.pathname
+        .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi, '[id]')
+        .replace(/\/[A-Za-z0-9_-]{40,}(?=\/|$)/g, '/[redacted]');
+      return url.toString();
+    } catch {
+      return '[invalid URL]';
+    }
+  };
   const pause = () => new Promise((done) => setTimeout(done, 100));
   try {
     let port = '';
@@ -50,8 +84,74 @@ export async function checkBiodataBrowser(apiOrigin: string, email: string, pass
     await new Promise<void>((done, reject) => { socket!.onopen = () => done(); socket!.onerror = () => reject(new Error('Browser connection failed')); });
     let sequence = 0;
     const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
+    const requestById = new Map<string, { method: string; url: string }>();
     socket.onmessage = (event) => {
-      const message = JSON.parse(String(event.data)) as { id: number; result: unknown; error?: { message: string } };
+      const message = JSON.parse(String(event.data)) as {
+        id?: number;
+        method?: string;
+        params?: Record<string, unknown>;
+        result?: unknown;
+        error?: { message: string };
+      };
+      if (message.method) {
+        const params = message.params ?? {};
+        if (message.method === 'Runtime.consoleAPICalled' && params.type === 'error') {
+          const args = (params.args ?? []) as { type?: string; value?: unknown; description?: string }[];
+          const summary = args.map((arg) => {
+            if (typeof arg.value === 'string') return redact(arg.value);
+            if (arg.type === 'object') return '[object]';
+            return redact(arg.description?.split('\n')[0] ?? arg.type ?? 'unknown');
+          }).join(' ');
+          remember(diagnostics.consoleErrors, summary || 'console.error called');
+        }
+        if (message.method === 'Runtime.exceptionThrown') {
+          const details = params.exceptionDetails as {
+            text?: string;
+            exception?: { className?: string; description?: string };
+          } | undefined;
+          const description = details?.exception?.description?.split('\n').slice(0, 3).join('\n');
+          remember(diagnostics.runtimeErrors, redact(
+            [details?.exception?.className, details?.text, description].filter(Boolean).join(': ') || 'uncaught JavaScript exception',
+          ));
+        }
+        if (message.method === 'Runtime.bindingCalled' && params.name === '__biodataE2eDiagnostic') {
+          try {
+            const payload = JSON.parse(String(params.payload)) as { kind?: string; message?: string };
+            remember(diagnostics.runtimeErrors, redact(`${payload.kind ?? 'browser error'}: ${payload.message ?? ''}`));
+          } catch {
+            remember(diagnostics.runtimeErrors, 'browser runtime diagnostic could not be parsed');
+          }
+        }
+        if (message.method === 'Network.requestWillBeSent') {
+          const requestId = String(params.requestId ?? '');
+          const request = params.request as { method?: string; url?: string } | undefined;
+          if (requestId && request?.url) {
+            requestById.set(requestId, { method: request.method ?? 'GET', url: safeUrl(request.url) });
+          }
+        }
+        if (message.method === 'Network.responseReceived') {
+          const request = requestById.get(String(params.requestId ?? ''));
+          const response = params.response as { status?: number; url?: string } | undefined;
+          if (response && (response.status ?? 0) >= 400) {
+            remember(
+              diagnostics.failedRequests,
+              `${request?.method ?? 'GET'} ${request?.url ?? safeUrl(response.url ?? '')} -> HTTP ${response.status}`,
+            );
+          }
+        }
+        if (message.method === 'Network.loadingFailed') {
+          const request = requestById.get(String(params.requestId ?? ''));
+          if (request) {
+            remember(diagnostics.failedRequests, `${request.method} ${request.url} failed: ${String(params.errorText ?? 'network error')}`);
+          }
+        }
+        if (message.method === 'Log.entryAdded') {
+          const entry = params.entry as { level?: string; text?: string } | undefined;
+          if (entry?.level === 'error') remember(diagnostics.consoleErrors, redact(entry.text ?? 'browser error log entry'));
+        }
+        return;
+      }
+      if (message.id === undefined) return;
       const receiver = pending.get(message.id);
       if (!receiver) return;
       pending.delete(message.id);
@@ -68,12 +168,47 @@ export async function checkBiodataBrowser(apiOrigin: string, email: string, pass
       if (result.exceptionDetails) throw new Error(`Browser evaluation failed: ${expression}`);
       return result.result.value;
     };
-    const waitFor = async (expression: string) => {
+    const waitFor = async (expression: string, label?: string) => {
       for (let i = 0; i < 150; i++) {
-        try { if (await evaluate<boolean>(expression)) return; } catch { /* navigation changes the JS context */ }
+        try {
+          if (await evaluate<boolean>(expression)) return;
+        } catch (error) {
+          remember(diagnostics.evaluationErrors, redact(error instanceof Error ? error.message : String(error)));
+        }
         await pause();
       }
-      throw new Error(`Browser condition timed out: ${expression}; page: ${await evaluate('document.body.innerText')}`);
+      let pageState: unknown;
+      try {
+        pageState = await evaluate(`(() => {
+          const body = document.body?.innerText ?? '';
+          const markers = [
+            'WORLD OF WEDDINGZ', 'Welcome back', 'Sign in', 'Biodata',
+            'Saved section by section', 'Family Photo', 'This page could not be shown',
+            'Forbidden', 'Loading', 'Complete your profile',
+          ];
+          return {
+            url: location.origin + location.pathname + (location.search ? '?[redacted]' : ''),
+            readyState: document.readyState,
+            title: document.title,
+            elements: {
+              personalSection: Boolean(document.querySelector('#section-personal')),
+              familyPhotoSection: Boolean(document.querySelector('#section-family-photo')),
+              familyPhotoButton: Boolean(document.querySelector('#section-family-photo button')),
+            },
+            loading: document.readyState !== 'complete' || Boolean(document.querySelector('[aria-busy="true"], .animate-pulse')),
+            visibleTextMarkers: markers.filter((marker) => body.toLowerCase().includes(marker.toLowerCase())),
+          };
+        })()`);
+      } catch (error) {
+        pageState = { unavailable: redact(error instanceof Error ? error.message : String(error)) };
+      }
+      throw new Error(`${label ? `${label}: ` : ''}Browser condition timed out: ${expression}; diagnostics: ${JSON.stringify({
+        page: pageState,
+        consoleErrors: diagnostics.consoleErrors,
+        runtimeErrors: diagnostics.runtimeErrors,
+        failedRequests: diagnostics.failedRequests,
+        evaluationErrors: diagnostics.evaluationErrors,
+      })}`);
     };
     const fill = (selector: string, value: string) => evaluate(`(() => { const input = document.querySelector(${JSON.stringify(selector)}); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, ${JSON.stringify(value)}); input.dispatchEvent(new Event('input', { bubbles: true })); })()`);
     const navigate = async (path: string) => { await send('Page.navigate', { url: origin + path }); };
@@ -85,12 +220,26 @@ export async function checkBiodataBrowser(apiOrigin: string, email: string, pass
       await evaluate('document.querySelector("#email").closest("form").requestSubmit()');
       await waitFor('location.pathname !== "/login"');
     };
-    const openPhoto = async () => {
-      await waitFor('Boolean(document.querySelector("#section-family-photo button"))');
+    const openPhoto = async (label: string) => {
+      await waitFor('Boolean(document.querySelector("#section-family-photo button"))', label);
       await evaluate('document.querySelector("#section-family-photo button").click()');
-      await waitFor('Boolean(document.querySelector("#section-family-photo input[type=file]"))');
+      await waitFor('Boolean(document.querySelector("#section-family-photo input[type=file]"))', label);
     };
     await send('Page.enable');
+    await send('Runtime.enable');
+    await send('Log.enable');
+    await send('Network.enable');
+    await send('Runtime.addBinding', { name: '__biodataE2eDiagnostic' });
+    await send('Page.addScriptToEvaluateOnNewDocument', {
+      source: `
+        const report = (kind, value) => window.__biodataE2eDiagnostic(JSON.stringify({ kind, message: value }));
+        window.addEventListener('error', (event) => report('window.error', event.message));
+        window.addEventListener('unhandledrejection', (event) => {
+          const reason = event.reason;
+          report('unhandledrejection', reason instanceof Error ? reason.message : String(reason));
+        });
+      `,
+    });
     await login();
     await navigate('/biodata');
     await waitFor(`document.querySelector('#section-personal input[aria-label="Height in feet"]')?.value === '5' && document.querySelector('#section-personal input[aria-label="Height in inches"]')?.value === '11'`);
@@ -106,7 +255,7 @@ export async function checkBiodataBrowser(apiOrigin: string, email: string, pass
     if (invalidFields.length) throw new Error(`Invalid form fields: ${invalidFields.join('; ')}`);
     await evaluate(`document.querySelector(${JSON.stringify(heightSelector)}).closest('form').requestSubmit()`);
     await waitFor('document.body.innerText.includes("Saved. Next:")');
-    await openPhoto();
+    await openPhoto('after personal-height save');
     let url = await evaluate<string>('document.querySelector("#section-family-photo img")?.src ?? ""');
     for (let i = 0; i < 2; i++) {
       const doc = await send<{ root: { nodeId: number } }>('DOM.getDocument');
@@ -116,7 +265,7 @@ export async function checkBiodataBrowser(apiOrigin: string, email: string, pass
       url = await evaluate<string>('document.querySelector("#section-family-photo img").src');
     }
     await navigate('/biodata');
-    await openPhoto();
+    await openPhoto('after navigating back to /biodata');
     await waitFor(`document.querySelector('#section-family-photo img')?.src === ${JSON.stringify(url)}`);
     await evaluate(`fetch('/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })`);
     await login();
