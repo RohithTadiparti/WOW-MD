@@ -28,7 +28,7 @@ import { useAuth, type AuthUser } from '@/store/auth';
  */
 
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://10.72.223.206:3000/api' ;
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http:// 192.168.0.20:3000/api' ;
 
 /** Alphanumerics, dot, dash and underscore only: SecureStore rejects the rest. */
 const REFRESH_KEY = 'wow.refreshToken';
