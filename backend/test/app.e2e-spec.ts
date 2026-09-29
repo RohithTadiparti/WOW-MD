@@ -74,7 +74,6 @@ describe('WOW API (e2e)', () => {
    */
   const unique = `${Date.now()}_${process.pid}_${Math.random().toString(36).slice(2, 8)}`;
   const mail = (tag: string) => `wow.e2e.${tag}.${unique}@gmail.com`;
-  const mobile = (prefix: string) => `${prefix}${String(unique).slice(-5)}`;
   const solo = {
     email: mail('solo'),
     password: 'Password123',
@@ -284,7 +283,7 @@ describe('WOW API (e2e)', () => {
   it('refuses registration with an address that is not Gmail', async () => {
     const refused = await http()
       .post('/api/auth/register')
-      .send({ ...solo, email: `wow.e2e.${unique}@example.com`, phone: mobile('98761') })
+      .send({ ...solo, email: `wow.e2e.${unique}@example.com`, phone: freshPhone(5) })
       .expect(400);
     expect(JSON.stringify(refused.body)).toContain('gmail.com');
   });
@@ -553,7 +552,7 @@ describe('WOW API (e2e)', () => {
   it('will not let an incomplete profile send an interest', async () => {
     const reg = await http()
       .post('/api/auth/register')
-      .send({ ...solo, email: mail('incomplete'), phone: mobile('98760'), displayName: 'Meera Iyer' })
+      .send({ ...solo, email: mail('incomplete'), phone: freshPhone(6), displayName: 'Meera Iyer' })
       .expect(201);
     const token = reg.body.accessToken;
 
