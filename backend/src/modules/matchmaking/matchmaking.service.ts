@@ -274,6 +274,14 @@ export class MatchmakingService {
     actor: AuthUser,
     q: SuggestionsQueryDto,
   ): Promise<PaginatedResult<Suggestion> & { counts?: MatchViewCounts }> {
+    if (
+      q.heightMinCm !== undefined &&
+      q.heightMaxCm !== undefined &&
+      q.heightMinCm > q.heightMaxCm
+    ) {
+      throw new BadRequestException('heightMinCm must be less than or equal to heightMaxCm');
+    }
+
     if (q.packageMin !== undefined && q.packageMax !== undefined && q.packageMin > q.packageMax) {
       throw new BadRequestException('packageMin must be less than or equal to packageMax');
     }

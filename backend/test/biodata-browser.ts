@@ -27,7 +27,15 @@ export async function checkBiodataBrowser(apiOrigin: string, email: string, pass
   const directory = await mkdtemp(join(tmpdir(), 'wow-biodata-browser-'));
   const fixture = join(directory, 'family.png');
   await writeFile(fixture, png);
-  const chrome = spawn(process.env.CHROME_BIN!, ['--headless=new', '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0', `--user-data-dir=${directory}`, 'about:blank'], { windowsHide: true, stdio: 'ignore' });
+  const chrome = spawn(process.env.CHROME_BIN!, [
+    '--headless=new',
+    ...(process.env.CI === 'true' ? ['--no-sandbox', '--disable-dev-shm-usage'] : []),
+    '--no-first-run',
+    '--no-default-browser-check',
+    '--remote-debugging-port=0',
+    `--user-data-dir=${directory}`,
+    'about:blank',
+  ], { windowsHide: true, stdio: 'ignore' });
   let socket: WebSocket | undefined;
   const pause = () => new Promise((done) => setTimeout(done, 100));
   try {
@@ -84,13 +92,15 @@ export async function checkBiodataBrowser(apiOrigin: string, email: string, pass
     await send('Page.enable');
     await login();
     await navigate('/biodata');
-    await waitFor('document.querySelector("#section-personal input[aria-label]")?.value === "8"');
+    await waitFor(`document.querySelector('#section-personal input[aria-label="Height in feet"]')?.value === '5' && document.querySelector('#section-personal input[aria-label="Height in inches"]')?.value === '11'`);
     const heightSelector = 'input[aria-label="Height in feet"]';
+    const inchesSelector = 'input[aria-label="Height in inches"]';
     for (const invalid of ['abc', '-5', '5..6', '5.', '8.1', '']) {
       await fill(heightSelector, invalid);
       if (await evaluate(`document.querySelector(${JSON.stringify(heightSelector)}).checkValidity()`)) throw new Error(`Browser accepted invalid height ${invalid}`);
     }
-    await fill(heightSelector, '5.6');
+    await fill(heightSelector, '5');
+    await fill(inchesSelector, '6');
     const invalidFields = await evaluate<string[]>(`Array.from(document.querySelector(${JSON.stringify(heightSelector)}).closest('form').querySelectorAll(':invalid')).map(input => input.outerHTML + ': ' + input.validationMessage)`);
     if (invalidFields.length) throw new Error(`Invalid form fields: ${invalidFields.join('; ')}`);
     await evaluate(`document.querySelector(${JSON.stringify(heightSelector)}).closest('form').requestSubmit()`);
@@ -112,7 +122,7 @@ export async function checkBiodataBrowser(apiOrigin: string, email: string, pass
     await navigate('/biodata');
     await waitFor('Boolean(document.querySelector("#section-saved button"))');
     await evaluate('document.querySelector("#section-saved button").click()');
-    await waitFor(`document.querySelector('#section-saved')?.innerText.includes('5.6 feet') && document.querySelector('#section-saved img[alt="Family photo"]')?.src === ${JSON.stringify(url)}`);
+    await waitFor(`document.querySelector('#section-saved')?.innerText.includes('5 ft 6 in') && document.querySelector('#section-saved img[alt="Family photo"]')?.src === ${JSON.stringify(url)}`);
     return url;
   } finally {
     socket?.close();
