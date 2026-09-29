@@ -11,10 +11,14 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { MaritalStatus, OccupationStatus } from '../../../common/enums';
 import { MATCH_VIEWS, MatchView } from '../suggestion-views';
+
+function parseStrictIntegerQuery(value: unknown): unknown {
+  return typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : value;
+}
 
 /**
  * Which profile the caller is acting as.
@@ -62,12 +66,22 @@ export class SuggestionsQueryDto extends PaginationDto {
   ageMax?: number;
 
   @ApiPropertyOptional({ minimum: 120, maximum: 230, description: 'Centimetres' })
-  @IsOptional() @Type(() => Number) @IsInt() @Min(120) @Max(230)
+  @IsOptional() @Transform(({ obj, key }) => parseStrictIntegerQuery(obj[key])) @IsInt() @Min(120) @Max(230)
   heightMinCm?: number;
 
   @ApiPropertyOptional({ minimum: 120, maximum: 230, description: 'Centimetres' })
-  @IsOptional() @Type(() => Number) @IsInt() @Min(120) @Max(230)
+  @IsOptional() @Transform(({ obj, key }) => parseStrictIntegerQuery(obj[key])) @IsInt() @Min(120) @Max(230)
   heightMaxCm?: number;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER })
+  @IsOptional() @Transform(({ obj, key }) => parseStrictIntegerQuery(obj[key]))
+  @IsInt() @Min(0) @Max(Number.MAX_SAFE_INTEGER)
+  packageMin?: number;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER })
+  @IsOptional() @Transform(({ obj, key }) => parseStrictIntegerQuery(obj[key]))
+  @IsInt() @Min(0) @Max(Number.MAX_SAFE_INTEGER)
+  packageMax?: number;
 
   @ApiPropertyOptional({ maxLength: 60 })
   @IsOptional() @IsString() @MaxLength(60)
