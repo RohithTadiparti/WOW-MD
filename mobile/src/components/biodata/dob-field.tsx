@@ -116,7 +116,7 @@ export function DobField({
           <View
             style={{
               backgroundColor: rgb(theme.surface),
-              borderRadius: radius.xl,
+              borderRadius: radius.lg,
               padding: space(4),
               maxHeight: '95%',
               shadowColor: '#000',
