@@ -79,7 +79,8 @@ export function Trigger({
           backgroundColor: rgb(theme.surface),
           borderRadius: radius.sm,
           paddingHorizontal: space(3),
-          minHeight: 46,
+          paddingVertical: 10,
+          minHeight: 48,
         },
         pressed && { backgroundColor: rgb(theme.surfaceSunken) },
         disabled && { opacity: 0.5 },
@@ -116,7 +117,7 @@ export function Wrapper({
   children: React.ReactNode;
 }) {
   return (
-    <View style={{ gap: space(1.5) }}>
+    <View style={{ gap: 4 }}>
       <Label required={required} autoFilled={autoFilled}>{label}</Label>
       {children}
       {error ? <Caption tone="critical">{error}</Caption> : null}

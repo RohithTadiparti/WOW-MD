@@ -207,8 +207,8 @@ export function Card({ children, style }: { children: ReactNode; style?: StylePr
           borderColor: rgb(theme.border),
           borderWidth: StyleSheet.hairlineWidth,
           borderRadius: radius.lg,
-          padding: space(4),
-          gap: space(2),
+          padding: space(3),
+          gap: space(3),
         },
         style,
       ]}
@@ -323,7 +323,7 @@ interface FieldProps extends TextInputProps {
 export function Field({ label, hint, error, required, autoFilled, style, ...props }: FieldProps) {
   const theme = useTheme();
   return (
-    <View style={{ gap: space(1.5) }}>
+    <View style={{ gap: 4 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(1) }}>
         <Txt style={{ fontSize: 13, fontWeight: '500', color: rgb(theme.ink[600]) }}>
           {label}
@@ -344,10 +344,10 @@ export function Field({ label, hint, error, required, autoFilled, style, ...prop
             backgroundColor: rgb(theme.surface),
             borderRadius: radius.sm,
             paddingHorizontal: space(3),
-            paddingVertical: space(3),
+            paddingVertical: 10,
             fontSize: 16, // 16 or iOS zooms the field on focus.
             color: rgb(theme.ink[900]),
-            minHeight: 46,
+            minHeight: 48,
           },
           style,
         ])}

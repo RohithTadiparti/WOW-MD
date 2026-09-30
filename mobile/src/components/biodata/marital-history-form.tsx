@@ -3,6 +3,7 @@ import { View } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api, apiMessage } from '@/lib/api';
+import { capitalizeWords } from '@/lib/format';
 import { SelectField } from '@/components/form';
 import { WowCalendar } from '@/components/common/WowCalendar';
 import { Alert, Button, Card, Field } from '@/components/ui';
@@ -46,7 +47,7 @@ export function MaritalHistoryForm({
     yearsMarried: String(h.yearsMarried ?? ''),
     childrenBoys: String(h.boys ?? ''),
     childrenGirls: String(h.girls ?? ''),
-    livingWith: String(h.childrenLivingWith ?? ''),
+    livingWith: capitalizeWords(String(h.childrenLivingWith ?? '')),
   });
 
   const save = useMutation({
@@ -74,7 +75,7 @@ export function MaritalHistoryForm({
     onError: (err) => setError(apiMessage(err, 'Marital history could not be saved.')),
   });
 
-  const set = (key: keyof Form) => (value: string) => setForm({ ...form, [key]: value });
+  const set = (key: keyof Form, capitalize?: boolean) => (value: string) => setForm({ ...form, [key]: capitalize ? capitalizeWords(value) : value });
   const setCount = (key: keyof Form) => (value: string) => setForm({ ...form, [key]: value.replace(/\D/g, '') });
 
   return (
@@ -90,7 +91,7 @@ export function MaritalHistoryForm({
       <Card>
         <Field label="Children (Boys)" value={form.childrenBoys} onChangeText={setCount('childrenBoys')} keyboardType="number-pad" maxLength={2} autoFilled={autofilledKeys?.has('maritalHistory.boys') || autofilledKeys?.has('boys')} />
         <Field label="Children (Girls)" value={form.childrenGirls} onChangeText={setCount('childrenGirls')} keyboardType="number-pad" maxLength={2} autoFilled={autofilledKeys?.has('maritalHistory.girls') || autofilledKeys?.has('girls')} />
-        <Field label="Living With" value={form.livingWith} onChangeText={set('livingWith')} hint="E.g. Father, Mother, Self" autoFilled={autofilledKeys?.has('maritalHistory.childrenLivingWith') || autofilledKeys?.has('childrenLivingWith')} />
+        <Field label="Living With" value={form.livingWith} onChangeText={set('livingWith', true)} hint="E.g. Father, Mother, Self" autoFilled={autofilledKeys?.has('maritalHistory.childrenLivingWith') || autofilledKeys?.has('childrenLivingWith')} autoCapitalize="words" />
       </Card>
       
       <View style={{ gap: space(2) }}>

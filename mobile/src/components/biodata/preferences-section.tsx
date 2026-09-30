@@ -9,6 +9,7 @@ import { Alert, Button, Caption, Card, Field, SectionTitle } from '@/components/
 import { CASTES_BY_RELIGION, CITIES, PADAMS, PROFESSIONS, QUALIFICATIONS, RASHIS, RELIGIONS } from '@/shared/reference';
 import { space } from '@/theme';
 import { ChoiceField, canonical } from './choice-field';
+import { capitalizeWords } from '@/lib/format';
 import {
   COMPLEXIONS,
   HOROSCOPE_EXPECTATIONS,
@@ -56,11 +57,8 @@ export function PreferencesSection({
     horoscopeExpectation: String(bag.horoscopeExpectation ?? ''),
     kujaDosham: String(bag.kujaDosham ?? ''),
     preferredRashi: canonical(String(bag.preferredRashi ?? bag.preferredRashis ?? ''), RASHIS),
-    preferredPadam: String(bag.preferredPadam ?? ''),
-    preferredGothram: String(bag.preferredGothram ?? ''),
-    preferredStars: String(bag.preferredStars ?? ''),
     nriPreference: String(bag.nriPreference ?? ''),
-    preferredNriCountry: String(bag.preferredNriCountry ?? ''),
+    preferredNriCountry: capitalizeWords(String(bag.preferredNriCountry ?? '')),
     other: String(bag.other ?? bag.anythingElse ?? ''),
   });
 
@@ -83,9 +81,6 @@ export function PreferencesSection({
         ...(form.horoscopeExpectation ? { horoscopeExpectation: form.horoscopeExpectation } : {}),
         ...(form.kujaDosham ? { kujaDosham: form.kujaDosham } : {}),
         ...(form.preferredRashi ? { preferredRashi: form.preferredRashi } : {}),
-        ...(form.preferredPadam ? { preferredPadam: form.preferredPadam } : {}),
-        ...(form.preferredGothram.trim() ? { preferredGothram: form.preferredGothram.trim() } : {}),
-        ...(form.preferredStars.trim() ? { preferredStars: form.preferredStars.trim() } : {}),
         ...(form.nriPreference ? { nriPreference: form.nriPreference } : {}),
         ...(form.nriPreference === 'yes' && form.preferredNriCountry.trim()
           ? { preferredNriCountry: form.preferredNriCountry.trim() }
@@ -101,8 +96,8 @@ export function PreferencesSection({
     onError: (err) => setError(apiMessage(err, 'Those preferences could not be saved.')),
   });
 
-  const set = (key: keyof typeof form) => (value: string) =>
-    setForm((current) => ({ ...current, [key]: value }));
+  const set = (key: keyof typeof form, capitalize?: boolean) => (value: string) =>
+    setForm((current) => ({ ...current, [key]: capitalize ? capitalizeWords(value) : value }));
 
   function submit() {
     const ranges = [
@@ -154,24 +149,32 @@ export function PreferencesSection({
               </View>
             </View>
 
-            <ChoiceField
-              label="Religion"
-              value={form.religion}
-              options={RELIGIONS}
-              placeholder="No preference"
-              onChange={(religion) => setForm((current) => ({ ...current, religion, caste: '' }))}
-            />
-            <ChoiceField
-              key={`caste-${form.religion}`}
-              label="Caste"
-              value={form.caste}
-              options={CASTES_BY_RELIGION[form.religion] ?? []}
-              placeholder="No preference"
-              onChange={set('caste')}
-            />
+            <View style={{ flexDirection: 'row', gap: space(2) }}>
+              <View style={{ flex: 1 }}>
+                <ChoiceField
+                  label="Religion"
+                  value={form.religion}
+                  options={RELIGIONS}
+                  placeholder="No preference"
+                  onChange={(religion) => setForm((current) => ({ ...current, religion, caste: '' }))}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <ChoiceField
+                  key={`caste-${form.religion}`}
+                  label="Caste"
+                  value={form.caste}
+                  options={CASTES_BY_RELIGION[form.religion] ?? []}
+                  placeholder="No preference"
+                  onChange={set('caste')}
+                />
+              </View>
+            </View>
+            
             <ChoiceField label="Education" value={form.education} options={QUALIFICATIONS} placeholder="No preference" onChange={set('education')} />
             <ChoiceField label="Profession" value={form.profession} options={PROFESSIONS} placeholder="No preference" onChange={set('profession')} />
             <ChoiceField label="Preferred Location" value={form.locations} options={CITIES} placeholder="No preference" onChange={set('locations')} />
+
             <SelectField
               label="Complexion"
               value={form.complexion}
@@ -179,43 +182,54 @@ export function PreferencesSection({
               placeholder="No preference"
               onChange={set('complexion')}
             />
-            <SelectField
-              label="Horoscope"
-              value={form.horoscopeExpectation}
-              options={[{ value: '', label: 'No preference' }, ...HOROSCOPE_EXPECTATIONS]}
-              placeholder="No preference"
-              onChange={set('horoscopeExpectation')}
-            />
-            <SelectField
-              label="Kuja dosham"
-              value={form.kujaDosham}
-              options={[{ value: '', label: 'No preference' }, ...KUJA_PREFERENCES]}
-              placeholder="No preference"
-              onChange={set('kujaDosham')}
-            />
-            <ChoiceField label="Preferred Rashi" value={form.preferredRashi} options={RASHIS} placeholder="No preference" allowOther={false} onChange={set('preferredRashi')} />
-            <ChoiceField label="Preferred Padam" value={form.preferredPadam} options={PADAMS} placeholder="No preference" allowOther={false} onChange={set('preferredPadam')} />
-            <Field label="Preferred Gothram(s)" value={form.preferredGothram} onChangeText={set('preferredGothram')} />
-            <Field label="Stars or rashis you are looking for" value={form.preferredStars} onChangeText={set('preferredStars')} placeholder="Ashwini, Bharani…" />
 
-            <SelectField
-              label="Is the partner an NRI?"
-              value={form.nriPreference}
-              options={NRI_OPTIONS}
-              onChange={set('nriPreference')}
-              placeholder="No preference"
-            />
+            <View style={{ flexDirection: 'row', gap: space(2) }}>
+              <View style={{ flex: 1 }}>
+                <SelectField
+                  label="Horoscope"
+                  value={form.horoscopeExpectation}
+                  options={[{ value: '', label: 'No preference' }, ...HOROSCOPE_EXPECTATIONS]}
+                  placeholder="No preference"
+                  onChange={set('horoscopeExpectation')}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <SelectField
+                  label="Kuja dosham"
+                  value={form.kujaDosham}
+                  options={[{ value: '', label: 'No preference' }, ...KUJA_PREFERENCES]}
+                  placeholder="No preference"
+                  onChange={set('kujaDosham')}
+                />
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: space(2) }}>
+              <View style={{ flex: 1 }}>
+                <ChoiceField label="Preferred Rashi" value={form.preferredRashi} options={RASHIS} placeholder="No preference" allowOther={false} onChange={set('preferredRashi')} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <SelectField
+                  label="Is NRI?"
+                  value={form.nriPreference}
+                  options={NRI_OPTIONS}
+                  onChange={set('nriPreference')}
+                  placeholder="No preference"
+                />
+              </View>
+            </View>
             {form.nriPreference === 'yes' ? (
               <Field
                 label="Preferred NRI country"
                 value={form.preferredNriCountry}
-                onChangeText={set('preferredNriCountry')}
+                onChangeText={set('preferredNriCountry', true)}
                 placeholder="USA, UK, Canada, Australia…"
                 maxLength={120}
+                autoCapitalize="words"
               />
             ) : null}
 
-            <Field label="Anything Else" value={form.other} onChangeText={set('other')} />
+            <Field label="Looking for Anything Else" value={form.other} onChangeText={set('other')} />
 
             {!isWizard && (
               <View style={{ gap: space(2) }}>
@@ -246,7 +260,6 @@ export function PreferencesSection({
               <DetailRow label="Horoscope">{labelOf(HOROSCOPE_EXPECTATIONS, bag.horoscopeExpectation)}</DetailRow>
               <DetailRow label="Kuja dosham">{labelOf(KUJA_PREFERENCES, bag.kujaDosham)}</DetailRow>
               <DetailRow label="Rashi">{String(bag.preferredRashi ?? bag.preferredRashis ?? '—')}</DetailRow>
-              <DetailRow label="Stars">{String(bag.preferredStars ?? '—')}</DetailRow>
               <DetailRow label="NRI">{NRI_LABEL[String(bag.nriPreference ?? '')] ?? 'Not said'}</DetailRow>
               {bag.nriPreference === 'yes' ? <DetailRow label="Country">{String(bag.preferredNriCountry ?? '—')}</DetailRow> : null}
             </DetailGrid>

@@ -8,6 +8,7 @@ import { Alert, Button, Card, Field } from '@/components/ui';
 import { PROFESSIONS } from '@/shared/reference';
 import { space } from '@/theme';
 import { ChoiceField, DependentLocation, canonical } from './choice-field';
+import { capitalizeWords } from '@/lib/format';
 import { FAMILY_TYPES, FAMILY_STATUSES, LIFE_STATUSES, stored } from './constants';
 
 interface Form {
@@ -48,15 +49,16 @@ export function FamilyBackgroundForm({
 }) {
   const qc = useQueryClient();
   const [error, setError] = useState('');
+  const [errors, setErrors] = useState<Record<string, string>>({});
   
   const father = (details.father as Record<string, unknown>) ?? {};
   const mother = (details.mother as Record<string, unknown>) ?? {};
   
   const [form, setForm] = useState<Form>({
-    fatherName: String(father.name ?? ''),
+    fatherName: capitalizeWords(String(father.name ?? '')),
     fatherProfession: canonical(String(father.profession ?? ''), PROFESSIONS),
     fatherLifeStatus: String(father.lifeStatus ?? ''),
-    motherName: String(mother.name ?? ''),
+    motherName: capitalizeWords(String(mother.name ?? '')),
     motherProfession: canonical(String(mother.profession ?? ''), PROFESSIONS),
     motherLifeStatus: String(mother.lifeStatus ?? ''),
     familyType: String(details.familyType ?? ''),
@@ -67,10 +69,10 @@ export function FamilyBackgroundForm({
     nativeCountry: String(details.nativeCountry ?? ''),
     nativeState: String(details.nativeState ?? ''),
     nativeDistrict: String(details.nativeDistrict ?? ''),
-    nativePlace: String(details.nativePlace ?? ''),
+    nativePlace: capitalizeWords(String(details.nativePlace ?? '')),
     isNri: details.isNri === true ? 'yes' : 'no',
-    nriCity: String(details.nriCity ?? ''),
-    nriCountry: String(details.nriCountry ?? ''),
+    nriCity: capitalizeWords(String(details.nriCity ?? '')),
+    nriCountry: capitalizeWords(String(details.nriCountry ?? '')),
   });
 
   const save = useMutation({
@@ -111,13 +113,27 @@ export function FamilyBackgroundForm({
     onError: (err) => setError(apiMessage(err, 'Family background could not be saved.')),
   });
 
-  const set = (key: keyof Form) => (value: string) => setForm({ ...form, [key]: value });
+  const set = (key: keyof Form, capitalize?: boolean) => (value: string) => {
+    setErrors(e => ({ ...e, [key]: '' }));
+    setForm({ ...form, [key]: capitalize ? capitalizeWords(value) : value });
+  };
 
   function submit() {
-    if (!form.fatherName.trim() || !form.motherName.trim() || !form.familyType || !form.familyStatus) {
-      setError("Father's name, mother's name, family type and family status are needed.");
+    let newErrors: Record<string, string> = {};
+    if (!form.fatherLifeStatus) newErrors.fatherLifeStatus = "Father Status is required.";
+    if (!form.fatherName.trim()) newErrors.fatherName = "Father's Name is required.";
+    if (!form.motherLifeStatus) newErrors.motherLifeStatus = "Mother Status is required.";
+    if (!form.motherName.trim()) newErrors.motherName = "Mother's Name is required.";
+    if (!form.familyType) newErrors.familyType = "Family Type is required.";
+    if (!form.familyStatus) newErrors.familyStatus = "Family Status is required.";
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      setError('Please fix the errors below.');
       return;
     }
+    
+    setErrors({});
     setError('');
     save.mutate();
   }
@@ -127,22 +143,50 @@ export function FamilyBackgroundForm({
       {error ? <Alert tone="critical">{error}</Alert> : null}
       
       <Card>
-        <Field label="Father's Name" value={form.fatherName} onChangeText={set('fatherName')} required autoFilled={autofilledKeys?.has('father.name') || autofilledKeys?.has('fatherName')} />
-        <ChoiceField label="Father's Profession" value={form.fatherProfession} options={PROFESSIONS} onChange={set('fatherProfession')} autoFilled={autofilledKeys?.has('father.profession') || autofilledKeys?.has('fatherProfession')} />
-        <SelectField label="Father's Living Status" value={form.fatherLifeStatus} options={LIFE_STATUSES} onChange={set('fatherLifeStatus')} placeholder="Not said" autoFilled={autofilledKeys?.has('father.lifeStatus') || autofilledKeys?.has('fatherLifeStatus')} />
+        <View style={{ flexDirection: 'row', gap: space(2) }}>
+          <View style={{ flex: 1 }}>
+            <SelectField label="Father" value={form.fatherLifeStatus} options={[{ value: 'alive', label: 'Mr.' }, { value: 'deceased', label: 'Late' }]} onChange={(v) => { setForm({ ...form, fatherLifeStatus: v, fatherProfession: v === 'deceased' ? '' : form.fatherProfession }); setErrors(e => ({ ...e, fatherLifeStatus: '' })); }} required autoFilled={autofilledKeys?.has('father.lifeStatus') || autofilledKeys?.has('fatherLifeStatus')} error={errors.fatherLifeStatus} />
+          </View>
+          <View style={{ flex: 2 }}>
+            <Field label="Father's Name" value={form.fatherName} onChangeText={set('fatherName', true)} required autoFilled={autofilledKeys?.has('father.name') || autofilledKeys?.has('fatherName')} autoCapitalize="words" error={errors.fatherName} />
+          </View>
+        </View>
+        {form.fatherLifeStatus !== 'deceased' && (
+          <ChoiceField label="Father's Profession" value={form.fatherProfession} options={PROFESSIONS} onChange={set('fatherProfession')} autoFilled={autofilledKeys?.has('father.profession') || autofilledKeys?.has('fatherProfession')} />
+        )}
       </Card>
       
       <Card>
-        <Field label="Mother's Name" value={form.motherName} onChangeText={set('motherName')} required autoFilled={autofilledKeys?.has('mother.name') || autofilledKeys?.has('motherName')} />
-        <ChoiceField label="Mother's Profession" value={form.motherProfession} options={PROFESSIONS} onChange={set('motherProfession')} autoFilled={autofilledKeys?.has('mother.profession') || autofilledKeys?.has('motherProfession')} />
-        <SelectField label="Mother's Living Status" value={form.motherLifeStatus} options={LIFE_STATUSES} onChange={set('motherLifeStatus')} placeholder="Not said" autoFilled={autofilledKeys?.has('mother.lifeStatus') || autofilledKeys?.has('motherLifeStatus')} />
+        <View style={{ flexDirection: 'row', gap: space(2) }}>
+          <View style={{ flex: 1 }}>
+            <SelectField label="Mother" value={form.motherLifeStatus} options={[{ value: 'alive', label: 'Mrs.' }, { value: 'deceased', label: 'Late' }]} onChange={(v) => { setForm({ ...form, motherLifeStatus: v, motherProfession: v === 'deceased' ? '' : form.motherProfession }); setErrors(e => ({ ...e, motherLifeStatus: '' })); }} required autoFilled={autofilledKeys?.has('mother.lifeStatus') || autofilledKeys?.has('motherLifeStatus')} error={errors.motherLifeStatus} />
+          </View>
+          <View style={{ flex: 2 }}>
+            <Field label="Mother's Name" value={form.motherName} onChangeText={set('motherName', true)} required autoFilled={autofilledKeys?.has('mother.name') || autofilledKeys?.has('motherName')} autoCapitalize="words" error={errors.motherName} />
+          </View>
+        </View>
+        {form.motherLifeStatus !== 'deceased' && (
+          <ChoiceField label="Mother's Profession" value={form.motherProfession} options={PROFESSIONS} onChange={set('motherProfession')} autoFilled={autofilledKeys?.has('mother.profession') || autofilledKeys?.has('motherProfession')} />
+        )}
       </Card>
       
       <Card>
-        <SelectField label="Family Type" value={form.familyType} options={FAMILY_TYPES} onChange={set('familyType')} required autoFilled={autofilledKeys?.has('familyType')} />
-        <SelectField label="Family Status" value={form.familyStatus} options={FAMILY_STATUSES} onChange={set('familyStatus')} required autoFilled={autofilledKeys?.has('familyStatus')} />
-        <Field label="Number of Brothers" value={form.brothers} onChangeText={set('brothers')} keyboardType="number-pad" maxLength={2} autoFilled={autofilledKeys?.has('brothers')} />
-        <Field label="Number of Sisters" value={form.sisters} onChangeText={set('sisters')} keyboardType="number-pad" maxLength={2} autoFilled={autofilledKeys?.has('sisters')} />
+        <View style={{ flexDirection: 'row', gap: space(2) }}>
+          <View style={{ flex: 1 }}>
+            <SelectField label="Family Type" value={form.familyType} options={FAMILY_TYPES} onChange={set('familyType')} required autoFilled={autofilledKeys?.has('familyType')} error={errors.familyType} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <SelectField label="Family Status" value={form.familyStatus} options={FAMILY_STATUSES} onChange={set('familyStatus')} required autoFilled={autofilledKeys?.has('familyStatus')} error={errors.familyStatus} />
+          </View>
+        </View>
+        <View style={{ flexDirection: 'row', gap: space(2) }}>
+          <View style={{ flex: 1 }}>
+            <Field label="No. of Brothers" value={form.brothers} onChangeText={set('brothers')} keyboardType="number-pad" maxLength={2} autoFilled={autofilledKeys?.has('brothers')} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Field label="No. of Sisters" value={form.sisters} onChangeText={set('sisters')} keyboardType="number-pad" maxLength={2} autoFilled={autofilledKeys?.has('sisters')} />
+          </View>
+        </View>
         <Field label="Family Net Worth" value={form.familyNetWorth} onChangeText={set('familyNetWorth')} keyboardType="number-pad" hint="Optional, in Rupees" autoFilled={autofilledKeys?.has('familyNetWorth')} />
       </Card>
 
@@ -157,7 +201,7 @@ export function FamilyBackgroundForm({
           labels={{ country: 'Native Country', state: 'Native State', district: 'Native District' }}
           autoFilled={autofilledKeys?.has('nativeCountry') || autofilledKeys?.has('nativeState') || autofilledKeys?.has('nativeDistrict')}
         />
-        <Field label="Native Place (village / town)" value={form.nativePlace} onChangeText={set('nativePlace')} maxLength={120} autoFilled={autofilledKeys?.has('nativePlace')} />
+        <Field label="Native Place (village / town)" value={form.nativePlace} onChangeText={set('nativePlace', true)} maxLength={120} autoFilled={autofilledKeys?.has('nativePlace')} autoCapitalize="words" />
         <SelectField
           label="Settled abroad"
           value={form.isNri}
@@ -167,8 +211,8 @@ export function FamilyBackgroundForm({
         />
         {form.isNri === 'yes' && (
           <>
-            <Field label="City abroad" value={form.nriCity} onChangeText={set('nriCity')} maxLength={120} autoFilled={autofilledKeys?.has('nriCity')} />
-            <Field label="Country" value={form.nriCountry} onChangeText={set('nriCountry')} maxLength={80} autoFilled={autofilledKeys?.has('nriCountry')} />
+            <Field label="City abroad" value={form.nriCity} onChangeText={set('nriCity', true)} maxLength={120} autoFilled={autofilledKeys?.has('nriCity')} autoCapitalize="words" />
+            <Field label="Country" value={form.nriCountry} onChangeText={set('nriCountry', true)} maxLength={80} autoFilled={autofilledKeys?.has('nriCountry')} autoCapitalize="words" />
           </>
         )}
       </Card>

@@ -4,16 +4,19 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api, apiMessage } from '@/lib/api';
 import { SelectField } from '@/components/form';
-import { Alert, Button, Card, Field } from '@/components/ui';
+import { Alert, Button, Card, Field, Caption, Body } from '@/components/ui';
 import { CASTES_BY_RELIGION, MOTHER_TONGUES, RELIGIONS } from '@/shared/reference';
 import { STATES_BY_COUNTRY, districtsForState, DISTRICTS_BY_STATE } from '@/shared/locations';
 import { space } from '@/theme';
 import { ChoiceField, canonical } from './choice-field';
 import { WowCalendar } from '@/components/common/WowCalendar';
+import { MediaStrip, PhotoPicker } from '@/components/uploader';
+import { capitalizeWords } from '@/lib/format';
 import { GENDERS, MARITAL, COMPLEXIONS, stored } from './constants';
 
 interface Form {
-  fullName: string;
+  firstName: string;
+  lastName: string;
   dateOfBirth: string;
   gender: string;
   heightCm: string;
@@ -44,8 +47,10 @@ function formFrom(
     }
   }
 
+  const names = String(me.displayName ?? '').trim().split(/\s+/);
   return {
-    fullName: String(me.displayName ?? ''),
+    firstName: capitalizeWords(String(d.firstName ?? names[0] ?? '')),
+    lastName: capitalizeWords(String(d.lastName ?? names.slice(1).join(' ') ?? '')),
     dateOfBirth: String(me.dateOfBirth ?? full?.dateOfBirth ?? '').slice(0, 10),
     gender: String(me.gender ?? '').toLowerCase(),
     heightCm: stored(d.heightCm),
@@ -55,8 +60,8 @@ function formFrom(
     subCaste: String(d.subCaste ?? ''),
     motherTongue: canonical(String(d.motherTongue ?? ''), MOTHER_TONGUES),
     state,
-    location: city,
-    communicationAddress: String(d.communicationAddress ?? ''),
+    location: capitalizeWords(city),
+    communicationAddress: capitalizeWords(String(d.communicationAddress ?? '')),
     alternateMobile: String(d.alternateMobile ?? ''),
     complexion: String(d.complexion ?? ''),
   };
@@ -66,6 +71,9 @@ export function PersonalForm({
   profileId,
   me,
   full,
+  photos,
+  onPhotoAdded,
+  onPhotoRemoved,
   onSaved,
   onBack,
   autofilledKeys,
@@ -73,12 +81,16 @@ export function PersonalForm({
   profileId: string | null;
   me: Record<string, unknown>;
   full?: { details?: Record<string, unknown> | null; dateOfBirth?: string | null };
+  photos?: string[];
+  onPhotoAdded?: (url: string) => void;
+  onPhotoRemoved?: (url: string) => void;
   onSaved: () => void;
   onBack?: () => void;
   autofilledKeys?: Set<string>;
 }) {
   const qc = useQueryClient();
   const [error, setError] = useState('');
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [draft, setDraft] = useState<Form | null>(null);
 
   const form = draft ?? formFrom(me, full);
@@ -97,24 +109,23 @@ export function PersonalForm({
   const save = useMutation({
     mutationFn: async () => {
       const payload: Record<string, string> = {};
-      if (form.fullName.trim()) payload.displayName = form.fullName.trim();
+      if (form.firstName.trim() || form.lastName.trim()) {
+        payload.displayName = `${form.firstName.trim()} ${form.lastName.trim()}`.trim();
+      }
       if (form.gender) payload.gender = form.gender;
       if (form.dateOfBirth) payload.dateOfBirth = form.dateOfBirth;
       if (form.location.trim()) payload.city = form.location.trim();
       await api.put('/users/me/profile', payload);
 
       if (!profileId) return;
-      const names = form.fullName.trim().split(/\s+/);
-      if (personalStarted) {
         await api.put(`/profiles/${profileId}/details/personal`, {
-          firstName: names[0] || form.fullName.trim(),
-          lastName: names.slice(1).join(' ') || undefined,
+          firstName: form.firstName.trim(),
+          lastName: form.lastName.trim(),
           heightCm: Number(form.heightCm),
           complexion: form.complexion,
           communicationAddress: form.communicationAddress.trim(),
           alternateMobile: form.alternateMobile.trim() || null,
         });
-      }
 
       if (religionStarted) {
         await api.put(`/profiles/${profileId}/details/religion`, {
@@ -144,24 +155,40 @@ export function PersonalForm({
     onError: (err) => setError(apiMessage(err, 'Your profile could not be saved.')),
   });
 
-  const set = (key: keyof Form) => (value: string) => setDraft({ ...form, [key]: value });
+  const set = (key: keyof Form, capitalize?: boolean) => (value: string) => {
+    setErrors(e => ({ ...e, [key]: '' }));
+    setDraft({ ...form, [key]: capitalize ? capitalizeWords(value) : value });
+  };
 
   function submit() {
-    if (personalStarted) {
-      const h = Number(form.heightCm);
-      if (!form.heightCm || Number.isNaN(h) || h < 120 || h > 230) {
-        setError('Height must be between 120cm and 230cm.');
-        return;
-      }
-      if (!form.complexion || !form.communicationAddress.trim()) {
-        setError('Complexion and communication address are needed to save personal details.');
-        return;
-      }
+    let newErrors: Record<string, string> = {};
+    if (!photos || photos.length < 3) return setError('At least 3 photographs are required.');
+    
+    if (!form.firstName.trim()) newErrors.firstName = 'First Name is required.';
+    if (!form.lastName.trim()) newErrors.lastName = 'Last Name is required.';
+    if (!form.dateOfBirth) newErrors.dateOfBirth = 'Date of Birth is required.';
+    if (!form.gender) newErrors.gender = 'Gender is required.';
+    
+    const h = Number(form.heightCm);
+    if (!form.heightCm || Number.isNaN(h) || h < 120 || h > 230) {
+      newErrors.heightCm = 'Height must be between 120cm and 230cm.';
     }
-    if (religionStarted && (!form.religion || !form.caste.trim() || !form.subCaste.trim() || !form.motherTongue.trim())) {
-      setError('Religion, caste, sub-caste and mother tongue are all needed to save religion details.');
+    
+    if (!form.complexion) newErrors.complexion = 'Complexion is required.';
+    if (!form.maritalStatus) newErrors.maritalStatus = 'Marital Status is required.';
+    
+    if (!form.religion) newErrors.religion = 'Religion is required.';
+    if (!form.caste.trim()) newErrors.caste = 'Caste is required.';
+    if (!form.motherTongue.trim()) newErrors.motherTongue = 'Mother Tongue is required.';
+    if (!form.communicationAddress.trim()) newErrors.communicationAddress = 'Communication Address is required.';
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      setError('Please fix the errors below.');
       return;
     }
+
+    setErrors({});
     setError('');
     save.mutate();
   }
@@ -170,34 +197,87 @@ export function PersonalForm({
     <View style={{ gap: space(4) }}>
       {error ? <Alert tone="critical">{error}</Alert> : null}
       <Card>
-        <Field label="Full Name" value={form.fullName} onChangeText={set('fullName')} required autoFilled={autofilledKeys?.has('firstName') || autofilledKeys?.has('lastName')} />
-        <WowCalendar label="Date of Birth" title="Select Date of Birth" value={form.dateOfBirth} onChange={set('dateOfBirth')} maximumDate={maxDob} required autoFilled={autofilledKeys?.has('dateOfBirth')} />
-        <SelectField label="Gender" value={form.gender} options={GENDERS} onChange={set('gender')} required autoFilled={autofilledKeys?.has('gender')} />
-        <Field label="Height (cm)" value={form.heightCm} onChangeText={set('heightCm')} keyboardType="number-pad" maxLength={3} required autoFilled={autofilledKeys?.has('heightCm')} />
-        <SelectField label="Complexion" value={form.complexion} options={COMPLEXIONS} onChange={set('complexion')} required autoFilled={autofilledKeys?.has('complexion')} />
-        <SelectField label="Marital Status" value={form.maritalStatus} options={MARITAL} onChange={set('maritalStatus')} required autoFilled={autofilledKeys?.has('maritalStatus')} />
+        <Body tone="muted">
+          Add at least 3 photographs — basic information cannot be saved without them.
+        </Body>
+        {(photos ?? []).length === 0 ? (
+          <View style={{ width: 116, height: 84, borderRadius: 8, backgroundColor: '#f0f0f0' }} />
+        ) : null}
+        <MediaStrip
+          urls={photos ?? []}
+          onRemove={onPhotoRemoved}
+        />
+        <PhotoPicker
+          label="Add a photograph"
+          onUploaded={(url) => onPhotoAdded && onPhotoAdded(url)}
+        />
       </Card>
 
       <Card>
-        <ChoiceField
-          label="Religion"
-          value={form.religion}
-          options={RELIGIONS}
-          onChange={(religion) => setDraft({ ...form, religion, caste: '' })}
-          required
-          autoFilled={autofilledKeys?.has('religion')}
-        />
-        <ChoiceField
-          key={`caste-${form.religion}`}
-          label="Caste"
-          value={form.caste}
-          options={CASTES_BY_RELIGION[form.religion] ?? []}
-          onChange={set('caste')}
-          required
-          autoFilled={autofilledKeys?.has('caste')}
-        />
-        <Field label="Sub-Caste" value={form.subCaste} onChangeText={set('subCaste')} maxLength={60} required autoFilled={autofilledKeys?.has('subCaste')} />
+        <View style={{ flexDirection: 'row', gap: space(2) }}>
+          <View style={{ flex: 1 }}>
+            <Field label="First Name" value={form.firstName} onChangeText={set('firstName', true)} required autoFilled={autofilledKeys?.has('firstName')} autoCapitalize="words" error={errors.firstName} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Field label="Last Name" value={form.lastName} onChangeText={set('lastName', true)} required autoFilled={autofilledKeys?.has('lastName')} autoCapitalize="words" error={errors.lastName} />
+          </View>
+        </View>
+
+        <View style={{ flexDirection: 'row', gap: space(2) }}>
+          <View style={{ flex: 1 }}>
+            <WowCalendar label="Date of Birth" title="Select Date of Birth" value={form.dateOfBirth} onChange={set('dateOfBirth')} maximumDate={maxDob} required autoFilled={autofilledKeys?.has('dateOfBirth')} />
+            {errors.dateOfBirth ? <Caption tone="critical">{errors.dateOfBirth}</Caption> : null}
+          </View>
+          <View style={{ flex: 1 }}>
+            <SelectField label="Gender" value={form.gender} options={GENDERS} onChange={set('gender')} required autoFilled={autofilledKeys?.has('gender')} error={errors.gender} />
+          </View>
+        </View>
+
+        <View style={{ flexDirection: 'row', gap: space(2) }}>
+          <View style={{ flex: 1 }}>
+            <Field label="Height (cm)" value={form.heightCm} onChangeText={set('heightCm')} keyboardType="number-pad" maxLength={3} required autoFilled={autofilledKeys?.has('heightCm')} error={errors.heightCm} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <SelectField label="Complexion" value={form.complexion} options={COMPLEXIONS} onChange={set('complexion')} required autoFilled={autofilledKeys?.has('complexion')} error={errors.complexion} />
+          </View>
+        </View>
+        
+        <SelectField label="Marital Status" value={form.maritalStatus} options={MARITAL} onChange={set('maritalStatus')} required autoFilled={autofilledKeys?.has('maritalStatus')} error={errors.maritalStatus} />
+      </Card>
+
+      <Card>
+        <View style={{ flexDirection: 'row', gap: space(2) }}>
+          <View style={{ flex: 1 }}>
+            <ChoiceField
+              label="Religion"
+              value={form.religion}
+              options={RELIGIONS}
+              onChange={(religion) => {
+                setErrors(e => ({ ...e, religion: '', caste: '' }));
+                setDraft({ ...form, religion, caste: '' });
+              }}
+              required
+              autoFilled={autofilledKeys?.has('religion')}
+            />
+            {errors.religion ? <Caption tone="critical">{errors.religion}</Caption> : null}
+          </View>
+          <View style={{ flex: 1 }}>
+            <ChoiceField
+              key={`caste-${form.religion}`}
+              label="Caste"
+              value={form.caste}
+              options={CASTES_BY_RELIGION[form.religion] ?? []}
+              onChange={set('caste')}
+              required
+              autoFilled={autofilledKeys?.has('caste')}
+            />
+            {errors.caste ? <Caption tone="critical">{errors.caste}</Caption> : null}
+          </View>
+        </View>
+
+        <Field label="Sub-Caste" value={form.subCaste} onChangeText={set('subCaste', true)} maxLength={60} autoFilled={autofilledKeys?.has('subCaste')} autoCapitalize="words" />
         <ChoiceField label="Mother Tongue" value={form.motherTongue} options={MOTHER_TONGUES} onChange={set('motherTongue')} required autoFilled={autofilledKeys?.has('motherTongue')} />
+        {errors.motherTongue ? <Caption tone="critical">{errors.motherTongue}</Caption> : null}
       </Card>
 
       <Card>
@@ -206,6 +286,7 @@ export function PersonalForm({
           value={form.state}
           options={STATES_BY_COUNTRY['India'] ?? []}
           onChange={(newState) => {
+            setErrors(e => ({ ...e, state: '', location: '' }));
             setDraft({
               ...form,
               state: newState,
@@ -214,8 +295,11 @@ export function PersonalForm({
           }}
           autoFilled={autofilledKeys?.has('state')}
         />
-        <ChoiceField label="City" value={form.location} options={districtsForState(form.state)} onChange={set('location')} autoFilled={autofilledKeys?.has('location')} />
-        <Field label="Communication Address" value={form.communicationAddress} onChangeText={set('communicationAddress')} required autoFilled={autofilledKeys?.has('communicationAddress')} />
+        {errors.state ? <Caption tone="critical">{errors.state}</Caption> : null}
+        
+        <ChoiceField label="City" value={form.location} options={districtsForState(form.state)} onChange={set('location', true)} autoFilled={autofilledKeys?.has('location')} />
+
+        <Field label="Communication Address" value={form.communicationAddress} onChangeText={set('communicationAddress', true)} required autoFilled={autofilledKeys?.has('communicationAddress')} autoCapitalize="words" error={errors.communicationAddress} />
         <Field label="Alternate Mobile" value={form.alternateMobile} onChangeText={set('alternateMobile')} keyboardType="phone-pad" autoFilled={autofilledKeys?.has('alternateMobile')} />
       </Card>
 
@@ -227,7 +311,7 @@ export function PersonalForm({
           style={{ flex: 1 }}
           label="Save & Continue →"
           busy={save.isPending}
-          disabled={!form.fullName.trim()}
+          disabled={!form.firstName.trim() || !form.lastName.trim()}
           onPress={submit}
         />
       </View>

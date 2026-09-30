@@ -337,17 +337,9 @@ export default function Matches() {
               Pick a client to browse their matches.
             </EmptyState>
           ) : gate ? (
-            !isProfileComplete ? (
-              <View style={{ paddingTop: space(2) }}>
-                <ProfileCompletionCard percent={biodata?.percent ?? 0} hideAction={Boolean(acting.profileId)} />
-              </View>
-            ) : (
-              <View style={{ gap: space(2) }}>
-                <EmptyState title="Matchmaking is closed">
-                  {gate}
-                </EmptyState>
-              </View>
-            )
+            <EmptyState title="Matchmaking is closed">
+              {gate}
+            </EmptyState>
           ) : (
             <EmptyState title="No matches to show yet">
               Try changing your search or match tab.
