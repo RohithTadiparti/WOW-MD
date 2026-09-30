@@ -15,7 +15,7 @@ import { rupeesExact, shortDate } from '@/lib/format';
 import { isPlannerAccount } from '@/lib/planner-listing';
 import { MILESTONE_LABEL, Permission, can } from '@/shared/permissions';
 import { Badge, Divider, StatTile, TileGrid, type Tone } from '@/components/chrome';
-import { PayoutAccount } from '@/components/accounts/payout-account';
+import { PayoutAccount, type PayoutAccountView } from '@/components/accounts/payout-account';
 import { ListScreen } from '@/components/layout';
 import { BusinessSwitcher } from '@/components/business/switcher';
 import { Body, Button, Caption, Card, PageSubtitle, SectionTitle } from '@/components/ui';
@@ -134,19 +134,15 @@ export default function Accounts() {
   });
 
   // The provider's payout account lives here, not in My Business.
-  const { data: payout } = useQuery<{ payoutAccountId: string | null } | null>({
+  const payoutEndpoint = isPlanner
+    ? '/wedding-planners/me/payout-account'
+    : activeId
+      ? `/vendors/${activeId}/payout-account`
+      : null;
+  const { data: payout } = useQuery<PayoutAccountView | null>({
     queryKey: ['payout-account', isPlanner ? 'planner' : activeId],
-    enabled: (isVendor && Boolean(activeId)) || isPlanner,
-    queryFn: async () => {
-      if (isPlanner) {
-        return (await api.get('/wedding-planners/me')).data as { payoutAccountId: string | null };
-      }
-      const listings = (await api.get('/vendors/me')).data as {
-        id: string;
-        payoutAccountId: string | null;
-      }[];
-      return listings.find((l) => l.id === activeId) ?? null;
-    },
+    enabled: ((isVendor && Boolean(activeId)) || isPlanner) && Boolean(payoutEndpoint),
+    queryFn: async () => (await api.get<PayoutAccountView>(payoutEndpoint as string)).data,
     retry: false,
   });
 
@@ -177,17 +173,8 @@ export default function Accounts() {
 
           <BusinessSwitcher />
 
-          {isVendor && activeId ? (
-            <PayoutAccount
-              endpoint={`/vendors/${activeId}/payout-account`}
-              current={payout?.payoutAccountId ?? null}
-            />
-          ) : null}
-          {isPlanner ? (
-            <PayoutAccount
-              endpoint="/wedding-planners/me/payout-account"
-              current={payout?.payoutAccountId ?? null}
-            />
+          {((isVendor && activeId) || isPlanner) && payoutEndpoint ? (
+            <PayoutAccount endpoint={payoutEndpoint} view={payout ?? null} />
           ) : null}
 
           {data && (
@@ -256,6 +243,7 @@ export default function Accounts() {
                       <EligiblePayoutCard
                         key={row.paymentId}
                         row={row}
+                        payoutActive={payout?.status === 'active'}
                         onReleased={() => void queryClient.invalidateQueries({ queryKey: ['earnings'] })}
                       />
                     ))}
@@ -266,11 +254,15 @@ export default function Accounts() {
               <Card>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space(2) }}>
                   <SectionTitle>Payout account</SectionTitle>
-                  <Badge tone={payout?.payoutAccountId ? 'positive' : 'caution'}>
-                    {payout?.payoutAccountId ? 'Verified' : 'Not configured'}
+                  <Badge tone={payout?.status === 'active' ? 'positive' : 'caution'}>
+                    {payout?.status === 'active'
+                      ? 'Active'
+                      : payout?.status === 'pending_verification'
+                        ? 'Pending verification'
+                        : 'Not configured'}
                   </Badge>
                 </View>
-                <Body tone="muted">Razorpay account</Body>
+                <Body tone="muted">Linked account</Body>
                 <Body style={{ fontFamily: 'monospace' }}>{maskAccountId(payout?.payoutAccountId ?? null)}</Body>
               </Card>
             </View>
@@ -383,9 +375,11 @@ function LedgerCard({ row, onPress }: { row: LedgerRow; onPress: () => void }) {
 
 function EligiblePayoutCard({
   row,
+  payoutActive,
   onReleased,
 }: {
   row: LedgerRow;
+  payoutActive: boolean;
   onReleased: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -394,9 +388,12 @@ function EligiblePayoutCard({
     setBusy(true);
     setError(null);
     try {
-      await api.put(
+      const { data: result } = await api.put<{ released: number; notReleased: string[] }>(
         `/bookings/${row.bookingId}/release-payout?milestone=${encodeURIComponent(row.milestone)}`,
       );
+      if (result.released === 0) {
+        setError(result.notReleased[0] ?? 'Nothing was released. It may already be on its way.');
+      }
       onReleased();
     } catch (err) {
       setError(apiMessage(err, 'That payment could not be released.'));
@@ -416,10 +413,13 @@ function EligiblePayoutCard({
       <Line label="Available" value={rupeesExact(row.availableAmount)} strong />
       <Button
         label={busy ? 'Releasing…' : 'Release Payment'}
-        disabled={busy}
+        disabled={busy || !payoutActive}
         busy={busy}
         onPress={() => void release()}
       />
+      {!payoutActive ? (
+        <Caption tone="faint">Released once your payout account is active.</Caption>
+      ) : null}
       {error ? <Caption tone="critical">{error}</Caption> : null}
     </View>
   );

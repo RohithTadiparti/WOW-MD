@@ -1,11 +1,11 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiMessage } from '../lib/api';
 import { MILESTONE_LABEL, Permission, can } from '../lib/permissions';
 import { paymentStatusLabel } from '../lib/labels';
 import { Loading } from '../components/ui/Feedback';
-import PayoutAccount from '../components/PayoutAccount';
+import PayoutAccount, { type PayoutAccountView } from '../components/PayoutAccount';
 import { useAuth } from '../store/auth';
 import { useBusinesses } from '../store/business';
 
@@ -84,18 +84,40 @@ export default function Accounts() {
   });
 
   // The provider's payout account lives here now, not in My Business (EZ1-I100).
-  const { data: payout } = useQuery<{ payoutAccountId: string | null } | null>({
+  const payoutEndpoint = isPlanner
+    ? '/wedding-planners/me/payout-account'
+    : activeId
+      ? `/vendors/${activeId}/payout-account`
+      : null;
+  const { data: payout } = useQuery<PayoutAccountView | null>({
     queryKey: ['payout-account', isPlanner ? 'planner' : activeId],
-    enabled: (isVendor && Boolean(activeId)) || isPlanner,
-    queryFn: async () => {
-      if (isPlanner) {
-        return (await api.get('/wedding-planners/me')).data as { payoutAccountId: string | null };
-      }
-      const listings = (await api.get('/vendors/me')).data as { id: string; payoutAccountId: string | null }[];
-      return listings.find((l) => l.id === activeId) ?? null;
-    },
+    enabled: ((isVendor && Boolean(activeId)) || isPlanner) && Boolean(payoutEndpoint),
+    queryFn: async () => (await api.get<PayoutAccountView>(payoutEndpoint as string)).data,
     retry: false,
   });
+  const payoutActive = payout?.status === 'active';
+  const [releasing, setReleasing] = useState<string | null>(null);
+  const [releaseNotice, setReleaseNotice] = useState('');
+
+  async function releasePayment(row: LedgerRow) {
+    setReleasing(row.paymentId);
+    setReleaseNotice('');
+    try {
+      const { data: result } = await api.put<{ released: number; notReleased: string[] }>(
+        `/bookings/${row.bookingId}/release-payout?milestone=${encodeURIComponent(row.milestone)}`,
+      );
+      setReleaseNotice(
+        result.released > 0
+          ? 'Payment released to your payout account.'
+          : result.notReleased[0] ?? 'Nothing was released. It may already be on its way.',
+      );
+      await qc.invalidateQueries({ queryKey: ['earnings'] });
+    } catch (err) {
+      setReleaseNotice(apiMessage(err, 'That payment could not be released.'));
+    } finally {
+      setReleasing(null);
+    }
+  }
 
   const money = (value: string) =>
     `${data?.currency === 'INR' ? '₹' : ''}${Number(value).toLocaleString('en-IN', {
@@ -120,17 +142,8 @@ export default function Accounts() {
         </p>
       </div>
 
-      {isVendor && activeId && (
-        <PayoutAccount
-          endpoint={`/vendors/${activeId}/payout-account`}
-          current={payout?.payoutAccountId ?? null}
-        />
-      )}
-      {isPlanner && (
-        <PayoutAccount
-          endpoint="/wedding-planners/me/payout-account"
-          current={payout?.payoutAccountId ?? null}
-        />
+      {((isVendor && activeId) || isPlanner) && payoutEndpoint && (
+        <PayoutAccount endpoint={payoutEndpoint} view={payout ?? null} />
       )}
 
       {isLoading && <Loading rows={3} />}
@@ -154,6 +167,9 @@ export default function Accounts() {
                   Available: {money(data.pendingPayout)}
                 </span>
               </div>
+              {releaseNotice && (
+                <p className="rounded-sm bg-sky-50 p-2 text-sm text-sky-800">{releaseNotice}</p>
+              )}
               {eligibleRows.length === 0 ? (
                 <div className="py-4 text-center text-sm text-gray-500">No milestones are currently eligible for release.</div>
               ) : (
@@ -186,19 +202,12 @@ export default function Accounts() {
                           <td className="py-3 text-right">
                             <button
                               type="button"
-                              className="btn whitespace-nowrap"
-                              onClick={async () => {
-                                try {
-                                  await api.put(
-                                    `/bookings/${row.bookingId}/release-payout?milestone=${encodeURIComponent(row.milestone)}`,
-                                  );
-                                  await qc.invalidateQueries({ queryKey: ['earnings'] });
-                                } catch (err) {
-                                  window.alert(apiMessage(err, 'That payment could not be released.'));
-                                }
-                              }}
+                              className="btn whitespace-nowrap disabled:cursor-not-allowed disabled:bg-slate-200"
+                              disabled={releasing !== null || !payoutActive}
+                              title={payoutActive ? undefined : 'Set up an active payout account first'}
+                              onClick={() => void releasePayment(row)}
                             >
-                              Release Payment
+                              {releasing === row.paymentId ? 'Releasing…' : 'Release Payment'}
                             </button>
                           </td>
                         </tr>
@@ -213,18 +222,24 @@ export default function Accounts() {
               <div className="flex items-center justify-between gap-3">
                 <h2 className="section-title">Payout account</h2>
                 <span
-                  className={`rounded-full px-2 py-1 text-xs ${payout?.payoutAccountId ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'}`}
+                  className={`rounded-full px-2 py-1 text-xs ${payoutActive ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'}`}
                 >
-                  {payout?.payoutAccountId ? 'Verified' : 'Not configured'}
+                  {payoutActive
+                    ? 'Active'
+                    : payout?.status === 'pending_verification'
+                      ? 'Pending verification'
+                      : 'Not configured'}
                 </span>
               </div>
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-                <div className="font-medium text-slate-900">Razorpay account</div>
+                <div className="font-medium text-slate-900">Linked account</div>
                 <div className="mt-1 font-mono">{maskAccountId(payout?.payoutAccountId ?? null)}</div>
                 <div className="mt-2 text-xs text-slate-500">
-                  {payout?.payoutAccountId
-                    ? 'Transfers can be sent once the account is verified by the payout provider.'
-                    : 'Add a linked payout account to allow transfers from escrow.'}
+                  {payoutActive
+                    ? 'Released payments are transferred to this account.'
+                    : payout?.status === 'pending_verification'
+                      ? 'Your bank details are waiting to be verified. Payouts are held until then.'
+                      : 'Add a payout account to allow transfers from escrow.'}
                 </div>
               </div>
             </div>
