@@ -87,11 +87,6 @@ export function OfferingPicker({
                   Includes: {o.inclusions.join(', ')}
                 </span>
               )}
-              {offeringId === o.id && (
-                <span className="mt-1 block text-xs font-medium text-brand">
-                  Selected — select again to request a quote instead.
-                </span>
-              )}
             </button>
           ))}
         </div>
