@@ -64,6 +64,25 @@ export const OCCUPATION_STATUS = [
 export const stored = (value: unknown): string =>
   typeof value === 'number' || (typeof value === 'string' && value.trim()) ? String(value) : '';
 
+/**
+ * First and last name to start the form with: the biodata's own when it has
+ * them, otherwise the account's display name split at the first space.
+ */
+export function namesFrom(
+  displayName: unknown,
+  details: Record<string, unknown>,
+): { firstName: string; lastName: string } {
+  const first = stored(details.firstName);
+  const last = stored(details.lastName) || stored(details.surname);
+  if (first || last) return { firstName: first, lastName: last };
+  const [head = '', ...rest] = String(displayName ?? '').trim().split(/\s+/);
+  return { firstName: head, lastName: rest.join(' ') };
+}
+
+/** The account's display name, from the two biodata fields. */
+export const displayNameOf = (firstName: string, lastName: string): string =>
+  [firstName.trim(), lastName.trim()].filter(Boolean).join(' ');
+
 export const COMPLEXIONS = [
   { value: 'fair', label: 'Fair' },
   { value: 'wheatish', label: 'Wheatish' },

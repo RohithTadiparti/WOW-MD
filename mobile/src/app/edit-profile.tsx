@@ -13,6 +13,7 @@ import {
   Screen,
   SectionTitle,
 } from '@/components/ui';
+import { displayNameOf, namesFrom } from '@/components/biodata';
 import { space } from '@/theme';
 
 const GENDERS = [
@@ -55,7 +56,8 @@ const HEIGHTS = [
 ];
 
 interface Form {
-  fullName: string;
+  firstName: string;
+  lastName: string;
   dateOfBirth: string;
   gender: string;
   heightCm: string;
@@ -71,7 +73,7 @@ function formFrom(
 ): Form {
   const d = (full?.details ?? {}) as Record<string, unknown>;
   return {
-    fullName: String(me.displayName ?? ''),
+    ...namesFrom(me.displayName, d),
     dateOfBirth: String(me.dateOfBirth ?? full?.dateOfBirth ?? '').slice(0, 10),
     gender: String(me.gender ?? '').toLowerCase(),
     heightCm: d.heightCm != null ? String(d.heightCm) : '',
@@ -112,18 +114,18 @@ export default function EditProfile() {
   const save = useMutation({
     mutationFn: async () => {
       const payload: Record<string, string> = {};
-      if (form.fullName.trim()) payload.displayName = form.fullName.trim();
+      const displayName = displayNameOf(form.firstName, form.lastName);
+      if (displayName) payload.displayName = displayName;
       if (form.gender) payload.gender = form.gender;
       if (form.dateOfBirth) payload.dateOfBirth = form.dateOfBirth;
       if (form.location.trim()) payload.city = form.location.trim();
       await api.put('/users/me/profile', payload);
 
       if (!profileId) return;
-      const names = form.fullName.trim().split(/\s+/);
       try {
         await api.put(`/profiles/${profileId}/details/personal`, {
-          firstName: names[0] || form.fullName.trim(),
-          lastName: names.slice(1).join(' ') || undefined,
+          firstName: form.firstName.trim(),
+          lastName: form.lastName.trim(),
           heightCm: form.heightCm ? Number(form.heightCm) : undefined,
           city: form.location.trim() || undefined,
         });
@@ -180,7 +182,13 @@ export default function EditProfile() {
       {notice ? <Alert tone="positive">{notice}</Alert> : null}
       {error ? <Alert tone="critical">{error}</Alert> : null}
 
-      <Field label="Full Name" value={form.fullName} onChangeText={set('fullName')} />
+      <Field label="First Name" value={form.firstName} onChangeText={set('firstName')} />
+      <Field
+        label="Last Name"
+        value={form.lastName}
+        onChangeText={set('lastName')}
+        hint="Family name, as on your documents"
+      />
       <DateField label="Date of Birth" value={form.dateOfBirth} onChange={set('dateOfBirth')} />
       <SelectField label="Gender" value={form.gender} options={GENDERS} onChange={set('gender')} />
       <SelectField label="Height" value={form.heightCm} options={HEIGHTS} onChange={set('heightCm')} />
@@ -203,7 +211,7 @@ export default function EditProfile() {
         <Button
           label="Save Changes"
           busy={save.isPending}
-          disabled={!form.fullName.trim()}
+          disabled={!form.firstName.trim() || !form.lastName.trim()}
           onPress={() => save.mutate()}
         />
       </View>

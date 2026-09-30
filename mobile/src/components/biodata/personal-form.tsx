@@ -6,10 +6,19 @@ import { api, apiMessage } from '@/lib/api';
 import { DateField, SelectField } from '@/components/form';
 import { Alert, Button, Card, Field } from '@/components/ui';
 import { space } from '@/theme';
-import { GENDERS, MARITAL, RELIGIONS, COMPLEXIONS, stored } from './constants';
+import {
+  GENDERS,
+  MARITAL,
+  RELIGIONS,
+  COMPLEXIONS,
+  displayNameOf,
+  namesFrom,
+  stored,
+} from './constants';
 
 interface Form {
-  fullName: string;
+  firstName: string;
+  lastName: string;
   dateOfBirth: string;
   gender: string;
   heightCm: string;
@@ -39,7 +48,7 @@ function formFrom(
 ): Form {
   const d = (full?.details ?? {}) as Record<string, unknown>;
   return {
-    fullName: String(me.displayName ?? ''),
+    ...namesFrom(me.displayName, d),
     dateOfBirth: String(me.dateOfBirth ?? full?.dateOfBirth ?? '').slice(0, 10),
     gender: String(me.gender ?? '').toLowerCase(),
     heightCm: stored(d.heightCm),
@@ -92,20 +101,20 @@ export function PersonalForm({
   const save = useMutation({
     mutationFn: async () => {
       const payload: Record<string, string> = {};
-      if (form.fullName.trim()) payload.displayName = form.fullName.trim();
+      const displayName = displayNameOf(form.firstName, form.lastName);
+      if (displayName) payload.displayName = displayName;
       if (form.gender) payload.gender = form.gender;
       if (form.dateOfBirth) payload.dateOfBirth = form.dateOfBirth;
       if (form.location.trim()) payload.city = form.location.trim();
       await api.put('/users/me/profile', payload);
 
       if (!profileId) return;
-      const names = form.fullName.trim().split(/\s+/);
       // Each of these used to swallow its own error, so a refused save (most
       // often "Add 3 photographs first") still moved on as if it had worked.
       // A failure now stops here and is shown on the form.
       await api.put(`/profiles/${profileId}/details/personal`, {
-        firstName: names[0] || form.fullName.trim(),
-        lastName: names.slice(1).join(' ') || undefined,
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
         heightCm: form.heightCm ? Number(form.heightCm) : undefined,
         city: form.location.trim() || undefined,
         complexion: form.complexion.trim() || undefined,
@@ -157,7 +166,13 @@ export function PersonalForm({
     <View style={{ gap: space(4) }}>
       {error ? <Alert tone="critical">{error}</Alert> : null}
       <Card>
-        <Field label="Full Name" value={form.fullName} onChangeText={set('fullName')} />
+        <Field label="First Name" value={form.firstName} onChangeText={set('firstName')} />
+        <Field
+          label="Last Name"
+          value={form.lastName}
+          onChangeText={set('lastName')}
+          hint="Family name, as on your documents"
+        />
         <DateField label="Date of Birth" value={form.dateOfBirth} onChange={set('dateOfBirth')} to={maxDob} />
         <SelectField label="Gender" value={form.gender} options={GENDERS} onChange={set('gender')} />
         <Field label="Height (cm)" value={form.heightCm} onChangeText={set('heightCm')} keyboardType="numeric" />
@@ -207,7 +222,7 @@ export function PersonalForm({
           style={{ flex: 1 }}
           label="Save & Continue →"
           busy={save.isPending}
-          disabled={!form.fullName.trim()}
+          disabled={!form.firstName.trim() || !form.lastName.trim()}
           onPress={() => {
             if (form.heightCm) {
               const h = Number(form.heightCm);
