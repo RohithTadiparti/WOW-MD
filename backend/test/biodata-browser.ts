@@ -213,6 +213,10 @@ export async function checkBiodataBrowser(apiOrigin: string, email: string, pass
     };
     const fill = (selector: string, value: string) => evaluate(`(() => { const input = document.querySelector(${JSON.stringify(selector)}); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, ${JSON.stringify(value)}); input.dispatchEvent(new Event('input', { bubbles: true })); })()`);
     const navigate = async (path: string) => { await send('Page.navigate', { url: origin + path }); };
+    // Moves inside the running app, as a link would. A full page load straight
+    // after signing in can race the app's own session refresh, and the losing
+    // refresh reads as a replayed token and ends the session.
+    const goInApp = (path: string) => evaluate(`(() => { history.pushState({}, '', ${JSON.stringify(path)}); dispatchEvent(new PopStateEvent('popstate')); })()`);
     const login = async () => {
       await navigate('/login');
       await waitFor('Boolean(document.querySelector("#email"))');
@@ -243,7 +247,7 @@ export async function checkBiodataBrowser(apiOrigin: string, email: string, pass
       `,
     });
     await login();
-    await navigate('/biodata');
+    await goInApp('/biodata');
 
     // The photographs step: upload the family photo, then replace it.
     await openPhoto('on the photographs step');
@@ -278,7 +282,7 @@ export async function checkBiodataBrowser(apiOrigin: string, email: string, pass
     await waitFor(`document.querySelector('#family-photo img')?.src === ${JSON.stringify(url)}`, 'family photo after reload');
     await evaluate(`fetch('/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })`);
     await login();
-    await navigate('/biodata');
+    await goInApp('/biodata');
     await openPhoto('after signing in again');
     await waitFor(`document.querySelector('#family-photo img')?.src === ${JSON.stringify(url)}`, 'family photo after sign-in');
     await waitFor('Boolean(document.querySelector("#saved-details button"))', 'saved details');
