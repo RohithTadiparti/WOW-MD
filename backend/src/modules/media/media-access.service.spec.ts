@@ -5,6 +5,7 @@ import { UserRole } from '../../common/enums';
 import { BookingsService } from '../bookings/bookings.service';
 import { Booking } from '../bookings/entities/booking.entity';
 import { Vendor } from '../vendors/entities/vendor.entity';
+import { ProfileDetails } from '../profile-details/entities/profile-details.entity';
 import { MediaAccessService } from './media-access.service';
 import { MediaService } from './media.service';
 import { Album } from './entities/album.entity';
@@ -58,8 +59,26 @@ function service() {
       where.ownerUserId === PHOTOGRAPHER.userId ? { id: 'vendor-1' } : null,
     ),
   } as unknown as Repository<Vendor>;
-  return { access: new MediaAccessService(bookings, vendors), bookings };
+  // One intake document on record: the agent's upload, for a client the bride
+  // has since claimed.
+  const intake = { ref: `media://${INTAKE_DOCUMENT}`, owners: [BRIDE.userId, 'agent-1'] };
+  const details = {
+    createQueryBuilder: () => {
+      const params: Record<string, string> = {};
+      const qb = {
+        innerJoin: () => qb,
+        where: (_sql: string, p: Record<string, string>) => (Object.assign(params, p), qb),
+        andWhere: (_sql: string, p: Record<string, string>) => (Object.assign(params, p), qb),
+        getCount: async () =>
+          params.ref === intake.ref && intake.owners.includes(params.viewer) ? 1 : 0,
+      };
+      return qb;
+    },
+  } as unknown as Repository<ProfileDetails>;
+  return { access: new MediaAccessService(bookings, vendors, details), bookings };
 }
+
+const INTAKE_DOCUMENT = 'users/agent-1/attachments/1-a-biodata.pdf';
 
 describe('MediaAccessService', () => {
   describe('who may open a booking delivery', () => {
@@ -103,6 +122,14 @@ describe('MediaAccessService', () => {
       await expect(access.canView(STRANGER, 'users/bride/attachments/1-a-receipt.pdf')).resolves.toBe(false);
       await expect(access.canView(STRANGER, 'users/bride/albums/1-a-haldi.jpg')).resolves.toBe(false);
       await expect(access.canView(BRIDE, 'users/bride/attachments/1-a-receipt.pdf')).resolves.toBe(true);
+    });
+
+    it("lets a profile's owner open the biodata document its agent uploaded", async () => {
+      const { access } = service();
+      await expect(access.canView(user('agent-1', UserRole.AGENT), INTAKE_DOCUMENT)).resolves.toBe(true);
+      await expect(access.canView(BRIDE, INTAKE_DOCUMENT)).resolves.toBe(true);
+      await expect(access.canView(STRANGER, INTAKE_DOCUMENT)).resolves.toBe(false);
+      await expect(access.canView(BRIDE, 'users/agent-1/attachments/1-a-other.pdf')).resolves.toBe(false);
     });
 
     it('lets the endpoint decide for anything that is not a booking file', async () => {

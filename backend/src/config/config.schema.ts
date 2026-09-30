@@ -9,6 +9,7 @@ import * as Joi from 'joi';
 export const configValidationSchema = Joi.object({
   NODE_ENV: Joi.string().valid('development', 'test', 'staging', 'production').default('development'),
   PORT: Joi.number().default(3000),
+  HOST: Joi.string().default('0.0.0.0'),
   API_PREFIX: Joi.string().default('api'),
   LOG_LEVEL: Joi.string().valid('fatal', 'error', 'warn', 'info', 'debug', 'trace').default('info'),
   CORS_ORIGINS: Joi.string().optional(),

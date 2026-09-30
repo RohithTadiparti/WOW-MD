@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CheckCircle } from '@phosphor-icons/react';
+import { CheckCircle, LockSimple } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
 import { isChartImage } from '../lib/horoscope';
 import { api, apiMessage } from '../lib/api';
@@ -15,6 +15,8 @@ interface Viewable {
    * the biodata sections are withheld rather than missing.
    */
   limited?: boolean;
+  accessLevel: 'basic' | 'full';
+  unlockRequirement: 'accepted_interest' | 'fixed_match' | null;
   profile: {
     id: string;
     displayName: string | null;
@@ -165,6 +167,14 @@ export default function ProfilePreview({
                     {active}
                   </span>
                 )}
+                {data?.limited && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
+                    <LockSimple size={13} weight="fill" aria-hidden />
+                    {data.unlockRequirement === 'fixed_match'
+                      ? 'Full profile unlocks once match is fixed'
+                      : 'Full profile unlocks once interest is accepted'}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -235,6 +245,7 @@ export default function ProfilePreview({
             <Group title="Education and occupation">
               <Row label="Qualification">{str('highestQualification')}</Row>
               <Row label="Occupation">{str('occupationStatus')?.replace(/_/g, ' ')}</Row>
+              <Row label="Profession">{str('profession') ?? String(bag('employment').role ?? bag('employment').designation ?? '')}</Row>
               {!data.limited && <Row label="Course">{str('course')}</Row>}
               {!data.limited && (
                 <Row label="Employer">
@@ -271,8 +282,9 @@ export default function ProfilePreview({
 
             {data.limited && (
               <p className="text-xs text-gray-500">
-                Family, contact details and the rest of the biodata are shared once you both
-                accept interest.
+                {data.unlockRequirement === 'fixed_match'
+                  ? 'The full profile is shared after the match is fixed and confirmed. Accepting interest alone does not unlock it.'
+                  : 'The full profile is shared after interest is accepted. Sending interest alone does not unlock it.'}
               </p>
             )}
 

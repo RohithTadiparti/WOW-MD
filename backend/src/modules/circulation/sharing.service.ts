@@ -100,7 +100,6 @@ export class SharingService {
         'This profile is marked private. Change its visibility before circulating it.',
       );
     }
-
     await this.consent.assertMayCirculate(profile);
     await this.assertBiodataComplete(profile);
     return profile;
@@ -531,7 +530,15 @@ export class SharingService {
 
     return shares.flatMap((share) => {
       const profile = byId.get(share.profileId);
-      if (!profile) return [];
+      // A profile archived, suspended or made private since it was shared
+      // drops off the list rather than taking the whole list down with it.
+      if (
+        !profile ||
+        profile.lifecycle !== ProfileLifecycle.ACTIVE ||
+        profile.visibility === ProfileVisibility.PRIVATE
+      ) {
+        return [];
+      }
 
       const agency = agencyByUser.get(share.sharedByUserId);
       const user = userById.get(share.sharedByUserId);

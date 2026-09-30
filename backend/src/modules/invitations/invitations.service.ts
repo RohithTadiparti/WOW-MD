@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
@@ -16,6 +17,8 @@ import { MailService } from '../../platform/mail/mail.service';
 import { SmsService } from '../../platform/sms/sms.service';
 import { AuditAction, AuditService } from '../../platform/audit/audit.service';
 import { expiresIn, generateToken, hashToken } from '../../common/util/tokens';
+import { randomInt } from 'crypto';
+import { RedisService } from '../../platform/redis/redis.service';
 import {
   InvitationStatus,
   ProfileClaimStatus,
@@ -23,6 +26,9 @@ import {
 } from '../../common/enums';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { MOBILE_MESSAGE, MOBILE_PATTERN } from '../../common/util/identity-fields';
+
+const INVITATION_OTP_TTL_SECONDS = 10 * 60;
+const INVITATION_OTP_MAX_ATTEMPTS = 5;
 
 /** What the public invitation-landing page is allowed to see. */
 export interface InvitationPreview {
@@ -60,6 +66,7 @@ export class InvitationsService {
     private readonly sms: SmsService,
     private readonly audit: AuditService,
     private readonly dataSource: DataSource,
+    private readonly redis: RedisService,
   ) {}
 
   /**
@@ -250,6 +257,63 @@ export class InvitationsService {
     };
   }
 
+  /** Sends an OTP to the mobile number on an SMS-only invitation for verification. */
+  async sendOtp(token: string): Promise<{ sent: true }> {
+    const invitation = await this.loadPending(token);
+    if (invitation.email || !invitation.phone) {
+      throw new BadRequestException('Mobile verification is only required for SMS-only invitations');
+    }
+    const redis = this.redis?.raw;
+    if (!redis) throw new ServiceUnavailableException('Mobile verification is temporarily unavailable');
+    const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
+    const otpKey = `invitation:otp:${invitation.id}`;
+    const attemptsKey = `invitation:otp:attempts:${invitation.id}`;
+    await redis.multi().set(otpKey, hashToken(code), 'EX', INVITATION_OTP_TTL_SECONDS)
+      .del(attemptsKey).exec();
+    // SmsService reports a gateway failure as `false` rather than throwing.
+    // Saying "sent" then would leave the invitee waiting for a code that never
+    // comes, with no way to claim the profile without it.
+    const sent = await this.sms.sendPhoneVerification({ to: invitation.phone, code });
+    if (!sent) {
+      await redis.del(otpKey);
+      throw new ServiceUnavailableException(
+        'We could not send the verification code just now. Please try again in a few minutes.',
+      );
+    }
+    return { sent: true };
+  }
+
+  /** Atomically checks, consumes, and rate-limits a single invitation OTP. */
+  private async verifyInvitationOtp(invitationId: string, code: string): Promise<boolean> {
+    const redis = this.redis?.raw;
+    if (!redis) throw new ServiceUnavailableException('Mobile verification is temporarily unavailable');
+    const otpKey = `invitation:otp:${invitationId}`;
+    const attemptsKey = `invitation:otp:attempts:${invitationId}`;
+    const result = await redis.eval(
+      `local stored = redis.call('GET', KEYS[1])
+       if stored and stored == ARGV[1] then
+         redis.call('DEL', KEYS[1])
+         redis.call('DEL', KEYS[2])
+         return { 1, 0 }
+       end
+       local attempts = redis.call('INCR', KEYS[2])
+       if attempts == 1 then redis.call('EXPIRE', KEYS[2], ARGV[2]) end
+       if attempts >= tonumber(ARGV[3]) then redis.call('DEL', KEYS[1]) end
+       return { 0, attempts }`,
+      2,
+      otpKey,
+      attemptsKey,
+      hashToken(code),
+      String(INVITATION_OTP_TTL_SECONDS),
+      String(INVITATION_OTP_MAX_ATTEMPTS),
+    ) as [number, number];
+    if (result[0] === 1) return true;
+    if (result[1] >= INVITATION_OTP_MAX_ATTEMPTS) {
+      throw new BadRequestException('Too many incorrect verification codes. Request a new code.');
+    }
+    return false;
+  }
+
   /**
    * Accepts an invitation: creates the account, links it to the profile and
    * marks the profile claimed. Everything happens in one transaction so a
@@ -258,7 +322,7 @@ export class InvitationsService {
    * The subject's email is verified implicitly — they proved control of it by
    * following the link.
    */
-  async accept(token: string, password: string, email?: string): Promise<User> {
+  async accept(token: string, password: string, email?: string, otpCode?: string): Promise<User> {
     return this.dataSource.transaction(async (manager) => {
       const invitationRepo = manager.getRepository(Invitation);
       const profileRepo = manager.getRepository(Profile);
@@ -266,6 +330,7 @@ export class InvitationsService {
 
       const invitation = await invitationRepo.findOne({
         where: { tokenHash: hashToken(token), status: InvitationStatus.PENDING },
+        lock: { mode: 'pessimistic_write' },
       });
       if (!invitation) {
         throw new NotFoundException('That invitation link is not valid or has already been used');
@@ -276,9 +341,12 @@ export class InvitationsService {
         throw new BadRequestException('That invitation has expired. Ask for a new one.');
       }
 
-      const profile = await profileRepo.findOne({ where: { id: invitation.profileId } });
+      const profile = await profileRepo.findOne({ where: { id: invitation.profileId }, lock: { mode: 'pessimistic_write' } });
       if (!profile) throw new NotFoundException('That profile no longer exists');
       if (profile.userId) throw new ConflictException('That profile already has an owner');
+      if (profile.contactPhone !== invitation.phone || profile.contactEmail !== invitation.email) {
+        throw new ConflictException('The contact details changed. Ask your agent for a new invitation.');
+      }
 
       /*
        * An invitation that went out by SMS alone carries no address. The
@@ -312,6 +380,18 @@ export class InvitationsService {
         if (numberTaken) throw new ConflictException('That mobile number already has an account');
       }
 
+      const smsOnly = !invitation.email && Boolean(invitation.phone);
+      let phoneVerifiedAt: Date | null = null;
+      if (smsOnly) {
+        if (!otpCode) {
+          throw new BadRequestException('Enter the mobile verification code to claim this invitation');
+        }
+        if (!(await this.verifyInvitationOtp(invitation.id, otpCode))) {
+          throw new BadRequestException('Invalid or expired mobile verification code');
+        }
+        phoneVerifiedAt = new Date();
+      }
+
       const passwordHash = await bcrypt.hash(password, this.cfg.auth.bcryptRounds);
       const user = await userRepo.save(
         userRepo.create({
@@ -328,6 +408,7 @@ export class InvitationsService {
           // nothing, so that account starts unverified like any other.
           isVerified: Boolean(invitation.email),
           emailVerifiedAt: invitation.email ? new Date() : null,
+          phoneVerifiedAt,
         }),
       );
 
@@ -335,6 +416,7 @@ export class InvitationsService {
       // agent's copy and the owner's disagree from the first day. A claim made
       // without an address leaves the profile's own contact details alone.
       if (address) profile.contactEmail = address;
+      profile.contactPhone = invitation.phone;
       profile.userId = user.id;
       profile.claimStatus = ProfileClaimStatus.CLAIMED;
       await profileRepo.save(profile);

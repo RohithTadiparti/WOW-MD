@@ -288,6 +288,16 @@ export default function Biodata() {
       {error && <p className="alert-critical">{error}</p>}
       {notice && <p className="alert-positive">{notice}</p>}
 
+      {/* The biodata document an agent created this profile from, if any. */}
+      {typeof details.biodataDocumentUrl === 'string' && details.biodataDocumentUrl && (
+        <p className="text-sm text-gray-600">
+          Created from an uploaded biodata.{' '}
+          <a className="text-brand" href={details.biodataDocumentUrl} target="_blank" rel="noreferrer">
+            Open the original document
+          </a>
+        </p>
+      )}
+
       {/*
         The thing they made, before the forms that made it. A read-back list is
         still a list; what somebody wants after filling this in is to see a

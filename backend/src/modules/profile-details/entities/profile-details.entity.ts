@@ -23,6 +23,15 @@ import { FamilyType, MaritalStatus, OccupationStatus } from '../../../common/enu
  */
 @Entity('profile_details')
 export class ProfileDetails {
+  /**
+   * The biodata document an agent uploaded when creating the client. Stored
+   * under the agent's attachments; MediaAccessService lets the profile's owner
+   * (once claimed) and its steward open it, and `findShareable` keeps it out
+   * of what anybody else is shown.
+   */
+  @Column({ type: 'text', nullable: true })
+  biodataDocumentUrl: string | null;
+
   @PrimaryGeneratedColumn('uuid')
   id: string;
 

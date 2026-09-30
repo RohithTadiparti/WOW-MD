@@ -188,6 +188,7 @@ export class CirculationController {
   @Get('shared-with-me')
   async sharedWithMe(@CurrentUser() actor: AuthUser) {
     const rows = await this.sharing.sharedWithMe(actor);
+    const cards = await this.details.basicCards(rows.map(({ profile }) => profile.id));
     return rows.map(({ share, profile, sharedBy }) => ({
       shareId: share.id,
       sharedAt: share.createdAt,
@@ -198,7 +199,7 @@ export class CirculationController {
       sharedBy,
       // A recipient gets the full biodata: the point of circulating is that they
       // can assess the match. They still cannot edit it or act as it.
-      profile: toBiodata(profile),
+      profile: toBiodata(profile, cards.get(profile.id), { recipient: true }),
     }));
   }
 
@@ -223,8 +224,13 @@ export class CirculationController {
   @RequirePermissions(Permission.NETWORK_POOL_BROWSE)
   @ApiOperation({ summary: 'Search the vetted-agent pool' })
   @Get('pool')
-  searchPool(@CurrentUser() actor: AuthUser, @Query() q: PoolSearchDto) {
-    return this.sharing.searchPool(actor, q);
+  async searchPool(@CurrentUser() actor: AuthUser, @Query() q: PoolSearchDto) {
+    const page = await this.sharing.searchPool(actor, q);
+    const cards = await this.details.basicCards(page.data.map((profile) => profile.id));
+    return {
+      ...page,
+      data: page.data.map((profile) => toBiodata(profile, cards.get(profile.id))),
+    };
   }
 
   @ApiBearerAuth()
