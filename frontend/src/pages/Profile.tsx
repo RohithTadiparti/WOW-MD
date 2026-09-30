@@ -435,7 +435,7 @@ export default function Profile() {
                 </select>
                 <span className="mt-1 block text-xs text-gray-500">
                   Public shares your full profile. Matches only unlocks it after interest is accepted.
-                  Hidden until matched requires a fixed, confirmed match. All three can appear in Matches.
+                  Hidden profiles do not appear in Matches and cannot receive interests.
                 </span>
               </label>
             )}
