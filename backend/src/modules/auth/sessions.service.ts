@@ -1,10 +1,11 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, LessThan, Repository } from 'typeorm';
+import { IsNull, LessThan, MoreThan, Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
 import { RefreshSession } from './entities/refresh-session.entity';
 import { hashToken } from '../../common/util/tokens';
 import { AuditAction, AuditService } from '../../platform/audit/audit.service';
+import { AppConfigService } from '../../config/app-config.service';
 
 export interface SessionContext {
   userAgent?: string | null;
@@ -32,6 +33,13 @@ export interface SessionView {
  *    already been replaced should never be presented again. If one is, it
  *    leaked — so the entire family (that login and all its rotations) is
  *    revoked rather than just the row, and the event is audited.
+ *
+ * One exception to reuse detection: a token replaced within the last few
+ * seconds (`REFRESH_REUSE_GRACE_SECONDS`). A browser reloading while its
+ * refresh is in flight, or a second tab, can present the old cookie before the
+ * new one lands; that is a lost race, not theft. Within the window the
+ * family's live session is rotated instead, so the login carries on and still
+ * has exactly one live token. Outside it, reuse revokes the family as before.
  */
 @Injectable()
 export class SessionsService {
@@ -40,6 +48,7 @@ export class SessionsService {
   constructor(
     @InjectRepository(RefreshSession) private readonly sessions: Repository<RefreshSession>,
     private readonly audit: AuditService,
+    private readonly cfg: AppConfigService,
   ) {}
 
   async create(
@@ -82,6 +91,22 @@ export class SessionsService {
     }
 
     if (existing.revokedAt) {
+      // Replaced a moment ago: a reload or another tab lost the race. Carry
+      // the login on from its live session rather than ending it.
+      if (this.withinReuseGrace(existing)) {
+        const live = await this.sessions.findOne({
+          where: { familyId: existing.familyId, revokedAt: IsNull(), expiresAt: MoreThan(new Date()) },
+          order: { createdAt: 'DESC' },
+        });
+        if (live) {
+          live.revokedAt = new Date();
+          live.revokedReason = 'rotated';
+          live.lastUsedAt = new Date();
+          await this.sessions.save(live);
+          return this.create(userId, newToken, newExpiresAt, ctx, existing.familyId);
+        }
+      }
+
       // Already rotated away, yet presented again: treat as compromise.
       await this.revokeFamily(existing.familyId, 'refresh token reuse detected');
       await this.audit.record({
@@ -107,6 +132,17 @@ export class SessionsService {
     await this.sessions.save(existing);
 
     return this.create(userId, newToken, newExpiresAt, ctx, existing.familyId);
+  }
+
+  /** Rotated (not revoked for any other reason) within the grace window. */
+  private withinReuseGrace(session: RefreshSession): boolean {
+    const graceMs = this.cfg.auth.refreshReuseGraceSeconds * 1000;
+    return (
+      graceMs > 0 &&
+      session.revokedReason === 'rotated' &&
+      !!session.revokedAt &&
+      Date.now() - session.revokedAt.getTime() <= graceMs
+    );
   }
 
   async revoke(sessionId: string, reason: string): Promise<void> {

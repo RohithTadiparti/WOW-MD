@@ -107,6 +107,10 @@ export default () => ({
     maxFailedLogins: toNumber(process.env.MAX_FAILED_LOGINS, 8),
     lockoutMinutes: toNumber(process.env.LOCKOUT_MINUTES, 15),
 
+    // A refresh token replaced this recently and presented again is a lost
+    // race (a reload or a second tab), not theft; 0 treats every reuse as theft.
+    refreshReuseGraceSeconds: toNumber(process.env.REFRESH_REUSE_GRACE_SECONDS, 10),
+
     // Single-use email token lifetimes.
     invitationTtlHours: toNumber(process.env.INVITATION_TTL_HOURS, 168),
     emailVerifyTtlHours: toNumber(process.env.EMAIL_VERIFY_TTL_HOURS, 48),

@@ -195,6 +195,7 @@ export const configValidationSchema = Joi.object({
   COOKIE_DOMAIN: Joi.string().allow('').optional(),
   MAX_FAILED_LOGINS: Joi.number().min(3).max(100).default(8),
   LOCKOUT_MINUTES: Joi.number().min(1).max(1440).default(15),
+  REFRESH_REUSE_GRACE_SECONDS: Joi.number().integer().min(0).max(60).default(10),
   INVITATION_TTL_HOURS: Joi.number().min(1).max(2160).default(168),
   EMAIL_VERIFY_TTL_HOURS: Joi.number().min(1).max(720).default(48),
   PASSWORD_RESET_TTL_MINUTES: Joi.number().min(5).max(1440).default(30),
