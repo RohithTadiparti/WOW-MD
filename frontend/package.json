@@ -4,7 +4,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "ocr-assets": "node scripts/copy-ocr-assets.mjs",
+    "predev": "npm run ocr-assets",
     "dev": "vite",
+    "prebuild": "npm run ocr-assets",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
