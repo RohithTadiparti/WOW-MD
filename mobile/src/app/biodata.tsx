@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { View, ScrollView } from 'react-native';
+  import { useState, useEffect } from 'react';
+import { View, ScrollView, Alert as NativeAlert, Pressable } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 
@@ -11,9 +11,10 @@ import {
   FamilyBackgroundForm,
   HoroscopeSection,
   PreferencesSection,
+  UploadFlow,
 } from '@/components/biodata';
-import { MediaStrip, PhotoPicker } from '@/components/uploader';
-import { ProfileSilhouette } from '@/components/profile-silhouette';
+import { ProfileCompletionCard } from '@/components/profile-completion-card';
+import { DetailGrid, DetailRow } from '@/components/chrome';
 import {
   Body,
   Button,
@@ -24,9 +25,6 @@ import {
   SectionTitle,
 } from '@/components/ui';
 import { radius, rgb, space, useTheme } from '@/theme';
-
-/** The server's minimum before the basic information can be saved. */
-const REQUIRED_PHOTOS = 3;
 
 interface BiodataResponse {
   profileId: string;
@@ -39,7 +37,8 @@ export default function BiodataWizard() {
   const qc = useQueryClient();
   const router = useRouter();
 
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(0);
+  const [autofilledKeys, setAutofilledKeys] = useState<Set<string>>(new Set());
 
   const { data: me, isPending: loadingMe } = useQuery({
     queryKey: ['me'],
@@ -68,6 +67,24 @@ export default function BiodataWizard() {
     retry: false,
   });
 
+  const { data: completion } = useQuery({
+    queryKey: ['biodata-completion', profileId],
+    enabled: Boolean(profileId),
+    queryFn: async () =>
+      (await api.get(`/profiles/${profileId}/details/completion`)).data as { percent: number, complete: boolean },
+    retry: false,
+  });
+
+  // Skip selection screen if already has details
+  useEffect(() => {
+    if (step === 0 && full !== undefined) {
+      const hasDetails = Object.keys(full?.details ?? {}).length > 0;
+      if (hasDetails) {
+        setStep(1);
+      }
+    }
+  }, [step, full]);
+
   if (loadingMe || (profileId && isPending)) {
     return (
       <Screen>
@@ -92,20 +109,18 @@ export default function BiodataWizard() {
   const d = (full?.details ?? {}) as Record<string, unknown>;
   const showMarital = d.maritalStatus && d.maritalStatus !== 'never_married';
 
-  // Photographs first: the server will not save the basic information until
-  // the profile has three of them, so asking for them last meant step one
-  // could never be saved by somebody new.
+  // Photographs are on the first step: the server will not save the basic
+  // information until the profile has three of them, so asking for them later
+  // meant step one could never be saved by somebody new.
   const steps = [
-    { id: 'photos', title: 'Photographs' },
-    { id: 'personal', title: 'Basic Information' },
+    { id: 'personal', title: 'Basic Information & Photos' },
     ...(showMarital ? [{ id: 'marital', title: 'Marital History' }] : []),
     { id: 'education', title: 'Education & Career' },
     { id: 'family', title: 'Family Background' },
     { id: 'horoscope', title: 'Horoscope' },
     { id: 'preferences', title: 'Partner Preferences' },
+    { id: 'summary', title: 'Review Your Biodata' },
   ];
-
-  const photoCount = (photos?.photos ?? []).length;
 
   const totalSteps = steps.length;
   // Make sure step doesn't exceed totalSteps if marital status changes back to never_married
@@ -132,6 +147,59 @@ export default function BiodataWizard() {
     }
   };
 
+  if (step === 0) {
+    return (
+      <Screen scroll={false}>
+        <UploadFlow
+          profileId={profileId}
+          onCustom={() => setStep(1)}
+          onExtracted={(data) => {
+            const flatData = {
+              ...data,
+              ...(data.education || {}),
+              father: data.family?.father ?? data.father,
+              mother: data.family?.mother ?? data.mother,
+            };
+            delete flatData.education;
+            delete flatData.family;
+
+            const keys = new Set<string>();
+            const traverse = (obj: any, prefix = '') => {
+              if (!obj || typeof obj !== 'object') return;
+              for (const [k, v] of Object.entries(obj)) {
+                if (v) {
+                  keys.add(prefix ? `${prefix}.${k}` : k);
+                  traverse(v, prefix ? `${prefix}.${k}` : k);
+                }
+              }
+            };
+            traverse(flatData);
+            setAutofilledKeys(keys);
+
+            // Update local cache
+            qc.setQueryData(['me'], (old: any) => ({
+              ...old,
+              displayName: data.firstName ? `${data.firstName} ${data.lastName ?? ''}`.trim() : old?.displayName,
+              dateOfBirth: data.dateOfBirth ?? old?.dateOfBirth,
+              gender: data.gender ?? old?.gender,
+            }));
+
+            qc.setQueryData(['biodata-details', profileId], (old: any) => {
+              return {
+                ...old,
+                details: {
+                  ...(old?.details ?? {}),
+                  ...flatData,
+                }
+              };
+            });
+            setStep(1);
+          }}
+        />
+      </Screen>
+    );
+  }
+
   return (
     <Screen>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: space(2) }}>
@@ -140,14 +208,39 @@ export default function BiodataWizard() {
           Step {currentStepIndex + 1} of {totalSteps}
         </Caption>
       </View>
+      {completion && step > 0 && currentStep.id !== 'summary' && (
+        <View style={{ marginBottom: space(4) }}>
+          <ProfileCompletionCard percent={completion.percent} hideAction />
+        </View>
+      )}
 
       {currentStep.id === 'personal' && (
         <PersonalForm
           profileId={profileId}
           me={me as Record<string, unknown>}
           full={full}
+          photos={photos?.photos ?? []}
+          onPhotoAdded={(url) => {
+            void api.post(`/profiles/${profileId}/details/photos`, { url }).then(refresh).catch((err) => {
+              console.error('Failed to add photo:', err);
+              NativeAlert.alert('Upload Failed', 'Your photo could not be uploaded. Please try again.');
+            });
+          }}
+          onPhotoRemoved={(url) => {
+            void api.delete(`/profiles/${profileId}/details/photos`, { data: { url } }).then(refresh).catch((err) => {
+              console.error('Failed to remove photo:', err);
+              NativeAlert.alert('Remove Failed', 'Your photo could not be removed. Please try again.');
+            });
+          }}
+          primaryPhotoUrl={photos?.primaryPhotoUrl ?? null}
+          onMakePrimary={(url) => {
+            void api.put(`/profiles/${profileId}/details/primary-photo`, { url }).then(refresh).catch(() => {
+              NativeAlert.alert('Not Changed', 'That photo could not be set as your profile photo. Please try again.');
+            });
+          }}
           onSaved={nextStep}
           onBack={prevStep}
+          autofilledKeys={autofilledKeys}
         />
       )}
 
@@ -158,6 +251,7 @@ export default function BiodataWizard() {
           onSaved={nextStep}
           onBack={prevStep}
           onSkip={nextStep}
+          autofilledKeys={autofilledKeys}
         />
       )}
 
@@ -168,6 +262,7 @@ export default function BiodataWizard() {
           onSaved={nextStep}
           onBack={prevStep}
           onSkip={nextStep}
+          autofilledKeys={autofilledKeys}
         />
       )}
 
@@ -178,6 +273,7 @@ export default function BiodataWizard() {
           onSaved={nextStep}
           onBack={prevStep}
           onSkip={nextStep}
+          autofilledKeys={autofilledKeys}
         />
       )}
 
@@ -185,7 +281,10 @@ export default function BiodataWizard() {
         <HoroscopeSection
           profileId={profileId}
           details={d}
-          onSaved={nextStep}
+          onSaved={() => {
+            refresh();
+            nextStep();
+          }}
           onBack={prevStep}
           onSkip={nextStep}
           isWizard
@@ -196,61 +295,152 @@ export default function BiodataWizard() {
         <PreferencesSection
           profileId={profileId}
           details={d}
-          onSaved={nextStep}
+          onSaved={() => {
+            refresh();
+            nextStep();
+          }}
           onBack={prevStep}
           onSkip={nextStep}
           isWizard
         />
       )}
 
-      {currentStep.id === 'photos' && (
+      {currentStep.id === 'summary' && (
         <View style={{ gap: space(4) }}>
-          <Card>
-            <Body tone="muted">
-              A profile with photographs is asked about several times more often than one without.
-            </Body>
-            <Caption tone={photoCount >= REQUIRED_PHOTOS ? 'muted' : 'critical'}>
-              {photoCount >= REQUIRED_PHOTOS
-                ? `${photoCount} added.`
-                : `Add at least ${REQUIRED_PHOTOS} to continue — ${photoCount} so far.`}
-            </Caption>
-            {photos && (photos.photos ?? []).length === 0 ? (
-              <ProfileSilhouette
-                gender={me?.gender}
-                style={{ width: 116, height: 84, borderRadius: radius.sm }}
-              />
-            ) : null}
-            {photoCount > 1 ? (
-              <Caption tone="muted">
-                Tap “Set as profile photo” under the one you want families to see first.
-              </Caption>
-            ) : null}
-            <MediaStrip
-              urls={photos?.photos ?? []}
-              primary={photos?.primaryPhotoUrl ?? photos?.photos?.[0] ?? null}
-              onMakePrimary={(url) => {
-                void api
-                  .put(`/profiles/${profileId}/details/primary-photo`, { url })
-                  .then(refresh);
-              }}
-              onRemove={(url) => {
-                void api
-                  .delete(`/profiles/${profileId}/details/photos`, { data: { url } })
-                  .then(refresh);
-              }}
-            />
-            <PhotoPicker
-              label="Add a photograph"
-              onUploaded={(url) => {
-                void api.post(`/profiles/${profileId}/details/photos`, { url }).then(refresh);
-              }}
-            />
+          {completion && (
+            <ProfileCompletionCard percent={completion.percent} hideAction />
+          )}
+
+          <Card style={{ padding: space(3), gap: space(1) }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <SectionTitle>Basic Information</SectionTitle>
+              <Pressable onPress={() => setStep(steps.findIndex(s => s.id === 'personal') + 1)}><Caption tone="brand">Edit</Caption></Pressable>
+            </View>
+            <View style={{ marginTop: space(2) }}>
+              <DetailGrid>
+                <DetailRow label="Name">{`${d.firstName ?? ''} ${d.lastName ?? ''}`.trim()}</DetailRow>
+                <DetailRow label="Date of Birth">{String(me?.dateOfBirth ?? full?.dateOfBirth ?? '—').slice(0, 10)}</DetailRow>
+                <DetailRow label="Gender">{String(me?.gender ?? '—')}</DetailRow>
+                <DetailRow label="Height">{String(d.height ?? '—')}</DetailRow>
+                <DetailRow label="Complexion">{String(d.complexion ?? '—')}</DetailRow>
+                <DetailRow label="Marital Status">{String(d.maritalStatus ?? '—').replace(/_/g, ' ')}</DetailRow>
+                <DetailRow label="Religion">{String(d.religion ?? '—')}</DetailRow>
+                <DetailRow label="Caste">{String(d.caste ?? '—')}</DetailRow>
+                {d.subcaste ? <DetailRow label="Subcaste">{String(d.subcaste)}</DetailRow> : null}
+              </DetailGrid>
+            </View>
           </Card>
-          <Button
-            label="Continue →"
-            onPress={nextStep}
-            disabled={photoCount < REQUIRED_PHOTOS}
-          />
+
+          <Card style={{ padding: space(3), gap: space(1) }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <SectionTitle>Family Details</SectionTitle>
+              <Pressable onPress={() => setStep(steps.findIndex(s => s.id === 'family') + 1)}><Caption tone="brand">Edit</Caption></Pressable>
+            </View>
+            <View style={{ marginTop: space(2) }}>
+              <DetailGrid>
+                <DetailRow label="Father">
+                  {(d.father as any)?.lifeStatus === 'deceased' ? `Late ${(d.father as any)?.name ?? '—'}` : `Mr. ${(d.father as any)?.name ?? '—'}`}
+                </DetailRow>
+                {(d.father as any)?.lifeStatus !== 'deceased' && (d.father as any)?.profession ? (
+                  <DetailRow label="Profession">{String((d.father as any)?.profession)}</DetailRow>
+                ) : null}
+                <DetailRow label="Mother">
+                  {(d.mother as any)?.lifeStatus === 'deceased' ? `Late ${(d.mother as any)?.name ?? '—'}` : `Mrs. ${(d.mother as any)?.name ?? '—'}`}
+                </DetailRow>
+                {(d.mother as any)?.lifeStatus !== 'deceased' && (d.mother as any)?.profession ? (
+                  <DetailRow label="Profession">{String((d.mother as any)?.profession)}</DetailRow>
+                ) : null}
+                {d.brothers ? <DetailRow label="Brothers">{String(d.brothers)}</DetailRow> : null}
+                {d.sisters ? <DetailRow label="Sisters">{String(d.sisters)}</DetailRow> : null}
+              </DetailGrid>
+            </View>
+          </Card>
+
+          <Card style={{ padding: space(3), gap: space(1) }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <SectionTitle>Education & Career</SectionTitle>
+              <Pressable onPress={() => setStep(steps.findIndex(s => s.id === 'education') + 1)}><Caption tone="brand">Edit</Caption></Pressable>
+            </View>
+            <View style={{ marginTop: space(2) }}>
+              <DetailGrid>
+                <DetailRow label="Education">{String(d.highestQualification ?? '—')}</DetailRow>
+                {d.college ? <DetailRow label="College">{String(d.college)}</DetailRow> : null}
+                <DetailRow label="Occupation">{String(d.occupationStatus ?? '—').replace(/_/g, ' ')}</DetailRow>
+                {d.profession ? <DetailRow label="Profession">{String(d.profession)}</DetailRow> : null}
+                {d.companyName ? <DetailRow label="Company">{String(d.companyName)}</DetailRow> : null}
+                {d.annualIncome ? <DetailRow label="Income">{String(d.annualIncome)}</DetailRow> : null}
+                {d.workCountry || d.workCity ? <DetailRow label="Work Location">{[d.workCity, d.workState, d.workCountry].filter(Boolean).join(', ')}</DetailRow> : null}
+              </DetailGrid>
+            </View>
+          </Card>
+          
+          <Card style={{ padding: space(3), gap: space(1) }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <SectionTitle>Location & Personal Details</SectionTitle>
+              <Pressable onPress={() => setStep(steps.findIndex(s => s.id === 'personal') + 1)}><Caption tone="brand">Edit</Caption></Pressable>
+            </View>
+            <View style={{ marginTop: space(2) }}>
+              <DetailGrid>
+                {d.city || d.country ? <DetailRow label="Current Location">{[d.city, d.state, d.country].filter(Boolean).join(', ')}</DetailRow> : null}
+                {d.diet ? <DetailRow label="Diet">{String(d.diet)}</DetailRow> : null}
+                {d.smoking ? <DetailRow label="Smoking">{String(d.smoking)}</DetailRow> : null}
+                {d.drinking ? <DetailRow label="Drinking">{String(d.drinking)}</DetailRow> : null}
+                {d.languages ? <DetailRow label="Languages">{Array.isArray(d.languages) ? d.languages.join(', ') : String(d.languages)}</DetailRow> : null}
+              </DetailGrid>
+            </View>
+          </Card>
+
+          <Card style={{ padding: space(3), gap: space(1) }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <SectionTitle>Horoscope</SectionTitle>
+              <Pressable onPress={() => setStep(steps.findIndex(s => s.id === 'horoscope') + 1)}><Caption tone="brand">Edit</Caption></Pressable>
+            </View>
+            <View style={{ marginTop: space(2) }}>
+              <DetailGrid>
+                <DetailRow label="Time of Birth">{String(d.timeOfBirth ?? '—')}</DetailRow>
+                <DetailRow label="Place of Birth">{[d.cityOfBirth, d.stateOfBirth, d.countryOfBirth].filter(Boolean).join(', ') || '—'}</DetailRow>
+                {d.rasi ? <DetailRow label="Rasi">{String(d.rasi)}</DetailRow> : null}
+                {d.star ? <DetailRow label="Star">{String(d.star)}</DetailRow> : null}
+                {d.padam ? <DetailRow label="Padam">{String(d.padam)}</DetailRow> : null}
+                {d.gothram ? <DetailRow label="Gothram">{String(d.gothram)}</DetailRow> : null}
+                {d.horoscopeMatch ? <DetailRow label="Match Preference">{String(d.horoscopeMatch)}</DetailRow> : null}
+              </DetailGrid>
+            </View>
+          </Card>
+
+          <Card style={{ padding: space(3), gap: space(1) }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <SectionTitle>Partner Preferences</SectionTitle>
+              <Pressable onPress={() => setStep(steps.findIndex(s => s.id === 'preferences') + 1)}><Caption tone="brand">Edit</Caption></Pressable>
+            </View>
+            <View style={{ marginTop: space(2) }}>
+              <DetailGrid>
+                {(d.partnerPreferences as any)?.ageMin || (d.partnerPreferences as any)?.ageMax ? <DetailRow label="Age">{`${(d.partnerPreferences as any)?.ageMin ?? ''} to ${(d.partnerPreferences as any)?.ageMax ?? ''}`}</DetailRow> : null}
+                {(d.partnerPreferences as any)?.heightMin || (d.partnerPreferences as any)?.heightMax ? <DetailRow label="Height">{`${(d.partnerPreferences as any)?.heightMin ?? ''} to ${(d.partnerPreferences as any)?.heightMax ?? ''}`}</DetailRow> : null}
+                {(d.partnerPreferences as any)?.maritalStatus ? <DetailRow label="Marital Status">{Array.isArray((d.partnerPreferences as any).maritalStatus) ? (d.partnerPreferences as any).maritalStatus.join(', ') : String((d.partnerPreferences as any).maritalStatus)}</DetailRow> : null}
+                {(d.partnerPreferences as any)?.religion ? <DetailRow label="Religion">{String((d.partnerPreferences as any).religion)}</DetailRow> : null}
+                {(d.partnerPreferences as any)?.caste ? <DetailRow label="Caste">{Array.isArray((d.partnerPreferences as any).caste) ? (d.partnerPreferences as any).caste.join(', ') : String((d.partnerPreferences as any).caste)}</DetailRow> : null}
+                {(d.partnerPreferences as any)?.motherTongue ? <DetailRow label="Mother Tongue">{Array.isArray((d.partnerPreferences as any).motherTongue) ? (d.partnerPreferences as any).motherTongue.join(', ') : String((d.partnerPreferences as any).motherTongue)}</DetailRow> : null}
+                {(d.partnerPreferences as any)?.education ? <DetailRow label="Education">{Array.isArray((d.partnerPreferences as any).education) ? (d.partnerPreferences as any).education.join(', ') : String((d.partnerPreferences as any).education)}</DetailRow> : null}
+                {(d.partnerPreferences as any)?.occupation ? <DetailRow label="Occupation">{Array.isArray((d.partnerPreferences as any).occupation) ? (d.partnerPreferences as any).occupation.join(', ') : String((d.partnerPreferences as any).occupation)}</DetailRow> : null}
+                {(d.partnerPreferences as any)?.nri ? <DetailRow label="NRI Preference">{String((d.partnerPreferences as any).nri)}</DetailRow> : null}
+                {(d.partnerPreferences as any)?.location ? <DetailRow label="Location">{Array.isArray((d.partnerPreferences as any).location) ? (d.partnerPreferences as any).location.join(', ') : String((d.partnerPreferences as any).location)}</DetailRow> : null}
+                {(d.partnerPreferences as any)?.otherInfo ? <DetailRow label="Looking for Anything Else">{String((d.partnerPreferences as any).otherInfo)}</DetailRow> : null}
+              </DetailGrid>
+            </View>
+          </Card>
+
+          <View style={{ flexDirection: 'row', gap: space(2) }}>
+            <Button label="Back" variant="outline" onPress={prevStep} />
+            <Button style={{ flex: 1 }} label="Complete Biodata" onPress={() => {
+              if (completion && !completion.complete) {
+                // Not completed - require completion
+                NativeAlert.alert("Incomplete", "Please fill all mandatory fields (marked with *) across all steps to complete your Biodata.");
+              } else {
+                router.back();
+              }
+            }} />
+          </View>
         </View>
       )}
     </Screen>

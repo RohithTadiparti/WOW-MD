@@ -42,7 +42,7 @@ const TABS: { key: keyof Board & string; label: string; empty: string }[] = [
   {
     key: 'received',
     label: 'Received',
-    empty: 'Nobody has asked about this profile yet. Being complete and having photographs is what changes that.',
+    empty: 'No interests are waiting for your answer. Being complete and having photographs is what brings more.',
   },
   { key: 'sent', label: 'Sent', empty: 'Nothing sent yet. Browse Matches and send an interest to start.' },
   { key: 'pending', label: 'Pending', empty: 'Nothing is waiting on an answer, from either side.' },

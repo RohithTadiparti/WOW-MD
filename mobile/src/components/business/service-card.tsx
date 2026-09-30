@@ -196,8 +196,8 @@ function EditService({
     if (Object.keys(found).length > 0) return;
     onSave({
       definitionId: service.definitionId,
-      displayName: displayName.trim(),
-      description: description.trim(),
+      displayName: displayName.trim() || null,
+      description: description.trim() || null,
       attributes: cleanAnswers(service.serviceForm, answers),
     });
   }

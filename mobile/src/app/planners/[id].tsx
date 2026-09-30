@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import {
-  Alert as NativeAlert,
   Image,
   Pressable,
   ScrollView,
@@ -9,11 +8,12 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Heart, MapPin, SealCheck, Star } from 'phosphor-react-native';
+import { ArrowLeft, Heart, MapPin, Star } from 'phosphor-react-native';
 
 import { api, apiMessage } from '@/lib/api';
 import { loadPlannerShortlist, togglePlannerShortlist } from '@/lib/plan-shortlist';
-import { DateField } from '@/components/form';
+import { WowCalendar } from '@/components/common/WowCalendar';
+import { SocialLinksList, type SocialLinks } from '@/components/social-links';
 import {
   Alert,
   Body,
@@ -40,9 +40,8 @@ type Planner = {
   portfolio?: string[];
   packages?: { name: string; price: number; includes?: string[] }[];
   contactPerson?: string | null;
-  website?: string | null;
   ownerUserId: string;
-};
+} & SocialLinks;
 
 type Review = {
   id: string;
@@ -214,11 +213,11 @@ export default function PlannerDetail() {
           <View style={{ gap: space(1) }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(1) }}>
               <SectionTitle>{planner.agencyName}</SectionTitle>
-              <SealCheck size={18} color={rgb(theme.positiveFg)} weight="fill" />
             </View>
             <Caption>
               <Star size={13} color={rgb(theme.brand)} weight="fill" />{' '}
-              {planner.ratingAvg.toFixed(1)} · {planner.ratingCount} reviews
+              {Number(planner.ratingAvg).toFixed(1)} · {planner.ratingCount}{' '}
+              {planner.ratingCount === 1 ? 'review' : 'reviews'}
             </Caption>
             <Caption>
               <MapPin size={13} color={rgb(theme.ink[400])} />{' '}
@@ -242,6 +241,8 @@ export default function PlannerDetail() {
               return (
                 <Pressable
                   key={key}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: active }}
                   onPress={() => setTab(key)}
                   style={{
                     paddingHorizontal: space(3),
@@ -275,6 +276,7 @@ export default function PlannerDetail() {
               {planner.contactPerson ? (
                 <Caption tone="muted">Contact: {planner.contactPerson}</Caption>
               ) : null}
+              <SocialLinksList links={planner} />
             </Card>
           ) : null}
 
@@ -341,11 +343,11 @@ export default function PlannerDetail() {
           {requesting ? (
             <Card style={{ gap: space(3) }}>
               <SectionTitle>Request Planner</SectionTitle>
-              <DateField
+              <WowCalendar
                 label="Wedding / event date"
                 value={eventDate}
                 onChange={setEventDate}
-                from={new Date().toISOString().slice(0, 10)}
+                minimumDate={new Date().toISOString().slice(0, 10)}
               />
               <Field
                 label="Budget (optional)"

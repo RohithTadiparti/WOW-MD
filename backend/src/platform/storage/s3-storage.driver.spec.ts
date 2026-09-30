@@ -69,6 +69,20 @@ describe('S3StorageDriver', () => {
       expect(options.expiresIn).toBe(3600);
     });
 
+    it('signs a short-lived link at the moment it is asked for', async () => {
+      const at = Date.UTC(2026, 8, 19, 10, 17, 5);
+      await driver().urlFor(KEY, { expiresInSeconds: 300 }, at);
+      const [, , options] = presign.mock.calls[0];
+      expect(options.expiresIn).toBe(300);
+      expect(options.signingDate).toEqual(new Date(at));
+    });
+
+    it('never lets a requested life outlast the usual one', async () => {
+      await driver().urlFor(KEY, { expiresInSeconds: 999999 });
+      const [, , options] = presign.mock.calls[0];
+      expect(options.expiresIn).toBe(3600);
+    });
+
     it('reads an object back', async () => {
       send.mockResolvedValue({ ContentLength: 42, ContentType: 'image/png' });
       await expect(driver().head(KEY)).resolves.toEqual({ size: 42, contentType: 'image/png' });

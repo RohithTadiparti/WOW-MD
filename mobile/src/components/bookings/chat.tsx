@@ -22,7 +22,13 @@ import { radius, rgb, space, useTheme } from '@/theme';
  * Re-deriving "can I type?" from the booking status here would be a second copy
  * of the rule, and the two would disagree the first time one changed.
  */
-export function BookingChat({ bookingId }: { bookingId: string }) {
+export function BookingChat({
+  bookingId,
+  label = 'Message the client',
+}: {
+  bookingId: string;
+  label?: string;
+}) {
   const theme = useTheme();
   const qc = useQueryClient();
   const me = useAuth((s) => s.user?.id);
@@ -78,7 +84,7 @@ export function BookingChat({ bookingId }: { bookingId: string }) {
   if (!open) {
     return (
       <Button
-        label="Message the client"
+        label={label}
         variant="ghost"
         small
         onPress={() => setOpen(true)}

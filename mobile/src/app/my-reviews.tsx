@@ -15,7 +15,7 @@ import {
   PageSubtitle,
   Screen,
 } from '@/components/ui';
-import { useAuth } from '@/store/auth';
+import { selectPermissions, useAuth } from '@/store/auth';
 import { useBusinesses } from '@/store/business';
 import { rgb, space, useTheme } from '@/theme';
 
@@ -47,7 +47,7 @@ interface OwnerReview {
 
 export default function MyReviews() {
   const { activeId } = useBusinesses();
-  const permissions = useAuth((s) => s.user?.permissions ?? []);
+  const permissions = useAuth(selectPermissions);
   // A planner has no business to switch between: their reviews hang off the one
   // planner listing, and the vendor read answered them with nothing.
   const isPlanner = isPlannerAccount(permissions);

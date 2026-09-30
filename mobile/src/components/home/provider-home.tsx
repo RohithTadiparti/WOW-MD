@@ -12,7 +12,7 @@ import { Badge, SectionHeader, StatTile, TileGrid } from '@/components/chrome';
 import { BusinessSwitcher } from '@/components/business/switcher';
 import { PlannerAgencyCard, PlannerBook } from '@/components/home/planner-home';
 import { Body, Caption, Card, Loading, SectionTitle } from '@/components/ui';
-import { useAuth } from '@/store/auth';
+import { selectPermissions, useAuth } from '@/store/auth';
 import { useBusinesses } from '@/store/business';
 import { rgb, space, useTheme, radius } from '@/theme';
 
@@ -97,7 +97,7 @@ export function ProviderHome() {
   // A planner has no vendor listing. Their rating and their windows are on the
   // one planner listing, and asking /vendors/me for them answered with an empty
   // business card, "No reviews" and a blank Open windows.
-  const permissions = useAuth((s) => s.user?.permissions ?? []);
+  const permissions = useAuth(selectPermissions);
   const isPlanner = isPlannerAccount(permissions);
   const planner = usePlannerListing(isPlanner);
 

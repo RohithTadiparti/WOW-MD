@@ -136,6 +136,26 @@ export class PresignAttachmentDto extends UploadDetailsDto {
 }
 
 /**
+ * The formats the biodata reader can actually look at.
+ *
+ * Narrower than a profile photograph on purpose: the extractor hands the file
+ * to a vision model, which reads JPEG, PNG and WebP and nothing else. A PDF or
+ * a HEIC would upload, be sent off, and come back as nothing, so it is refused
+ * here where the person can still do something about it.
+ */
+export const BIODATA_IMAGE_EXTENSIONS = 'jpg|jpeg|png|webp';
+
+export class PresignBiodataDto extends UploadDetailsDto {
+  @ApiProperty({ example: 'my biodata.jpg', maxLength: 200 })
+  @IsString()
+  @MaxLength(200)
+  @Matches(new RegExp(`^${NAME_PART}\\.(${BIODATA_IMAGE_EXTENSIONS})$`, 'i'), {
+    message: 'Choose a photo of your biodata: a JPEG, PNG or WebP image.',
+  })
+  filename: string;
+}
+
+/**
  * A file on a booking: what the provider delivers, or what the couple shows
  * them. Photographs and films, and a PDF for an album proof or a contract.
  */

@@ -18,7 +18,7 @@ import { BookingCard } from '@/components/bookings/booking-card';
 import { ListScreen } from '@/components/layout';
 import { BusinessSwitcher } from '@/components/business/switcher';
 import { Alert, Button, Caption, Field, PageSubtitle, PageTitle } from '@/components/ui';
-import { useAuth } from '@/store/auth';
+import { selectPermissions, useAuth } from '@/store/auth';
 import { space } from '@/theme';
 
 /**
@@ -38,7 +38,7 @@ import { space } from '@/theme';
 export default function Bookings() {
   const qc = useQueryClient();
   const router = useRouter();
-  const permissions = useAuth((s) => s.user?.permissions ?? []);
+  const permissions = useAuth(selectPermissions);
   // A planner answers an incoming request the same way a vendor does — with a
   // quotation — so both seller capabilities count. The server already lets
   // either one quote; checking only the vendor permission is what left a

@@ -97,6 +97,7 @@ export function IndividualHome({ profileId }: { profileId: string | null }) {
   const recommendations = useQuery({
     queryKey: ['recommendations-matches'],
     queryFn: async () => (await api.get('/ai/recommendations/matches')).data as { data: Suggestion[] },
+    enabled: Boolean(completion.data?.complete),
     retry: false,
   });
 
@@ -233,9 +234,9 @@ export function IndividualHome({ profileId }: { profileId: string | null }) {
           </Pressable>
         </View>
 
-        {recommendations.isPending ? (
+        {completion.isPending || (completion.data?.complete && recommendations.isPending) ? (
           <Loading rows={2} />
-        ) : !recommendations.data?.data || recommendations.data.data.length === 0 ? (
+        ) : !completion.data?.complete || !recommendations.data?.data || recommendations.data.data.length === 0 ? (
           <Card style={{ alignItems: 'center', padding: space(6), gap: space(3) }}>
             <View style={{ width: 48, height: 48, borderRadius: radius.md, backgroundColor: rgb(theme.brandSoft), alignItems: 'center', justifyContent: 'center' }}>
               <MagnifyingGlass size={24} color={rgb(theme.brandStrong)} />
@@ -288,44 +289,6 @@ export function IndividualHome({ profileId }: { profileId: string | null }) {
         )}
       </View>
 
-      {completion.data && !completion.data.complete ? (
-        <Card style={{ flexDirection: 'row', alignItems: 'center', gap: space(4) }}>
-          <View style={{
-            width: 64,
-            height: 64,
-            borderRadius: radius.md,
-            borderWidth: 4,
-            borderColor: rgb(theme.brandSoft),
-            borderTopColor: rgb(theme.brand),
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}>
-            <Body style={{ fontWeight: '700', color: rgb(theme.brand) }}>{completion.data.percent}%</Body>
-          </View>
-          <View style={{ flex: 1, gap: space(2) }}>
-            <View>
-              <Body style={{ fontWeight: '600' }}>Complete your profile</Body>
-              <Caption tone="muted">Get more relevant matches</Caption>
-            </View>
-            <Pressable
-              onPress={() => router.push('/biodata')}
-              style={{
-                backgroundColor: rgb(theme.brand),
-                paddingHorizontal: space(3),
-                paddingVertical: space(1.5),
-                borderRadius: radius.sm,
-                alignSelf: 'flex-start',
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: space(1)
-              }}
-            >
-              <Caption style={{ color: rgb(theme.surface), fontWeight: '600' }}>Complete Profile</Caption>
-              <CaretRight size={12} color={rgb(theme.surface)} />
-            </Pressable>
-          </View>
-        </Card>
-      ) : null}
 
       <View style={{ gap: space(3) }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>

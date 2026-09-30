@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsEnum, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
+import { IsDateString, IsEnum, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength, ValidateIf } from 'class-validator';
 import { TaskStatus } from '../../../common/enums';
+import { IsStrictNumber } from '../../../common/decorators/strict-type.decorator';
 
 export class CreatePlanDto {
   @ApiProperty({ example: '2026-12-01', format: 'date' })
@@ -32,6 +33,16 @@ export class UpdateTaskStatusDto {
   @ApiProperty({ enum: TaskStatus })
   @IsEnum(TaskStatus)
   status: TaskStatus;
+}
+
+/** The couple's overall wedding budget; null clears it. */
+export class SetWeddingBudgetDto {
+  @ApiProperty({ example: 1500000, nullable: true, minimum: 0, maximum: 10_000_000_000 })
+  @ValidateIf((o: SetWeddingBudgetDto) => o.budget !== null)
+  @IsStrictNumber({ maxDecimalPlaces: 2 }, { message: 'budget must be an amount in rupees' })
+  @Min(0)
+  @Max(10_000_000_000)
+  budget: number | null;
 }
 
 /** Host engages a wedding planner on a plan, or clears the engagement. */

@@ -11,7 +11,7 @@ import {
   type IconProps,
 } from 'phosphor-react-native';
 
-import { apiMessage } from '@/lib/api';
+import { api, apiMessage } from '@/lib/api';
 import { shortDate } from '@/lib/format';
 import {
   categoryLabel,
@@ -64,9 +64,9 @@ export default function PlanHome() {
   const bookings = useQuery({
     queryKey: ['my-bookings', 'upcoming'],
     queryFn: async () =>
-      (await import('@/lib/api')).api.get('/bookings', { params: { limit: 5 } }).then(
-        (r) => r.data as { data?: BookingRow[] } | BookingRow[],
-      ),
+      (await api.get('/bookings', { params: { limit: 5 } })).data as
+        | { data?: BookingRow[] }
+        | BookingRow[],
     retry: false,
   });
 
@@ -90,12 +90,12 @@ export default function PlanHome() {
 
   const data = dashboard.data as WeddingDashboard;
   const plan = plans.data?.[0];
-  const percent = data.journey.percent ?? 0;
+  const percent = data.journey.total ? data.journey.percent : null;
   const location =
     data.upcoming.find((e) => e.venue)?.venue ??
     data.upcoming[0]?.venue ??
     null;
-  const guestCount = data.guests.expectedHeadcount || data.guests.onList || 0;
+  const guestCount = data.guests.onList;
   const bookingRows: BookingRow[] = Array.isArray(bookings.data)
     ? bookings.data
     : (bookings.data?.data ?? []);
@@ -223,7 +223,12 @@ export default function PlanHome() {
           </Card>
         ) : (
           upcomingBookings.map((row) => (
-            <Pressable key={row.id} onPress={() => router.push('/plan/bookings')}>
+            <Pressable
+              key={row.id}
+              onPress={() =>
+                router.push({ pathname: '/plan/bookings', params: { highlight: row.id } })
+              }
+            >
               <Card style={{ gap: space(1), borderRadius: radius.md }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: space(2) }}>
                   <Body style={{ fontWeight: '700', flex: 1 }} numberOfLines={1}>
@@ -280,9 +285,9 @@ function Fact({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ProgressRing({ percent }: { percent: number }) {
+function ProgressRing({ percent }: { percent: number | null }) {
   const theme = useTheme();
-  const clamped = Math.min(100, Math.max(0, percent));
+  const clamped = Math.min(100, Math.max(0, percent ?? 0));
   return (
     <View
       style={{
@@ -309,8 +314,8 @@ function ProgressRing({ percent }: { percent: number }) {
           transform: [{ rotate: `${(clamped / 100) * 360 - 90}deg` }],
         }}
       />
-      <Txt style={{ fontSize: 18, fontWeight: '700', color: rgb(theme.brandStrong) }}>
-        {clamped}%
+      <Txt style={{ fontSize: percent === null ? 11 : 18, fontWeight: '700', color: rgb(theme.brandStrong) }}>
+        {percent === null ? 'Not started' : `${clamped}%`}
       </Txt>
       <Caption tone="faint" style={{ fontSize: 10 }}>
         Progress

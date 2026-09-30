@@ -1,4 +1,5 @@
 import { BusinessStatus } from '../../common/enums';
+import { SOCIAL_LINK_FIELDS } from '../../common/dto/social-links.dto';
 
 /**
  * What a business may do, in each state it can be in.
@@ -216,7 +217,7 @@ export function normaliseCorrectionFields(fields: unknown): unknown {
  * live (EZ1-I207).
  *
  * Deliberately only the presentational ones — the description, the contact
- * number and the portfolio. None of these is what an officer verified on the
+ * number, the portfolio and the social links. None of these is what an officer verified on the
  * visit, so changing one does not invalidate the verification. Everything an
  * officer actually checked (name, category, PAN, GST, registration number,
  * trading-since, registered address, compliance documents) stays locked and can
@@ -227,6 +228,7 @@ export const POST_VERIFICATION_EDITABLE_FIELDS = [
   'description',
   'contactPhone',
   'portfolio',
+  ...SOCIAL_LINK_FIELDS,
 ] as const;
 
 export function rulesFor(status: BusinessStatus): BusinessRules {

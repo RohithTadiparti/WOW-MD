@@ -69,3 +69,12 @@ export function dateTime(value: string | null | undefined): string {
     minute: '2-digit',
   });
 }
+
+/** Capitalizes the first letter of every word (for names, cities, etc) */
+export function capitalizeWords(str: string | null | undefined): string {
+  if (!str) return '';
+  return str.split(/(\s+)/).map(part => {
+    if (part.trim().length === 0) return part;
+    return part.charAt(0).toUpperCase() + part.slice(1);
+  }).join('');
+}

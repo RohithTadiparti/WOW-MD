@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProfileDetails } from './entities/profile-details.entity';
 import { ProfileSibling } from './entities/profile-sibling.entity';
@@ -16,9 +16,11 @@ import {
   MockAadhaarProvider,
   aadhaarProviderFactory,
 } from './aadhaar.provider';
+import { AiModule } from '../ai/ai.module';
 
 @Module({
   imports: [
+    forwardRef(() => AiModule),
     TypeOrmModule.forFeature([
       ProfileDetails,
       ProfileSibling,

@@ -7,6 +7,12 @@ import { Booking } from '../bookings/entities/booking.entity';
 import { Vendor } from '../vendors/entities/vendor.entity';
 import { ProfileDetails } from '../profile-details/entities/profile-details.entity';
 import { MediaAccessService } from './media-access.service';
+import { MediaService } from './media.service';
+import { Album } from './entities/album.entity';
+import { MediaItem } from './entities/media-item.entity';
+import { StorageService } from '../../platform/storage/storage.service';
+import { AppConfigService } from '../../config/app-config.service';
+import { ModerationService } from '../../platform/moderation/moderation.service';
 
 const user = (userId: string, role = UserRole.BRIDE) =>
   ({ userId, role, email: null, managedByAgentId: null }) as AuthUser;
@@ -140,6 +146,39 @@ describe('MediaAccessService', () => {
       await expect(access.canUpload(ADMIN, 'users/bride/profile/1-a-me.jpg')).resolves.toBe(false);
       await expect(access.canUpload(PHOTOGRAPHER, 'vendors/vendor-1/portfolio/1-a-x.jpg')).resolves.toBe(true);
       await expect(access.canUpload(OTHER_VENDOR, 'vendors/vendor-1/portfolio/1-a-x.jpg')).resolves.toBe(false);
+    });
+  });
+
+  describe('a biodata document', () => {
+    const biodata = 'users/bride/biodata/1-a-biodata.jpg';
+
+    it('is its uploader\'s to write and to open, and nobody else\'s', async () => {
+      const { access } = service();
+      await expect(access.canUpload(BRIDE, biodata)).resolves.toBe(true);
+      await expect(access.canUpload(STRANGER, biodata)).resolves.toBe(false);
+      await expect(access.canView(BRIDE, biodata)).resolves.toBe(true);
+      await expect(access.canView(STRANGER, biodata)).resolves.toBe(false);
+    });
+
+    it('can be presigned: the key is one the platform mints', async () => {
+      const storage = {
+        presignUpload: jest.fn(async (key: string) => ({ key, uploadUrl: `https://store/${key}` })),
+      } as unknown as StorageService;
+      const { access } = service();
+      const media = new MediaService(
+        {} as Repository<Album>,
+        {} as Repository<MediaItem>,
+        storage,
+        access,
+        {} as AppConfigService,
+        {} as ModerationService,
+      );
+      const out = (await media.presignUpload(
+        BRIDE,
+        { owner: 'users', id: BRIDE.userId, area: 'biodata' },
+        { filename: 'my biodata.jpg', size: 1234, contentType: 'image/jpeg' },
+      )) as unknown as { key: string };
+      expect(out.key).toMatch(/^users\/bride\/biodata\/\d+-[0-9a-f]{16}-my-biodata\.jpg$/);
     });
   });
 

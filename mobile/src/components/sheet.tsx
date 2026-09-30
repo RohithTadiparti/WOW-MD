@@ -2,29 +2,19 @@ import type { ReactNode } from 'react';
 import { Modal, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { SectionTitle } from '@/components/ui';
+import { Caption, SectionTitle } from '@/components/ui';
 import { radius, rgb, rgba, space, useTheme } from '@/theme';
 
-/**
- * A sheet from the bottom of the screen.
- *
- * The native answer to the several things the web client does with a dropdown,
- * a `<select>` or a `window.prompt`. All three assume a pointer and a keyboard
- * within reach; on a phone the reachable part of the screen is the bottom, and
- * a control that opens there is one a thumb can finish without the hand moving.
- *
- * `presentationStyle` is left alone deliberately — a plain transparent modal
- * behaves the same on both platforms, where the iOS-only page sheet would give
- * Android a different dismissal gesture from the one the scrim implies.
- */
 export function Sheet({
   visible,
   title,
+  subtitle,
   onClose,
   children,
 }: {
   visible: boolean;
   title: string;
+  subtitle?: string;
   onClose: () => void;
   children: ReactNode;
 }) {
@@ -32,63 +22,38 @@ export function Sheet({
   const insets = useSafeAreaInsets();
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      // The hardware back button on Android closes the sheet rather than the
-      // screen behind it, which is what the scrim is promising.
-      onRequestClose={onClose}
-    >
-      <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-        {/*
-          The scrim dismisses. A sheet that can only be closed by a button is
-          a sheet people back out of with the system gesture, which on iOS
-          leaves the app rather than the sheet.
-        */}
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: rgba(theme.scrim, 0.45) }}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Close"
           onPress={onClose}
-          // The four edges written out rather than `StyleSheet.absoluteFillObject`,
-          // which React Native 0.86 no longer exports (EZ1-I251).
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: rgba(theme.scrim, 0.45),
-          }}
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
         />
         <View
           style={{
-            backgroundColor: rgb(theme.surfaceRaised),
+            backgroundColor: rgb(theme.surface),
             borderTopLeftRadius: radius.lg,
             borderTopRightRadius: radius.lg,
-            paddingTop: space(4),
-            paddingHorizontal: space(4),
+            paddingTop: space(3),
             paddingBottom: insets.bottom + space(4),
-            gap: space(3),
-            // Never taller than most of the screen: a sheet that fills it is a
-            // screen, and should have been pushed instead.
-            maxHeight: '85%',
+            maxHeight: '90%',
           }}
         >
-          <View style={{ alignItems: 'center' }}>
-            {/* The grabber, which is what says this panel came from the bottom
-                and can go back there. */}
+          <View style={{ alignItems: 'center', marginBottom: space(4) }}>
             <View
               style={{
                 width: 36,
                 height: 4,
                 borderRadius: radius.md,
                 backgroundColor: rgb(theme.borderStrong),
-                marginBottom: space(3),
               }}
             />
           </View>
-          <SectionTitle>{title}</SectionTitle>
+          <View style={{ paddingHorizontal: space(4), marginBottom: space(3) }}>
+            <SectionTitle style={{ marginBottom: space(1) }}>{title}</SectionTitle>
+            {subtitle ? <Caption tone="faint">{subtitle}</Caption> : null}
+          </View>
           {children}
         </View>
       </View>

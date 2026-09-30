@@ -13,6 +13,7 @@ import { VendorService } from '../catalog/entities/vendor-service.entity';
 import { Quotation } from '../bookings/entities/quotation.entity';
 import { User } from '../auth/entities/user.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { MatchmakingModule } from '../matchmaking/matchmaking.module';
 import { EventsService } from './events.service';
 import { EventsController } from './events.controller';
 
@@ -39,6 +40,8 @@ import { EventsController } from './events.controller';
     ]),
     // Syncing a shared event to the other party raises a notification (EZ1-I84).
     NotificationsModule,
+    // Names the match-fixed partner on the wedding invitation.
+    MatchmakingModule,
   ],
   providers: [EventsService],
   controllers: [EventsController],

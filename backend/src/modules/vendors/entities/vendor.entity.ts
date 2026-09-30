@@ -94,6 +94,16 @@ export class Vendor {
   @Column({ type: 'varchar', nullable: true })
   contactPhone: string | null;
 
+  /** Public social links; validated by SocialLinksDto. */
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  website: string | null;
+
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  instagramUrl: string | null;
+
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  youtubeUrl: string | null;
+
   /** Uploaded certificates and licences, as media URLs. */
   @Column({ type: 'jsonb', default: [] })
   complianceDocuments: string[];

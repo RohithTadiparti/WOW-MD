@@ -10,7 +10,9 @@ import { DetailGrid, DetailRow } from '@/components/chrome';
 import { PhotoPicker } from '@/components/uploader';
 import { Alert, Body, Button, Caption, Card, Field, SectionTitle } from '@/components/ui';
 import { SelectField } from '@/components/form';
+import { NAKSHATRAS, PADAMS, RASHIS } from '@/shared/reference';
 import { radius, rgb, space, useTheme } from '@/theme';
+import { ChoiceField, canonical } from './choice-field';
 import { KUJA_DOSHAM_OPTIONS } from './constants';
 
 export function HoroscopeSection({
@@ -37,14 +39,43 @@ export function HoroscopeSection({
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [form, setForm] = useState({
-    rashi: String(chart.rashi ?? ''),
-    star: String(chart.star ?? ''),
-    padam: String(chart.padam ?? ''),
+    rashi: canonical(String(chart.rashi ?? ''), RASHIS),
+    star: canonical(String(chart.star ?? ''), NAKSHATRAS),
+    padam: canonical(String(chart.padam ?? ''), PADAMS),
     gothram: String(chart.gothram ?? ''),
     kujaDosham: String(chart.kujaDosham ?? ''),
     timeOfBirth: String(chart.timeOfBirth ?? ''),
+    timeOfBirthDisplay: String(chart.timeOfBirth ?? '') ? (() => {
+      const t = String(chart.timeOfBirth);
+      const [hStr, mStr] = t.split(':');
+      let h = parseInt(hStr, 10);
+      if (isNaN(h)) return t;
+      const period = h >= 12 ? 'PM' : 'AM';
+      if (h > 12) h -= 12;
+      if (h === 0) h = 12;
+      return `${h.toString().padStart(2, '0')}:${mStr} ${period}`;
+    })() : '',
     horoscopeDocumentUrl: storedValue ?? '',
   });
+
+  const [timeError, setTimeError] = useState('');
+
+  function parseAndValidateTime(input: string) {
+    if (!input.trim()) return '';
+    const match = input.trim().match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/i);
+    if (!match) return null;
+    let [ , hStr, mStr, period ] = match;
+    let hour = parseInt(hStr, 10);
+    const minute = parseInt(mStr, 10);
+    
+    if (hour < 1 || hour > 12) return null;
+    if (minute < 0 || minute > 59) return null;
+    
+    if (period.toLowerCase() === 'pm' && hour < 12) hour += 12;
+    if (period.toLowerCase() === 'am' && hour === 12) hour = 0;
+    
+    return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+  }
 
   const save = useMutation({
     mutationFn: async (patch: Partial<typeof form> = {}) => {
@@ -57,7 +88,7 @@ export function HoroscopeSection({
         horoscopeAvailable: isAvailable,
         ...Object.fromEntries(
           (['rashi', 'star', 'padam', 'gothram', 'kujaDosham', 'timeOfBirth'] as const)
-            .map((key) => [key, next[key].trim()])
+            .map((key) => [key, next[key]?.trim() || ''])
             .filter(([, value]) => value),
         ),
         ...(next.horoscopeDocumentUrl ? { horoscopeDocumentUrl: next.horoscopeDocumentUrl } : {}),
@@ -85,20 +116,63 @@ export function HoroscopeSection({
 
         {editing ? (
           <>
-            <Field label="Rashi" value={form.rashi} onChangeText={set('rashi')} />
-            <Field label="Star / Nakshatram" value={form.star} onChangeText={set('star')} />
-            <Field label="Padam" value={form.padam} onChangeText={set('padam')} maxLength={20} />
-            <Field label="Gothram" value={form.gothram} onChangeText={set('gothram')} />
-            <SelectField
-              label="Kuja dosham"
-              value={form.kujaDosham}
-              onChange={set('kujaDosham')}
-              options={KUJA_DOSHAM_OPTIONS}
-            />
-            <Field label="Time of Birth" value={form.timeOfBirth} onChangeText={set('timeOfBirth')} hint="e.g. 10:30 AM" />
+            <View style={{ flexDirection: 'row', gap: space(2) }}>
+              <View style={{ flex: 1 }}>
+                <ChoiceField label="Rashi" value={form.rashi} options={RASHIS} onChange={set('rashi')} allowOther={false} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <ChoiceField label="Star" value={form.star} options={NAKSHATRAS} onChange={set('star')} allowOther={false} />
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row', gap: space(2) }}>
+              <View style={{ flex: 1 }}>
+                <ChoiceField label="Padam" value={form.padam} options={PADAMS} onChange={set('padam')} allowOther={false} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Field label="Gothram" value={form.gothram} onChangeText={set('gothram')} />
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row', gap: space(2) }}>
+              <View style={{ flex: 1 }}>
+                <SelectField
+                  label="Kuja dosham"
+                  value={form.kujaDosham}
+                  onChange={set('kujaDosham')}
+                  options={KUJA_DOSHAM_OPTIONS}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Field 
+                  label="Time of Birth" 
+                  value={form.timeOfBirthDisplay} 
+                  onChangeText={(val) => {
+                    let text = val.toUpperCase();
+                    if (text.length === 2 && form.timeOfBirthDisplay.length === 1 && !text.includes(':')) text += ':';
+                    if (text.length === 5 && form.timeOfBirthDisplay.length === 4 && !text.includes(' ')) text += ' ';
+                    setForm((current) => ({ ...current, timeOfBirthDisplay: text }));
+                    setTimeError('');
+                  }} 
+                  placeholder="HH:MM AM" 
+                  maxLength={8}
+                  error={timeError}
+                />
+              </View>
+            </View>
             {!isWizard && (
               <View style={{ gap: space(2) }}>
-                <Button label="Save" busy={save.isPending} onPress={() => save.mutate({})} />
+                <Button label="Save" busy={save.isPending} onPress={() => {
+                  const val = form.timeOfBirthDisplay.trim();
+                  if (val) {
+                    const parsed = parseAndValidateTime(val);
+                    if (parsed === null) {
+                      setTimeError('Please enter a valid time (e.g. 08:30 AM).');
+                      return;
+                    }
+                    save.mutate({ timeOfBirth: parsed });
+                  } else {
+                    save.mutate({ timeOfBirth: '' });
+                  }
+                }} />
                 <Button label="Cancel" variant="outline" onPress={() => setEditing(false)} />
               </View>
             )}
@@ -111,7 +185,7 @@ export function HoroscopeSection({
               <DetailRow label="Star">{String(chart.star ?? '—')}</DetailRow>
               <DetailRow label="Padam">{String(chart.padam ?? '—')}</DetailRow>
               <DetailRow label="Gothram">{String(chart.gothram ?? '—')}</DetailRow>
-              <DetailRow label="Kuja dosham">{String(chart.kujaDosham ?? '—')}</DetailRow>
+              <DetailRow label="Kuja dosham">{KUJA_DOSHAM_OPTIONS.find((o) => o.value === chart.kujaDosham)?.label ?? String(chart.kujaDosham ?? '—')}</DetailRow>
               <DetailRow label="Time of Birth">{String(chart.timeOfBirth ?? '—')}</DetailRow>
             </DetailGrid>
             <Button label="Edit the chart details" variant="outline" small onPress={() => setEditing(true)} />
@@ -158,7 +232,10 @@ export function HoroscopeSection({
           kind="attachment"
           onUploaded={(url) => {
             setForm((current) => ({ ...current, horoscopeDocumentUrl: url }));
-            save.mutate({ horoscopeDocumentUrl: url });
+            // In wizard mode, we don't automatically save and jump to next step.
+            if (!isWizard) {
+              save.mutate({ horoscopeDocumentUrl: url });
+            }
           }}
         />
         <Caption tone="faint">
@@ -182,7 +259,19 @@ export function HoroscopeSection({
               style={{ flex: 1 }}
               label="Save & Continue →"
               busy={save.isPending}
-              onPress={() => save.mutate({})}
+              onPress={() => {
+                const val = form.timeOfBirthDisplay.trim();
+                if (val) {
+                  const parsed = parseAndValidateTime(val);
+                  if (parsed === null) {
+                    setTimeError('Please enter a valid time (e.g. 08:30 AM).');
+                    return;
+                  }
+                  save.mutate({ timeOfBirth: parsed });
+                } else {
+                  save.mutate({ timeOfBirth: '' });
+                }
+              }}
             />
           </View>
           {onSkip && (

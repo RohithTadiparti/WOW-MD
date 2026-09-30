@@ -5,9 +5,10 @@ import { api, apiMessage } from '@/lib/api';
 import { rupees } from '@/lib/format';
 import { Permission, can } from '@/shared/permissions';
 import { Divider } from '@/components/chrome';
-import { CheckRow, DateField, Textarea } from '@/components/form';
+import { CheckRow, Textarea } from '@/components/form';
+import { WowCalendar } from '@/components/common/WowCalendar';
 import { Alert, Body, Button, Caption, Field } from '@/components/ui';
-import { useAuth } from '@/store/auth';
+import { selectPermissions, useAuth } from '@/store/auth';
 import { radius, rgb, space, useTheme } from '@/theme';
 
 /**
@@ -30,7 +31,7 @@ export function QuotationForm({
 }) {
   const theme = useTheme();
   const isPlanner = can(
-    useAuth((s) => s.user?.permissions ?? []),
+    useAuth(selectPermissions),
     Permission.PLANNER_LISTING_MANAGE,
   );
 
@@ -103,8 +104,9 @@ export function QuotationForm({
         placeholder="0"
       />
       <Field label="Notes for the client" value={notes} onChangeText={setNotes} />
-      <DateField
+      <WowCalendar
         label="Valid until"
+        title="Valid until"
         value={validUntil}
         onChange={setValidUntil}
         hint="Left blank, the offer stands for 14 days."

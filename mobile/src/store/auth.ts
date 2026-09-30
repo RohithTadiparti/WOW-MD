@@ -58,3 +58,15 @@ export const useAuth = create<AuthState>()((set) => ({
   setReady: (ready) => set({ ready }),
   clear: () => set({ user: null, accessToken: null, ready: true }),
 }));
+
+const NO_PERMISSIONS: PermissionValue[] = [];
+
+/**
+ * The signed-in account's permissions, `useAuth(selectPermissions)`.
+ *
+ * The empty fallback must be one array: a selector that returns a fresh `[]`
+ * once the user is cleared re-renders forever, which is what signing out with
+ * a booking screen still in the stack did.
+ */
+export const selectPermissions = (s: AuthState): PermissionValue[] =>
+  s.user?.permissions ?? NO_PERMISSIONS;

@@ -9,7 +9,7 @@ import { dateTime, money, shortDate } from '@/lib/format';
 import { formatAnswer, type FieldSpec } from '@/shared/dynamic-form';
 import { Permission, can } from '@/shared/permissions';
 import { PlacedBookingFacts, usePlacedForClients } from '@/components/bookings/placed-for-clients';
-import { useAuth } from '@/store/auth';
+import { selectPermissions, useAuth } from '@/store/auth';
 import { DetailGrid, DetailRow, Divider } from '@/components/chrome';
 import { VendorAddOns } from '@/components/bookings/addons';
 import { WeddingBrief } from '@/components/bookings/wedding-brief';
@@ -48,7 +48,7 @@ export function BookingDetail({ booking }: { booking: IncomingBooking }) {
   // A planner books vendors for the couples who hired them, and those are the
   // couple's bookings rather than rows in this queue — so they are named on the
   // couple's booking with the planner, where the planner looks for them.
-  const permissions = useAuth((s) => s.user?.permissions ?? []);
+  const permissions = useAuth(selectPermissions);
   const isPlanner = can(permissions, Permission.BOOKING_REQUEST_FOR_CLIENT);
   const placed = usePlacedForClients(isPlanner);
   const vendorsForClient = (placed.data ?? []).filter((v) => v.clientUserId === booking.userId);

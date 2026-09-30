@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Image } from 'expo-image';
@@ -44,6 +44,23 @@ const IMAGE_EXTENSIONS = [
 
 /** What the attachment route accepts: an image, or a PDF. */
 const DOCUMENT_EXTENSIONS = [...IMAGE_EXTENSIONS, 'pdf'];
+
+/**
+ * What the biodata reader can look at. Kept in step with
+ * `BIODATA_IMAGE_EXTENSIONS` on the API: the file goes to a vision model that
+ * reads these and nothing else, so a PDF is refused here rather than uploaded
+ * and read as nothing.
+ */
+const BIODATA_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp'];
+
+const ALLOWED: Record<Kind, { extensions: string[]; message: string }> = {
+  photo: { extensions: IMAGE_EXTENSIONS, message: 'Choose an image — a JPEG, PNG, HEIC or WebP.' },
+  attachment: { extensions: DOCUMENT_EXTENSIONS, message: 'Choose an image or a PDF.' },
+  biodata: {
+    extensions: BIODATA_EXTENSIONS,
+    message: 'Choose a photo of your biodata: a JPEG, PNG or WebP image.',
+  },
+};
 
 /** The server's own MAX_FILE_SIZE default, checked here so a refusal is
  *  immediate rather than ten megabytes later. */
@@ -90,73 +107,111 @@ async function upload(
   mimeType: string,
   kind: Kind,
   onProgress?: (fraction: number) => void,
-): Promise<string> {
-  const allowed = kind === 'attachment' ? DOCUMENT_EXTENSIONS : IMAGE_EXTENSIONS;
-  if (!allowed.includes(extensionOf(fileName))) {
-    throw new UploadError(
-      kind === 'attachment'
-        ? 'Choose an image or a PDF.'
-        : 'Choose an image — a JPEG, PNG, HEIC or WebP.',
-    );
+): Promise<Uploaded> {
+  const allowed = ALLOWED[kind];
+  if (!allowed.extensions.includes(extensionOf(fileName))) {
+    throw new UploadError(allowed.message);
   }
 
-  // Read the size before asking for an upload slot: a file that is going to be
-  // refused should be refused before anything is minted or sent.
-  const info = await FileSystem.getInfoAsync(uri);
-  if (!info.exists) throw new UploadError('That file could not be read. Choose it again.');
-  if (info.size > MAX_BYTES) {
+  let size = 0;
+  let fileBlob: Blob | null = null;
+
+  if (Platform.OS === 'web') {
+    try {
+      const response = await fetch(uri);
+      fileBlob = await response.blob();
+      size = fileBlob.size;
+    } catch {
+      throw new UploadError('That file could not be read. Choose it again.');
+    }
+  } else {
+    const info = await FileSystem.getInfoAsync(uri);
+    if (!info.exists) throw new UploadError('That file could not be read. Choose it again.');
+    size = info.size;
+  }
+
+  if (size > MAX_BYTES) {
     throw new UploadError('That file is over 10MB. Choose a smaller one.');
   }
 
   // The size and type go with the request so storage can hold the upload to
   // them: on S3 both are signed into the upload URL, and a file of any other
   // length is refused there. The type only when it is a real one.
+  const presignPath =
+    kind === 'attachment' ? '/media/attachment/presign'
+    : kind === 'biodata' ? '/media/biodata/presign'
+    : '/media/profile-photo/presign';
   const { data } = await api.post(
-    kind === 'attachment' ? '/media/attachment/presign' : '/media/profile-photo/presign',
+    presignPath,
     {
       filename: fileName,
-      size: info.size,
+      size: size,
       ...(REPORTED_TYPE.test(mimeType) ? { contentType: mimeType } : {}),
     },
   );
 
   const uploadUrl = reachable(data.uploadUrl as string);
-  const task = FileSystem.createUploadTask(
-    uploadUrl,
-    uri,
-    {
-      httpMethod: 'PUT',
-      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-      // The type only. Setting a multipart content type by hand is what breaks
-      // an upload that has no boundary to go with it.
-      headers: { 'Content-Type': mimeType, ...((data.headers as Record<string, string>) ?? {}) },
-    },
-    (progress) => {
-      if (!onProgress || !progress.totalBytesExpectedToSend) return;
-      onProgress(progress.totalBytesSent / progress.totalBytesExpectedToSend);
-    },
-  );
 
-  let response: Awaited<ReturnType<typeof task.uploadAsync>>;
-  try {
-    response = await task.uploadAsync();
-  } catch {
-    // Named, so "could not reach" says which address could not be reached.
-    throw new UploadError(`Could not reach storage at ${hostOf(uploadUrl)}. Check your connection and try again.`);
-  }
-  if (!response) throw new UploadError('That upload was interrupted. Try again.');
-  if (response.status < 200 || response.status >= 300) {
-    throw new UploadError(`Storage refused the file (${response.status}). Try again.`);
+  if (Platform.OS === 'web' && fileBlob) {
+    if (onProgress) onProgress(0.1);
+    let response: Response;
+    try {
+      response = await fetch(uploadUrl, {
+        method: 'PUT',
+        body: fileBlob,
+        headers: { 'Content-Type': mimeType, ...((data.headers as Record<string, string>) ?? {}) },
+      });
+    } catch {
+      throw new UploadError(`Could not reach storage at ${hostOf(uploadUrl)}. Check your connection and try again.`);
+    }
+    if (!response.ok) {
+      throw new UploadError(`Storage refused the file (${response.status}). Try again.`);
+    }
+    if (onProgress) onProgress(1);
+  } else {
+    const task = FileSystem.createUploadTask(
+      uploadUrl,
+      uri,
+      {
+        httpMethod: 'PUT',
+        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+        // The type only. Setting a multipart content type by hand is what breaks
+        // an upload that has no boundary to go with it.
+        headers: { 'Content-Type': mimeType, ...((data.headers as Record<string, string>) ?? {}) },
+      },
+      (progress) => {
+        if (!onProgress || !progress.totalBytesExpectedToSend) return;
+        onProgress(progress.totalBytesSent / progress.totalBytesExpectedToSend);
+      },
+    );
+
+    let response: Awaited<ReturnType<typeof task.uploadAsync>>;
+    try {
+      response = await task.uploadAsync();
+    } catch {
+      // Named, so "could not reach" says which address could not be reached.
+      throw new UploadError(`Could not reach storage at ${hostOf(uploadUrl)}. Check your connection and try again.`);
+    }
+    if (!response) throw new UploadError('That upload was interrupted. Try again.');
+    if (response.status < 200 || response.status >= 300) {
+      throw new UploadError(`Storage refused the file (${response.status}). Try again.`);
+    }
   }
 
   // The server reads the file back and refuses one that is not what it
   // claimed to be, before anything is attached to it.
   await api.post('/media/complete', { key: data.key });
 
-  return reachable(data.publicUrl as string);
+  return { url: reachable(data.publicUrl as string), key: data.key as string };
 }
 
-type Kind = 'photo' | 'attachment';
+type Kind = 'photo' | 'attachment' | 'biodata';
+
+/** Where an upload landed: a link to show it, and the key the API knows it by. */
+interface Uploaded {
+  url: string;
+  key: string;
+}
 
 export function PhotoPicker({
   label = 'Add a photo',
@@ -165,7 +220,8 @@ export function PhotoPicker({
 }: {
   label?: string;
   kind?: Kind;
-  onUploaded: (url: string) => void;
+  /** `key` is what a route that takes a storage key (the biodata reader) expects. */
+  onUploaded: (url: string, key: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -173,7 +229,13 @@ export function PhotoPicker({
 
   /** Whatever went wrong, said in words the person can act on. */
   function report(err: unknown, fallback: string) {
-    setError(err instanceof UploadError ? err.message : apiMessage(err, fallback));
+    if (err instanceof UploadError) {
+      setError(err.message);
+    } else if (err instanceof Error && !('isAxiosError' in err)) {
+      setError(err.message);
+    } else {
+      setError(apiMessage(err, fallback));
+    }
   }
 
   async function run(source: 'library' | 'camera') {
@@ -210,8 +272,8 @@ export function PhotoPicker({
     try {
       const name =
         asset.fileName ?? `upload-${Date.now()}.${asset.uri.split('.').pop() ?? FALLBACK_EXTENSION}`;
-      const url = await upload(asset.uri, name, asset.mimeType ?? 'image/jpeg', kind, setProgress);
-      onUploaded(url);
+      const { url, key } = await upload(asset.uri, name, asset.mimeType ?? 'image/jpeg', kind, setProgress);
+      onUploaded(url, key);
     } catch (err) {
       report(err, 'That photo could not be uploaded.');
     } finally {
@@ -242,14 +304,14 @@ export function PhotoPicker({
     setProgress(0);
     try {
       const name = asset.name || `document-${Date.now()}.pdf`;
-      const url = await upload(
+      const { url, key } = await upload(
         asset.uri,
         name,
         asset.mimeType ?? 'application/pdf',
         'attachment',
         setProgress,
       );
-      onUploaded(url);
+      onUploaded(url, key);
     } catch (err) {
       report(err, 'That document could not be uploaded.');
     } finally {
@@ -288,6 +350,12 @@ export function PhotoPicker({
       ) : null}
       {busy ? <ProgressBar fraction={progress} /> : null}
       {error ? <Caption tone="critical">{error}</Caption> : null}
+      {kind === 'biodata' ? (
+        <Caption tone="faint">
+          A clear photo or screenshot of your biodata: JPEG, PNG or WebP, up to 10MB. For a PDF,
+          take a screenshot of the page first.
+        </Caption>
+      ) : null}
       {kind === 'attachment' ? (
         <Caption tone="faint">
           A PDF, or a photograph of the document — the officer checks what it says, not what it was

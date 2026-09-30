@@ -9,6 +9,8 @@ export interface WeddingDashboard {
     source: string | null;
   };
   budget: {
+    /** The couple's overall wedding budget (PUT /planner/budget); null until set. */
+    total: string | null;
     budgeted: string;
     committed: string;
     remaining: string;
@@ -47,6 +49,7 @@ export interface WeddingPlanRow {
   weddingDate: string | null;
   plannerUserId: string | null;
   plannerBookingId: string | null;
+  budget: string | null;
 }
 
 export function fetchWeddingDashboard() {

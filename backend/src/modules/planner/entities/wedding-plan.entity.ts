@@ -39,6 +39,13 @@ export class WeddingPlan {
   @Column({ type: 'date', nullable: true })
   weddingDate: string | null;
 
+  /**
+   * The couple's overall wedding budget. Event budgets are an optional
+   * breakdown; this is the total the Budget screen measures bookings against.
+   */
+  @Column({ type: 'numeric', precision: 14, scale: 2, nullable: true })
+  budget: string | null;
+
   @OneToMany(() => PlanTask, (task) => task.plan)
   tasks: PlanTask[];
 

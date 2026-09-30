@@ -17,9 +17,6 @@ import {
   DotsThreeVertical,
   Paperclip,
   PaperPlaneRight,
-  Phone,
-  Smiley,
-  VideoCamera,
 } from "phosphor-react-native";
 
 import { Sheet } from "@/components/sheet";
@@ -59,7 +56,15 @@ export default function Thread() {
   const [error, setError] = useState("");
   const [more, setMore] = useState(false);
   const [attachmentOpen, setAttachmentOpen] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
+  const [mutedHere, setIsMuted] = useState<boolean | null>(null);
+  const conversations = useQuery({
+    queryKey: ["conversations"],
+    queryFn: async () =>
+      (await api.get("/chat/conversations")).data as { withUserId: string; muted?: boolean }[],
+    retry: false,
+  });
+  const isMuted =
+    mutedHere ?? Boolean(conversations.data?.find((c) => c.withUserId === id)?.muted);
   const history = useQuery({
     queryKey: ["chat-history", id],
     queryFn: async () =>
@@ -102,6 +107,7 @@ export default function Thread() {
     onSuccess: () => {
       setIsMuted(!isMuted);
       setMore(false);
+      void qc.invalidateQueries({ queryKey: ["conversations"] });
     },
     onError: (e) => setError(apiMessage(e, "Conversation could not be muted.")),
   });
@@ -143,11 +149,6 @@ export default function Thread() {
       </View>
     );
   const messages = history.data?.data ?? [];
-  const unsupportedCall = (type: string) =>
-    NativeAlert.alert(
-      `${type} unavailable`,
-      `${type}ing is not available yet.`,
-    );
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: rgb(theme.canvas) }}
@@ -158,8 +159,6 @@ export default function Thread() {
         photo={photo}
         online={online === "true"}
         onBack={() => router.back()}
-        onCall={() => unsupportedCall("Voice call")}
-        onVideo={() => unsupportedCall("Video call")}
         onMore={() => setMore(true)}
       />
       <FlatList
@@ -229,16 +228,12 @@ function Header({
   photo,
   online,
   onBack,
-  onCall,
-  onVideo,
   onMore,
 }: {
   name: string;
   photo?: string;
   online: boolean;
   onBack: () => void;
-  onCall: () => void;
-  onVideo: () => void;
   onMore: () => void;
 }) {
   const theme = useTheme();
@@ -305,20 +300,6 @@ function Header({
           <Caption tone="faint">{online ? "Online" : "Offline"}</Caption>
         </View>
       </View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Voice call"
-        onPress={onCall}
-      >
-        <Phone size={22} color={rgb(theme.brand)} />
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Video call"
-        onPress={onVideo}
-      >
-        <VideoCamera size={23} color={rgb(theme.brand)} />
-      </Pressable>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="More options"
@@ -393,16 +374,6 @@ function Composer({
           multiline
           maxLength={4000}
         />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Add emoji"
-          onPress={() => {
-            inputRef.current?.focus();
-            NativeAlert.alert("Emoji", "Use your device's native keyboard to insert emojis.");
-          }}
-        >
-          <Smiley size={22} color={rgb(theme.ink[500])} />
-        </Pressable>
       </View>
       <Pressable
         accessibilityRole="button"
