@@ -65,10 +65,19 @@ const EMPTY = {
 /** The server's own rule, applied in the field so a typo costs no round trip. */
 const MOBILE_10 = /^[6-9]\d{9}$/;
 
-function dobError(value: string): string | undefined {
+/**
+ * What is wrong with a typed date of birth, if anything.
+ *
+ * While it is still being typed, a partial date is not an error yet. On
+ * save it is: a date the app cannot read is never sent to the server as typed.
+ */
+function dobError(value: string, final = false): string | undefined {
   if (!value) return undefined;
   const iso = dobInputToIso(value);
-  if (!iso) return value.length === 10 ? 'Enter a valid date of birth' : undefined;
+  if (!iso) {
+    if (value.length === 10) return 'Enter a valid date of birth';
+    return final ? 'Enter the full date of birth as DD/MM/YYYY' : undefined;
+  }
   const now = new Date();
   const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   if (iso > todayIso) {
@@ -120,7 +129,14 @@ export default function Profile() {
       const payload: Record<string, string> = { displayName: form.displayName.trim() };
       for (const key of ['gender', 'dateOfBirth', 'city', 'address', 'contactPhone', 'bio'] as const) {
         const value = form[key].trim();
-        if (value) payload[key] = key === 'dateOfBirth' ? (dobInputToIso(value) ?? value) : value;
+        if (!value) continue;
+        if (key === 'dateOfBirth') {
+          // Checked complete in submit(); never sent as typed.
+          const iso = dobInputToIso(value);
+          if (iso) payload[key] = iso;
+        } else {
+          payload[key] = value;
+        }
       }
       await api.put('/users/me/profile', payload);
     },
@@ -138,7 +154,7 @@ export default function Profile() {
     setError('');
     const errors: Record<string, string> = {};
     if (!form.displayName.trim()) errors.displayName = 'Tell us what to call you';
-    const dateOfBirthError = dobError(form.dateOfBirth);
+    const dateOfBirthError = dobError(form.dateOfBirth.trim(), true);
     if (dateOfBirthError) errors.dateOfBirth = dateOfBirthError;
     if (form.contactPhone.trim()) {
       const digits = form.contactPhone.replace(/[\s-]/g, '').replace(/^\+91/, '');

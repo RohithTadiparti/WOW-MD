@@ -22,6 +22,7 @@ export default () => ({
   runtime: {
     env: process.env.NODE_ENV || 'development',
     port: toNumber(process.env.PORT, 3000),
+    host: process.env.HOST || '0.0.0.0',
     apiPrefix: process.env.API_PREFIX || 'api',
     logLevel: process.env.LOG_LEVEL || 'info',
     corsOrigins: toList(process.env.CORS_ORIGINS, ['http://localhost:5173']),
@@ -419,6 +420,12 @@ export default () => ({
   payout: {
     supportedBanks: toList(process.env.SUPPORTED_PAYOUT_BANKS),
     ifscLookupBaseUrl: process.env.IFSC_LOOKUP_BASE_URL || 'https://ifsc.razorpay.com',
+    /**
+     * Key for encrypting payout bank account numbers at rest. Blank outside
+     * production falls back to a key derived from the JWT secret so a local
+     * stack works; blank in production means bank details are refused.
+     */
+    detailsKey: process.env.PAYOUT_DETAILS_KEY || '',
   },
 
   identity: {

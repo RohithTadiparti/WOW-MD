@@ -36,13 +36,19 @@ import {
 } from '../../common/enums';
 import { AppConfigService } from '../../config/app-config.service';
 import { OutboxService } from '../../platform/events/outbox.service';
-import { PAYMENT_PROVIDER, PaymentProvider, PayoutDestination } from './payment.provider';
+import {
+  PAYMENT_PROVIDER,
+  PaymentProvider,
+  PayoutDestination,
+  PayoutResult,
+} from './payment.provider';
 import { PAYMENT_STATUS_RANK, collectedByBooking, isCollected } from './payment-totals';
 import { escrowSummary, summariseQuotations } from './booking-summary';
 import { WeddingFacts, bookingContextOf } from './booking-venue';
 import { loadWeddingFacts } from './wedding-facts';
 import { serviceNamesByIds } from '../catalog/service-names';
 import { displayNamesByUserIds } from '../users/display-names';
+import { profilePhotoOf } from '../users/dto/public-profile.dto';
 import { SupportCasesService } from '../verification/support-cases.service';
 import { MatchmakingService } from '../matchmaking/matchmaking.service';
 import { AvailabilityService } from '../vendors/availability.service';
@@ -1125,6 +1131,74 @@ export class BookingsService {
   }
 
   /**
+   * Transfer every owed payout on one booking in full, at the provider's asking.
+   *
+   * Refused outright when there is nowhere to send it: attempting a transfer
+   * to no account would change nothing and only leave a trail of releases
+   * that never happened. Safe to call twice at once; see releaseOnePending.
+   */
+  async releasePayout(
+    actor: AuthUser,
+    bookingId: string,
+    milestone?: PaymentMilestone,
+  ): Promise<{ bookingId: string; released: number; notReleased: string[] }> {
+    const booking = await this.loadOrFail(bookingId);
+    await this.assertSellerSide(actor, booking);
+
+    if (await this.cases.hasOpenCaseFor(bookingId)) {
+      throw new BadRequestException('An open case is holding this booking.');
+    }
+
+    const pending = await this.payments.find({
+      where: {
+        bookingId,
+        status: PaymentStatus.PENDING_PAYOUT,
+        ...(milestone ? { milestone } : {}),
+      },
+    });
+    if (pending.length === 0) {
+      throw new BadRequestException('No eligible payout remains for this booking');
+    }
+
+    const destination = await this.payoutDestination(booking);
+    if (!destination.accountId) {
+      throw new BadRequestException(
+        'There is no active payout account to send this to yet. It is released once your ' +
+          'payout account is set up and verified.',
+      );
+    }
+
+    let released = 0;
+    const notReleased: string[] = [];
+    for (const row of pending) {
+      const outcome = await this.releaseOnePending(row.id, destination);
+      // Claimed by a concurrent release, or already released: nothing to do.
+      if (!outcome) continue;
+      const { payment, result } = outcome;
+      if (!result.transferred) {
+        notReleased.push(result.reason ?? 'The transfer was not made');
+        continue;
+      }
+      released += 1;
+      await this.audit.record({
+        action: AuditAction.BOOKING_ESCROW_RELEASED,
+        actor,
+        resourceType: 'booking',
+        resourceId: bookingId,
+        metadata: {
+          gross: payment.amount,
+          milestone: payment.milestone,
+          payout: payment.payoutAmount,
+          commission: payment.commissionAmount,
+          transferred: true,
+          reason: null,
+        },
+      });
+    }
+    return { bookingId, released, notReleased };
+  }
+
+  /**
    * Moves every held payment on a booking to the provider.
    *
    * A provider whose payout onboarding is not finished has no account to
@@ -1195,6 +1269,45 @@ export class BookingsService {
       });
     }
     return moved;
+  }
+
+  /**
+   * Transfers one owed payment, if nobody else is already doing so.
+   *
+   * The row is claimed with a row lock that skips rather than waits, inside a
+   * transaction that also covers the write-back. Two releases racing for the
+   * same payment (a double click, or a click landing while the nightly retry
+   * runs) therefore never both reach the gateway: the loser finds the row
+   * locked, or no longer owed, and returns null. The status is only ever
+   * written back on a row that is still PENDING_PAYOUT, so a failed attempt
+   * cannot overwrite a payment somebody else has already released.
+   */
+  private async releaseOnePending(
+    paymentId: string,
+    destination: PayoutDestination,
+  ): Promise<{ payment: Payment; result: PayoutResult } | null> {
+    return this.dataSource.transaction(async (manager) => {
+      const repo = manager.getRepository(Payment);
+      const payment = await repo.findOne({
+        where: { id: paymentId, status: PaymentStatus.PENDING_PAYOUT },
+        lock: { mode: 'pessimistic_write', onLocked: 'skip_locked' },
+      });
+      if (!payment?.providerRef) return null;
+
+      const result = await this.gateway.release(
+        payment.providerRef,
+        payment.payoutAmount,
+        payment.currency,
+        destination,
+      );
+      await repo.update(
+        { id: payment.id, status: PaymentStatus.PENDING_PAYOUT },
+        result.transferred
+          ? { status: PaymentStatus.RELEASED, payoutRef: result.transferRef, payoutNote: null }
+          : { payoutNote: result.reason },
+      );
+      return { payment, result };
+    });
   }
 
   /**
@@ -1380,20 +1493,10 @@ export class BookingsService {
       const destination = await this.payoutDestination(booking);
       if (!destination.accountId) continue;
 
-      const result = await this.gateway.release(
-        payment.providerRef,
-        payment.payoutAmount,
-        payment.currency,
-        destination,
-      );
-      if (!result.transferred) continue;
-
-      await this.payments.update(payment.id, {
-        status: PaymentStatus.RELEASED,
-        payoutRef: result.transferRef,
-        payoutNote: null,
-      });
-      released += 1;
+      // Claimed row by row, so a provider releasing by hand at the same moment
+      // cannot be paid twice or have a finished release written back as owed.
+      const outcome = await this.releaseOnePending(payment.id, destination);
+      if (outcome?.result.transferred) released += 1;
     }
     return { attempted: pending.length, released };
   }
@@ -1698,34 +1801,18 @@ export class BookingsService {
       .groupBy('b.status')
       .getRawMany<{ status: string; count: string }>();
 
-    const counts: Record<string, number> = {
-      all: 0,
-      requests: 0,
-      confirmed: 0,
-      in_progress: 0,
-      completed: 0,
-      cancelled: 0,
-    };
-
+    /*
+     * One key per status, each counted once, so a client adding up the
+     * statuses of a tab gets the right number. `requests` gathers the three
+     * request statuses for the dashboard tile; it is not a status name, so it
+     * cannot be mistaken for one.
+     */
+    const counts: Record<string, number> = { all: 0, requests: 0 };
     for (const row of rows) {
-      const s = (row.status ?? '').toLowerCase().trim();
       const n = Number(row.count) || 0;
+      counts[row.status] = (counts[row.status] ?? 0) + n;
       counts.all += n;
-      if (!['confirmed', 'in_progress', 'completed', 'cancelled'].includes(s)) {
-        counts[s] = (counts[s] ?? 0) + n;
-      }
-
-      if (s === 'requested' || s === 'quotation_sent' || s === 'quotation_accepted') {
-        counts.requests += n;
-      } else if (s === 'payment_pending' || s === 'pending' || s === 'confirmed') {
-        counts.confirmed += n;
-      } else if (s === 'in_progress' || s === 'completed_pending_final_payment') {
-        counts.in_progress += n;
-      } else if (s === 'completed') {
-        counts.completed += n;
-      } else if (s === 'cancelled' || s === 'disputed') {
-        counts.cancelled += n;
-      }
+      if ((REQUEST_STATUSES as string[]).includes(row.status)) counts.requests += n;
     }
 
     // Not a status, so not in the tally above. Counted with the same rule as
@@ -1744,8 +1831,9 @@ export class BookingsService {
   }
 
   /**
-   * Buyer-side status buckets for the individual dashboard tiles & status tabs:
-   * total, active, cancelled, completed, and status breakdown.
+   * Buyer-side counts: the individual dashboard tiles (EZ1-I75), total,
+   * active, cancelled and completed, plus one count per status for the tabs.
+   * Scoped exactly like listForBuyer so the numbers match the list.
    */
   async buyerCounts(actor: AuthUser): Promise<Record<string, number> & {
     all: number;
@@ -1766,58 +1854,24 @@ export class BookingsService {
     }
     const rows = await qb.groupBy('b.status').getRawMany<{ status: string; count: string }>();
 
-    const counts: Record<string, number> & {
-      all: number;
-      active: number;
-      cancelled: number;
-      completed: number;
-    } = {
-      all: 0,
-      active: 0,
-      cancelled: 0,
-      completed: 0,
-      requested: 0,
-      quotation: 0,
-      payment: 0,
-      confirmed: 0,
-      in_progress: 0,
-      disputed: 0,
-    };
-
+    // One key per status, counted once, for the status tabs; the tiles' three
+    // buckets are the same as before, with active everything still in flight
+    // (a disputed booking included), so the buckets add up to the total.
+    const counts: Record<string, number> = { all: 0 };
     for (const row of rows) {
-      const s = (row.status ?? '').toLowerCase().trim();
       const n = Number(row.count) || 0;
+      counts[row.status] = (counts[row.status] ?? 0) + n;
       counts.all += n;
-      if (!['requested', 'confirmed', 'in_progress', 'completed', 'cancelled', 'disputed'].includes(s)) {
-        counts[s] = (counts[s] ?? 0) + n;
-      }
-
-      if (s === 'requested') {
-        counts.requested += n;
-        counts.active += n;
-      } else if (s === 'quotation_sent' || s === 'quotation_accepted') {
-        counts.quotation += n;
-        counts.active += n;
-      } else if (s === 'payment_pending' || s === 'pending') {
-        counts.payment += n;
-        counts.active += n;
-      } else if (s === 'confirmed') {
-        counts.confirmed += n;
-        counts.active += n;
-      } else if (s === 'in_progress' || s === 'completed_pending_final_payment') {
-        counts.in_progress += n;
-        counts.active += n;
-      } else if (s === 'completed') {
-        counts.completed += n;
-      } else if (s === 'cancelled' || s === 'disputed') {
-        counts.cancelled += n;
-        if (s === 'disputed') counts.disputed += n;
-      } else {
-        counts.active += n;
-      }
     }
-
-    return counts;
+    const cancelled = counts[BookingStatus.CANCELLED] ?? 0;
+    const completed = counts[BookingStatus.COMPLETED] ?? 0;
+    return {
+      ...counts,
+      all: counts.all,
+      active: counts.all - cancelled - completed,
+      cancelled,
+      completed,
+    };
   }
 
   /**
@@ -1908,7 +1962,7 @@ export class BookingsService {
       booking.clientEmail = user?.email ?? null;
       booking.clientPhone = user?.phone ?? null;
       booking.clientCity = clientProfile?.city ?? null;
-      booking.clientPhoto = clientProfile?.photos?.[0] ?? null;
+      booking.clientPhoto = profilePhotoOf(clientProfile);
       // Judged before the linked function's date replaces the booking's own,
       // with the same rule incomingCounts uses for the tab.
       booking.requestOnDate =
@@ -2128,11 +2182,14 @@ export class BookingsService {
       clientName: string | null;
       /** What was booked: the service's name, or 'Wedding planning' for a planner. */
       serviceName: string | null;
+      eventDate: string | null;
       milestone: PaymentMilestone;
       status: PaymentStatus;
       amount: string;
       commissionAmount: string;
       payoutAmount: string;
+      releasedAmount: string;
+      availableAmount: string;
       /** The gateway's reference for the transfer, once one is made. */
       payoutRef: string | null;
       /** Why a payout has not happened, when it has not. */
@@ -2156,7 +2213,7 @@ export class BookingsService {
 
     const bookings = await this.bookings.find({
       where: { providerId: In(providerIds) },
-      select: ['id', 'currency', 'userId', 'providerType', 'vendorServiceId'],
+      select: ['id', 'currency', 'userId', 'providerType', 'vendorServiceId', 'eventDate'],
     });
     if (bookings.length === 0) return empty;
 
@@ -2234,11 +2291,17 @@ export class BookingsService {
         bookingId: p.bookingId,
         clientName: clientNames.get(bookingById.get(p.bookingId)?.userId ?? '') ?? null,
         serviceName: serviceNameOf(bookingById.get(p.bookingId)),
+        eventDate: bookingById.get(p.bookingId)?.eventDate ?? null,
         milestone: p.milestone,
         status: p.status,
         amount: p.amount,
         commissionAmount: p.commissionAmount,
         payoutAmount: p.payoutAmount,
+        releasedAmount:
+          p.status === PaymentStatus.RELEASED || p.status === PaymentStatus.PARTIALLY_SETTLED
+            ? p.payoutAmount
+            : '0.00',
+        availableAmount: p.status === PaymentStatus.PENDING_PAYOUT ? p.payoutAmount : '0.00',
         payoutRef: p.payoutRef ?? null,
         payoutNote: p.payoutNote ?? null,
         confirmedAt: p.webhookVerifiedAt ?? null,

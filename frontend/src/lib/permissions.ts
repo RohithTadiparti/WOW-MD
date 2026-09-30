@@ -349,6 +349,16 @@ export const OCCUPATION_LABEL: Record<OccupationStatus, string> = {
   retired: 'Retired',
 };
 
+/** Income besides the main occupation; keys match the server's list. */
+export const OTHER_INCOME_LABEL: Record<string, string> = {
+  business: 'Business on the side',
+  rental: 'Rental income',
+  agriculture: 'Agriculture',
+  investments: 'Investments',
+  freelance: 'Freelance / consulting',
+  other: 'Other',
+};
+
 export const ASSET_TYPE_LABEL: Record<string, string> = {
   independent_house: 'Independent house',
   apartment: 'Apartment',

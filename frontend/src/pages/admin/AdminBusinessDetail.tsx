@@ -36,6 +36,8 @@ interface ServiceRow {
   description: string | null;
   active: boolean;
   category?: { name?: string } | null;
+  /** Its category is no longer one the business lists; off sale. */
+  outsideSelectedCategories?: boolean;
   offerings: Offering[];
 }
 
@@ -231,6 +233,9 @@ export default function AdminBusinessDetail() {
                     <span className={`pill ${s.active ? 'bg-positive-bg text-positive-fg' : 'bg-gray-100 text-gray-500'}`}>
                       {s.active ? 'Active' : 'Off'}
                     </span>
+                    {s.outsideSelectedCategories && (
+                      <span className="pill bg-amber-50 text-amber-800">Outside selected categories</span>
+                    )}
                   </span>
                 </div>
                 {s.description && <p className="mt-1 text-xs text-gray-500">{s.description}</p>}

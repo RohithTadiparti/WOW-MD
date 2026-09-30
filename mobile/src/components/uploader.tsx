@@ -55,24 +55,25 @@ const REPORTED_TYPE = /^(image|video)\/[a-z0-9.+-]+$|^application\/pdf$/i;
 /** A refusal the person can act on, as opposed to one about the network. */
 class UploadError extends Error {}
 
-const LOOPBACK_URL = /^(https?:)\/\/(localhost|127(?:\.\d{1,3}){3}|\[::1\])(:\d{1,5})?(\/.*)?$/i;
+const PRIVATE_STORAGE_URL =
+  /^(https?:)\/\/(localhost|127(?:\.\d{1,3}){3}|10(?:\.\d{1,3}){3}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}|192\.168(?:\.\d{1,3}){2}|\[::1\])(:\d{1,5})?(\/.*)?$/i;
 const ORIGIN = /^(https?:\/\/[^/]+)/i;
 
 /**
  * A storage URL the phone can actually open (EZ1-I248).
  *
- * A server configured with `localhost` for its storage hands back URLs that
- * mean the phone itself. The API the app already talks to is, by definition,
- * reachable; so a loopback URL is re-pointed at that origin, path kept. A URL
- * that is not loopback, or an app that is itself talking to localhost, is left
- * alone.
+ * A local storage server can return a URL with an address from the developer's
+ * machine or LAN. That address may not be reachable from the phone. Repoint
+ * loopback and private-network storage URLs at the API origin already configured
+ * for this app, preserving the upload path. Public storage URLs remain intact.
  */
 export function reachable(url: string): string {
-  const loopback = LOOPBACK_URL.exec(url);
+  const privateStorage = PRIVATE_STORAGE_URL.exec(url);
   const apiOrigin = ORIGIN.exec(api.defaults.baseURL ?? '');
-  if (!loopback || !apiOrigin) return url;
-  if (LOOPBACK_URL.test(apiOrigin[1])) return url;
-  return `${apiOrigin[1]}${loopback[4] ?? ''}`;
+  if (!privateStorage || !apiOrigin) return url;
+  const storageOrigin = `${privateStorage[1]}//${privateStorage[2]}${privateStorage[3] ?? ''}`;
+  if (storageOrigin.toLowerCase() === apiOrigin[1].toLowerCase()) return url;
+  return `${apiOrigin[1]}${privateStorage[4] ?? ''}`;
 }
 
 function hostOf(url: string): string {
@@ -343,10 +344,16 @@ function ProgressBar({ fraction }: { fraction: number }) {
 export function MediaStrip({
   urls,
   onRemove,
+  primary,
+  onMakePrimary,
 }: {
   urls: string[];
   /** Absent makes the strip read-only, which is what a review screen wants. */
   onRemove?: (url: string) => void;
+  /** The profile photo, marked in the strip. */
+  primary?: string | null;
+  /** Present offers "Set as profile photo" under every other photo. */
+  onMakePrimary?: (url: string) => void;
 }) {
   const theme = useTheme();
   if (urls.length === 0) return null;
@@ -354,13 +361,37 @@ export function MediaStrip({
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space(2) }}>
       {urls.map((url) => (
-        <View key={url}>
+        <View key={url} style={{ width: 116 }}>
           <Image
             source={{ uri: reachable(url) }}
-            style={{ width: 116, height: 84, borderRadius: radius.sm, backgroundColor: rgb(theme.surfaceSunken) }}
+            style={{
+              width: 116,
+              height: 84,
+              borderRadius: radius.sm,
+              backgroundColor: rgb(theme.surfaceSunken),
+              borderWidth: url === primary ? 2 : 0,
+              borderColor: rgb(theme.brand),
+            }}
             contentFit="cover"
             transition={150}
           />
+          {url === primary ? (
+            <Caption tone="brand" style={{ marginTop: space(1), textAlign: 'center' }}>
+              Profile photo
+            </Caption>
+          ) : onMakePrimary ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Set as profile photo"
+              onPress={() => onMakePrimary(url)}
+              hitSlop={8}
+              style={({ pressed }) => [{ marginTop: space(1) }, pressed && { opacity: 0.6 }]}
+            >
+              <Caption style={{ textAlign: 'center', textDecorationLine: 'underline' }}>
+                Set as profile photo
+              </Caption>
+            </Pressable>
+          ) : null}
           {onRemove && (
             <Pressable
               accessibilityRole="button"

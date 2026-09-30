@@ -10,7 +10,7 @@ import { displayNamesByUserIds } from '../users/display-names';
 import { PostProposalNoteDto } from './dto/sharing.dto';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { InterestStatus, UserRole } from '../../common/enums';
-import { toPublicProfile, PublicProfileView } from '../users/dto/public-profile.dto';
+import { profilePhotoOf, toPublicProfile, PublicProfileView } from '../users/dto/public-profile.dto';
 import { ChatService } from '../chat/chat.service';
 import { visibleTo } from '../matchmaking/interest-screening.service';
 
@@ -124,7 +124,7 @@ export class ProposalsService {
       interestId,
       status: interest.status,
       sides: [from, to].map((p) => ({
-        profile: toPublicProfile(p, { matched: matched || mineIds.has(p.id) }),
+        profile: toPublicProfile(p, { owner: mineIds.has(p.id), accepted: matched, fixed: interest.matchFixedState === 'confirmed' }),
         handledBy: stewardName(p.managedByUserId),
         isMine: mineIds.has(p.id),
       })),
@@ -291,7 +291,7 @@ export class ProposalsService {
         myProfileId: mineId,
         otherProfileId: otherId,
         otherName: other?.displayName ?? 'The other side',
-        otherPhotoUrl: other?.photos?.[0] ?? null,
+        otherPhotoUrl: profilePhotoOf(other),
         otherGender: other?.gender ?? null,
         lastNote: last?.body ?? null,
         lastNoteAt: last?.createdAt ?? null,

@@ -205,11 +205,11 @@ export default function BookingConsole({
     }
     if (!counts) return undefined;
     if (entry.key === 'all') return counts.all ?? 0;
-    if (entry.key in counts) return counts[entry.key] ?? 0;
+    // One count per status from the server; a tab adds up its own statuses.
     if (entry.statuses.length > 0) {
       return entry.statuses.reduce((n, status) => n + (counts[status] ?? 0), 0);
     }
-    return undefined;
+    return counts[entry.key];
   };
 
   return (

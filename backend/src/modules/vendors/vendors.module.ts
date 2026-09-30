@@ -20,6 +20,8 @@ import { AdminReviewsController, VendorsController } from './vendors.controller'
 import { BookingsModule } from '../bookings/bookings.module';
 import { CatalogModule } from '../catalog/catalog.module';
 import { PayoutBankService } from './payout-bank.service';
+import { PayoutAccountsService } from './payout-accounts.service';
+import { PayoutBankAccount } from './entities/payout-bank-account.entity';
 
 @Module({
   imports: [
@@ -39,15 +41,31 @@ import { PayoutBankService } from './payout-bank.service';
       // Read-only, to name the reviewer for an administrator.
       User,
       Profile,
-      // Read-only, so availability can ask whether a planner listing is yours.
+      // So availability can ask whether a planner listing is yours, and the
+      // payout form can set where a planner is paid.
       PlannerProfile,
       SupportCase,
+      // Submitted payout bank details, sealed; see PayoutAccountsService.
+      PayoutBankAccount,
     ]),
     forwardRef(() => BookingsModule),
     forwardRef(() => CatalogModule),
   ],
-  providers: [VendorsService, AvailabilityService, BusinessLifecycleService, PayoutBankService],
+  providers: [
+    VendorsService,
+    AvailabilityService,
+    BusinessLifecycleService,
+    PayoutBankService,
+    PayoutAccountsService,
+  ],
   controllers: [VendorsController, AdminReviewsController],
-  exports: [VendorsService, AvailabilityService, TypeOrmModule, BusinessLifecycleService, PayoutBankService],
+  exports: [
+    VendorsService,
+    AvailabilityService,
+    TypeOrmModule,
+    BusinessLifecycleService,
+    PayoutBankService,
+    PayoutAccountsService,
+  ],
 })
 export class VendorsModule {}

@@ -282,6 +282,7 @@ export default function Register() {
           value={password}
           onChangeText={setPassword}
           secureTextEntry
+          showPasswordToggle
           autoCapitalize="none"
           autoComplete="new-password"
           textContentType="newPassword"
@@ -294,6 +295,7 @@ export default function Register() {
           value={confirmPassword}
           onChangeText={setConfirmPassword}
           secureTextEntry
+          showPasswordToggle
           autoCapitalize="none"
           autoComplete="new-password"
           textContentType="newPassword"

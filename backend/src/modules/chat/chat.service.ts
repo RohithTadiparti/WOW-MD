@@ -26,7 +26,7 @@ import {
   isIndividual,
   isProvider,
 } from '../../common/enums';
-import { ageBand } from '../users/dto/public-profile.dto';
+import { ageBand, profilePhotoOf } from '../users/dto/public-profile.dto';
 import { CompatibilityEngine } from '../matchmaking/compatibility.engine';
 import { ProfileDetails } from '../profile-details/entities/profile-details.entity';
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
@@ -665,7 +665,7 @@ export class ChatService {
           withUserId: otherUserId,
           muted: false,
           displayName: profile?.displayName ?? accountNames.get(otherUserId) ?? 'Match',
-          photoUrl: profile?.photos?.[0] ?? null,
+          photoUrl: profilePhotoOf(profile),
           gender: profile?.gender ?? null,
           lastMessage: null,
           lastMessageAt: null,
@@ -723,7 +723,7 @@ export class ChatService {
           withUserId: otherUserId,
           muted: Boolean(pref?.muted),
           displayName: profile?.displayName ?? accountNames.get(otherUserId) ?? 'Match',
-          photoUrl: profile?.photos?.[0] ?? null,
+          photoUrl: profilePhotoOf(profile),
           gender: profile?.gender ?? null,
           lastMessage: last?.body ?? null,
           lastMessageAt: last?.createdAt ?? null,

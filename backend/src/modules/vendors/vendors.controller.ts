@@ -26,6 +26,7 @@ import {
   VendorSearchDto,
 } from './dto/vendor.dto';
 import { PayoutBankService } from './payout-bank.service';
+import { PayoutAccountsService } from './payout-accounts.service';
 import {
   AvailabilityQueryDto,
   BlockSlotDto,
@@ -34,7 +35,10 @@ import {
 } from './dto/availability.dto';
 import { AuthUser, CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
-import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import {
+  RequireAnyPermission,
+  RequirePermissions,
+} from '../../common/decorators/permissions.decorator';
 import { Permission } from '../../common/authz/permissions';
 import { ProviderType, UserRole } from '../../common/enums';
 
@@ -47,17 +51,20 @@ export class VendorsController {
     private readonly bookings: BookingsService,
     private readonly lifecycle: BusinessLifecycleService,
     private readonly payoutBanks: PayoutBankService,
+    private readonly payoutAccounts: PayoutAccountsService,
   ) {}
 
+  // Planners are paid out too and fill in the same payout form, so the bank
+  // list and IFSC lookup are open to either kind of provider.
   @ApiBearerAuth()
-  @RequirePermissions(Permission.VENDOR_LISTING_MANAGE)
+  @RequireAnyPermission(Permission.VENDOR_LISTING_MANAGE, Permission.PLANNER_LISTING_MANAGE)
   @Get('payout/banks')
   supportedPayoutBanks(@Query('q') query?: string) {
     return this.payoutBanks.listSupportedBanks(query);
   }
 
   @ApiBearerAuth()
-  @RequirePermissions(Permission.VENDOR_LISTING_MANAGE)
+  @RequireAnyPermission(Permission.VENDOR_LISTING_MANAGE, Permission.PLANNER_LISTING_MANAGE)
   @Get('payout/ifsc/:ifsc')
   lookupPayoutIfsc(@Param('ifsc') ifsc: string, @Query('bankName') bankName?: string) {
     return this.payoutBanks.lookupIfsc(ifsc, bankName);
@@ -335,10 +342,25 @@ export class VendorsController {
   @ApiBearerAuth()
   @RequirePermissions(Permission.VENDOR_LISTING_MANAGE)
   @ApiOperation({
+    summary: 'Where escrow pays out to, and how far its setup has got',
+    description: 'The bank account number only ever comes back masked.',
+  })
+  @Get(':id/payout-account')
+  getPayoutAccount(
+    @CurrentUser('userId') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.payoutAccounts.getForVendor(userId, id);
+  }
+
+  @ApiBearerAuth()
+  @RequirePermissions(Permission.VENDOR_LISTING_MANAGE)
+  @ApiOperation({
     summary: 'Where escrow pays out to',
     description:
-      'The gateway linked account for this business. Its own route rather than a field on the ' +
-      'listing form: it is the one value on a business record that decides where money lands.',
+      'The gateway linked account for this business, or the bank details to create one. Its ' +
+      'own route rather than a field on the listing form: it is the one value on a business ' +
+      'record that decides where money lands. An empty id with no bank details clears it.',
   })
   @Put(':id/payout-account')
   setPayoutAccount(
@@ -346,7 +368,7 @@ export class VendorsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: PayoutAccountDto,
   ) {
-    return this.vendors.setPayoutAccount(userId, id, dto.payoutAccountId);
+    return this.payoutAccounts.setForVendor(userId, id, dto);
   }
 
   @ApiBearerAuth()

@@ -50,24 +50,6 @@ export default {
           light: channel('brand-soft'),
         },
 
-        // Official WOW palette. This is intentionally a top-level family so
-        // every portal can use the approved tokens directly (`bg-wow-primary`,
-        // `text-wow-text-main`, etc.) without coupling brand semantics to an
-        // unrelated colour scale.
-        wow: {
-          primary: channel('wow-primary'),
-          'primary-light': channel('wow-primary-light'),
-          'accent-gold': channel('wow-accent-gold'),
-          'accent-warm': channel('wow-accent-warm'),
-          'bg-main': channel('wow-bg-main'),
-          'bg-secondary': channel('wow-bg-secondary'),
-          surface: channel('wow-surface'),
-          'text-main': channel('wow-text-main'),
-          'text-muted': channel('wow-text-muted'),
-          success: channel('wow-success'),
-          error: channel('wow-error'),
-        },
-
         // The template's struck gold, for ornament: numerals, rules, hearts.
         gold: {
           DEFAULT: channel('gold'),
@@ -128,17 +110,17 @@ export default {
           800: channel('caution-fg'),
           900: channel('caution-fg'),
         },
+        // Informational tints (notes, neutral states) share one token pair,
+        // defined for both themes in index.css. Only the tint and text steps
+        // are mapped; the others keep their stock values.
         blue: {
           50: channel('info-bg'),
-          200: channel('rose-200'),
           700: channel('info-fg'),
           800: channel('info-fg'),
           900: channel('info-fg'),
         },
         sky: {
           50: channel('info-bg'),
-          200: channel('rose-200'),
-          300: channel('rose-300'),
           700: channel('info-fg'),
           800: channel('info-fg'),
           900: channel('info-fg'),

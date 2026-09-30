@@ -7,8 +7,9 @@ import { Badge, DetailGrid, DetailRow, Divider } from '@/components/chrome';
 import { DynamicForm } from '@/components/dynamic-form';
 import { Textarea } from '@/components/form';
 import { Offerings } from '@/components/business/offerings';
+import { PromptSheet } from '@/components/prompt';
 import type { VendorService } from '@/components/business/service-types';
-import { Body, Button, Caption, Card, Field, SectionTitle } from '@/components/ui';
+import { Alert, Body, Button, Caption, Card, Field, SectionTitle } from '@/components/ui';
 import { space } from '@/theme';
 
 /**
@@ -36,6 +37,7 @@ export function ServiceCard({
   onNotice: (message: string) => void;
 }) {
   const [mode, setMode] = useState<'read' | 'edit' | 'prices'>('read');
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   return (
     <Card>
@@ -52,9 +54,22 @@ export function ServiceCard({
 
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2), alignItems: 'center' }}>
         <Badge tone={service.bookable ? 'positive' : 'caution'}>
-          {service.bookable ? 'Bookable' : service.active ? 'No price published' : 'Switched off'}
+          {service.bookable
+            ? 'Bookable'
+            : !service.active
+              ? 'Switched off'
+              : service.outsideSelectedCategories
+                ? 'Outside your categories'
+                : 'No price published'}
         </Badge>
       </View>
+
+      {service.outsideSelectedCategories ? (
+        <Alert tone="caution">
+          This service is under a category your business no longer lists, so clients cannot book
+          it. Add the category back to your business, or switch the service off.
+        </Alert>
+      ) : null}
 
       {service.description ? <Body tone="muted">{service.description}</Body> : null}
 
@@ -85,11 +100,7 @@ export function ServiceCard({
             if (ok) setMode('read');
           }}
           onRemove={async () => {
-            const ok = await onAct(
-              () => api.delete(`/vendors/${vendorId}/services/${service.id}`),
-              'Service removed.',
-            );
-            if (ok) setMode('read');
+            setConfirmingDelete(true);
           }}
           onCancel={() => setMode('read')}
         />
@@ -107,6 +118,13 @@ export function ServiceCard({
             variant="outline"
             small
             onPress={() => setMode(mode === 'edit' ? 'read' : 'edit')}
+            style={{ flex: 1 }}
+          />
+          <Button
+            label="Delete"
+            variant="outline"
+            small
+            onPress={() => setConfirmingDelete(true)}
             style={{ flex: 1 }}
           />
           <Button
@@ -133,6 +151,25 @@ export function ServiceCard({
           }
         />
       </View>
+
+      <PromptSheet
+        visible={confirmingDelete}
+        title="Delete service?"
+        message={`Delete "${service.displayName ?? service.definition?.name ?? 'this service'}" permanently? This also deletes its prices and cannot be undone.`}
+        confirmLabel="Delete"
+        input={false}
+        onCancel={() => setConfirmingDelete(false)}
+        onConfirm={() => {
+          void (async () => {
+            const ok = await onAct(
+              () => api.delete(`/vendors/${vendorId}/services/${service.id}`),
+              'Service deleted.',
+            );
+            if (ok) setMode('read');
+            setConfirmingDelete(false);
+          })();
+        }}
+      />
     </Card>
   );
 }
@@ -152,7 +189,6 @@ function EditService({
   const [description, setDescription] = useState(service.description ?? '');
   const [answers, setAnswers] = useState<Answers>(service.attributes);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [confirming, setConfirming] = useState(false);
 
   function submit() {
     const found = validateAnswers(service.serviceForm, answers);
@@ -188,21 +224,12 @@ function EditService({
       <View style={{ flexDirection: 'row', gap: space(2) }}>
         <Button label="Cancel" variant="outline" onPress={onCancel} style={{ flex: 1 }} />
         <Button
-          // Two presses rather than a confirm dialog: removing a service takes
-          // its prices and its published windows with it, and a modal that
-          // interrupts the form is easier to dismiss by accident than a button
-          // that changes what it says.
-          label={confirming ? 'Really remove' : 'Remove'}
+          label="Delete"
           variant="outline"
-          onPress={() => (confirming ? onRemove() : setConfirming(true))}
+          onPress={onRemove}
           style={{ flex: 1 }}
         />
       </View>
-      {confirming ? (
-        <Caption tone="critical">
-          This removes the service from your business, along with its prices.
-        </Caption>
-      ) : null}
     </View>
   );
 }

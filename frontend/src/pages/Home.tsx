@@ -36,6 +36,12 @@ const SAMPLE_PROFILES = [
 
 const NAV_LINK = 'plate text-[0.8125rem] uppercase tracking-[0.16em] text-gray-700 hover:text-brand';
 
+/**
+ * The Android app, served by the web container from docker/downloads (see
+ * frontend/nginx.conf). A plain link rather than a router Link: it is a file.
+ */
+const ANDROID_APK = '/downloads/wow.apk';
+
 export default function Home() {
   const nav = useNavigate();
 
@@ -65,6 +71,9 @@ export default function Home() {
             </a>
             <a href="#stories" className={NAV_LINK}>
               Stories
+            </a>
+            <a href="#app" className={NAV_LINK}>
+              Android app
             </a>
             <Link to="/login" className={NAV_LINK}>
               Sign in
@@ -186,6 +195,31 @@ export default function Home() {
           </Link>
         </section>
 
+        <section
+          id="app"
+          className="mt-7 flex scroll-mt-8 flex-col items-start justify-between gap-8 border border-gray-200 bg-surface p-8 sm:p-12 md:flex-row md:items-center"
+        >
+          <div className="flex max-w-[40rem] flex-col gap-2.5">
+            <h2 className="font-serif text-[2.25rem] font-normal leading-[1.1] text-brand sm:text-[2.625rem]">
+              Get the Android app
+            </h2>
+            <p className="text-[0.9375rem] leading-relaxed text-gray-700">
+              The same profile, matches and chat on your phone, with calls and notifications. Open
+              the file once it has downloaded; Android asks you to allow installs from your browser
+              the first time.
+            </p>
+            <p className="eyebrow tracking-[0.18em]">Android 7 and later</p>
+          </div>
+          {/* Outline, not filled: "Create profile" above is the page's main action. */}
+          <a
+            href={ANDROID_APK}
+            download="wow.apk"
+            className="btn-outline min-h-14 w-full shrink-0 px-4 text-xs tracking-[0.14em] sm:w-auto sm:px-12 sm:text-[0.8125rem] sm:tracking-[0.24em]"
+          >
+            Download for Android
+          </a>
+        </section>
+
         <footer className="mt-auto flex flex-wrap items-center justify-between gap-6 border-t border-gray-200 py-10 mt-24">
           <p className="plate eyebrow tracking-[0.18em]">World of Weddingz · © {new Date().getFullYear()}</p>
           <nav className="flex items-center gap-8">
@@ -195,6 +229,9 @@ export default function Home() {
             <Link to="/register" className="plate eyebrow tracking-[0.18em] hover:text-brand">
               Register
             </Link>
+            <a href={ANDROID_APK} download="wow.apk" className="plate eyebrow tracking-[0.18em] hover:text-brand">
+              Android app
+            </a>
           </nav>
         </footer>
       </div>

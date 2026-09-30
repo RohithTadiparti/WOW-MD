@@ -114,34 +114,56 @@ export class VendorServicesService {
     });
     const categoryById = new Map(categories.map((c) => [c.id, c]));
     const definitionById = new Map(definitions.map((d) => [d.id, d]));
-    const selectedCategories = new Set(vendor.categories ?? []);
-    const selectedServices = services.filter((service) => {
-      const definition = definitionById.get(service.definitionId);
-      const category = definition ? categoryById.get(definition.categoryId) : null;
-      return Boolean(category && selectedCategories.has(category.slug));
-    });
 
-    return selectedServices.map((service) => {
+    const expanded = services.map((service) => {
       const definition = definitionById.get(service.definitionId) ?? null;
+      const category = definition ? (categoryById.get(definition.categoryId) ?? null) : null;
       const attributes = attributesByDefinition.get(service.definitionId) ?? [];
       const mine = offerings.filter((o) => o.vendorServiceId === service.id);
+      /*
+       * A service whose category the business no longer lists is kept, not
+       * hidden: the vendor still has to be able to see it, switch it off or
+       * remove it, and an administrator or officer reviewing the business has
+       * to see everything on it. It is taken off sale instead, so what the
+       * public can book always matches what the vendor can see.
+       */
+      const outsideSelectedCategories = !this.inSelectedCategories(vendor, category?.slug ?? null);
 
       return {
         ...service,
         definition,
-        category: definition ? (categoryById.get(definition.categoryId) ?? null) : null,
+        category,
         serviceForm: describeForm(attributes, AttributeScope.SERVICE),
         bookingForm: describeForm(attributes, AttributeScope.BOOKING),
         offerings: activeOnly ? mine.filter((o) => o.active) : mine,
+        outsideSelectedCategories,
         /**
          * Whether a buyer could actually book this today. A service with no
          * live offering is a description with no price, and the request form
          * has nothing to submit — so say so here rather than letting the
          * buyer find out at the end.
          */
-        bookable: service.active && mine.some((o) => o.active),
+        bookable: service.active && !outsideSelectedCategories && mine.some((o) => o.active),
       };
     });
+
+    // The public read shows only what can be booked from it.
+    return activeOnly ? expanded.filter((s) => !s.outsideSelectedCategories) : expanded;
+  }
+
+  /**
+   * Whether a service in this category belongs to the categories the business
+   * lists.
+   *
+   * A business with no categories at all is one migrated from the single
+   * legacy category (listed as "Other" or a value the catalogue no longer
+   * has). It has not chosen yet, so nothing it already sells is treated as
+   * outside its choice.
+   */
+  private inSelectedCategories(vendor: Vendor, categorySlug: string | null): boolean {
+    const selected = vendor.categories ?? [];
+    if (selected.length === 0) return true;
+    return categorySlug !== null && selected.includes(categorySlug);
   }
 
   async addService(actor: AuthUser, vendorId: string, dto: UpsertVendorServiceDto) {
@@ -179,6 +201,9 @@ export class VendorServicesService {
         displayName: dto.displayName ?? null,
         description: dto.description ?? null,
         attributes: validated,
+        // Capacity is set on each published window now; the definition's
+        // default still seeds windows that do not name one.
+        concurrentCapacity: definition.defaultCapacity,
         active: dto.active ?? true,
       }),
     );
@@ -191,9 +216,21 @@ export class VendorServicesService {
     dto: UpsertVendorServiceDto,
   ): Promise<VendorService> {
     const service = await this.ownedService(actor, vendorId, id);
-    const vendor = await this.assertOwner(actor, vendorId);
-    const definition = await this.catalog.getDefinition(service.definitionId);
-    await this.assertSelectedCategory(vendor, definition.categoryId);
+
+    // Switching a service off is always allowed, including one whose category
+    // the business has since dropped: that is exactly the service the vendor
+    // needs to be able to take down. Anything more than that is new selling
+    // under the service, so it has to sit in a category the business lists.
+    const onlyDeactivating =
+      dto.active === false &&
+      dto.attributes === undefined &&
+      dto.displayName === undefined &&
+      dto.description === undefined;
+    if (!onlyDeactivating) {
+      const vendor = await this.assertOwner(actor, vendorId);
+      const definition = await this.catalog.getDefinition(service.definitionId);
+      await this.assertSelectedCategory(vendor, definition.categoryId);
+    }
 
     // The definition is what all the validation hangs off, so it is not
     // something an update may quietly swap. Changing it means a new service.
@@ -217,8 +254,24 @@ export class VendorServicesService {
 
   private async assertSelectedCategory(vendor: Vendor, categoryId: string): Promise<void> {
     const category = await this.categories.findOne({ where: { id: categoryId } });
-    if (!category || !(vendor.categories ?? []).includes(category.slug)) {
-      throw new BadRequestException('Choose a service under one of your selected categories');
+    if (!category || !this.inSelectedCategories(vendor, category.slug)) {
+      throw new BadRequestException(
+        'This service is outside the categories your business lists. Add the category to your ' +
+          'business, or switch the service off.',
+      );
+    }
+  }
+
+  /**
+   * Refuses a buyer path into a service whose category the business no longer
+   * lists, so the public read and what can actually be booked agree.
+   */
+  private async assertOnSale(service: VendorService, categoryId: string): Promise<void> {
+    const vendor = await this.vendors.findOne({ where: { id: service.vendorId } });
+    if (!vendor) throw new NotFoundException('That service is not available');
+    const slug = await this.categorySlugOf(categoryId);
+    if (!this.inSelectedCategories(vendor, slug)) {
+      throw new BadRequestException('That service is not currently offered');
     }
   }
 
@@ -498,6 +551,7 @@ export class VendorServicesService {
       this.vendors.findOne({ where: { id: service.vendorId } }),
     ]);
 
+    await this.assertOnSale(service, definition.categoryId);
     if (offerings.length === 0) {
       throw new BadRequestException('This service has no published prices yet');
     }
@@ -547,6 +601,7 @@ export class VendorServicesService {
       this.catalog.attributesFor(service.definitionId),
       this.catalog.getDefinition(service.definitionId),
     ]);
+    await this.assertOnSale(service, definition.categoryId);
     const hasFormFields = attributes.some((a) => a.scope === AttributeScope.BOOKING);
     return {
       service,

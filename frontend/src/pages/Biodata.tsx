@@ -1,9 +1,7 @@
 import BusinessEntriesFields from '../components/BusinessEntriesFields';
 import HeightInput from '../components/HeightInput';
-import OtherIncomeFields from '../components/OtherIncomeFields';
-import { OtherIncomeEntry, readOtherIncome } from '../lib/other-income';
-import { readBusinessEntries, BusinessEntry } from '../lib/business-entries';
 import PackageRangeFields from '../components/PackageRangeFields';
+import { BusinessEntry, readBusinessEntries } from '../lib/business-entries';
 import { FormEvent, ReactNode, useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
@@ -17,6 +15,7 @@ import {
   SELF_MARITAL_STATUSES,
   MaritalStatus,
   OCCUPATION_LABEL,
+  OTHER_INCOME_LABEL,
   OccupationStatus,
   Permission,
   COMPLEXION_LABEL,
@@ -77,6 +76,13 @@ interface ContactBlock {
   email: string | null;
 }
 
+/** One caste in the reference catalogue, with the sub-castes filed under it. */
+interface CasteEntry {
+  casteName: string;
+  religions: string[];
+  subCastes: { subCasteName: string }[];
+}
+
 interface Sibling {
   id: string;
   name: string;
@@ -114,7 +120,10 @@ export default function Biodata() {
   const [profileId, setProfileId] = useState(params.get('profileId') ?? '');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [open, setOpen] = useState('personal');
+  const [step, setStep] = useState<StepName>('photos');
+  const [direction, setDirection] = useState<'next' | 'prev'>('next');
+  const [savedOpen, setSavedOpen] = useState(false);
+  const [identityOpen, setIdentityOpen] = useState(false);
 
   // Individuals edit their own profile and never pick one.
   const { data: me } = useQuery({
@@ -142,42 +151,67 @@ export default function Biodata() {
   const siblings: Sibling[] = data?.siblings ?? [];
   const assets: Asset[] = data?.assets ?? [];
 
-  /** Resolves true once the server has accepted the section, false otherwise. */
-  async function save(section: string, body: unknown): Promise<boolean> {
+  // The same steps as the mobile app: marital history is only asked for once
+  // somebody has said they have been married.
+  const steps = stepsFor(details.maritalStatus);
+  // A step that has dropped out (marital, after changing back to never
+  // married) falls back to the one before it.
+  const current: StepName = steps.includes(step)
+    ? step
+    : steps[Math.max(0, ALL_STEPS.indexOf(step) - 1)] ?? steps[0];
+
+  /** Swap the card, sliding forward or back depending on where it lands. */
+  function goTo(next: StepName, list: StepName[] = steps) {
+    setDirection(list.indexOf(next) >= list.indexOf(current) ? 'next' : 'prev');
+    setStep(next);
+    requestAnimationFrame(() => {
+      document
+        .getElementById('biodata-steps')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }
+
+  /** The step a biodata section is filled in on. */
+  function stepForSection(section: string): StepName | null {
+    if (section === 'personal' || section === 'religion') return 'basic';
+    if (section === 'occupation') return 'education';
+    if (section === 'marital') return steps.includes('marital') ? 'marital' : 'basic';
+    return (steps as string[]).includes(section) ? (section as StepName) : null;
+  }
+
+  /**
+   * Saves one or more sections in order, then moves to the next card.
+   * Resolves true once the server has accepted all of them, false otherwise.
+   */
+  async function save(
+    from: StepName,
+    sections: [section: string, body: unknown][],
+  ): Promise<boolean> {
     setError('');
     setNotice('');
     try {
-      await api.put(`/profiles/${targetId}/details/${section}`, body);
+      for (const [section, body] of sections) {
+        await api.put(`/profiles/${targetId}/details/${section}`, body);
+      }
       await qc.invalidateQueries({ queryKey: ['biodata', targetId] });
-      if (section === 'preferences' || section === 'education' || section === 'occupation') {
+      // Preferences and income feed the match suggestions.
+      if (sections.some(([section]) => section === 'preferences' || section === 'education')) {
         await Promise.all([
           qc.invalidateQueries({ queryKey: ['suggestions'] }),
           qc.invalidateQueries({ queryKey: ['recommended'] }),
         ]);
       }
 
-      // Straight on to the next section. Leaving the page where it was meant
-      // scrolling back up to find the next thing, which is where people
-      // stopped.
-      const next = nextSection(section);
+      // Straight on to the next card. The steps are worked out from what was
+      // just saved, since a new marital status can add or remove one.
+      const saved = sections.find(([section]) => section === 'marital')?.[1] as
+        | Draft
+        | undefined;
+      const list = stepsFor(saved?.maritalStatus ?? details.maritalStatus);
+      const next = list[list.indexOf(from) + 1];
       if (next) {
-        setOpen(next);
-        setNotice(`Saved. Next: ${SECTION_LABEL[next] ?? next}.`);
-        /*
-         * To the next section, not to the top of the page.
-         *
-         * This scrolled to the top, on the reasoning that the next section
-         * would otherwise open below the fold on a phone. It does solve that
-         * and it is the reported complaint: somebody who has just finished
-         * section three is put back at the beginning and has to scroll down
-         * past everything they have already done. Bringing the section itself
-         * into view solves the fold problem without the journey back.
-         */
-        requestAnimationFrame(() => {
-          document
-            .getElementById(`section-${next}`)
-            ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        });
+        goTo(next, list);
+        setNotice(`Saved. Next: ${STEP_TITLE[next]}.`);
       } else {
         setNotice('Saved. That is the last section.');
       }
@@ -256,7 +290,11 @@ export default function Biodata() {
             {completion.sections.map((s) => (
               <button
                 key={s.section}
-                onClick={() => setOpen(s.section)}
+                onClick={() => {
+                  if (s.section === 'identity') return setIdentityOpen(true);
+                  const target = stepForSection(s.section);
+                  if (target) goTo(target);
+                }}
                 className={`rounded-sm px-3 py-1 text-xs font-medium ${
                   s.complete ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'
                 }`}
@@ -271,6 +309,16 @@ export default function Biodata() {
       {error && <p className="alert-critical">{error}</p>}
       {notice && <p className="alert-positive">{notice}</p>}
 
+      {/* The biodata document an agent created this profile from, if any. */}
+      {typeof details.biodataDocumentUrl === 'string' && details.biodataDocumentUrl && (
+        <p className="text-sm text-gray-600">
+          Created from an uploaded biodata.{' '}
+          <a className="text-brand" href={details.biodataDocumentUrl} target="_blank" rel="noreferrer">
+            Open the original document
+          </a>
+        </p>
+      )}
+
       {/*
         The thing they made, before the forms that made it. A read-back list is
         still a list; what somebody wants after filling this in is to see a
@@ -283,9 +331,9 @@ export default function Biodata() {
           details={details}
           complete={completion?.complete ?? false}
           percent={completion?.percent ?? 0}
-          onEdit={() => setOpen('personal')}
-          onPhotos={() => setOpen('photos')}
-          onView={() => setOpen('saved')}
+          onEdit={() => goTo('basic')}
+          onPhotos={() => goTo('photos')}
+          onView={() => setSavedOpen(true)}
           gender={me?.gender ?? data?.gender}
         />
       )}
@@ -295,44 +343,68 @@ export default function Biodata() {
         exactly like a form you have not filled in yet, which is why people
         saved, saw the same boxes and concluded nothing had been stored.
       */}
-      <Accordion title="Saved details" name="saved" open={open} setOpen={setOpen}>
+      <Accordion id="saved-details" title="Saved details" open={savedOpen} setOpen={setSavedOpen}>
         <SavedBiodata details={details} siblings={siblings} assets={assets} />
       </Accordion>
 
-      <Accordion title="Photographs" name="photos" open={open} setOpen={setOpen}>
-        {targetId ? (
-          <ProfilePhotos profileId={targetId} gender={me?.gender ?? data?.gender} />
-        ) : (
-          <p className="text-sm text-gray-400">Pick a profile first.</p>
-        )}
-      </Accordion>
+      {/*
+        One section at a time, in the same steps as the mobile app. Forms
+        stacked on one page read as one very long form, and people stopped
+        partway down it. A single card with "Step 3 of 7" and a way back is a
+        much shorter-looking task.
+      */}
+      <StepCard
+        current={current}
+        steps={steps}
+        direction={direction}
+        onGo={goTo}
+        completion={completion}
+      >
+        {current === 'photos' &&
+          (targetId ? (
+            <div className="space-y-6">
+              <ProfilePhotos profileId={targetId} gender={me?.gender ?? data?.gender} />
+              {/* One group photograph of the family, kept apart from the profile photos. */}
+              <section id="family-photo" key={targetId} className="space-y-3 border-t pt-4">
+                <h3 className="font-semibold text-gray-800">Family photo</h3>
+                {details.familyPhotoUrl && (
+                  <img
+                    src={details.familyPhotoUrl}
+                    alt="Family photo"
+                    className="max-h-80 object-contain"
+                  />
+                )}
+                <PhotoUploader
+                  label={details.familyPhotoUrl ? 'Replace family photo' : 'Upload family photo'}
+                  onUploaded={(url) =>
+                    mutate(() => api.put(`/profiles/${targetId}/details/family-photo`, { url }))
+                  }
+                />
+              </section>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400">Pick a profile first.</p>
+          ))}
 
-      <Accordion title="Family Photo" name="family-photo" open={open} setOpen={setOpen}>
-        {targetId ? <div className="space-y-3" key={targetId}>
-          {details.familyPhotoUrl && <img src={details.familyPhotoUrl} alt="Family photo" className="max-h-80 rounded-sm object-contain" />}
-          <PhotoUploader label={details.familyPhotoUrl ? 'Replace family photo' : 'Upload family photo'}
-            onUploaded={async (url) => { await save('family-photo', { url }); }} />
-        </div> : <p className="text-sm text-gray-400">Pick a profile first.</p>}
-      </Accordion>
-
-      <Accordion title="Personal details" name="personal" open={open} setOpen={setOpen}>
-        <PersonalForm
-          // The bride/groom's date of birth belongs to this managed profile and
-          // must never be inherited from the logged-in family member's own
-          // account DOB (EZ1-I182). `me.dateOfBirth` is the account holder's, so
-          // it is not used here. Seed from the managed profile's own saved DOB —
-          // the value `savePersonal` writes from this very form — but only once
-          // the personal section has been filled in; before that the field
-          // starts empty so the family enters the bride/groom's date
-          // deliberately rather than carrying the parent's over.
-          initial={{
-            ...details,
-            dateOfBirth: data?.dateOfBirth ?? '',
-          }}
-          contact={contact}
-          onSave={(b) => save('personal', b)}
-          storageKey={`biodata:${targetId}:personal`}
-          /*
+        {current === 'basic' && (
+          <BasicInfoForm
+            // The bride/groom's date of birth belongs to this managed profile and
+            // must never be inherited from the logged-in family member's own
+            // account DOB (EZ1-I182). `me.dateOfBirth` is the account holder's, so
+            // it is not used here. Seed from the managed profile's own saved DOB —
+            // the value `savePersonal` writes from this very form — but only once
+            // the personal section has been filled in; before that the field
+            // starts empty so the family enters the bride/groom's date
+            // deliberately rather than carrying the parent's over.
+            initial={{
+              ...details,
+              ...namesFrom(data?.displayName, details),
+              dateOfBirth: data?.dateOfBirth ?? '',
+            }}
+            contact={contact}
+            onSave={(sections) => save('basic', sections)}
+            storageKey={`biodata:${targetId}`}
+            /*
             Whose date of birth this field is for.
 
             Shown whenever the biodata being edited is not the viewer's own,
@@ -349,78 +421,65 @@ export default function Biodata() {
             above seeds from `data`, the *managed* profile's own record, so the
             parent's date is never carried across either.
           */
-          showDob={Boolean(targetId) && targetId !== me?.id}
-        />
-      </Accordion>
+            showDob={Boolean(targetId) && targetId !== me?.id}
+          />
+        )}
 
-      <Accordion title="Religion and community" name="religion" open={open} setOpen={setOpen}>
-        <ReligionForm
-          initial={details}
-          onSave={(b) => save('religion', b)}
-          storageKey={`biodata:${targetId}:religion`}
-        />
-      </Accordion>
+        {current === 'marital' && (
+          <MaritalForm
+            initial={details}
+            onSave={(b) => save('marital', [['marital', b]])}
+            storageKey={`biodata:${targetId}:marital`}
+          />
+        )}
 
-      <Accordion title="Horoscope" name="horoscope" open={open} setOpen={setOpen}>
-        <HoroscopeForm
-          initial={details}
-          onSave={(b) => save('horoscope', b)}
-          storageKey={`biodata:${targetId}:horoscope`}
-        />
-      </Accordion>
+        {current === 'education' && (
+          <EducationForm
+            initial={details}
+            onSave={(b) => save('education', [['education', b]])}
+            storageKey={`biodata:${targetId}:education`}
+          />
+        )}
 
-      <Accordion title="Marital status" name="marital" open={open} setOpen={setOpen}>
-        <MaritalForm
-          initial={details}
-          onSave={(b) => save('marital', b)}
-          storageKey={`biodata:${targetId}:marital`}
-        />
-      </Accordion>
+        {current === 'family' && (
+          <FamilyForm
+            initial={details}
+            siblings={siblings}
+            assets={assets}
+            onSave={(b) => save('family', [['family', b]])}
+            storageKey={`biodata:${targetId}:family`}
+            onAddSibling={(b) =>
+              mutate(() => api.post(`/profiles/${targetId}/details/siblings`, b))
+            }
+            onRemoveSibling={(id) =>
+              mutate(() => api.delete(`/profiles/${targetId}/details/siblings/${id}`))
+            }
+            onAddAsset={(b) => mutate(() => api.post(`/profiles/${targetId}/details/assets`, b))}
+            onRemoveAsset={(id) =>
+              mutate(() => api.delete(`/profiles/${targetId}/details/assets/${id}`))
+            }
+          />
+        )}
 
-      <Accordion title="Family" name="family" open={open} setOpen={setOpen}>
-        <FamilyForm
-          initial={details}
-          siblings={siblings}
-          assets={assets}
-          gender={me?.gender ?? data?.gender}
-          onSave={(b) => save('family', b)}
-          storageKey={`biodata:${targetId}:family`}
-          onAddSibling={(b) => mutate(() => api.post(`/profiles/${targetId}/details/siblings`, b))}
-          onRemoveSibling={(id) =>
-            mutate(() => api.delete(`/profiles/${targetId}/details/siblings/${id}`))
-          }
-          onAddAsset={(b) => mutate(() => api.post(`/profiles/${targetId}/details/assets`, b))}
-          onRemoveAsset={(id) =>
-            mutate(() => api.delete(`/profiles/${targetId}/details/assets/${id}`))
-          }
-        />
-      </Accordion>
+        {current === 'horoscope' && (
+          <HoroscopeForm
+            initial={details}
+            onSave={(b) => save('horoscope', [['horoscope', b]])}
+            storageKey={`biodata:${targetId}:horoscope`}
+          />
+        )}
 
-      <Accordion title="Education" name="education" open={open} setOpen={setOpen}>
-        <EducationForm
-          initial={details}
-          onSave={(b) => save('education', b)}
-          storageKey={`biodata:${targetId}:education`}
-        />
-      </Accordion>
+        {current === 'preferences' && (
+          <PreferencesForm
+            initial={details}
+            onSave={(b) => save('preferences', [['preferences', b]])}
+            storageKey={`biodata:${targetId}:preferences`}
+          />
+        )}
+      </StepCard>
 
-      <Accordion title="Occupation" name="occupation" open={open} setOpen={setOpen}>
-        <OccupationForm
-          initial={details}
-          onSave={(b) => save('occupation', b)}
-          storageKey={`biodata:${targetId}:occupation`}
-        />
-      </Accordion>
-
-      <Accordion title="Partner preferences" name="preferences" open={open} setOpen={setOpen}>
-        <PreferencesForm
-          initial={details}
-          onSave={(b) => save('preferences', b)}
-          storageKey={`biodata:${targetId}:preferences`}
-        />
-      </Accordion>
-
-      <Accordion title="Identity verification" name="identity" open={open} setOpen={setOpen}>
+      {/* Its own screen on mobile, so not one of the steps here either. */}
+      <Accordion title="Identity verification" open={identityOpen} setOpen={setIdentityOpen}>
         <AadhaarPanel profileId={targetId} />
       </Accordion>
     </div>
@@ -428,82 +487,155 @@ export default function Biodata() {
 }
 
 /**
- * The order the form is filled in.
+ * The order the form is filled in, matching the mobile app's steps.
  *
  * Saving a section moves to the next one rather than leaving somebody scrolling
  * back up to find where they were — which is the reported complaint, and the
- * reason people stopped halfway. Photographs come first because the details
- * cannot be saved without three of them.
+ * reason people stopped halfway. Photographs come first here (last on mobile)
+ * because the server will not save the personal details without three of them.
  */
-/** What each section is called, for the "next" line after a save. */
-const SECTION_LABEL: Record<string, string> = {
-  photos: 'Photographs',
-  personal: 'Personal details',
-  religion: 'Religion and community',
-  horoscope: 'Horoscope',
-  marital: 'Marital status',
-  family: 'Family',
-  education: 'Education',
-  occupation: 'Occupation',
-  preferences: 'Partner preferences',
-  identity: 'Identity verification',
-};
-
-const SECTION_ORDER = [
+const ALL_STEPS = [
   'photos',
-  'personal',
-  'religion',
-  'horoscope',
+  'basic',
   'marital',
-  'family',
   'education',
-  'occupation',
+  'family',
+  'horoscope',
   'preferences',
-  'identity',
 ] as const;
 
-function nextSection(current: string): string | null {
-  const i = SECTION_ORDER.indexOf(current as (typeof SECTION_ORDER)[number]);
-  if (i === -1 || i === SECTION_ORDER.length - 1) return null;
-  return SECTION_ORDER[i + 1];
+type StepName = (typeof ALL_STEPS)[number];
+
+/** What each step is called, in the header and the "next" line after a save. */
+const STEP_TITLE: Record<StepName, string> = {
+  photos: 'Photographs',
+  basic: 'Basic Information',
+  marital: 'Marital History',
+  education: 'Education & Career',
+  family: 'Family Background',
+  horoscope: 'Horoscope',
+  preferences: 'Partner Preferences',
+};
+
+/** Marital history is a step only for somebody who has been married. */
+function stepsFor(maritalStatus: unknown): StepName[] {
+  const married = Boolean(maritalStatus) && maritalStatus !== 'never_married';
+  return ALL_STEPS.filter((s) => s !== 'marital' || married);
 }
 
 function Accordion({
+  id,
   title,
-  name,
   open,
   setOpen,
   children,
 }: {
+  id?: string;
   title: string;
-  name: string;
-  open: string;
-  setOpen: (n: string) => void;
+  open: boolean;
+  setOpen: (open: boolean) => void;
   children: ReactNode;
 }) {
-  const isOpen = open === name;
-  const step = SECTION_ORDER.indexOf(name as (typeof SECTION_ORDER)[number]);
   return (
-    // Addressable so that saving one section can bring the next into view
-    // rather than throwing the page back to the top.
-    <div className="card" id={`section-${name}`}>
+    <div id={id} className="card">
       <button
         className="flex w-full items-center justify-between text-left"
-        onClick={() => setOpen(isOpen ? '' : name)}
+        onClick={() => setOpen(!open)}
       >
-        <span className="flex items-baseline font-serif text-[1.375rem] font-normal text-brand">
-          {/* Which of how many, so the form has a visible end. */}
-          {step >= 0 && (
-            <span className="mr-3 font-sans text-[0.6875rem] uppercase tracking-[0.22em] text-gold-deep">
-              {step + 1} of {SECTION_ORDER.length}
-            </span>
-          )}
-          {title}
-        </span>
-        <span className="text-gray-400">{isOpen ? '−' : '+'}</span>
+        <span className="font-serif text-[1.375rem] font-normal text-brand">{title}</span>
+        <span className="text-gray-400">{open ? '−' : '+'}</span>
       </button>
-      {isOpen && <div className="mt-4">{children}</div>}
+      {open && <div className="mt-4">{children}</div>}
     </div>
+  );
+}
+
+/**
+ * The biodata as a deck of cards, one step showing at a time, as on mobile.
+ *
+ * Saving a form swaps in the next card on its own; Back and Skip are here for
+ * the photographs (nothing to save) and for somebody who wants to come back
+ * to a step later.
+ */
+function StepCard({
+  current,
+  steps,
+  direction,
+  onGo,
+  completion,
+  children,
+}: {
+  current: StepName;
+  steps: StepName[];
+  direction: 'next' | 'prev';
+  onGo: (step: StepName) => void;
+  completion?: Completion;
+  children: ReactNode;
+}) {
+  const index = steps.indexOf(current);
+  const prev = index > 0 ? steps[index - 1] : null;
+  const next = index < steps.length - 1 ? steps[index + 1] : null;
+  // Basic information is two server sections; it is done when both are.
+  const sectionsOf: Record<StepName, string[]> = {
+    photos: [],
+    basic: ['personal', 'religion'],
+    marital: ['marital'],
+    education: ['education', 'occupation'],
+    family: ['family'],
+    horoscope: ['horoscope'],
+    preferences: ['preferences'],
+  };
+  const done = (name: StepName) =>
+    sectionsOf[name].length > 0 &&
+    sectionsOf[name].every(
+      (s) => completion?.sections.find((sec) => sec.section === s)?.complete ?? false,
+    );
+
+  return (
+    <section id="biodata-steps" className="scroll-mt-4" aria-label="Biodata steps">
+      <div className="overflow-hidden">
+        <div
+          // A new key per section remounts the card, which is what plays the
+          // swap; the direction decides which side it comes in from.
+          key={current}
+          className={`card ${direction === 'next' ? 'card-swap-next' : 'card-swap-prev'}`}
+        >
+          <header className="mb-4 flex items-baseline justify-between gap-3 border-b pb-3">
+            <h2 className="font-serif text-[1.375rem] font-normal text-brand">
+              {STEP_TITLE[current]}
+              {done(current) && (
+                <span className="ml-3 whitespace-nowrap font-sans text-[0.6875rem] uppercase tracking-[0.18em] text-emerald-700">
+                  ✓ Saved
+                </span>
+              )}
+            </h2>
+            <span className="whitespace-nowrap font-sans text-[0.6875rem] uppercase tracking-[0.22em] text-gold-deep">
+              Step {index + 1} of {steps.length}
+            </span>
+          </header>
+
+          {children}
+
+          <footer className="mt-6 flex items-center justify-between gap-3 border-t pt-4">
+            <button
+              type="button"
+              className="btn-ghost"
+              disabled={!prev}
+              onClick={() => prev && onGo(prev)}
+            >
+              ← Back
+            </button>
+            {next ? (
+              <button type="button" className="btn-outline btn-sm" onClick={() => onGo(next)}>
+                {current === 'photos' || done(current) ? 'Continue' : 'Skip'} →
+              </button>
+            ) : (
+              <span className="text-xs text-gray-500">Last step</span>
+            )}
+          </footer>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -555,7 +687,11 @@ function useDraft(initial: Draft, keys: string[], storageKey?: string) {
   return { draft, setDraft: edit, set, put, clear };
 }
 
-function PersonalForm({
+/**
+ * Personal details, religion and marital status on one card, as the mobile
+ * app's "Basic Information" step asks them. Three server sections, one save.
+ */
+function BasicInfoForm({
   initial,
   contact,
   onSave,
@@ -564,7 +700,8 @@ function PersonalForm({
 }: {
   initial: Draft;
   contact?: ContactBlock;
-  onSave: (b: Draft) => Promise<boolean>;
+  onSave: (sections: [section: string, body: unknown][]) => Promise<boolean>;
+  /** Prefix for the local drafts; each section keeps its own. */
   storageKey?: string;
   /** Family login only: the bride/groom's date of birth is entered here. */
   showDob?: boolean;
@@ -578,25 +715,75 @@ function PersonalForm({
     'communicationAddress',
     'alternateMobile',
   ];
-  const { draft, set, clear } = useDraft(initial, keys, storageKey);
+  const personal = useDraft(initial, keys, storageKey && `${storageKey}:personal`);
+  const faith = useDraft(
+    initial,
+    ['religion', 'caste', 'subCaste', 'motherTongue'],
+    storageKey && `${storageKey}:religion`,
+  );
+  const marital = useDraft(initial, ['maritalStatus'], storageKey && `${storageKey}:status`);
+  const { draft, set } = personal;
+  const put = faith.put;
+  const status = String(marital.draft.maritalStatus ?? '');
+
+  const religion = String(faith.draft.religion ?? '');
+  /*
+   * Castes follow the religion, not one list for everybody.
+   *
+   * Offering a Hindu caste list to a Christian family is not a neutral
+   * mistake. Religions with no caste structure get an empty list, and the
+   * field then offers only the free-text box. The sub-castes come from the
+   * same catalogue, under the caste they belong to.
+   */
+  const { data: casteCatalog } = useQuery({
+    queryKey: ['reference', 'castes'],
+    queryFn: async () => (await api.get('/reference/castes')).data,
+    staleTime: 60 * 60 * 1000,
+  });
+  const casteEntries = ((casteCatalog?.castes ?? []) as CasteEntry[]).filter((entry) =>
+    entry.religions.includes(religion),
+  );
+  const casteOptions = casteEntries.length
+    ? casteEntries.map((entry) => entry.casteName)
+    : (CASTES_BY_RELIGION[religion] ?? []);
+  const caste = String(faith.draft.caste ?? '');
+  const subCasteOptions = (
+    casteEntries.find((entry) => entry.casteName === caste)?.subCastes ?? []
+  ).map((entry) => entry.subCasteName);
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    // The local copy goes only once the server has the draft: until then it is
-    // the only copy, and a refused save must not lose it (EZ1-I73).
-    void submitDraft(
-      onSave({
-        ...draft,
-        heightCm: Number(draft.heightCm) || undefined,
-        // null, not undefined: an absent field is left alone by the server,
-        // so emptying the box has to be said explicitly.
-        alternateMobile: draft.alternateMobile || null,
-        // Only meaningful for a family login; blank otherwise, and the server
-        // ignores it for a self-registered individual (EZ1-I158).
-        dateOfBirth: draft.dateOfBirth || undefined,
-      }),
-      clear,
-    );
+    const sections: [string, unknown][] = [
+      [
+        'personal',
+        {
+          ...draft,
+          heightCm: Number(draft.heightCm) || undefined,
+          // null, not undefined: an absent field is left alone by the server,
+          // so emptying the box has to be said explicitly.
+          alternateMobile: draft.alternateMobile || null,
+          // Only meaningful for a family login; blank otherwise, and the server
+          // ignores it for a self-registered individual (EZ1-I158).
+          dateOfBirth: draft.dateOfBirth || undefined,
+        },
+      ],
+      // Denomination is deliberately not sent: the field is gone, and the
+      // server treats it as optional, so an old value simply stops being
+      // rewritten. Nothing is deleted from rows that already have one.
+      ['religion', faith.draft],
+    ];
+    // Only when it has changed: saving the status alone replaces the marital
+    // history, so re-saving this card must not wipe what the next step holds.
+    if (status && status !== initial?.maritalStatus) {
+      sections.push(['marital', { maritalStatus: status }]);
+    }
+    // The local copies go only once the server has everything: until then
+    // they are the only copy, and a refused save must not lose them (EZ1-I73).
+    void submitDraft(onSave(sections), () => {
+      personal.clear();
+      faith.clear();
+      marital.clear();
+    });
   }
 
   return (
@@ -632,7 +819,11 @@ function PersonalForm({
           </Field>
         )}
         <Field label="Height">
-          <HeightInput value={draft.heightCm} onChange={(value) => set('heightCm')({ target: { value } })} required />
+          <HeightInput
+            value={draft.heightCm}
+            onChange={(value) => set('heightCm')({ target: { value } })}
+            required
+          />
         </Field>
         <Field label="Complexion">
           <select
@@ -697,54 +888,6 @@ function PersonalForm({
           required
         />
       </Field>
-      <button className="btn">Save personal details</button>
-    </form>
-  );
-}
-
-function ReligionForm({
-  initial,
-  onSave,
-  storageKey,
-}: {
-  initial: Draft;
-  onSave: (b: Draft) => Promise<boolean>;
-  storageKey?: string;
-}) {
-  const { draft, put, clear } = useDraft(
-    initial,
-    ['religion', 'caste', 'subCaste', 'motherTongue'],
-    storageKey,
-  );
-
-  const religion = String(draft.religion ?? '');
-  const { data: casteCatalog } = useQuery({
-    queryKey: ['reference', 'castes'],
-    queryFn: async () => (await api.get('/reference/castes')).data,
-    staleTime: 60 * 60 * 1000,
-  });
-  const casteEntries = (casteCatalog?.castes ?? []).filter((entry: {
-    religions: string[];
-  }) => entry.religions.includes(religion));
-  const casteOptions = casteEntries.map((entry: { casteName: string }) => entry.casteName);
-  const caste = String(draft.caste ?? '');
-  const selectedCaste = casteEntries.find((entry: { casteName: string }) => entry.casteName === caste);
-  const subCasteOptions = (selectedCaste?.subCastes ?? []).map(
-    (entry: { subCasteName: string }) => entry.subCasteName,
-  );
-  const OTHER_NOT_LISTED = 'Other / Not Listed';
-
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        // Denomination is deliberately not sent: the field is gone, and the
-        // server treats it as optional, so an old value simply stops being
-        // rewritten. Nothing is deleted from rows that already have one.
-        void submitDraft(onSave(draft), clear);
-      }}
-      className="space-y-3"
-    >
       <div className="grid gap-3 sm:grid-cols-2">
         <ChoiceField
           label="Religion"
@@ -765,29 +908,57 @@ function ReligionForm({
             put('subCaste')('');
           }}
           options={casteOptions}
-          hint={religion ? 'Options are commonly reported labels and may vary by region.' : 'Pick a religion first.'}
+          hint={
+            religion
+              ? 'Options are commonly reported labels and may vary by region.'
+              : 'Pick a religion first, or type the caste.'
+          }
           required
         />
+        {/*
+          The catalogue lists the common sub-castes under each caste; there
+          are thousands and they vary by district, so the free-text escape
+          stays for everything it does not name.
+        */}
         <ChoiceField
           key={caste}
           label="Sub-caste"
-          value={String(draft.subCaste ?? '')}
+          value={String(faith.draft.subCaste ?? '')}
           onChange={put('subCaste')}
           options={subCasteOptions}
-          otherOption={OTHER_NOT_LISTED}
+          otherOption="Other / Not Listed"
           disabled={!caste}
-          hint={caste ? 'Options are commonly reported labels and may vary by region.' : 'Select a caste first.'}
+          hint={caste ? undefined : 'Select a caste first.'}
           required
         />
         <ChoiceField
           label="Mother tongue"
-          value={String(draft.motherTongue ?? '')}
+          value={String(faith.draft.motherTongue ?? '')}
           onChange={put('motherTongue')}
           options={MOTHER_TONGUES}
           required
         />
+        {/*
+          Asked here, as on mobile, so the marital history step can appear
+          only for somebody who has been married.
+        */}
+        <Field label="Marital status">
+          <select
+            className="input mt-1"
+            value={status}
+            onChange={(e) => marital.put('maritalStatus')(e.target.value)}
+            required
+          >
+            <option value="">Select…</option>
+            {SELF_MARITAL_STATUSES.map((value) => (
+              <option key={value} value={value}>
+                {MARITAL_LABEL[value]}
+              </option>
+            ))}
+          </select>
+        </Field>
       </div>
-      <button className="btn">Save religion details</button>
+      <button className="btn">Save and continue</button>
     </form>
   );
 }
@@ -1235,11 +1406,6 @@ function FamilyForm({
   initial: Draft;
   siblings: Sibling[];
   assets: Asset[];
-  /**
-   * The profile's own gender. Groom profiles (male) require a net worth;
-   * bride profiles do not.
-   */
-  gender?: string;
   onSave: (b: Draft) => Promise<boolean>;
   onAddSibling: (b: Draft) => void;
   onRemoveSibling: (id: string) => void;
@@ -1247,7 +1413,6 @@ function FamilyForm({
   onRemoveAsset: (id: string) => void;
   storageKey?: string;
 }) {
-//  const  something = gender === 'male';
   const father = (initial?.father ?? {}) as Draft;
   const mother = (initial?.mother ?? {}) as Draft;
   // Only an edited draft is written (EZ1-I236); see createDraftGuard.
@@ -1492,10 +1657,7 @@ function FamilyForm({
             than instead of them. Optional, and private unless the family says
             otherwise — the same rule money follows everywhere else here.
           */}
-          <Field
-            label="Family net worth"
-            hint="Rupees. Optional, and hidden unless you say otherwise."
-          >
+          <Field label="Family net worth" hint="Rupees. Optional, and hidden unless you say otherwise">
             <input
               className="input mt-1"
               type="number"
@@ -1701,6 +1863,27 @@ function FamilyForm({
   );
 }
 
+/**
+ * First and last name to start the form with: the biodata's own when it has
+ * them, otherwise the profile's display name split at the first space.
+ */
+function namesFrom(displayName: unknown, details: Draft): { firstName: string; lastName: string } {
+  const first = String(details.firstName ?? '').trim();
+  const last = String(details.lastName ?? details.surname ?? '').trim();
+  if (first || last) return { firstName: first, lastName: last };
+  const [head = '', ...rest] = String(displayName ?? '').trim().split(/\s+/);
+  return { firstName: head, lastName: rest.join(' ') };
+}
+
+interface OtherIncome {
+  source: string;
+  details?: string;
+  annualIncome?: string;
+}
+
+/** The server takes up to five. */
+const OTHER_INCOME_LIMIT = 5;
+
 function EducationForm({
   initial,
   onSave,
@@ -1710,47 +1893,129 @@ function EducationForm({
   onSave: (b: Draft) => Promise<boolean>;
   storageKey?: string;
 }) {
+  const employment = (initial?.employment ?? {}) as Draft;
+  const business = (initial?.business ?? {}) as Draft;
+  // Only an edited draft is written (EZ1-I236); see createDraftGuard.
   const [guard] = useState(createDraftGuard);
   const stored0 = loadDraft(storageKey);
+  const [status, seedStatus] = useState<OccupationStatus>(
+    stored0
+      ? (stored0.status as OccupationStatus)
+      : ((initial?.occupationStatus as OccupationStatus) ?? 'employed'),
+  );
   const [values, seedValues] = useState<Draft>(stored0 ? ((stored0.values as Draft) ?? {}) : {});
 
   useEffect(() => {
     const stored = loadDraft(storageKey);
     guard.seeded(Boolean(stored));
     if (stored) {
+      seedStatus(stored.status as OccupationStatus);
       const draft = (stored.values as Draft) ?? {};
-      seedValues({ ...draft });
+      // A draft saved before businesses became a list holds one business's
+      // fields at the top level; they become its first entry.
+      seedValues({
+        ...draft,
+        businessEntries: Array.isArray(draft.businessEntries)
+          ? draft.businessEntries
+          : [
+              {
+                id: crypto.randomUUID(),
+                businessName: draft.businessName ?? '',
+                businessType: draft.businessType ?? '',
+                businessLocation: draft.businessLocation ?? '',
+                businessIncome: draft.businessIncome ?? '',
+              },
+            ],
+      });
       return;
     }
+    seedStatus((initial?.occupationStatus as OccupationStatus) ?? 'employed');
+    const entries = readBusinessEntries(business);
     seedValues({
       highestQualification: initial?.highestQualification ?? '',
       course: initial?.course ?? '',
       institution: initial?.institution ?? '',
       collegePlace: initial?.collegePlace ?? '',
+      company: employment.company ?? '',
+      designation: employment.designation ?? '',
+      workLocation: employment.workLocation ?? '',
+      salary: employment.salary ?? '',
+      businessEntries: (entries.length ? entries : [{}]).map((entry) => ({
+        ...entry,
+        id: entry.id ?? crypto.randomUUID(),
+      })),
+      otherIncome: Array.isArray(initial?.otherIncome) ? initial.otherIncome : [],
+      incomeVisible: initial?.incomeVisible ?? false,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(initial), storageKey]);
 
   useEffect(() => {
-    guard.persist(storageKey, { values });
-  }, [guard, storageKey, values]);
+    guard.persist(storageKey, { status, values });
+  }, [guard, storageKey, status, values]);
 
+  const setStatus = guard.edit(seedStatus);
   const setValues = guard.edit(seedValues);
 
   const set = (k: string) => (e: { target: { value: string } }) =>
     setValues((v) => ({ ...v, [k]: e.target.value }));
   const put = (k: string) => (value: string) => setValues((v) => ({ ...v, [k]: value }));
 
+  const otherIncome = (Array.isArray(values.otherIncome) ? values.otherIncome : []) as OtherIncome[];
+  const setOtherIncome = (fn: (rows: OtherIncome[]) => OtherIncome[]) =>
+    setValues((v) => ({
+      ...v,
+      otherIncome: fn((Array.isArray(v.otherIncome) ? v.otherIncome : []) as OtherIncome[]),
+    }));
+  const editIncome = (i: number, patch: Partial<OtherIncome>) =>
+    setOtherIncome((rows) => rows.map((row, j) => (j === i ? { ...row, ...patch } : row)));
+
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
+        const businessEntries = (values.businessEntries as BusinessEntry[] | undefined) ?? [];
+        // The fields say so already; there is nothing to send without one.
+        if (status === 'self_employed' && !businessEntries.length) return;
         const body: Draft = {
           highestQualification: values.highestQualification,
           course: values.course,
+          // null clears; undefined would leave the stored value in place.
           institution: values.institution || null,
           collegePlace: values.collegePlace || null,
+          occupationStatus: status,
+          // Rows left without a source are ones somebody added and abandoned.
+          otherIncome: otherIncome
+            .filter((row) => row.source)
+            .map((row) => ({
+              source: row.source,
+              details: row.details?.trim() || undefined,
+              annualIncome: row.annualIncome || undefined,
+            })),
+          incomeVisible: Boolean(values.incomeVisible),
         };
+        if (status === 'employed') {
+          body.employment = {
+            company: values.company,
+            designation: values.designation,
+            workLocation: values.workLocation || undefined,
+            salary: values.salary || undefined,
+          };
+        }
+        if (status === 'self_employed') {
+          body.business = {
+            entries: businessEntries.map((entry) => ({
+              id: entry.id,
+              businessName: String(entry.businessName ?? '').trim(),
+              businessType: String(entry.businessType ?? '').trim() || undefined,
+              businessLocation: String(entry.businessLocation ?? '').trim() || undefined,
+              businessIncome:
+                entry.businessIncome === '' || entry.businessIncome == null
+                  ? undefined
+                  : String(entry.businessIncome),
+            })),
+          };
+        }
         void submitDraft(onSave(body), () => guard.clear(storageKey));
       }}
       className="space-y-3"
@@ -1776,104 +2041,6 @@ function EducationForm({
         </Field>
       </div>
 
-      <button className="btn">Save education</button>
-    </form>
-  );
-}
-
-function OccupationForm({
-  initial,
-  onSave,
-  storageKey,
-}: {
-  initial: Draft;
-  onSave: (b: Draft) => Promise<boolean>;
-  storageKey?: string;
-}) {
-  const employment = (initial?.employment ?? {}) as Draft;
-  const business = (initial?.business ?? {}) as Draft;
-  const [guard] = useState(createDraftGuard);
-  const stored0 = loadDraft(storageKey);
-  const [status, seedStatus] = useState<OccupationStatus>(
-    stored0
-      ? (stored0.status as OccupationStatus)
-      : ((initial?.occupationStatus as OccupationStatus) ?? 'employed'),
-  );
-  const [values, seedValues] = useState<Draft>(stored0 ? ((stored0.values as Draft) ?? {}) : {});
-
-  useEffect(() => {
-    const stored = loadDraft(storageKey);
-    guard.seeded(Boolean(stored));
-    if (stored) {
-      seedStatus(stored.status as OccupationStatus);
-      const draft = (stored.values as Draft) ?? {};
-      seedValues({
-        ...draft,
-        otherIncome: draft.otherIncome ?? readOtherIncome(employment),
-        businessEntries: Array.isArray(draft.businessEntries)
-          ? draft.businessEntries
-          : [{ id: crypto.randomUUID(), businessName: draft.businessName ?? '', businessType: draft.businessType ?? '', businessLocation: draft.businessLocation ?? '', businessIncome: draft.businessIncome ?? '' }],
-      });
-      return;
-    }
-    seedStatus((initial?.occupationStatus as OccupationStatus) ?? 'employed');
-    seedValues({
-      company: employment.company ?? '',
-      designation: employment.designation ?? '',
-      workLocation: employment.workLocation ?? '',
-      salary: employment.salary ?? '',
-      otherIncome: readOtherIncome(employment),
-      businessEntries: (readBusinessEntries(business).length ? readBusinessEntries(business) : [{}])
-        .map((entry) => ({ ...entry, id: entry.id ?? crypto.randomUUID() })),
-      incomeVisible: initial?.incomeVisible ?? false,
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(initial), storageKey]);
-
-  useEffect(() => {
-    guard.persist(storageKey, { status, values });
-  }, [guard, storageKey, status, values]);
-
-  const setStatus = guard.edit(seedStatus);
-  const setValues = guard.edit(seedValues);
-
-  const set = (k: string) => (e: { target: { value: string } }) =>
-    setValues((v) => ({ ...v, [k]: e.target.value }));
-  const put = (k: string) => (value: string) => setValues((v) => ({ ...v, [k]: value }));
-
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (status === 'self_employed' && !(values.businessEntries as BusinessEntry[] | undefined)?.length) return;
-        const body: Draft = {
-          occupationStatus: status,
-          incomeVisible: Boolean(values.incomeVisible),
-        };
-        if (status === 'employed') {
-          body.employment = {
-            company: values.company,
-            designation: values.designation,
-            workLocation: values.workLocation || undefined,
-            salary: values.salary || undefined,
-            otherIncome: (values.otherIncome as OtherIncomeEntry[]) ?? [],
-          };
-        }
-        if (status === 'self_employed') {
-          body.business = {
-            entries: (values.businessEntries as BusinessEntry[]).map((entry) => ({
-              id: entry.id,
-              businessName: String(entry.businessName ?? '').trim(),
-              businessType: String(entry.businessType ?? '').trim(),
-              businessLocation: String(entry.businessLocation ?? '').trim(),
-              businessIncome: entry.businessIncome === '' || entry.businessIncome == null ? undefined : String(entry.businessIncome),
-            })),
-          };
-        }
-        void submitDraft(onSave(body), () => guard.clear(storageKey));
-      }}
-      className="space-y-3"
-    >
       <Field label="Occupation">
         <select
           className="input mt-1"
@@ -1897,6 +2064,11 @@ function OccupationForm({
             <input className="input mt-1" value={String(values.designation ?? '')} onChange={set('designation')} required />
           </Field>
           <Field label="Work location">
+            {/*
+              A dropdown, not free text — the same shape Partner Preferences
+              already uses for Preferred location, so the two are typed once and
+              spelled the same way. "Other" keeps any city the list omits.
+            */}
             <ChoiceField
               label=""
               value={String(values.workLocation ?? '')}
@@ -1905,6 +2077,11 @@ function OccupationForm({
             />
           </Field>
           <Field label="Salary" hint="Numbers only, annual in rupees. Hidden unless you tick the box below">
+            {/*
+              Digits only — a salary is a number, and the field used to take
+              letters and symbols and store them as-is (EZ1-I59). Non-numeric
+              input is dropped as it is typed rather than saved and shown back.
+            */}
             <input
               className="input mt-1"
               inputMode="numeric"
@@ -1918,19 +2095,77 @@ function OccupationForm({
         </div>
       )}
 
-      {status === 'employed' && (
-        <OtherIncomeFields
-          entries={(values.otherIncome as OtherIncomeEntry[]) ?? []}
-          onChange={(otherIncome) => setValues((v) => ({ ...v, otherIncome }))}
-        />
-      )}
-
       {status === 'self_employed' && (
         <BusinessEntriesFields
           entries={(values.businessEntries as BusinessEntry[]) ?? []}
           onChange={(businessEntries) => setValues((v) => ({ ...v, businessEntries }))}
         />
       )}
+
+      {/*
+        Optional, whatever the occupation: plenty of people have a job and a
+        business on the side, or rent from a property, and the occupation has
+        room for only one answer.
+      */}
+      <fieldset className="space-y-3 border-t pt-3">
+        <legend className="text-sm text-gray-700">
+          Other sources of income <span className="text-gray-500">(optional)</span>
+        </legend>
+        {otherIncome.map((row, i) => (
+          <div key={i} className="grid items-end gap-3 sm:grid-cols-[1fr_2fr_1fr_auto]">
+            <Field label="Source">
+              <select
+                className="input mt-1"
+                value={row.source}
+                onChange={(e) => editIncome(i, { source: e.target.value })}
+                required
+              >
+                <option value="">Select…</option>
+                {Object.entries(OTHER_INCOME_LABEL).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Details">
+              <input
+                className="input mt-1"
+                maxLength={160}
+                placeholder="e.g. Family textile shop"
+                value={row.details ?? ''}
+                onChange={(e) => editIncome(i, { details: e.target.value })}
+              />
+            </Field>
+            <Field label="Annual income">
+              {/* Digits only, same as Salary (EZ1-I59). */}
+              <input
+                className="input mt-1"
+                inputMode="numeric"
+                placeholder="e.g. 600000"
+                value={row.annualIncome ?? ''}
+                onChange={(e) => editIncome(i, { annualIncome: e.target.value.replace(/\D/g, '') })}
+              />
+            </Field>
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => setOtherIncome((rows) => rows.filter((_, j) => j !== i))}
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+        {otherIncome.length < OTHER_INCOME_LIMIT && (
+          <button
+            type="button"
+            className="btn-outline btn-sm"
+            onClick={() => setOtherIncome((rows) => [...rows, { source: '' }])}
+          >
+            + Add {otherIncome.length ? 'another' : 'a'} source of income
+          </button>
+        )}
+      </fieldset>
 
       <label className="flex items-center gap-2 text-sm">
         <input
@@ -1941,7 +2176,7 @@ function OccupationForm({
         <span>Show income on the biodata</span>
       </label>
 
-      <button className="btn">Save occupation</button>
+      <button className="btn">Save education and occupation</button>
     </form>
   );
 }
@@ -2019,9 +2254,11 @@ function PreferencesForm({
     <form
       onSubmit={(e) => {
         e.preventDefault();
+        // A blank bound is sent as null, which clears it.
+        const bound = (value: unknown) => (value === '' || value == null ? null : Number(value));
         const sent = onSave({
-          preferredPackageMin: values.preferredPackageMin === '' || values.preferredPackageMin == null ? null : Number(values.preferredPackageMin),
-          preferredPackageMax: values.preferredPackageMax === '' || values.preferredPackageMax == null ? null : Number(values.preferredPackageMax),
+          preferredPackageMin: bound(values.preferredPackageMin),
+          preferredPackageMax: bound(values.preferredPackageMax),
           preferredAgeMin: Number(values.preferredAgeMin),
           preferredAgeMax: Number(values.preferredAgeMax),
           preferredHeightMinCm: Number(values.preferredHeightMinCm),
@@ -2049,9 +2286,9 @@ function PreferencesForm({
         });
         void submitDraft(sent, () => guard.clear(storageKey));
       }}
-      className="space-y-5"
+      className="space-y-3"
     >
-      <div className="grid gap-5 sm:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-4">
         <Field label="Age from">
           <input className="input mt-1" type="number" min={18} max={100} value={String(values.preferredAgeMin ?? '')} onChange={set('preferredAgeMin')} required />
         </Field>
@@ -2059,13 +2296,21 @@ function PreferencesForm({
           <input className="input mt-1" type="number" min={18} max={100} value={String(values.preferredAgeMax ?? '')} onChange={set('preferredAgeMax')} required />
         </Field>
         <Field label="Height from">
-          <HeightInput value={values.preferredHeightMinCm} onChange={(value) => set('preferredHeightMinCm')({ target: { value } })} required />
+          <HeightInput
+            value={values.preferredHeightMinCm}
+            onChange={(value) => set('preferredHeightMinCm')({ target: { value } })}
+            required
+          />
         </Field>
         <Field label="Height to">
-          <HeightInput value={values.preferredHeightMaxCm} onChange={(value) => set('preferredHeightMaxCm')({ target: { value } })} required />
+          <HeightInput
+            value={values.preferredHeightMaxCm}
+            onChange={(value) => set('preferredHeightMaxCm')({ target: { value } })}
+            required
+          />
         </Field>
       </div>
-      <div className="grid gap-5 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2">
         {/*
           The same vocabulary the profile uses.
 
@@ -2173,7 +2418,7 @@ function PreferencesForm({
         else. "No preference" is a real answer and is offered as one — a family
         that does not use horoscopes is not asking anybody to abandon theirs.
       */}
-      <div className="grid gap-5 sm:grid-cols-3">
+      <div className="grid gap-3 border-t pt-3 sm:grid-cols-3">
         <Field label="Horoscope">
           <select
             className="input mt-1"
@@ -2212,7 +2457,7 @@ function PreferencesForm({
         preferred Rashi and Padam from the same lists the chart uses, and Gothram
         as free text since it runs to thousands.
       */}
-      <div className="grid gap-5 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-3">
         <ChoiceField
           label="Preferred Rashi"
           value={String(values.preferredRashi ?? '')}
@@ -2240,7 +2485,7 @@ function PreferencesForm({
       <Field label="Anything else">
         <textarea className="input mt-1" rows={2} value={String(values.other ?? '')} onChange={set('other')} />
       </Field>
-      <div className="flex justify-end"><button className="btn">Save Preferences</button></div>
+      <button className="btn">Save preferences</button>
     </form>
   );
 }

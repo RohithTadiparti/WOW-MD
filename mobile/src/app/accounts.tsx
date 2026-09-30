@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CaretRight } from 'phosphor-react-native';
 
 const maskAccountId = (value: string | null | undefined) => {
@@ -15,13 +15,13 @@ import { rupeesExact, shortDate } from '@/lib/format';
 import { isPlannerAccount } from '@/lib/planner-listing';
 import { MILESTONE_LABEL, Permission, can } from '@/shared/permissions';
 import { Badge, Divider, StatTile, TileGrid, type Tone } from '@/components/chrome';
-import { PayoutAccount } from '@/components/accounts/payout-account';
+import { PayoutAccount, type PayoutAccountView } from '@/components/accounts/payout-account';
 import { ListScreen } from '@/components/layout';
 import { BusinessSwitcher } from '@/components/business/switcher';
-import { Body, Button, Caption, Card, Field, PageSubtitle, SectionTitle } from '@/components/ui';
+import { Body, Button, Caption, Card, PageSubtitle, SectionTitle } from '@/components/ui';
 import { useAuth } from '@/store/auth';
 import { useBusinesses } from '@/store/business';
-import { radius, rgb, space, useTheme } from '@/theme';
+import { rgb, space, useTheme } from '@/theme';
 
 interface LedgerRow {
   paymentId: string;
@@ -31,13 +31,15 @@ interface LedgerRow {
   amount: string;
   commissionAmount: string;
   payoutAmount: string;
+  releasedAmount: string;
+  availableAmount: string;
   confirmedAt: string | null;
   createdAt: string;
+  eventDate: string | null;
   /** Who and what the payment was for, when the server names them. */
   clientName?: string | null;
   serviceName?: string | null;
 }
-
 interface Earnings {
   heldInEscrow: string;
   /** Earned and owed, but not yet transferred — usually payout onboarding. */
@@ -124,7 +126,7 @@ export default function Accounts() {
   // Null is every payment, which is what somebody arriving at the page wants.
   const [card, setCard] = useState<string | null>(null);
 
-  const [payoutVerified, setPayoutVerified] = useState(false);
+  const queryClient = useQueryClient();
 
   const { data, isPending, isFetching, refetch } = useQuery<Earnings>({
     queryKey: ['earnings'],
@@ -132,19 +134,15 @@ export default function Accounts() {
   });
 
   // The provider's payout account lives here, not in My Business.
-  const { data: payout } = useQuery<{ payoutAccountId: string | null } | null>({
+  const payoutEndpoint = isPlanner
+    ? '/wedding-planners/me/payout-account'
+    : activeId
+      ? `/vendors/${activeId}/payout-account`
+      : null;
+  const { data: payout } = useQuery<PayoutAccountView | null>({
     queryKey: ['payout-account', isPlanner ? 'planner' : activeId],
-    enabled: (isVendor && Boolean(activeId)) || isPlanner,
-    queryFn: async () => {
-      if (isPlanner) {
-        return (await api.get('/wedding-planners/me')).data as { payoutAccountId: string | null };
-      }
-      const listings = (await api.get('/vendors/me')).data as {
-        id: string;
-        payoutAccountId: string | null;
-      }[];
-      return listings.find((l) => l.id === activeId) ?? null;
-    },
+    enabled: ((isVendor && Boolean(activeId)) || isPlanner) && Boolean(payoutEndpoint),
+    queryFn: async () => (await api.get<PayoutAccountView>(payoutEndpoint as string)).data,
     retry: false,
   });
 
@@ -152,11 +150,14 @@ export default function Accounts() {
     const wanted = card ? CARD_STATUSES[card] : null;
     return (data?.ledger ?? []).filter((row) => !wanted || wanted.includes(row.status));
   }, [data?.ledger, card]);
+  const eligibleRows = useMemo(
+    () => (data?.ledger ?? []).filter((row) => row.status === 'pending_payout'),
+    [data?.ledger],
+  );
   const escrowRows = useMemo(
     () => (data?.ledger ?? []).filter((row) => ['held_in_escrow', 'disputed'].includes(row.status)),
     [data?.ledger],
   );
-  const availableBalance = Number(data?.pendingPayout ?? '0');
 
   const toggle = (key: string) => () => setCard((current) => (current === key ? null : key));
 
@@ -172,19 +173,8 @@ export default function Accounts() {
 
           <BusinessSwitcher />
 
-          {isVendor && activeId ? (
-            <PayoutAccount
-              endpoint={`/vendors/${activeId}/payout-account`}
-              current={payout?.payoutAccountId ?? null}
-              onStatusChange={setPayoutVerified}
-            />
-          ) : null}
-          {isPlanner ? (
-            <PayoutAccount
-              endpoint="/wedding-planners/me/payout-account"
-              current={payout?.payoutAccountId ?? null}
-              onStatusChange={setPayoutVerified}
-            />
+          {((isVendor && activeId) || isPlanner) && payoutEndpoint ? (
+            <PayoutAccount endpoint={payoutEndpoint} view={payout ?? null} />
           ) : null}
 
           {data && (
@@ -242,24 +232,37 @@ export default function Accounts() {
             <View style={{ gap: space(2) }}>
               <Card>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space(2) }}>
-                  <SectionTitle>Request payout</SectionTitle>
+                  <SectionTitle>Eligible payouts</SectionTitle>
                   <Badge tone="brand">Available {rupeesExact(data.pendingPayout)}</Badge>
                 </View>
-                <PayoutRequestForm
-                  balance={availableBalance}
-                  payoutAccount={payout?.payoutAccountId ?? null}
-                  verified={payoutVerified}
-                />
+                {eligibleRows.length === 0 ? (
+                  <Caption tone="faint">No milestones are currently eligible for release.</Caption>
+                ) : (
+                  <View style={{ gap: space(2) }}>
+                    {eligibleRows.map((row) => (
+                      <EligiblePayoutCard
+                        key={row.paymentId}
+                        row={row}
+                        payoutActive={payout?.status === 'active'}
+                        onReleased={() => void queryClient.invalidateQueries({ queryKey: ['earnings'] })}
+                      />
+                    ))}
+                  </View>
+                )}
               </Card>
 
               <Card>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space(2) }}>
                   <SectionTitle>Payout account</SectionTitle>
-                  <Badge tone={payout?.payoutAccountId ? 'positive' : 'caution'}>
-                    {payout?.payoutAccountId ? 'Verified' : 'Not configured'}
+                  <Badge tone={payout?.status === 'active' ? 'positive' : 'caution'}>
+                    {payout?.status === 'active'
+                      ? 'Active'
+                      : payout?.status === 'pending_verification'
+                        ? 'Pending verification'
+                        : 'Not configured'}
                   </Badge>
                 </View>
-                <Body tone="muted">Razorpay account</Body>
+                <Body tone="muted">Linked account</Body>
                 <Body style={{ fontFamily: 'monospace' }}>{maskAccountId(payout?.payoutAccountId ?? null)}</Body>
               </Card>
             </View>
@@ -361,13 +364,6 @@ function LedgerCard({ row, onPress }: { row: LedgerRow; onPress: () => void }) {
         <Line label="Your share" value={rupeesExact(row.payoutAmount)} strong />
       </View>
 
-      {/*
-        Only where the money is stuck. A "settle my payment" button beside every
-        row would be a button people press on payments that are working, and the
-        desk would fill with requests that have no answer.
-      */}
-      {row.status === 'pending_payout' ? <SettleMyPayment bookingId={row.bookingId} /> : null}
-
       {row.confirmedAt ? (
         <Caption tone="faint" style={{ color: rgb(theme.ink[400]) }}>
           Confirmed {shortDate(row.confirmedAt)}
@@ -377,56 +373,54 @@ function LedgerCard({ row, onPress }: { row: LedgerRow; onPress: () => void }) {
   );
 }
 
-function PayoutRequestForm({
-  balance,
-  payoutAccount,
-  verified,
+function EligiblePayoutCard({
+  row,
+  payoutActive,
+  onReleased,
 }: {
-  balance: number;
-  payoutAccount: string | null;
-  verified: boolean;
+  row: LedgerRow;
+  payoutActive: boolean;
+  onReleased: () => void;
 }) {
-  const [amount, setAmount] = useState('0.00');
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const requestAmount = Number(amount || 0);
-  const invalid = !verified || !payoutAccount || requestAmount <= 0 || requestAmount > balance;
-
-  const submit = () => {
+  const release = async () => {
+    setBusy(true);
     setError(null);
-    setNotice(null);
-    if (!verified || !payoutAccount) {
-      setError('Please verify your payout account before requesting a payout.');
-      return;
+    try {
+      const { data: result } = await api.put<{ released: number; notReleased: string[] }>(
+        `/bookings/${row.bookingId}/release-payout?milestone=${encodeURIComponent(row.milestone)}`,
+      );
+      if (result.released === 0) {
+        setError(result.notReleased[0] ?? 'Nothing was released. It may already be on its way.');
+      }
+      onReleased();
+    } catch (err) {
+      setError(apiMessage(err, 'That payment could not be released.'));
+    } finally {
+      setBusy(false);
     }
-    if (requestAmount <= 0) {
-      setError('Enter an amount greater than zero.');
-      return;
-    }
-    if (requestAmount > balance) {
-      setError(`You can request up to ${rupeesExact(String(balance))}.`);
-      return;
-    }
-    setNotice(`Request queued for ${rupeesExact(String(requestAmount))}.`);
   };
 
   return (
-    <View style={{ gap: space(2) }}>
-      <Body tone="muted">Use a value up to your available balance.</Body>
-      <Field
-        label="Amount"
-        value={amount}
-        keyboardType="decimal-pad"
-        onChangeText={setAmount}
-        placeholder="0.00"
-      />
+    <View style={{ gap: space(1) }}>
+      <Body>{MILESTONE_LABEL[row.milestone] ?? row.milestone}</Body>
+      <Caption tone="faint">{row.clientName ?? 'Customer'} · {row.bookingId.slice(0, 8)}</Caption>
+      <Line label="Service" value={row.serviceName ?? 'Booking'} />
+      <Line label="Event date" value={row.eventDate ? shortDate(row.eventDate) : '—'} />
+      <Line label="Total amount" value={rupeesExact(row.amount)} />
+      <Line label="Released" value={rupeesExact(row.releasedAmount)} />
+      <Line label="Available" value={rupeesExact(row.availableAmount)} strong />
       <Button
-        label="Request payout"
-        disabled={invalid}
-        onPress={submit}
+        label={busy ? 'Releasing…' : 'Release Payment'}
+        disabled={busy || !payoutActive}
+        busy={busy}
+        onPress={() => void release()}
       />
+      {!payoutActive ? (
+        <Caption tone="faint">Released once your payout account is active.</Caption>
+      ) : null}
       {error ? <Caption tone="critical">{error}</Caption> : null}
-      {notice ? <Caption tone="brand">{notice}</Caption> : null}
     </View>
   );
 }
@@ -455,68 +449,6 @@ function Line({
           {value}
         </Caption>
       )}
-    </View>
-  );
-}
-
-/**
- * "Settle my payment", on a payment that has not landed.
- *
- * It answers before it routes. The commonest reason a payout is stuck is a
- * provider who has not finished their own onboarding, and saying so is a better
- * outcome than putting a request on somebody's desk and making them wait for
- * the same sentence. Only if they still want a person does a case exist — and
- * the second press returns the one already open rather than raising another.
- */
-function SettleMyPayment({ bookingId }: { bookingId: string }) {
-  const theme = useTheme();
-  const [state, setState] = useState<{ reason: string; owed: string; open: boolean } | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-
-  async function ask() {
-    setBusy(true);
-    setError('');
-    try {
-      const { data } = await api.post(`/verification/cases/settlement/${bookingId}`, {});
-      setState({ reason: data.reason, owed: data.owed, open: data.alreadyOpen });
-    } catch (err) {
-      setError(apiMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (state) {
-    return (
-      <View
-        style={{
-          backgroundColor: rgb(theme.cautionBg),
-          borderRadius: radius.sm,
-          padding: space(2.5),
-          gap: space(1),
-        }}
-      >
-        <Caption style={{ color: rgb(theme.cautionFg) }}>{state.reason}</Caption>
-        <Caption style={{ color: rgb(theme.cautionFg) }}>
-          {state.open
-            ? 'A request on this is already with the support desk.'
-            : 'Raised with the support desk.'}
-        </Caption>
-      </View>
-    );
-  }
-
-  return (
-    <View style={{ gap: space(1) }}>
-      <Button
-        label={busy ? 'Checking…' : 'Settle my payment'}
-        variant="ghost"
-        small
-        busy={busy}
-        onPress={() => void ask()}
-      />
-      {error ? <Caption tone="critical">{error}</Caption> : null}
     </View>
   );
 }

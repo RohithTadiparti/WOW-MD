@@ -226,6 +226,7 @@ function ChangePassword({ onDone }: { onDone: () => void }) {
         value={currentPassword}
         onChangeText={setCurrent}
         secureTextEntry
+        showPasswordToggle
         autoCapitalize="none"
       />
       <Field
@@ -233,6 +234,7 @@ function ChangePassword({ onDone }: { onDone: () => void }) {
         value={newPassword}
         onChangeText={setNew}
         secureTextEntry
+        showPasswordToggle
         autoCapitalize="none"
         hint="At least 8 characters, with an uppercase letter, a lowercase letter and a digit."
       />
@@ -241,6 +243,7 @@ function ChangePassword({ onDone }: { onDone: () => void }) {
         value={confirmPassword}
         onChangeText={setConfirm}
         secureTextEntry
+        showPasswordToggle
         autoCapitalize="none"
       />
       <Button

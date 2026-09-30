@@ -34,7 +34,7 @@ export default function PackageRangeFields({ minimum, maximum, onMinimumChange, 
           { label: 'Maximum Package (Annual)', value: maximum, change: onMaximumChange, placeholder: 'e.g., 30', min: Number(minimum || 0) / 100000 },
         ].map((field) => (
           <label key={field.label} className="block min-w-0 text-sm text-gray-800">
-            {field.label}
+            <span>{field.label}</span>
             <div className="relative mt-1.5">
               <input
                 className="input w-full bg-white pr-28"

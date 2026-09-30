@@ -123,8 +123,10 @@ export class UsersService {
           .createQueryBuilder('i')
           .where('i."toProfileId" IN (:...ids)', { ids: clientIds })
           .andWhere('i.status = :status', { status: InterestStatus.PENDING })
-          .andWhere('i.screening IN (:...screening)', {
-            screening: [InterestScreening.WITH_AGENCY, InterestScreening.FORWARDED, null],
+          // NULL is the usual value, an interest never held for screening, and
+          // `IN (..., NULL)` never matches it, so it is asked for separately.
+          .andWhere('(i.screening IN (:...screening) OR i.screening IS NULL)', {
+            screening: [InterestScreening.WITH_AGENCY, InterestScreening.FORWARDED],
           })
           .getCount();
         counts['/interests'] = pendingInterests;
@@ -134,8 +136,8 @@ export class UsersService {
           .select('DISTINCT i."toProfileId"', 'profileId')
           .where('i."toProfileId" IN (:...ids)', { ids: clientIds })
           .andWhere('i.status = :status', { status: InterestStatus.PENDING })
-          .andWhere('i.screening IN (:...screening)', {
-            screening: [InterestScreening.WITH_AGENCY, InterestScreening.FORWARDED, null],
+          .andWhere('(i.screening IN (:...screening) OR i.screening IS NULL)', {
+            screening: [InterestScreening.WITH_AGENCY, InterestScreening.FORWARDED],
           })
           .getRawMany()
           .then((rows) => rows.length);
@@ -157,9 +159,8 @@ export class UsersService {
       counts['/cases'] = await this.cases.count({
         where: { assignedToUserId: actor.userId, status: In(active) },
       });
-      counts['/support'] = await this.cases.count({
-        where: { assignedToUserId: actor.userId, status: In(active) },
-      });
+      // The same queue, shown on both entries.
+      counts['/support'] = counts['/cases'];
     }
 
     counts['/notifications'] = await this.notifications.count({

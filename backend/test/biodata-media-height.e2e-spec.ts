@@ -12,8 +12,8 @@ import { User } from '../src/modules/auth/entities/user.entity';
 import { Profile } from '../src/modules/users/entities/profile.entity';
 import { ProfileDetails } from '../src/modules/profile-details/entities/profile-details.entity';
 import { UserRole } from '../src/common/enums';
-import { BiodataFeetAndFamilyPhoto1710000090000 } from '../src/database/migrations/1710000090000-BiodataFeetAndFamilyPhoto';
-import { RestoreBiodataHeightCm1710000091000 } from '../src/database/migrations/1710000091000-RestoreBiodataHeightCm';
+import { BiodataFamilyPhoto1710000103000 } from '../src/database/migrations/1710000103000-BiodataFamilyPhoto';
+import { RestoreBiodataHeightCm1710000104000 } from '../src/database/migrations/1710000104000-RestoreBiodataHeightCm';
 
 describe('Family Photo and centimeter height end to end', () => {
   let app: INestApplication;
@@ -144,6 +144,13 @@ describe('Family Photo and centimeter height end to end', () => {
 
   (process.env.CHROME_BIN ? it : it.skip)('saves height and uploads/replaces Family Photo in the browser, including reload and logout/login', async () => {
     const actor = actors[0];
+    // The basic information card saves personal details and religion together,
+    // so the religion it reads back has to be complete for the form to submit.
+    const route = `/api/profiles/${actor.profile.id}/details`;
+    await http().put(`${route}/religion`).set('Authorization', `Bearer ${actor.token}`)
+      .send({ religion: 'Hindu', caste: 'Kamma', subCaste: 'Test sub-caste', motherTongue: 'Telugu' }).expect(200);
+    await http().put(`${route}/marital`).set('Authorization', `Bearer ${actor.token}`)
+      .send({ maritalStatus: 'never_married' }).expect(200);
     const url = await checkBiodataBrowser(await app.getUrl(), actor.user.email!, password, png);
     expect((await db.getRepository(ProfileDetails).findOneByOrFail({ profileId: actor.profile.id })))
       .toMatchObject({ heightCm: 168, familyPhotoUrl: url });
@@ -158,8 +165,8 @@ describe('Family Photo and centimeter height end to end', () => {
       await runner.query('SET LOCAL search_path TO biodata_height_migration_test');
       await runner.query('CREATE TABLE profile_details ("heightFeet" numeric, "preferredHeightMinFeet" numeric, "preferredHeightMaxFeet" numeric, CONSTRAINT "CK_heightFeet_feet" CHECK ("heightFeet" BETWEEN 3 AND 8), CONSTRAINT "CK_preferredHeightMinFeet_feet" CHECK ("preferredHeightMinFeet" BETWEEN 3 AND 8), CONSTRAINT "CK_preferredHeightMaxFeet_feet" CHECK ("preferredHeightMaxFeet" BETWEEN 3 AND 8))');
       await runner.query('INSERT INTO profile_details VALUES (5.1,4.9,6.2), (5.5,5.1,5.75), (5.75,5.5,6.25), (6.25,6.25,6.25), (NULL,NULL,NULL)');
-      await new BiodataFeetAndFamilyPhoto1710000090000().up(runner);
-      const migration = new RestoreBiodataHeightCm1710000091000();
+      await new BiodataFamilyPhoto1710000103000().up(runner);
+      const migration = new RestoreBiodataHeightCm1710000104000();
       await migration.up(runner);
       const rows = await runner.query('SELECT * FROM profile_details ORDER BY "heightCm" NULLS LAST');
       expect(rows.slice(0, 4)).toMatchObject([
@@ -175,7 +182,7 @@ describe('Family Photo and centimeter height end to end', () => {
       await runner.query('ALTER TABLE profile_details RENAME TO profile_details_restored');
       await runner.query('CREATE TABLE profile_details ("heightCm" integer, "preferredHeightMinCm" integer, "preferredHeightMaxCm" integer)');
       await runner.query('INSERT INTO profile_details VALUES (170,150,190)');
-      await new BiodataFeetAndFamilyPhoto1710000090000().up(runner);
+      await new BiodataFamilyPhoto1710000103000().up(runner);
       await migration.up(runner);
       expect(await runner.query('SELECT * FROM profile_details')).toEqual([
         { heightCm: 170, preferredHeightMinCm: 150, preferredHeightMaxCm: 190, familyPhotoUrl: null },

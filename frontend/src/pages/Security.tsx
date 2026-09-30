@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiMessage } from '../lib/api';
 import { useAuth } from '../store/auth';
@@ -80,7 +81,7 @@ export default function Security() {
         }}
       />
 
-      <ChangePasswordCard onDone={() => setNotice('Password changed. Sign in again to continue.')} />
+      <ChangePasswordCard />
 
       <div className="card space-y-3">
         <h2 className="section-title">Signed-in devices</h2>
@@ -293,35 +294,56 @@ function TwoFactorCard({
   );
 }
 
-function ChangePasswordCard({ onDone }: { onDone: () => void }) {
+function ChangePasswordCard() {
+  const nav = useNavigate();
+  const qc = useQueryClient();
   const [currentPassword, setCurrent] = useState('');
   const [newPassword, setNew] = useState('');
+  const [confirmPassword, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
   async function submit(e: FormEvent) {
     e.preventDefault();
+    if (busy) return;
     setError('');
+    if (newPassword !== confirmPassword) {
+      setError('New passwords do not match.');
+      return;
+    }
+    setBusy(true);
     try {
       await api.post('/auth/password/change', { currentPassword, newPassword });
       setCurrent('');
       setNew('');
-      onDone();
+      setConfirm('');
+      useAuth.getState().clear();
+      qc.clear();
+      nav('/login', { replace: true, state: { passwordChanged: true } });
     } catch (err) {
       setError(apiMessage(err));
+    } finally {
+      setBusy(false);
     }
   }
 
   return (
     <form onSubmit={submit} className="card space-y-3">
       <h2 className="section-title">Change password</h2>
-      {error && <p className="alert-critical">{error}</p>}
+      {error && <p role="alert" className="alert-critical">{error}</p>}
       <p className="text-sm text-gray-500">
         Changing your password signs out every device, including this one.
       </p>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <p className="text-sm text-gray-500">
+        Use 8–128 characters, including an uppercase letter, a lowercase letter and a digit.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-3">
         <input
           className="input"
           type="password"
+          aria-label="Current Password"
+          autoComplete="current-password"
+          maxLength={128}
           placeholder="Current password"
           value={currentPassword}
           onChange={(e) => setCurrent(e.target.value)}
@@ -331,13 +353,28 @@ function ChangePasswordCard({ onDone }: { onDone: () => void }) {
           className="input"
           type="password"
           minLength={8}
+          maxLength={128}
+          pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}"
+          title="Use an uppercase letter, a lowercase letter and a digit."
+          aria-label="New Password"
+          autoComplete="new-password"
           placeholder="New password"
           value={newPassword}
           onChange={(e) => setNew(e.target.value)}
           required
         />
+        <input
+          className="input"
+          type="password"
+          aria-label="Confirm New Password"
+          autoComplete="new-password"
+          placeholder="Confirm new password"
+          value={confirmPassword}
+          onChange={(e) => setConfirm(e.target.value)}
+          required
+        />
       </div>
-      <button className="btn">Change password</button>
+      <button className="btn" disabled={busy}>{busy ? 'Changing password…' : 'Change password'}</button>
     </form>
   );
 }

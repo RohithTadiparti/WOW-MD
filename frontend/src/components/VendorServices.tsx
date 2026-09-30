@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiMessage } from '../lib/api';
 import { Loading } from './ui/Feedback';
+import ConfirmDialog from './ConfirmDialog';
 import DynamicForm, {
   Answers,
   FieldSpec,
@@ -50,6 +51,8 @@ interface VendorService {
   attributes: Answers;
   active: boolean;
   bookable: boolean;
+  /** Its category is no longer one the business lists, so it is off sale. */
+  outsideSelectedCategories?: boolean;
   definition: Definition | null;
   category: Category | null;
   serviceForm: FieldSpec[];
@@ -105,6 +108,10 @@ export default function VendorServices({
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [pricing, setPricing] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<
+    { kind: 'service'; id: string; name: string } | { kind: 'offering'; serviceId: string; id: string; name: string } | null
+  >(null);
+  const [deleting, setDeleting] = useState(false);
 
   const { data: services = [], isLoading } = useQuery<VendorService[]>({
     queryKey: ['vendor-services', vendorId],
@@ -126,11 +133,13 @@ export default function VendorServices({
     }
   }
 
-  const visibleServices = useMemo(
-    () => services.filter((service) => service.category?.slug && selectedCategories.includes(service.category.slug)),
-    [services, selectedCategories],
-  );
-  const takenDefinitionIds = useMemo(() => visibleServices.map((s) => s.definitionId), [visibleServices]);
+  /*
+   * Every service is listed, including one whose category the business no
+   * longer lists. The server takes those off sale; the vendor still has to see
+   * them to switch them off or remove them.
+   */
+  const visibleServices = services;
+  const takenDefinitionIds = useMemo(() => services.map((s) => s.definitionId), [services]);
 
   return (
     <div className="space-y-4">
@@ -194,15 +203,29 @@ export default function VendorServices({
               >
                 {service.bookable
                   ? 'Bookable'
-                  : service.active
-                    ? 'No price published'
-                    : 'Switched off'}
+                  : !service.active
+                    ? 'Switched off'
+                    : service.outsideSelectedCategories
+                      ? 'Outside your categories'
+                      : 'No price published'}
               </span>
               <button
                 className="btn-outline"
                 onClick={() => setEditing(editing === service.id ? null : service.id)}
               >
                 {editing === service.id ? 'Close' : 'Edit'}
+              </button>
+              <button
+                className="btn-outline text-critical-fg"
+                onClick={() =>
+                  setDeleteTarget({
+                    kind: 'service',
+                    id: service.id,
+                    name: service.displayName ?? service.definition?.name ?? 'this service',
+                  })
+                }
+              >
+                Delete
               </button>
               <button
                 className="btn-outline"
@@ -228,6 +251,12 @@ export default function VendorServices({
             </div>
           </div>
 
+          {service.outsideSelectedCategories && (
+            <p className="rounded-sm bg-amber-50 p-2 text-xs text-amber-800">
+              This service is under a category your business no longer lists, so clients cannot
+              book it. Add the category back to your business, or switch the service off.
+            </p>
+          )}
           {service.description && <p className="text-sm text-gray-700">{service.description}</p>}
 
           {/* The vendor's own answers, read back. */}
@@ -249,17 +278,17 @@ export default function VendorServices({
           {editing === service.id && (
             <EditService
               service={service}
+              onDelete={() =>
+                setDeleteTarget({
+                  kind: 'service',
+                  id: service.id,
+                  name: service.displayName ?? service.definition?.name ?? 'this service',
+                })
+              }
               onSave={async (body) => {
                 const ok = await act(
                   () => api.put(`/vendors/${vendorId}/services/${service.id}`, body),
                   'Service updated.',
-                );
-                if (ok) setEditing(null);
-              }}
-              onRemove={async () => {
-                const ok = await act(
-                  () => api.delete(`/vendors/${vendorId}/services/${service.id}`),
-                  'Service removed.',
                 );
                 if (ok) setEditing(null);
               }}
@@ -270,11 +299,50 @@ export default function VendorServices({
             <Offerings
               vendorId={vendorId}
               service={service}
+              onDelete={(offering) =>
+                setDeleteTarget({
+                  kind: 'offering',
+                  serviceId: service.id,
+                  id: offering.id,
+                  name: offering.name,
+                })
+              }
               onChanged={(ok) => act(async () => undefined, ok)}
             />
           )}
         </div>
       ))}
+
+      {deleteTarget && (
+        <ConfirmDialog
+          title={deleteTarget.kind === 'service' ? 'Delete service?' : 'Delete pricing/package?'}
+          body={`Delete "${deleteTarget.name}" permanently? This cannot be undone.`}
+          confirmLabel="Delete"
+          busy={deleting}
+          onDismiss={() => {
+            if (!deleting) setDeleteTarget(null);
+          }}
+          onConfirm={async () => {
+            setDeleting(true);
+            const target = deleteTarget;
+            const ok = await act(
+              () =>
+                target.kind === 'service'
+                  ? api.delete(`/vendors/${vendorId}/services/${target.id}`)
+                  : api.delete(
+                      `/vendors/${vendorId}/services/${target.serviceId}/offerings/${target.id}`,
+                    ),
+              target.kind === 'service' ? 'Service deleted.' : 'Pricing/package deleted.',
+            );
+            setDeleting(false);
+            if (ok) {
+              setDeleteTarget(null);
+              setEditing(null);
+              setPricing(null);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -299,7 +367,12 @@ function AddService({
   });
 
   const availableCategories = useMemo(
-    () => categories.filter((category) => selectedCategories.includes(category.slug)),
+    // A business with no categories yet (moved over from the single legacy
+    // category) has not narrowed anything down, and the server agrees.
+    () =>
+      selectedCategories.length === 0
+        ? categories
+        : categories.filter((category) => selectedCategories.includes(category.slug)),
     [categories, selectedCategories],
   );
 
@@ -397,12 +470,12 @@ function AddService({
 
 function EditService({
   service,
+  onDelete,
   onSave,
-  onRemove,
 }: {
   service: VendorService;
+  onDelete: () => void;
   onSave: (b: Record<string, unknown>) => void;
-  onRemove: () => void;
 }) {
   const [displayName, setDisplayName] = useState(service.displayName ?? '');
   const [description, setDescription] = useState(service.description ?? '');
@@ -457,9 +530,7 @@ function EditService({
         <button
           type="button"
           className="btn-outline"
-          onClick={() => {
-            if (confirm('Remove this service from your business?')) onRemove();
-          }}
+          onClick={onDelete}
         >
           Remove
         </button>
@@ -471,10 +542,12 @@ function EditService({
 function Offerings({
   vendorId,
   service,
+  onDelete,
   onChanged,
 }: {
   vendorId: string;
   service: VendorService;
+  onDelete: (offering: Offering) => void;
   onChanged: (ok: string) => void;
 }) {
   const qc = useQueryClient();
@@ -538,15 +611,7 @@ function Offerings({
                 )
               }
               onCancel={() => setEditing(null)}
-              onRemove={() =>
-                act(
-                  () =>
-                    api.delete(
-                      `/vendors/${vendorId}/services/${service.id}/offerings/${o.id}`,
-                    ),
-                  'Price removed.',
-                )
-              }
+              onRemove={() => onDelete(o)}
             />
           ) : (
             <div key={o.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
@@ -571,6 +636,9 @@ function Offerings({
               </div>
               <button className="btn-outline" onClick={() => setEditing(o.id)}>
                 Edit
+              </button>
+              <button className="btn-outline text-critical-fg" onClick={() => onDelete(o)}>
+                Delete
               </button>
             </div>
           ),

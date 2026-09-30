@@ -61,6 +61,7 @@ async function main(): Promise<void> {
               allowedPricingModels: def.allowedPricingModels,
               availabilityModel: def.availabilityModel,
               packagesAllowed: def.packagesAllowed,
+              defaultCapacity: def.defaultCapacity,
               active: true,
               sortOrder: definitionIndex * 10,
             }),

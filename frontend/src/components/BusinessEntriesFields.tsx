@@ -24,7 +24,7 @@ export default function BusinessEntriesFields({ entries, onChange }: {
               ['businessIncome', 'Business Income (annual rupees)', 15],
             ].map(([key, label, length]) => (
               <label key={key} className="block text-sm text-gray-700">
-                {label}
+                <span>{label}</span>
                 <input
                   id={`business-${entry.id}-${key}`}
                   className="input mt-1"

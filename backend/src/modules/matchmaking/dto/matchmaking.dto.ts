@@ -13,6 +13,7 @@ import {
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
+import { MAX_HEIGHT_CM, MIN_HEIGHT_CM } from '../../../common/util/height';
 import { MaritalStatus, OccupationStatus } from '../../../common/enums';
 import { MATCH_VIEWS, MatchView } from '../suggestion-views';
 
@@ -65,12 +66,12 @@ export class SuggestionsQueryDto extends PaginationDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(18) @Max(100)
   ageMax?: number;
 
-  @ApiPropertyOptional({ minimum: 120, maximum: 230, description: 'Centimetres' })
-  @IsOptional() @Transform(({ obj, key }) => parseStrictIntegerQuery(obj[key])) @IsInt() @Min(120) @Max(230)
+  @ApiPropertyOptional({ minimum: MIN_HEIGHT_CM, maximum: MAX_HEIGHT_CM, description: 'Centimetres' })
+  @IsOptional() @Transform(({ obj, key }) => parseStrictIntegerQuery(obj[key])) @IsInt() @Min(MIN_HEIGHT_CM) @Max(MAX_HEIGHT_CM)
   heightMinCm?: number;
 
-  @ApiPropertyOptional({ minimum: 120, maximum: 230, description: 'Centimetres' })
-  @IsOptional() @Transform(({ obj, key }) => parseStrictIntegerQuery(obj[key])) @IsInt() @Min(120) @Max(230)
+  @ApiPropertyOptional({ minimum: MIN_HEIGHT_CM, maximum: MAX_HEIGHT_CM, description: 'Centimetres' })
+  @IsOptional() @Transform(({ obj, key }) => parseStrictIntegerQuery(obj[key])) @IsInt() @Min(MIN_HEIGHT_CM) @Max(MAX_HEIGHT_CM)
   heightMaxCm?: number;
 
   @ApiPropertyOptional({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER })

@@ -248,31 +248,6 @@ export class VendorsService {
     return saved;
   }
 
-  /**
-   * Where escrow pays out to.
-   *
-   * Set by the provider once their payout onboarding has cleared. Until it is,
-   * money released from escrow stays there marked as owed rather than being
-   * pushed at an account that does not exist — so this is the switch that turns
-   * a completed job into an actual payment.
-   *
-   * An empty string clears it, which is how a provider whose account has been
-   * closed stops payouts going somewhere that will bounce.
-   */
-  async setPayoutAccount(
-    ownerUserId: string,
-    vendorId: string,
-    payoutAccountId: string,
-  ): Promise<Vendor> {
-    const vendor = await this.vendors.findOne({ where: { id: vendorId } });
-    if (!vendor) throw new NotFoundException('Vendor not found');
-    if (vendor.ownerUserId !== ownerUserId) {
-      throw new ForbiddenException('This listing does not belong to you');
-    }
-    vendor.payoutAccountId = payoutAccountId.trim() || null;
-    return this.vendors.save(vendor);
-  }
-
   listOwn(ownerUserId: string): Promise<Vendor[]> {
     return this.vendors.find({ where: { ownerUserId }, order: { createdAt: 'DESC' } });
   }
@@ -284,7 +259,9 @@ export class VendorsService {
       select: ['id', 'status'],
     });
     const solved = new Set([CaseStatus.RESOLVED, CaseStatus.REJECTED, CaseStatus.CLOSED]);
-    const pending = rows.filter((row) => row.status !== CaseStatus.OPEN && !solved.has(row.status));
+    // Anything not yet solved is pending, open cases included, so every case
+    // lands in exactly one of the two buckets.
+    const pending = rows.filter((row) => !solved.has(row.status));
     return {
       raised: rows.length,
       pending: pending.length,

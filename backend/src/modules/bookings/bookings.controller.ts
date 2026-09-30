@@ -4,6 +4,7 @@ import {
   Get,
   Headers,
   Param,
+  ParseEnumPipe,
   ParseUUIDPipe,
   Post,
   Put,
@@ -37,6 +38,7 @@ import {
 } from '../../common/decorators/permissions.decorator';
 import { Permission } from '../../common/authz/permissions';
 import { UserRole } from '../../common/enums';
+import { PaymentMilestone } from '../../common/enums';
 
 @ApiTags('bookings')
 @ApiBearerAuth()
@@ -474,6 +476,21 @@ export class BookingsController {
   @Put(':id/settle')
   settle(@CurrentUser() actor: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.bookings.settle(actor, id);
+  }
+
+  @RequirePermissions(Permission.BOOKING_COMPLETE)
+  @ApiOperation({
+    summary: 'Release an eligible pending payout for the provider',
+    description: 'Transfers the full eligible milestone amount; custom amounts are not supported.',
+  })
+  @Put(':id/release-payout')
+  releasePayout(
+    @CurrentUser() actor: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('milestone', new ParseEnumPipe(PaymentMilestone, { optional: true }))
+    milestone?: PaymentMilestone,
+  ) {
+    return this.bookings.releasePayout(actor, id, milestone);
   }
 
   /**

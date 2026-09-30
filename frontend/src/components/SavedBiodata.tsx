@@ -1,8 +1,8 @@
 import { formatHeight } from '../lib/height';
 import { readBusinessEntries } from '../lib/business-entries';
-import { OTHER_INCOME_LABELS, readOtherIncome } from '../lib/other-income';
 import { ReactNode } from 'react';
 import { formatDate } from '../lib/dates';
+import { OTHER_INCOME_LABEL } from '../lib/permissions';
 
 interface Sibling {
   id: string;
@@ -89,6 +89,12 @@ export default function SavedBiodata({
     const v = bag(key)[field];
     return v === null || v === undefined || v === '' ? null : String(v);
   };
+
+  const otherIncome = (Array.isArray(details.otherIncome) ? details.otherIncome : []) as {
+    source: string;
+    details?: string;
+    annualIncome?: string;
+  }[];
 
   const height = num('heightCm');
   const father = bag('father');
@@ -219,17 +225,22 @@ export default function SavedBiodata({
             <span className="text-gray-400">Kept private</span>
           </Row>
         )}
+        {otherIncome.length > 0 && (
+          <Row label="Other income">
+            {otherIncome
+              .map((row) =>
+                [
+                  OTHER_INCOME_LABEL[row.source] ?? row.source,
+                  row.details,
+                  details.incomeVisible && row.annualIncome ? `₹${row.annualIncome} a year` : null,
+                ]
+                  .filter(Boolean)
+                  .join(', '),
+              )
+              .join(' · ')}
+          </Row>
+        )}
       </Group>
-
-      {details.occupationStatus === 'employed' && readOtherIncome(bag('employment')).length > 0 && (
-        <Group title="Other Income (annual rupees)">
-          {readOtherIncome(bag('employment')).map((entry) => (
-            <Row key={entry.id} label={OTHER_INCOME_LABELS[entry.source]}>
-              {details.incomeVisible ? String(entry.amount) : 'Kept private'}
-            </Row>
-          ))}
-        </Group>
-      )}
 
       {details.occupationStatus === 'self_employed' && readBusinessEntries(bag('business')).map((entry, index) => (
         <Group key={String(entry.id ?? index)} title={`Business ${index + 1}`}>
@@ -243,7 +254,7 @@ export default function SavedBiodata({
       <Group title="Partner preferences">
         <Row label="Package Range (annual rupees)">
           {num('preferredPackageMin') != null || num('preferredPackageMax') != null
-            ? `${num('preferredPackageMin')?.toLocaleString('en-IN') ?? 'No minimum'} ? ${num('preferredPackageMax')?.toLocaleString('en-IN') ?? 'No maximum'}`
+            ? `${num('preferredPackageMin')?.toLocaleString('en-IN') ?? 'No minimum'} – ${num('preferredPackageMax')?.toLocaleString('en-IN') ?? 'No maximum'}`
             : 'No preference'}
         </Row>
         <Row label="Age">

@@ -1,10 +1,10 @@
-import { parseHeightCmQuery } from '../../../common/util/height';
+import { MAX_HEIGHT_CM, MIN_HEIGHT_CM, parseHeightCmQuery } from '../../../common/util/height';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
-  IsArray,
+  ArrayMaxSize,
   ArrayMinSize,
-  IsUUID,
+  IsArray,
   IsBoolean,
   IsDateString,
   IsEnum,
@@ -14,16 +14,15 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   Max,
   MaxLength,
   Min,
   ValidateIf,
-  Validate,
   ValidateNested,
 } from 'class-validator';
 import { IsUploadedUrl } from '../../../common/decorators/uploaded-url.decorator';
-import { OtherIncomeConstraint, OTHER_INCOME_SOURCES } from './other-income.dto';
 import { StrictBoolean } from '../../../common/decorators/strict-boolean.decorator';
 import { IsNotFutureDate } from '../../../common/decorators/not-future.decorator';
 import { IsAdultDate } from '../../../common/decorators/adult-date.decorator';
@@ -53,7 +52,7 @@ import {
  * until they have decided what they want their partner's caste to be.
  */
 
-class LocationDto {
+export class LocationDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(80) country?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(80) state?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(80) district?: string;
@@ -112,11 +111,11 @@ export class PersonalDetailsDto {
   @IsAdultDate(18, { message: 'The bride/groom must be at least 18 years old' })
   dateOfBirth?: string;
 
-  @ApiProperty({ example: 168, minimum: 91, maximum: 244, description: 'Height in whole centimetres' })
+  @ApiProperty({ example: 168, minimum: MIN_HEIGHT_CM, maximum: MAX_HEIGHT_CM, description: 'Height in whole centimetres' })
   @Transform(({ obj, key }) => parseHeightCmQuery(obj[key]))
   @IsInt()
-  @Min(91)
-  @Max(244)
+  @Min(MIN_HEIGHT_CM)
+  @Max(MAX_HEIGHT_CM)
   heightCm: number;
 
   /**
@@ -319,7 +318,7 @@ export class MaritalDetailsDto {
   childrenLivingWith?: string;
 }
 
-class ParentDto {
+export class ParentDto {
   @ApiProperty()
   @IsString()
   @Transform(normaliseName)
@@ -543,6 +542,38 @@ export class BusinessDetailsDto extends PartialType(BusinessEntryDto) {
   entries?: BusinessEntryDto[];
 }
 
+/** Where income beyond the main occupation comes from. */
+export const OTHER_INCOME_SOURCES = [
+  'business',
+  'rental',
+  'agriculture',
+  'investments',
+  'freelance',
+  'other',
+] as const;
+
+/**
+ * One income besides the main occupation — a job with a business on the side
+ * is common, and the occupation field has room for only one of them.
+ */
+export class OtherIncomeDto {
+  @ApiProperty({ enum: OTHER_INCOME_SOURCES })
+  @IsIn(OTHER_INCOME_SOURCES)
+  source: (typeof OTHER_INCOME_SOURCES)[number];
+
+  @ApiPropertyOptional({ example: 'Family textile shop' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  details?: string;
+
+  /** Annual, in rupees; digits only, like salary. Hidden unless income is shown. */
+  @ApiPropertyOptional({ example: '600000' })
+  @IsOptional()
+  @Matches(/^\d{1,12}$/, { message: 'Other income must be a whole number of rupees' })
+  annualIncome?: string;
+}
+
 export class EducationDetailsDto {
   @ApiProperty({ example: 'Masters' })
   @IsString()
@@ -562,25 +593,34 @@ export class EducationDetailsDto {
   @IsEnum(OccupationStatus)
   occupationStatus?: OccupationStatus;
 
-  /** Required when employed. Omitted otherIncome preserves sources; [] clears them. */
-  @ApiPropertyOptional({ type: 'object', additionalProperties: true, properties: {
-    otherIncome: { type: 'array', items: { type: 'object', required: ['source', 'amount'], properties: {
-      id: { type: 'string', format: 'uuid' },
-      source: { type: 'string', enum: [...OTHER_INCOME_SOURCES] },
-      amount: { type: 'string', pattern: '^\\d{1,15}$', description: 'Annual income in whole rupees' },
-    } } },
-  } })
-  @ValidateIf((o: EducationDetailsDto) => (o.occupationStatus === OccupationStatus.EMPLOYED || o.employment !== undefined) && o.occupationStatus !== undefined)
+  /**
+   * Required when employed. Validated whenever it is sent, whether or not the
+   * occupation comes with it: the service stores what arrives, so a skipped
+   * check is a stored bad value or a failed save.
+   */
+  @ApiPropertyOptional({ type: Object })
+  @ValidateIf((o: EducationDetailsDto) => o.occupationStatus === OccupationStatus.EMPLOYED || o.employment !== undefined)
   @IsObject({ message: 'Employment details are required for an employed candidate' })
-  @Validate(OtherIncomeConstraint)
   employment?: Record<string, unknown>;
 
-  /** Required when self-employed. */
+  /** Required when self-employed; validated whenever it is sent. */
   @ApiPropertyOptional({ type: BusinessDetailsDto })
-  @ValidateIf((o: EducationDetailsDto) => (o.occupationStatus === OccupationStatus.SELF_EMPLOYED || o.business !== undefined) && o.occupationStatus !== undefined)
+  @ValidateIf((o: EducationDetailsDto) => o.occupationStatus === OccupationStatus.SELF_EMPLOYED || o.business !== undefined)
   @IsObject({ message: 'Business details are required for a self-employed candidate' })
   @ValidateNested() @Type(() => BusinessDetailsDto)
   business?: BusinessDetailsDto;
+
+  /**
+   * Optional, whatever the occupation. Absent leaves the stored list alone, so
+   * a client that predates the field cannot wipe it; an empty list clears it.
+   */
+  @ApiPropertyOptional({ type: [OtherIncomeDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(5)
+  @ValidateNested({ each: true })
+  @Type(() => OtherIncomeDto)
+  otherIncome?: OtherIncomeDto[];
 
   @ApiPropertyOptional({ default: false })
   @IsOptional()
@@ -593,17 +633,10 @@ export class OccupationDetailsDto {
   @IsEnum(OccupationStatus)
   occupationStatus: OccupationStatus;
 
-  /** Required when employed. Omitted otherIncome preserves sources; [] clears them. */
-  @ApiPropertyOptional({ type: 'object', additionalProperties: true, properties: {
-    otherIncome: { type: 'array', items: { type: 'object', required: ['source', 'amount'], properties: {
-      id: { type: 'string', format: 'uuid' },
-      source: { type: 'string', enum: [...OTHER_INCOME_SOURCES] },
-      amount: { type: 'string', pattern: '^\\d{1,15}$', description: 'Annual income in whole rupees' },
-    } } },
-  } })
+  /** Required when employed. */
+  @ApiPropertyOptional({ type: Object })
   @ValidateIf((o: OccupationDetailsDto) => o.occupationStatus === OccupationStatus.EMPLOYED || o.employment !== undefined)
   @IsObject({ message: 'Employment details are required for an employed candidate' })
-  @Validate(OtherIncomeConstraint)
   employment?: Record<string, unknown>;
 
   /** Required when self-employed. */
@@ -645,18 +678,18 @@ export class PartnerPreferencesDto {
   @Max(100)
   preferredAgeMax: number;
 
-  @ApiProperty({ minimum: 91, maximum: 244, description: 'Height in whole centimetres' })
+  @ApiProperty({ minimum: MIN_HEIGHT_CM, maximum: MAX_HEIGHT_CM, description: 'Height in whole centimetres' })
   @Transform(({ obj, key }) => parseHeightCmQuery(obj[key]))
   @IsInt()
-  @Min(91)
-  @Max(244)
+  @Min(MIN_HEIGHT_CM)
+  @Max(MAX_HEIGHT_CM)
   preferredHeightMinCm: number;
 
-  @ApiProperty({ minimum: 91, maximum: 244, description: 'Height in whole centimetres' })
+  @ApiProperty({ minimum: MIN_HEIGHT_CM, maximum: MAX_HEIGHT_CM, description: 'Height in whole centimetres' })
   @Transform(({ obj, key }) => parseHeightCmQuery(obj[key]))
   @IsInt()
-  @Min(91)
-  @Max(244)
+  @Min(MIN_HEIGHT_CM)
+  @Max(MAX_HEIGHT_CM)
   preferredHeightMaxCm: number;
 
   @ApiPropertyOptional({

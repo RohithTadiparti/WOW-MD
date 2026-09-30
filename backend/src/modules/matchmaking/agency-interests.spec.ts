@@ -136,8 +136,9 @@ describe('MatchmakingService.agencyInterests', () => {
 
   /*
    * The rule that matters. An agent stewards their own client and sees
-   * everything on them; a pending interest does not open the other family's
-   * photographs or their written bio.
+   * everything on them; a pending interest shows the other family's profile
+   * photo, as the basic profile view does, but not the rest of the gallery or
+   * their written bio.
    */
   it('shows the client in full and the other side only as far as it has got', async () => {
     clients = [profile('c1', { managedByUserId: agent.userId })];
@@ -148,7 +149,7 @@ describe('MatchmakingService.agencyInterests', () => {
     expect(row.from.matched).toBe(true);
     expect(row.from.photos).toHaveLength(2);
     expect(row.to.matched).toBe(false);
-    expect(row.to.photos).toEqual([]);
+    expect(row.to.photos).toEqual(['https://cdn.example.com/x1-1.jpg']);
     expect(row.to.bio).toBeUndefined();
   });
 

@@ -1,5 +1,5 @@
 import HeightInput from '../components/HeightInput';
-import { formatHeight } from '../lib/height';
+import { formatHeight, MAX_HEIGHT_CM, MIN_HEIGHT_CM } from '../lib/height';
 import PackageRangeFields from '../components/PackageRangeFields';
 import { useEffect, useState } from 'react';
 import { X } from '@phosphor-icons/react';
@@ -264,7 +264,7 @@ export default function Matches() {
   // suggestions by the server; asking anyway was a 403 on every visit. The
   // status says which, and the page already explains it.
   const validHeightFilters = [filters.heightMinCm, filters.heightMaxCm]
-    .every((value) => value === '' || (/^\d+$/.test(value) && Number(value) >= 91 && Number(value) <= 244))
+    .every((value) => value === '' || (/^\d+$/.test(value) && Number(value) >= MIN_HEIGHT_CM && Number(value) <= MAX_HEIGHT_CM))
     && (!filters.heightMinCm || !filters.heightMaxCm || Number(filters.heightMinCm) <= Number(filters.heightMaxCm));
   const canBrowse = ready && Boolean(status) && !matchmakingGate(status);
 
@@ -308,6 +308,7 @@ export default function Matches() {
       qc.invalidateQueries({ queryKey: ['interest-board'] });
       qc.invalidateQueries({ queryKey: ['accepted-matches'] });
       qc.invalidateQueries({ queryKey: ['match-status'] });
+      qc.invalidateQueries({ queryKey: ['viewable-profile'] });
     } catch (err) {
       setError(apiMessage(err, 'That action was rejected.'));
     }
@@ -674,7 +675,7 @@ export default function Matches() {
                     maximum={filters.packageMax}
                     onMinimumChange={setField('packageMin')}
                     onMaximumChange={setField('packageMax')}
-                    hint="Leave a limit blank to use your saved partner preference."
+                    hint="Matches on the salary or business income a profile has chosen to show; profiles that keep income private are left out. Leave a limit blank for no limit."
                   />
                   {/*
                     Horoscope filters (EZ1-I163), off the same lists the biodata

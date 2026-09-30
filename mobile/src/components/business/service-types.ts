@@ -43,6 +43,8 @@ export interface VendorService {
   active: boolean;
   /** The server's own answer about whether a client can book this yet. */
   bookable: boolean;
+  /** Its category is no longer one the business lists, so it is off sale. */
+  outsideSelectedCategories?: boolean;
   definition: Definition | null;
   category: Category | null;
   serviceForm: FieldSpec[];

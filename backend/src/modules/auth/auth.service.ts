@@ -783,7 +783,9 @@ export class AuthService {
     if (!user) throw new NotFoundException('Account not found');
 
     const ok = await bcrypt.compare(dto.currentPassword, user.passwordHash);
-    if (!ok) throw new UnauthorizedException('Your current password is not correct');
+    // A rejected current password is a form error, not an expired access token.
+    // Returning 401 here would trigger the clients' automatic session refresh.
+    if (!ok) throw new BadRequestException('Current password is incorrect.');
 
     const passwordHash = await bcrypt.hash(dto.newPassword, this.cfg.auth.bcryptRounds);
     // Clearing `mustResetPassword` here is what lifts the lock a provisioned

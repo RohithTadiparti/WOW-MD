@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Permission, ROLE_LABEL, canAny, can } from './permissions';
+import { CORRECTABLE_FIELD_KEYS, Permission, ROLE_LABEL, canAny, can } from './permissions';
 
 /**
  * The client mirrors the backend's permission matrix by hand.
@@ -84,5 +84,30 @@ describe('role labels', () => {
       // "in_person" reaching a screen would be a leaked internal name.
       expect(label).not.toContain('_');
     }
+  });
+});
+
+/**
+ * The business fields a change request or a correction can name.
+ *
+ * The vendor's "Request a change" options are built from this list and the
+ * administrator's grant is checked against the server's copy. A key the
+ * server does not know (the change request once sent 'categories') is
+ * dropped at grant time, so the vendor never gets access to it.
+ */
+describe('the correctable business fields mirror', () => {
+  function backendCorrectableFields(): string[] {
+    const source = readFileSync(
+      join(__dirname, '../../../backend/src/modules/vendors/business-lifecycle.ts'),
+      'utf8',
+    );
+    const body = source.match(/CORRECTABLE_BUSINESS_FIELDS = \[([\s\S]*?)\] as const/)?.[1] ?? '';
+    return [...body.matchAll(/'([A-Za-z]+)'/g)].map((match) => match[1]);
+  }
+
+  it('names exactly the fields the server accepts', () => {
+    const server = backendCorrectableFields();
+    expect(server.length).toBeGreaterThan(5);
+    expect([...CORRECTABLE_FIELD_KEYS].sort()).toEqual([...server].sort());
   });
 });

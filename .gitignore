@@ -6,6 +6,8 @@ dist/
 build/
 coverage/
 e2e-results/
+# OCR runtime copied from node_modules by frontend/scripts/copy-ocr-assets.mjs
+frontend/public/ocr/
 
 # Environment and secrets
 .env
@@ -22,5 +24,12 @@ e2e-results/
 
 # Local compose secrets
 docker/.env
-.claude
+
+# Android test builds served by the frontend container
+docker/downloads/
+
 mobile/.env
+
+# Local editor settings (may hold personal tokens)
+.claude/settings.json
+.claude/settings.local.json

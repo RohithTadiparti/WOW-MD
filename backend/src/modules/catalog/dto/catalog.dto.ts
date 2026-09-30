@@ -1,6 +1,7 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiHideProperty, ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
+  Allow,
   ArrayMaxSize,
   ArrayNotEmpty,
   IsArray,
@@ -126,6 +127,13 @@ export class CreateDefinitionDto {
   @IsBoolean()
   packagesAllowed?: boolean;
 
+  @ApiPropertyOptional({ default: 1, minimum: 1, maximum: 500 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(500)
+  defaultCapacity?: number;
+
   @ApiPropertyOptional({ default: 0 })
   @IsOptional()
   @IsInt()
@@ -152,6 +160,7 @@ export class UpdateDefinitionDto {
   availabilityModel?: AvailabilityModel;
 
   @ApiPropertyOptional() @IsOptional() @IsBoolean() packagesAllowed?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) @Max(500) defaultCapacity?: number;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() active?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) @Max(1000) sortOrder?: number;
 }
@@ -293,6 +302,18 @@ export class UpsertVendorServiceDto {
   @IsOptional()
   @IsObject()
   attributes?: Record<string, unknown>;
+
+  /**
+   * Retired: capacity is now set on each published window, not per service.
+   *
+   * App builds released before that change still send it on every service
+   * edit, and the validation pipe rejects unknown properties, so it is
+   * accepted and ignored rather than turning those edits into a 400. The
+   * stored per-service value is kept and still seeds new windows.
+   */
+  @ApiHideProperty()
+  @Allow()
+  concurrentCapacity?: unknown;
 
   @ApiPropertyOptional()
   @IsOptional()

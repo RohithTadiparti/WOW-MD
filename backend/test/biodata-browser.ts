@@ -191,9 +191,10 @@ export async function checkBiodataBrowser(apiOrigin: string, email: string, pass
             readyState: document.readyState,
             title: document.title,
             elements: {
-              personalSection: Boolean(document.querySelector('#section-personal')),
-              familyPhotoSection: Boolean(document.querySelector('#section-family-photo')),
-              familyPhotoButton: Boolean(document.querySelector('#section-family-photo button')),
+              steps: Boolean(document.querySelector('#biodata-steps')),
+              heightInput: Boolean(document.querySelector('#biodata-steps input[aria-label="Height in feet"]')),
+              familyPhotoSection: Boolean(document.querySelector('#family-photo')),
+              familyPhotoInput: Boolean(document.querySelector('#family-photo input[type=file]')),
             },
             loading: document.readyState !== 'complete' || Boolean(document.querySelector('[aria-busy="true"], .animate-pulse')),
             visibleTextMarkers: markers.filter((marker) => body.toLowerCase().includes(marker.toLowerCase())),
@@ -220,11 +221,12 @@ export async function checkBiodataBrowser(apiOrigin: string, email: string, pass
       await evaluate('document.querySelector("#email").closest("form").requestSubmit()');
       await waitFor('location.pathname !== "/login"');
     };
+    // The biodata opens on the photographs step, where the family photo is.
     const openPhoto = async (label: string) => {
-      await waitFor('Boolean(document.querySelector("#section-family-photo button"))', label);
-      await evaluate('document.querySelector("#section-family-photo button").click()');
-      await waitFor('Boolean(document.querySelector("#section-family-photo input[type=file]"))', label);
+      await waitFor('Boolean(document.querySelector("#family-photo input[type=file]"))', label);
     };
+    // The step card's forward button: "Continue" on the photographs step.
+    const nextStep = () => evaluate(`Array.from(document.querySelectorAll('#biodata-steps footer button')).find((button) => /Continue|Skip/.test(button.textContent ?? '')).click()`);
     await send('Page.enable');
     await send('Runtime.enable');
     await send('Log.enable');
@@ -242,9 +244,24 @@ export async function checkBiodataBrowser(apiOrigin: string, email: string, pass
     });
     await login();
     await navigate('/biodata');
-    await waitFor(`document.querySelector('#section-personal input[aria-label="Height in feet"]')?.value === '5' && document.querySelector('#section-personal input[aria-label="Height in inches"]')?.value === '11'`);
-    const heightSelector = 'input[aria-label="Height in feet"]';
-    const inchesSelector = 'input[aria-label="Height in inches"]';
+
+    // The photographs step: upload the family photo, then replace it.
+    await openPhoto('on the photographs step');
+    let url = await evaluate<string>('document.querySelector("#family-photo img")?.src ?? ""');
+    for (let i = 0; i < 2; i++) {
+      const doc = await send<{ root: { nodeId: number } }>('DOM.getDocument');
+      const input = await send<{ nodeId: number }>('DOM.querySelector', { nodeId: doc.root.nodeId, selector: '#family-photo input[type=file]' });
+      await send('DOM.setFileInputFiles', { nodeId: input.nodeId, files: [fixture] });
+      await waitFor(`(() => { const image = document.querySelector('#family-photo img'); return image && image.src !== ${JSON.stringify(url)} && image.naturalWidth > 0 && !document.querySelector('#family-photo input[type=file]').disabled; })()`, 'family photo upload');
+      url = await evaluate<string>('document.querySelector("#family-photo img").src');
+    }
+
+    // The basic information step: the saved height reads back in feet and
+    // inches, the browser refuses bad values, and a new height saves.
+    await nextStep();
+    await waitFor(`document.querySelector('#biodata-steps input[aria-label="Height in feet"]')?.value === '5' && document.querySelector('#biodata-steps input[aria-label="Height in inches"]')?.value === '11'`, 'saved height');
+    const heightSelector = '#biodata-steps input[aria-label="Height in feet"]';
+    const inchesSelector = '#biodata-steps input[aria-label="Height in inches"]';
     for (const invalid of ['abc', '-5', '5..6', '5.', '8.1', '']) {
       await fill(heightSelector, invalid);
       if (await evaluate(`document.querySelector(${JSON.stringify(heightSelector)}).checkValidity()`)) throw new Error(`Browser accepted invalid height ${invalid}`);
@@ -254,25 +271,19 @@ export async function checkBiodataBrowser(apiOrigin: string, email: string, pass
     const invalidFields = await evaluate<string[]>(`Array.from(document.querySelector(${JSON.stringify(heightSelector)}).closest('form').querySelectorAll(':invalid')).map(input => input.outerHTML + ': ' + input.validationMessage)`);
     if (invalidFields.length) throw new Error(`Invalid form fields: ${invalidFields.join('; ')}`);
     await evaluate(`document.querySelector(${JSON.stringify(heightSelector)}).closest('form').requestSubmit()`);
-    await waitFor('document.body.innerText.includes("Saved. Next:")');
-    await openPhoto('after personal-height save');
-    let url = await evaluate<string>('document.querySelector("#section-family-photo img")?.src ?? ""');
-    for (let i = 0; i < 2; i++) {
-      const doc = await send<{ root: { nodeId: number } }>('DOM.getDocument');
-      const input = await send<{ nodeId: number }>('DOM.querySelector', { nodeId: doc.root.nodeId, selector: '#section-family-photo input[type=file]' });
-      await send('DOM.setFileInputFiles', { nodeId: input.nodeId, files: [fixture] });
-      await waitFor(`(() => { const image = document.querySelector('#section-family-photo img'); return image && image.src !== ${JSON.stringify(url)} && image.naturalWidth > 0 && !document.querySelector('#section-family-photo input[type=file]').disabled; })()`);
-      url = await evaluate<string>('document.querySelector("#section-family-photo img").src');
-    }
+    await waitFor('document.body.innerText.includes("Saved. Next:")', 'basic information save');
+
     await navigate('/biodata');
     await openPhoto('after navigating back to /biodata');
-    await waitFor(`document.querySelector('#section-family-photo img')?.src === ${JSON.stringify(url)}`);
+    await waitFor(`document.querySelector('#family-photo img')?.src === ${JSON.stringify(url)}`, 'family photo after reload');
     await evaluate(`fetch('/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })`);
     await login();
     await navigate('/biodata');
-    await waitFor('Boolean(document.querySelector("#section-saved button"))');
-    await evaluate('document.querySelector("#section-saved button").click()');
-    await waitFor(`document.querySelector('#section-saved')?.innerText.includes('5 ft 6 in') && document.querySelector('#section-saved img[alt="Family photo"]')?.src === ${JSON.stringify(url)}`);
+    await openPhoto('after signing in again');
+    await waitFor(`document.querySelector('#family-photo img')?.src === ${JSON.stringify(url)}`, 'family photo after sign-in');
+    await waitFor('Boolean(document.querySelector("#saved-details button"))', 'saved details');
+    await evaluate('document.querySelector("#saved-details button").click()');
+    await waitFor(`document.querySelector('#saved-details')?.innerText.includes('5 ft 6 in')`, 'saved height read-back');
     return url;
   } finally {
     socket?.close();

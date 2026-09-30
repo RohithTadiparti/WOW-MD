@@ -314,7 +314,8 @@ export default function Bookings() {
   const matchesTab = (b: Booking, tabKey: string): boolean => {
     const s = (b.status ?? '').toLowerCase().trim();
     if (tabKey === '') return true;
-    if (tabKey === 'active') return s !== 'cancelled' && s !== 'completed' && s !== 'disputed';
+    // The same rule as the dashboard tile: a dispute is still in flight.
+    if (tabKey === 'active') return s !== 'cancelled' && s !== 'completed';
     const def = TAB_DEFS.find((t) => t.key === tabKey);
     if (def && def.statuses.length > 0) {
       return def.statuses.map((x) => x.toLowerCase()).includes(s);
@@ -326,11 +327,13 @@ export default function Bookings() {
   const countFor = (tabKey: string) => {
     if (serverCounts) {
       if (tabKey === '') return serverCounts.all ?? 0;
-      if (tabKey in serverCounts) return serverCounts[tabKey] ?? 0;
+      // One count per status from the server; a tab adds up its own statuses,
+      // so a status name that is also a tab name is never counted twice.
       const def = TAB_DEFS.find((t) => t.key === tabKey);
       if (def && def.statuses.length > 0) {
         return def.statuses.reduce((sum, s) => sum + (serverCounts[s] ?? 0), 0);
       }
+      if (tabKey in serverCounts) return serverCounts[tabKey] ?? 0;
     }
     return allBookings.filter((b) => matchesTab(b, tabKey)).length;
   };

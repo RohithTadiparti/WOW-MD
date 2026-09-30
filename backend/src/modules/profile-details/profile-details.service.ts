@@ -1,5 +1,4 @@
 import { saveBusiness } from './business-entries';
-import { saveEmployment } from './other-income';
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -27,13 +26,15 @@ import {
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import {
   InterestStatus,
+  MatchFixedState,
   MaritalStatus,
   ProfileLifecycle,
   ProfileVisibility,
   UserRole,
 } from '../../common/enums';
 import { Interest } from '../matchmaking/entities/interest.entity';
-import { ageBand } from '../users/dto/public-profile.dto';
+import { hasFullProfileAccess } from '../users/profile-visibility';
+import { ageBand, toCardFacts } from '../users/dto/public-profile.dto';
 
 /** The most brothers and sisters a profile may list (EZ1-I102). */
 export const SIBLING_LIMIT = 10;
@@ -73,6 +74,29 @@ const SECTION_LABEL: Record<ProfileSection, string> = {
   preferences: 'Partner preferences',
   identity: 'Identity verification',
 };
+
+/**
+ * The occupation fields of an education or occupation save.
+ *
+ * Sending the occupation replaces the employment and business blocks, so a
+ * switch from self-employed to employed does not leave the old business on the
+ * biodata. Without it, only the blocks that were sent change. A business is
+ * merged through `saveBusiness`, which keeps the extra entries a single-business
+ * client cannot see.
+ */
+function occupationFields(
+  row: ProfileDetails,
+  dto: Pick<EducationDetailsDto, 'occupationStatus' | 'employment' | 'business' | 'incomeVisible'>,
+): Partial<ProfileDetails> {
+  const replacing = dto.occupationStatus !== undefined;
+  const fields: Partial<ProfileDetails> = {};
+  if (replacing) fields.occupationStatus = dto.occupationStatus;
+  if (replacing || dto.employment !== undefined) fields.employment = dto.employment ?? {};
+  if (dto.business !== undefined) fields.business = saveBusiness(row.business ?? {}, dto.business);
+  else if (replacing) fields.business = {};
+  if (dto.incomeVisible !== undefined) fields.incomeVisible = dto.incomeVisible;
+  return fields;
+}
 
 /**
  * The matrimonial biodata, section by section.
@@ -317,10 +341,17 @@ export class ProfileDetailsService {
       // Absent leaves the stored value alone; null (or '') clears it.
       ...(dto.institution !== undefined ? { institution: dto.institution || null } : {}),
       ...(dto.collegePlace !== undefined ? { collegePlace: dto.collegePlace || null } : {}),
-      ...(dto.occupationStatus !== undefined ? { occupationStatus: dto.occupationStatus } : {}),
-      ...(dto.employment !== undefined ? { employment: saveEmployment(row.employment ?? {}, dto.employment) } : {}),
-      ...(dto.business !== undefined ? { business: saveBusiness(row.business ?? {}, dto.business) } : {}),
-      ...(dto.incomeVisible !== undefined ? { incomeVisible: dto.incomeVisible } : {}),
+      ...occupationFields(row, dto),
+      // Absent leaves the list alone, so an older client cannot wipe it.
+      ...(dto.otherIncome !== undefined
+        ? {
+            otherIncome: dto.otherIncome.map(({ source, details, annualIncome }) => ({
+              source,
+              ...(details?.trim() ? { details: details.trim() } : {}),
+              ...(annualIncome ? { annualIncome } : {}),
+            })),
+          }
+        : {}),
     });
     return this.persist(row);
   }
@@ -328,10 +359,7 @@ export class ProfileDetailsService {
   async saveOccupation(actor: AuthUser, profileId: string, dto: OccupationDetailsDto) {
     const row = await this.editable(actor, profileId);
     Object.assign(row, {
-      ...(dto.occupationStatus !== undefined ? { occupationStatus: dto.occupationStatus } : {}),
-      ...(dto.employment !== undefined ? { employment: saveEmployment(row.employment ?? {}, dto.employment) } : {}),
-      ...(dto.business !== undefined ? { business: saveBusiness(row.business ?? {}, dto.business) } : {}),
-      ...(dto.incomeVisible !== undefined ? { incomeVisible: dto.incomeVisible } : {}),
+      ...occupationFields(row, dto),
       ...(dto.highestQualification !== undefined ? { highestQualification: dto.highestQualification } : {}),
       ...(dto.course !== undefined ? { course: dto.course } : {}),
       ...(dto.institution !== undefined ? { institution: dto.institution || null } : {}),
@@ -574,23 +602,42 @@ export class ProfileDetailsService {
   }
 
   private async photoState(profile: Profile) {
-    const row = await this.details.findOne({ where: { profileId: profile.id } });
+    // The first photo is the profile photo: `setPrimaryPhoto` keeps the chosen
+    // one at the front, so the order of the list is the source of truth.
     return {
       photos: profile.photos ?? [],
-      primaryPhotoUrl: row?.primaryPhotoUrl ?? profile.photos?.[0] ?? null,
+      primaryPhotoUrl: profile.photos?.[0] ?? null,
       max: ProfileDetailsService.MAX_PHOTOS,
     };
   }
 
-  /** The photo shown first. Must be one the profile already has. */
+  /**
+   * The profile photo: the one shown first. Must be one the profile already has.
+   *
+   * It moves to the front of `profiles.photos` as well as being recorded on the
+   * biodata. Match cards, chat, interests and circulation all show `photos[0]`,
+   * so reordering the list is what makes the choice show up everywhere rather
+   * than only on the screens that know to look for the pointer.
+   */
   async setPrimaryPhoto(actor: AuthUser, profileId: string, dto: SetPrimaryPhotoDto) {
     const row = await this.editable(actor, profileId);
-    const profile = await this.profiles.findOne({ where: { id: profileId } });
-    if (!profile?.photos?.includes(dto.url)) {
+    const profile = await this.load(profileId);
+    const photos = profile.photos ?? [];
+    if (!photos.includes(dto.url)) {
       throw new BadRequestException('That photo is not on this profile');
     }
-    row.primaryPhotoUrl = dto.url;
-    return this.persist(row);
+    profile.photos = [dto.url, ...photos.filter((p) => p !== dto.url)];
+    const saved = await this.profiles.save(profile);
+
+    // Photographs are the first biodata step, so there may be no biodata row
+    // yet. The order above is enough on its own; the pointer is kept in step
+    // only when the row already exists.
+    if (row.id) {
+      row.primaryPhotoUrl = dto.url;
+      await this.details.save(row);
+    }
+    await this.invalidateSuggestions(profileId);
+    return this.photoState(saved);
   }
 
   /**
@@ -598,23 +645,28 @@ export class ProfileDetailsService {
    * mother tongue, education and occupation — the details a family reads to
    * decide, without the native place, which stays behind a fixed match.
    */
-  async basicCard(profileId: string): Promise<{
-    religion: string | null;
-    caste: string | null;
-    subCaste: string | null;
-    motherTongue: string | null;
-    highestQualification: string | null;
-    occupationStatus: string | null;
-  } | null> {
-    const row = await this.details.findOne({ where: { profileId } });
-    if (!row) return null;
+  async basicCard(profileId: string) {
+    return (await this.basicCards([profileId])).get(profileId) ?? null;
+  }
+
+  /** Card facts for a page of profiles, fetched in one details query. */
+  async basicCards(profileIds: string[]) {
+    if (!profileIds.length) return new Map();
+    const rows = await this.details.find({ where: { profileId: In(profileIds) } });
+    return new Map(rows.map((row) => [row.profileId, this.cardFor(row)]));
+  }
+
+  private cardFor(row: ProfileDetails) {
+    const card = toCardFacts(row);
     return {
-      religion: row.religion,
-      caste: row.caste,
-      subCaste: row.subCaste,
-      motherTongue: row.motherTongue,
-      highestQualification: row.highestQualification,
-      occupationStatus: row.occupationStatus,
+      religion: card.religion,
+      caste: card.caste,
+      subCaste: row.subCaste ?? null,
+      motherTongue: card.motherTongue,
+      highestQualification: card.highestQualification,
+      occupationStatus: card.occupationStatus,
+      profession: card.profession,
+      heightCm: row.heightCm ?? null,
     };
   }
 
@@ -689,6 +741,8 @@ export class ProfileDetailsService {
       dateOfBirth: profile.dateOfBirth,
       // The profile's own gender, for the silhouette shown until it has a photo.
       gender: profile.gender,
+      // To start the first and last name from before the biodata has its own.
+      displayName: profile.displayName,
     };
   }
 
@@ -758,6 +812,29 @@ export class ProfileDetailsService {
    * a profile id guessable into a biodata; anything tighter would list people
    * you are not allowed to look at.
    */
+  /** Shared visibility decision for profile APIs and stored profile media. */
+  async canSeeFull(actor: AuthUser | undefined, profile: Profile): Promise<boolean> {
+    // A steward needs the complete record to edit and administer a client, via
+    // `findFull`. Viewing that client from Matches or Interests is different:
+    // it is a viewer relationship and must honour the client's visibility.
+    // Only the subject who owns the profile (and staff) bypasses this gate.
+    if (actor && (actor.role === UserRole.ADMIN || profile.userId === actor.userId)) return true;
+    if (hasFullProfileAccess(profile.visibility)) return true;
+    if (!actor) return false;
+    const mine = await this.profiles.find({
+      where: [{ userId: actor.userId }, { managedByUserId: actor.userId }],
+    });
+    const ids = mine.map(p => p.id).filter(id => id !== profile.id);
+    if (!ids.length) return false;
+    const relationship = profile.visibility === ProfileVisibility.MATCHES_ONLY
+      ? [{ status: InterestStatus.ACCEPTED }, { matchFixedState: MatchFixedState.CONFIRMED }]
+      : [{ matchFixedState: MatchFixedState.CONFIRMED }];
+    return Boolean(await this.interests.findOne({ where: relationship.flatMap(state => [
+      { fromProfileId: In(ids), toProfileId: profile.id, ...state },
+      { fromProfileId: profile.id, toProfileId: In(ids), ...state },
+    ]) }));
+  }
+
   async findViewable(actor: AuthUser, profileId: string) {
     const profile = await this.load(profileId);
 
@@ -766,95 +843,52 @@ export class ProfileDetailsService {
       profile.managedByUserId === actor.userId ||
       actor.role === UserRole.ADMIN;
 
-    // Whether the caller may see the full biodata, or only the basic card.
-    let basicOnly = false;
-
-    if (!controlsIt) {
-      if (profile.lifecycle !== ProfileLifecycle.ACTIVE) {
-        throw new NotFoundException('That profile is not available');
-      }
-      // Explicitly PRIVATE stays fully shut, before and after any interest.
-      if (profile.visibility === ProfileVisibility.PRIVATE) {
-        throw new ForbiddenException('That profile is private');
-      }
-
-      // MATCHES_ONLY means exactly that: an accepted interest between the two
-      // sides, in either direction.
-      if (profile.visibility === ProfileVisibility.MATCHES_ONLY) {
-        const mine = await this.profiles.find({
-          where: [{ userId: actor.userId }, { managedByUserId: actor.userId }],
-        });
-        const ids = mine.map((p) => p.id);
-        const matched = ids.length
-          ? await this.interests.findOne({
-              where: [
-                { fromProfileId: In(ids), toProfileId: profileId, status: InterestStatus.ACCEPTED },
-                { fromProfileId: profileId, toProfileId: In(ids), status: InterestStatus.ACCEPTED },
-              ],
-            })
-          : null;
-        // Before mutual acceptance the counterpart is not shut out entirely —
-        // they see a basic card (name, age band, gender, city, one photo) so
-        // they can decide whether to express interest at all. The private
-        // biodata — contact, family, horoscope, the full gallery — stays behind
-        // the mutual accept. A profile marked PRIVATE (above) is exempt.
-        if (!matched) basicOnly = true;
-      }
+    if (!controlsIt && profile.lifecycle !== ProfileLifecycle.ACTIVE) {
+      throw new NotFoundException('That profile is not available');
     }
-
+    const basicOnly = !(await this.canSeeFull(actor, profile));
+    // Explicitly PRIVATE stays fully shut to anyone who does not control it,
+    // until a match with it has been confirmed as fixed.
+    if (basicOnly && !controlsIt && profile.visibility === ProfileVisibility.PRIVATE) {
+      throw new ForbiddenException('That profile is private');
+    }
     if (basicOnly) {
-      // The basic biodata a family reads before deciding to send interest —
-      // community, education and occupation — travels with the basic card, while
-      // family, horoscope, marital history and contact stay behind the mutual
-      // accept (EZ1-I37). Only these fields are copied, so nothing private leaks.
       const detail = await this.details.findOne({ where: { profileId } });
       // The horoscope headline (rashi, star, padam, gothram, kuja dosham) is on
       // the match card already and is what many families compare on before they
-      // decide (EZ1-I48), so the basic profile view carries it too. The rest of
-      // the chart, and the document, stay behind the mutual accept.
+      // decide (EZ1-I48), so the basic profile view carries it too.
       const chart = detail?.horoscopeAvailable ? (detail.horoscope ?? {}) : {};
       const basicDetails = detail
         ? {
-            religion: detail.religion,
-            caste: detail.caste,
-            subCaste: detail.subCaste,
-            motherTongue: detail.motherTongue,
-            highestQualification: detail.highestQualification,
-            occupationStatus: detail.occupationStatus,
-            heightCm: detail.heightCm,
+            ...this.cardFor(detail),
             horoscopeAvailable: detail.horoscopeAvailable,
-            rashi: chart.rashi ?? null,
-            star: chart.star ?? null,
-            padam: chart.padam ?? null,
-            gothram: chart.gothram ?? null,
-            kujaDosham: chart.kujaDosham ?? null,
-            /*
-             * The chart itself, before the mutual accept (EZ1-I231).
-             *
-             * It was held back with the rest of the private biodata, on the
-             * reasoning that a chart image carries the exact birth date and
-             * time while this view deliberately shows only an age band. That
-             * was reversed deliberately: in this market a chart is the thing
-             * families compare before deciding whether to send interest at
-             * all, and the headline above -- rashi, star, padam, gothram, kuja
-             * dosham -- is already public here. Withholding only the image
-             * while publishing everything computed from it protected very
-             * little and stopped the comparison the page exists for.
-             *
-             * Everything else private stays private: family, contact, marital
-             * history and the rest of the gallery are still behind the accept.
-             */
+            rashi: (chart.rashi as string | undefined) ?? null,
+            star: (chart.star as string | undefined) ?? null,
+            padam: (chart.padam as string | undefined) ?? null,
+            gothram: (chart.gothram as string | undefined) ?? null,
+            kujaDosham: (chart.kujaDosham as string | undefined) ?? null,
+            // The chart itself travels before the mutual accept (EZ1-I231): in
+            // this market it is what families compare before sending interest,
+            // and everything computed from it is already shown above. Family,
+            // contact, marital history and the rest of the gallery stay behind
+            // the accept.
             horoscopeDocumentUrl: detail.horoscopeDocumentUrl ?? null,
           }
         : null;
       return {
+        profileId,
+        accessLevel: 'basic' as const,
+        unlockRequirement:
+          profile.visibility === ProfileVisibility.PRIVATE
+            ? ('fixed_match' as const)
+            : ('accepted_interest' as const),
         limited: true as const,
         // Empty, not absent: the profile view renders these lists, and the basic
         // card deliberately carries none of the private biodata behind them.
         siblings: [],
         assets: [],
-        details: basicDetails,
         contact: null,
+        details: basicDetails,
         profile: {
           id: profile.id,
           profileCode: profile.profileCode,
@@ -864,8 +898,10 @@ export class ProfileDetailsService {
           // An age band, not the exact date of birth: enough to judge a match,
           // not the full record, which is what the mutual accept unlocks.
           ageRange: ageBand(profile.dateOfBirth),
+          // One lead photo, so the family can decide whether to send interest.
           photos: (profile.photos ?? []).slice(0, 1),
           identityVerified: Boolean(profile.idVerifiedAt),
+          managingFor: profile.managingFor,
           stewardship: await this.stewardshipOf(profile),
         },
       };
@@ -874,6 +910,9 @@ export class ProfileDetailsService {
     const shareable = await this.findShareable(profileId);
     return {
       ...shareable,
+      limited: false as const,
+      accessLevel: 'full' as const,
+      unlockRequirement: null,
       profile: {
         id: profile.id,
         profileCode: profile.profileCode,
@@ -936,17 +975,19 @@ export class ProfileDetailsService {
     if (!details) return { profileId, details: null, siblings: [], assets: [] };
 
     const {
+      biodataDocumentUrl,
       communicationAddress,
       alternateMobile,
       employment,
       business,
+      otherIncome,
       incomeVisible,
       ...rest
     } = details;
 
     const strip = (block: Record<string, unknown>): Record<string, unknown> => {
       if (incomeVisible) return block;
-      const { salary, income, businessIncome, otherIncome, entries, ...safe } = block;
+      const { salary, income, businessIncome, annualIncome, otherIncome, entries, ...safe } = block;
       return { ...safe, ...(Array.isArray(entries) ? { entries: entries.map((entry) => strip(entry)) } : {}) };
     };
 
@@ -956,6 +997,7 @@ export class ProfileDetailsService {
         ...rest,
         employment: strip(employment ?? {}),
         business: strip(business ?? {}),
+        otherIncome: (otherIncome ?? []).map(strip),
       },
       siblings,
       assets,
@@ -1105,6 +1147,13 @@ export class ProfileDetailsService {
    * scanning, so the key pattern covers it.
    */
   private async persist(row: ProfileDetails): Promise<ProfileDetails> {
+    // Photographs come before the first biodata section, so the row is usually
+    // created after they were uploaded and nothing recorded the profile photo.
+    // Default it to the first photo — the one shown until somebody chooses.
+    if (!row.primaryPhotoUrl) {
+      const profile = await this.profiles.findOne({ where: { id: row.profileId }, select: ['id', 'photos'] });
+      row.primaryPhotoUrl = profile?.photos?.[0] ?? null;
+    }
     const saved = await this.details.save(row);
     await this.invalidateSuggestions(saved.profileId);
     return saved;

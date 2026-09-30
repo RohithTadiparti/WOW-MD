@@ -149,6 +149,23 @@ describe('ProfileDetailsService section saves', () => {
       .toMatchObject({ packageMin: 0, packageMax: 2000000 });
   });
 
+  it('filters matches on the same height range the biodata accepts', async () => {
+    const pipe = new ValidationPipe({ transform: true, whitelist: true });
+    const query = (q: Record<string, string>) => pipe.transform(q, { type: 'query', metatype: SuggestionsQueryDto });
+    const body = (min: number, max: number) =>
+      pipe.transform(
+        { preferredAgeMin: 24, preferredAgeMax: 34, preferredHeightMinCm: min, preferredHeightMaxCm: max },
+        { type: 'body', metatype: PartnerPreferencesDto },
+      );
+    // 3 ft 0 in and 8 ft 0 in, the ends of the range.
+    await expect(query({ heightMinCm: '91', heightMaxCm: '244' })).resolves.toMatchObject({ heightMinCm: 91, heightMaxCm: 244 });
+    await expect(body(91, 244)).resolves.toBeDefined();
+    for (const [min, max] of [['90', '200'], ['150', '245']]) {
+      await expect(query({ heightMinCm: min, heightMaxCm: max })).rejects.toThrow();
+      await expect(body(Number(min), Number(max))).rejects.toThrow();
+    }
+  });
+
   it('saves, preserves, edits and clears package bounds without losing other sections', async () => {
     stored = { profileId: 'p1', religion: 'Hindu' };
     const base = { preferredAgeMin: 24, preferredAgeMax: 34, preferredHeightMinCm: 150, preferredHeightMaxCm: 189 };
@@ -311,5 +328,103 @@ describe('ProfileDetailsService section saves', () => {
     ).resolves.toBeDefined();
 
     expect(stored).toMatchObject({ familyType: FamilyType.NUCLEAR });
+  });
+
+  it('validates employment and business on an education save without an occupation', async () => {
+    const pipe = new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true });
+    const base = { highestQualification: 'Masters', course: 'M.Tech' };
+    for (const body of [
+      { employment: 'abc' },
+      { business: 'abc' },
+      { business: { entries: 'x' } },
+      { business: { entries: [{ businessName: 'A', businessIncome: 'lots' }] } },
+      { occupationStatus: OccupationStatus.EMPLOYED },
+    ]) {
+      await expect(
+        pipe.transform({ ...base, ...body }, { type: 'body', metatype: EducationDetailsDto }),
+      ).rejects.toThrow();
+    }
+    await expect(
+      pipe.transform(
+        { ...base, business: { entries: [{ businessName: 'A', businessIncome: '500000' }] } },
+        { type: 'body', metatype: EducationDetailsDto },
+      ),
+    ).resolves.toBeDefined();
+  });
+
+  it('replaces the employment and business blocks when the occupation changes', async () => {
+    stored = {
+      profileId: 'p1',
+      occupationStatus: OccupationStatus.SELF_EMPLOYED,
+      business: { businessName: 'Shop', entries: [{ id: 'b1', businessName: 'Shop' }] },
+    };
+
+    await service.saveEducation(owner, 'p1', {
+      highestQualification: 'Masters',
+      course: 'M.Tech',
+      occupationStatus: OccupationStatus.EMPLOYED,
+      employment: { company: 'Acme', designation: 'Engineer' },
+    } as EducationDetailsDto);
+
+    expect(stored).toMatchObject({
+      occupationStatus: OccupationStatus.EMPLOYED,
+      employment: { company: 'Acme', designation: 'Engineer' },
+      business: {},
+    });
+  });
+
+  const EDUCATION = {
+    highestQualification: 'Masters',
+    course: 'M.Tech',
+    occupationStatus: OccupationStatus.EMPLOYED,
+    employment: { company: 'Acme', designation: 'Engineer', salary: '1200000' },
+  };
+
+  it('keeps other income when a save does not send it, and replaces it when one does', async () => {
+    await service.saveEducation(owner, 'p1', {
+      ...EDUCATION,
+      otherIncome: [{ source: 'business', details: '  Textile shop ', annualIncome: '600000' }],
+    } as EducationDetailsDto);
+    expect(stored?.otherIncome).toEqual([
+      { source: 'business', details: 'Textile shop', annualIncome: '600000' },
+    ]);
+
+    // An older client, which knows nothing of the field.
+    await service.saveEducation(owner, 'p1', EDUCATION as EducationDetailsDto);
+    expect(stored?.otherIncome).toHaveLength(1);
+
+    await service.saveEducation(owner, 'p1', {
+      ...EDUCATION,
+      otherIncome: [],
+    } as EducationDetailsDto);
+    expect(stored?.otherIncome).toEqual([]);
+  });
+
+  it('shares other income without the amounts unless income is shown', async () => {
+    const sharing = new ProfileDetailsService(
+      details,
+      { find: jest.fn(async () => []) } as unknown as Repository<ProfileSibling>,
+      { find: jest.fn(async () => []) } as unknown as Repository<ProfileAsset>,
+      profiles,
+      {} as Repository<User>,
+      redis,
+      {} as ModerationService,
+      {} as Repository<Interest>,
+    );
+    stored = {
+      profileId: 'p1',
+      ...EDUCATION,
+      business: {},
+      otherIncome: [{ source: 'rental', annualIncome: '300000' }],
+      incomeVisible: false,
+    };
+
+    const hidden = await sharing.findShareable('p1');
+    expect(hidden.details?.otherIncome).toEqual([{ source: 'rental' }]);
+    expect(hidden.details?.employment).not.toHaveProperty('salary');
+
+    stored.incomeVisible = true;
+    const shown = await sharing.findShareable('p1');
+    expect(shown.details?.otherIncome).toEqual([{ source: 'rental', annualIncome: '300000' }]);
   });
 });

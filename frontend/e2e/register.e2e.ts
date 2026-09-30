@@ -17,7 +17,8 @@ test('a new member can register and reach the profile', async ({ page }) => {
 
   await page.getByRole('button', { name: /Individual/i }).first().click();
   await page.locator('#role').selectOption('bride');
-  await page.locator('#displayName').fill('Ananya Rao');
+  await page.locator('#firstName').fill('Ananya');
+  await page.locator('#lastName').fill('Rao');
   await page.locator('#email').fill(`wow.e2e.${stamp}@gmail.com`);
   await page.locator('#phone').fill(`9${String(stamp).slice(-9)}`);
   await page.getByLabel('Password', { exact: true }).fill(password);

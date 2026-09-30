@@ -1,6 +1,12 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class RestoreBiodataHeightCm1710000091000 implements MigrationInterface {
+/**
+ * Puts heights back in whole centimetres on a database that stored them in
+ * feet under an earlier, withdrawn change. Does nothing anywhere else.
+ */
+export class RestoreBiodataHeightCm1710000104000 implements MigrationInterface {
+  name = 'RestoreBiodataHeightCm1710000104000';
+
   async up(queryRunner: QueryRunner): Promise<void> {
     const columns: { column_name: string }[] = await queryRunner.query(
       'SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = $1',
@@ -34,6 +40,8 @@ export class RestoreBiodataHeightCm1710000091000 implements MigrationInterface {
   }
 
   async down(): Promise<void> {
-    throw new Error('Restore a pre-migration backup to reverse height data repair safely.');
+    // Nothing to undo. Centimetres are the schema before and after this; on a
+    // database it repaired, the feet values are still kept in the *Legacy
+    // columns, and putting feet back would reintroduce the withdrawn change.
   }
 }

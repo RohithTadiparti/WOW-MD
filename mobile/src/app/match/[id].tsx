@@ -9,7 +9,12 @@ import { ageFrom, labelFor, stewardshipLine, type Stewardship } from '@/lib/labe
 import { isChartImage } from '@/shared/horoscope';
 import { formatDate } from '@/shared/dates';
 import { formatHeight } from '@/shared/height';
-import { FAMILY_TYPE_LABEL, MARITAL_LABEL, OCCUPATION_LABEL } from '@/shared/permissions';
+import {
+  FAMILY_TYPE_LABEL,
+  MARITAL_LABEL,
+  OCCUPATION_LABEL,
+  OTHER_INCOME_LABEL,
+} from '@/shared/permissions';
 import { DetailGrid, DetailRow } from '@/components/chrome';
 import {
   Body,
@@ -169,6 +174,21 @@ export default function MatchProfile() {
           <DetailRow label="Occupation">
             {labelFor(OCCUPATION_LABEL, d.occupationStatus) ?? '—'}
           </DetailRow>
+          {Array.isArray(d.otherIncome) && d.otherIncome.length > 0 ? (
+            // Amounts arrive only when the profile has chosen to show income.
+            <DetailRow label="Other income">
+              {(d.otherIncome as { source?: string; annualIncome?: string }[])
+                .map((row) =>
+                  [
+                    labelFor(OTHER_INCOME_LABEL, row.source) ?? row.source,
+                    row.annualIncome ? `₹${row.annualIncome} a year` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(', '),
+                )
+                .join(' · ')}
+            </DetailRow>
+          ) : null}
           {d.heightCm != null ? <DetailRow label="Height">{formatHeight(d.heightCm)}</DetailRow> : null}
         </DetailGrid>
       </Card>

@@ -71,11 +71,13 @@ export default function BusinessServices() {
   }
 
   const selectedCategories = listing?.categories ?? (listing?.category ? [listing.category] : []);
-  const visibleServices = useMemo(
-    () => services.filter((service) => service.category?.slug && selectedCategories.includes(service.category.slug)),
-    [services, selectedCategories],
-  );
-  const taken = useMemo(() => visibleServices.map((s) => s.definitionId), [visibleServices]);
+  /*
+   * Every service is listed, including one whose category the business no
+   * longer lists. The server takes those off sale; the vendor still has to see
+   * them to switch them off or remove them.
+   */
+  const visibleServices = services;
+  const taken = useMemo(() => services.map((s) => s.definitionId), [services]);
 
   if (!activeId) {
     return (
@@ -179,7 +181,12 @@ function AddService({
   });
 
   const availableCategories = useMemo(
-    () => categories.filter((category) => selectedCategories.includes(category.slug)),
+    // A business with no categories yet (moved over from the single legacy
+    // category) has not narrowed anything down, and the server agrees.
+    () =>
+      selectedCategories.length === 0
+        ? categories
+        : categories.filter((category) => selectedCategories.includes(category.slug)),
     [categories, selectedCategories],
   );
 

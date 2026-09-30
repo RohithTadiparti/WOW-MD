@@ -23,6 +23,15 @@ import { FamilyType, MaritalStatus, OccupationStatus } from '../../../common/enu
  */
 @Entity('profile_details')
 export class ProfileDetails {
+  /**
+   * The biodata document an agent uploaded when creating the client. Stored
+   * under the agent's attachments; MediaAccessService lets the profile's owner
+   * (once claimed) and its steward open it, and `findShareable` keeps it out
+   * of what anybody else is shown.
+   */
+  @Column({ type: 'text', nullable: true })
+  biodataDocumentUrl: string | null;
+
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -237,14 +246,19 @@ export class ProfileDetails {
 
   /** Company, designation, role, office and work location — when employed. */
   @Column({ type: 'jsonb', default: {} })
-  employment: Record<string, unknown> & {
-    /** Optional additional annual income; stored in the existing JSONB column. */
-    otherIncome?: { id: string; source: string; amount: string }[];
-  };
+  employment: Record<string, unknown>;
 
   /** Repeatable business entries; first-entry fields preserve the legacy API contract. */
   @Column({ type: 'jsonb', default: {} })
   business: Record<string, unknown>;
+
+  /**
+   * Income besides the main occupation — `{ source, details?, annualIncome? }`
+   * each, up to five. Optional whatever the occupation; the amounts follow
+   * `incomeVisible` like salary does.
+   */
+  @Column({ type: 'jsonb', default: [] })
+  otherIncome: Record<string, unknown>[];
 
   /**
    * Income is the field people are least willing to publish, so it carries its
