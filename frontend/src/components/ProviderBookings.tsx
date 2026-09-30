@@ -24,6 +24,8 @@ interface IncomingBooking {
   vendorServiceId?: string | null;
   serviceAnswers?: Record<string, unknown>;
   quantity?: number | null;
+  offeringId?: string | null;
+  estimatedAmount?: string | null;
 }
 
 /**
@@ -39,8 +41,9 @@ interface IncomingBooking {
 /**
  * Actions the seller side may take, by current status.
  *
- * A request carries no price: the provider quotes first, which is why
- * `requested` offers a quotation rather than an acceptance.
+ * A quote-only request is priced by the provider. A request with a selected
+ * fixed package price may instead be accepted at the exact total the customer
+ * was shown.
  */
 const ACTIONS: Record<string, { label: string; path: string }[]> = {
   requested: [{ label: 'Decline', path: 'cancel' }],
@@ -217,6 +220,24 @@ export default function ProviderBookings({ canQuote }: { canQuote: boolean }) {
                 {a.label}
               </button>
             ))}
+            {canAcceptListedPrice(b) && (
+              <button
+                className="btn btn-sm"
+                disabled={act.isPending}
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      `Accept this request at ${formatMoney(b.estimatedAmount, b.currency)}? The customer will then be able to pay the advance.`,
+                    )
+                  ) {
+                    return;
+                  }
+                  act.mutate({ id: b.id, path: 'accept-listed-price' });
+                }}
+              >
+                Accept at {formatMoney(b.estimatedAmount, b.currency)}
+              </button>
+            )}
             {canQuote && QUOTABLE.includes(b.status) && (
               <button
                 className="btn btn-sm"
@@ -250,6 +271,24 @@ export default function ProviderBookings({ canQuote }: { canQuote: boolean }) {
       />
     </div>
   );
+}
+
+function canAcceptListedPrice(booking: {
+  status: string;
+  offeringId?: string | null;
+  estimatedAmount?: string | null;
+}): boolean {
+  return (
+    booking.status === 'requested' &&
+    Boolean(booking.offeringId) &&
+    Number(booking.estimatedAmount ?? 0) > 0
+  );
+}
+
+function formatMoney(amount: string | null | undefined, currency = 'INR'): string {
+  return `${currency} ${Number(amount ?? 0).toLocaleString('en-IN', {
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 /**

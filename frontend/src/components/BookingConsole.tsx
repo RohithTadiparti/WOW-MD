@@ -61,6 +61,9 @@ interface IncomingBooking {
   serviceName: string | null;
   /** The package the customer picked, if any (EZ1-I33). */
   offeringName?: string | null;
+  /** The selected offering and its displayed total, for a fixed-price acceptance. */
+  offeringId?: string | null;
+  estimatedAmount?: string | null;
   /** What the customer said they had in mind, before any quote (EZ1-I33, I78). */
   expectedBudget?: string | null;
   paymentStatus: string | null;
