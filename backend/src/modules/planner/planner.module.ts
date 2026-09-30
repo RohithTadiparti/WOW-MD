@@ -13,7 +13,7 @@ import { Payment } from '../bookings/entities/payment.entity';
 import { Quotation } from '../bookings/entities/quotation.entity';
 import { VendorService } from '../catalog/entities/vendor-service.entity';
 import { ServiceOffering } from '../catalog/entities/service-offering.entity';
-import { ServiceCategory } from '../catalog/entities/service-category.entity';
+import { Profile } from '../users/entities/profile.entity';
 import { AgentsModule } from '../agents/agents.module';
 import { MatchmakingModule } from '../matchmaking/matchmaking.module';
 import { PlannerService } from './planner.service';
@@ -41,7 +41,7 @@ import { PlannerController } from './planner.controller';
       Payment,
       VendorService,
       ServiceOffering,
-      ServiceCategory,
+      Profile,
       // Read-only: the quotation on a booking the planner is looking at.
       Quotation,
     ]),

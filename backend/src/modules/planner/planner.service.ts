@@ -80,14 +80,22 @@ export class PlannerService {
 
     // A plan made before the date was known (a budget, or an engaged planner)
     // gets the date rather than a second plan beside it.
-    const undated = await this.plans.findOne({
-      where: { userId: hostUserId, weddingDate: IsNull() },
-      order: { createdAt: 'DESC' },
-    });
+    const [undated, latest] = await Promise.all([
+      this.plans.findOne({
+        where: { userId: hostUserId, weddingDate: IsNull() },
+        order: { createdAt: 'DESC' },
+      }),
+      this.plans.findOne({ where: { userId: hostUserId }, order: { createdAt: 'DESC' } }),
+    ]);
+    // The overall budget belongs to the couple, not to one plan. `setBudget`
+    // writes it to the newest plan and the dashboard reads the newest plan, so
+    // a new plan (a changed date, say) carries it forward rather than quietly
+    // dropping it.
+    const budget = latest?.budget ?? undated?.budget ?? null;
     const plan = await this.plans.save(
       undated
-        ? Object.assign(undated, { weddingDate: dto.weddingDate })
-        : this.plans.create({ userId: hostUserId, weddingDate: dto.weddingDate }),
+        ? Object.assign(undated, { weddingDate: dto.weddingDate, budget })
+        : this.plans.create({ userId: hostUserId, weddingDate: dto.weddingDate, budget }),
     );
 
     const tasks = DEFAULT_TIMELINE_TEMPLATE.map((item) => {
