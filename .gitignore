@@ -27,6 +27,8 @@ docker/.env
 
 # Android test builds served by the frontend container
 docker/downloads/
+# Android release signing key and its password (docker/android-build/build-apk.sh)
+docker/android-keys/
 
 mobile/.env
 

@@ -58,6 +58,7 @@ import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import VerifyEmail from './pages/VerifyEmail';
 import GuestRsvp from './pages/GuestRsvp';
+import GetApp from './pages/GetApp';
 import SharedInvitation from './pages/SharedInvitation';
 import Dashboard from './pages/Dashboard';
 import Profile from './pages/Profile';
@@ -936,6 +937,8 @@ export default function App() {
       <Route path="/reset-password/:token" element={<ResetPassword />} />
       <Route path="/verify-email/:token" element={<VerifyEmail />} />
       <Route path="/rsvp/:token" element={<GuestRsvp />} />
+      {/* Mobile test builds, with QR codes for scanning from a laptop. */}
+      <Route path="/app" element={<GetApp />} />
       {/*
         Public, like the per-guest RSVP above it. Whoever the link reached can
         open it; that is what a forwarded invitation is.

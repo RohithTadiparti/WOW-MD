@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { AndroidLogo } from '@phosphor-icons/react';
 
 /**
@@ -28,9 +29,14 @@ export function AppDownloadCard() {
           you to allow installs from your browser the first time.
         </p>
       </div>
-      <a href={ANDROID_APK} download="wow.apk" className="btn-outline btn-sm shrink-0">
-        Download for Android
-      </a>
+      <div className="flex shrink-0 items-center gap-4">
+        <Link to="/app" className="text-sm text-gray-500 underline underline-offset-4 hover:text-brand">
+          QR code
+        </Link>
+        <a href={ANDROID_APK} download="wow.apk" className="btn-outline btn-sm">
+          Download for Android
+        </a>
+      </div>
     </section>
   );
 }

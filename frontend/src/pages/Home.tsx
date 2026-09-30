@@ -203,7 +203,12 @@ export default function Home() {
               the file once it has downloaded; Android asks you to allow installs from your browser
               the first time.
             </p>
-            <p className="eyebrow tracking-[0.18em]">Android 7 and later</p>
+            <p className="eyebrow tracking-[0.18em]">
+              Android 7 and later ·{' '}
+              <Link to="/app" className="underline underline-offset-4 hover:text-brand">
+                QR code and iPhone
+              </Link>
+            </p>
           </div>
           {/* Outline, not filled: "Create profile" above is the page's main action. */}
           <a

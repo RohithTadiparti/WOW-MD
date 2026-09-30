@@ -275,6 +275,35 @@ services:
         condition: service_healthy
     restart: "no"
 
+  # One-shot Android test build (docker/android-build/build-apk.sh). Publishes
+  # wow.apk and version.json into ./downloads, which the frontend serves and
+  # the /app page turns into a QR code. No Expo account needed:
+  #   BUILD_COMMIT=$(git rev-parse --short HEAD) \
+  #     docker compose -f docker/docker-compose.yml --profile mobile run --rm build-android
+  build-android:
+    image: reactnativecommunity/react-native-android:latest
+    profiles: ["mobile"]
+    command: ["bash", "/build/build-apk.sh"]
+    environment:
+      # The API the app talks to, baked into the bundle at build time.
+      EXPO_PUBLIC_API_URL: ${MOBILE_API_URL:-https://test.worldofweddingz.com/api}
+      BUILD_COMMIT: ${BUILD_COMMIT:-unknown}
+      # arm64-v8a covers every current phone; add ",armeabi-v7a" for old ones.
+      ANDROID_ARCHS: ${ANDROID_ARCHS:-arm64-v8a}
+      # Only used when docker/android-keys/release.jks exists.
+      ANDROID_KEY_ALIAS: ${ANDROID_KEY_ALIAS:-upload}
+      ANDROID_KEYSTORE_PASSWORD: ${ANDROID_KEYSTORE_PASSWORD:-}
+    volumes:
+      - ../mobile:/src/mobile:ro
+      - ../frontend:/src/frontend:ro
+      - ./android-build:/build:ro
+      - ./android-keys:/keys:ro
+      - ${ANDROID_OUT_DIR:-./downloads}:/out
+      # The image keeps Gradle's home here; caching it makes a rebuild minutes, not half an hour.
+      - android_gradle:/opt/gradle-home
+      - android_npm:/root/.npm
+    restart: "no"
+
   frontend:
     build:
       context: ../frontend
@@ -377,6 +406,8 @@ volumes:
   # because "does the photograph survive a refresh" is the question people
   # actually ask, and a rebuild is a very thorough refresh.
   media_store:
+  android_gradle:
+  android_npm:
   neo4j_data:
   kafka_data:
   minio_data:
