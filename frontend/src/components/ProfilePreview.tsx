@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { isChartImage } from '../lib/horoscope';
 import { api, apiMessage } from '../lib/api';
 import { formatDate } from '../lib/dates';
+import { COMPLEXION_LABEL, LIFE_STATUS_LABEL } from '../lib/permissions';
 import { Loading } from './ui/Feedback';
 import { PersonPhoto } from './ProfileSilhouette';
 
@@ -64,6 +65,7 @@ export default function ProfilePreview({
   onSendInterest,
   score,
   lastActiveAt,
+  commonInterests,
 }: {
   profileId: string;
   onClose: () => void;
@@ -77,6 +79,8 @@ export default function ProfilePreview({
   score?: number;
   /** For the "Active …" line, carried from the same card. */
   lastActiveAt?: string | null;
+  /** Shared match dimensions, carried from the Match result. */
+  commonInterests?: string[];
 }) {
   const { data, isLoading, isError, error } = useQuery<Viewable>({
     queryKey: ['viewable-profile', profileId],
@@ -129,6 +133,23 @@ export default function ProfilePreview({
     heightCm ? formatHeight(heightCm) : null,
     data?.profile.city || null,
   ].filter(Boolean) as string[];
+  const preferenceSummary = (() => {
+    const preferences = bag('partnerPreferences');
+    const entries = [
+      ['Religion', preferences.religion],
+      ['Community', preferences.caste ?? preferences.community],
+      ['Education', preferences.education],
+      ['Profession', preferences.profession],
+      ['Locations', preferences.locations ?? preferences.preferredLocations],
+      ['Interests', preferences.lifestyle ?? preferences.interests],
+    ] as const;
+    return entries
+      .map(([label, value]) => {
+        const display = Array.isArray(value) ? value.filter(Boolean).join(', ') : String(value ?? '').trim();
+        return display ? `${label}: ${display}` : null;
+      })
+      .filter(Boolean) as string[];
+  })();
 
   return (
     <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
@@ -230,6 +251,16 @@ export default function ProfilePreview({
               <p className="whitespace-pre-wrap text-sm text-gray-700">{data.profile.bio}</p>
             )}
 
+            <Group title="Personal details">
+              <Row label="Name">{name}</Row>
+              <Row label="Age">{age ? `${age} years` : data.profile.ageRange}</Row>
+              <Row label="Location">{data.profile.city}</Row>
+              <Row label="Height">{heightCm ? formatHeight(heightCm) : null}</Row>
+              <Row label="Complexion">
+                {str('complexion') ? (COMPLEXION_LABEL[str('complexion')!] ?? str('complexion')) : null}
+              </Row>
+            </Group>
+
             {/*
               Before mutual acceptance a MATCHES_ONLY profile shares a basic
               card: the basic biodata a family reads to decide whether to send
@@ -260,6 +291,23 @@ export default function ProfilePreview({
                 </Row>
               )}
             </Group>
+
+            <Group title="Compatibility">
+              <Row label="Compatibility score">
+                {typeof score === 'number' ? `${score}%` : null}
+              </Row>
+              <Row label="Common interests">
+                {commonInterests?.length ? commonInterests.join(', ') : null}
+              </Row>
+            </Group>
+
+            {!data.limited && (
+              <Group title="Partner preferences">
+                <Row label="Preferences">
+                  {preferenceSummary.length ? preferenceSummary.join(' · ') : null}
+                </Row>
+              </Group>
+            )}
 
             {/* The horoscope before acceptance, so a family can compare charts
                 while deciding whether to send interest (EZ1-I48, EZ1-I231).
@@ -301,8 +349,17 @@ export default function ProfilePreview({
               {/* Native place is not shown in View Profile — it stays private
                   until a match is fixed, not merely accepted (EZ1-I136). */}
               <Row label="Father">{String(bag('father').name ?? '') || null}</Row>
+              <Row label="Father's profession">{String(bag('father').profession ?? '') || null}</Row>
+              <Row label="Father's living status">
+                {LIFE_STATUS_LABEL[String(bag('father').lifeStatus ?? '') as keyof typeof LIFE_STATUS_LABEL] ?? null}
+              </Row>
               <Row label="Mother">{String(bag('mother').name ?? '') || null}</Row>
+              <Row label="Mother's profession">{String(bag('mother').profession ?? '') || null}</Row>
+              <Row label="Mother's living status">
+                {LIFE_STATUS_LABEL[String(bag('mother').lifeStatus ?? '') as keyof typeof LIFE_STATUS_LABEL] ?? null}
+              </Row>
               <Row label="Family type">{str('familyType')}</Row>
+              <Row label="Family status">{str('familyStatus')?.replace(/_/g, ' ')}</Row>
               {data.siblings.length > 0 && (
                 <Row label="Siblings">
                   {data.siblings.map((s) => s.name).filter(Boolean).join(', ')}
@@ -360,17 +417,6 @@ export default function ProfilePreview({
               Shown at the foot, where it reads as provenance rather than as a
               claim about the person.
             */}
-            {data.profile.stewardship && (
-              <div className="rounded-sm border border-gray-200 bg-gray-50 p-3 text-sm">
-                <p className="font-medium text-gray-800">{data.profile.stewardship.label}</p>
-                {data.profile.stewardship.relation && (
-                  <p className="text-gray-600">
-                    Their {data.profile.stewardship.relation.toLowerCase()}
-                  </p>
-                )}
-              </div>
-            )}
-
             {/*
               What the managed person is — Bride or Groom — at the foot of the
               profile, for a family member opening it from chat (EZ1-I41).

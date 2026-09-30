@@ -228,22 +228,32 @@ export default function MatchCard({
         transition-[border-color,box-shadow] duration-200 hover:border-gray-300 hover:shadow-card"
     >
       <div className="flex gap-4">
-        {hasPhoto ? (
-          <img
-            src={p.photos[0]}
-            alt=""
-            className="h-24 w-24 shrink-0 rounded-md object-cover ring-1 ring-inset ring-gray-900/5"
-            loading="lazy"
-            onError={() => setPhotoFailed(true)}
-          />
-        ) : (
-          // Never a broken image: no photo, or one that fails to load, shows
-          // the groom or bride figure for this profile's gender.
-          <ProfileSilhouette
-            gender={p.gender}
-            className="h-24 w-24 shrink-0 rounded-md ring-1 ring-inset ring-gray-900/5"
-          />
-        )}
+        {/* The portrait is an equally clear way to ask for this person's
+            profile. Keep the photo and its fallback in the same real button
+            so keyboard and touch users get the exact same destination. */}
+        <button
+          type="button"
+          onClick={onOpen}
+          aria-label={`View ${p.displayName}'s profile`}
+          className="h-24 w-24 shrink-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+        >
+          {hasPhoto ? (
+            <img
+              src={p.photos[0]}
+              alt=""
+              className="h-full w-full rounded-md object-cover ring-1 ring-inset ring-gray-900/5"
+              loading="lazy"
+              onError={() => setPhotoFailed(true)}
+            />
+          ) : (
+            // Never a broken image: no photo, or one that fails to load, shows
+            // the groom or bride figure for this profile's gender.
+            <ProfileSilhouette
+              gender={p.gender}
+              className="h-full w-full rounded-md ring-1 ring-inset ring-gray-900/5"
+            />
+          )}
+        </button>
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-start justify-between gap-2">

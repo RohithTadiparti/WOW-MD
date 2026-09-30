@@ -212,17 +212,36 @@ export default function Matches() {
   // The score and activity of whichever card opened the preview, so the modal
   // can show the same match figure the list did (EZ1-I190). Empty for a preview
   // opened from a notification link, which carries no score.
-  const [previewMeta, setPreviewMeta] = useState<{ score?: number; lastActiveAt?: string | null }>(
-    {},
-  );
+  const [previewMeta, setPreviewMeta] = useState<{
+    score?: number;
+    lastActiveAt?: string | null;
+    commonInterests?: string[];
+  }>({});
   const [pages, setPages] = useState(1);
   const [showShortlist, setShowShortlist] = useState(false);
   // Which of the four tiles at the top is pressed; 'all' is Total matches.
   const [view, setView] = useState<MatchView>('all');
 
-  const openPreview = (id: string, score?: number, lastActiveAt?: string | null) => {
+  const openPreview = (
+    id: string,
+    score?: number,
+    lastActiveAt?: string | null,
+    breakdown?: Record<string, number>,
+  ) => {
     setPreviewId(id);
-    setPreviewMeta({ score, lastActiveAt });
+    const labels: Record<string, string> = {
+      age: 'Age', location: 'Location', religion: 'Religion', caste: 'Community',
+      motherTongue: 'Mother tongue', education: 'Education', lifestyle: 'Lifestyle',
+      preferences: 'Partner preferences',
+    };
+    setPreviewMeta({
+      score,
+      lastActiveAt,
+      commonInterests: Object.entries(breakdown ?? {})
+        .filter(([, value]) => value > 0)
+        .map(([key]) => labels[key] ?? key)
+        .slice(0, 5),
+    });
   };
   const closePreview = () => {
     setPreviewId('');
@@ -459,6 +478,7 @@ export default function Matches() {
           onSendInterest={interestHandler ? () => sendInterest(previewId) : undefined}
           score={previewMeta.score}
           lastActiveAt={previewMeta.lastActiveAt}
+          commonInterests={previewMeta.commonInterests}
         />
       )}
 
@@ -765,7 +785,7 @@ export default function Matches() {
                     <MatchCard
                       key={s.profile.id}
                       suggestion={{ ...s, shortlisted: true }}
-                      onOpen={() => openPreview(s.profile.id, s.score, s.profile.lastActiveAt)}
+                      onOpen={() => openPreview(s.profile.id, s.score, s.profile.lastActiveAt, s.breakdown)}
                       onSendInterest={
                         interestHandler ? () => sendInterest(s.profile.id) : undefined
                       }
@@ -805,7 +825,7 @@ export default function Matches() {
                       // browse cards too (EZ1-I189), not only when sorted by it.
                       showScore
                       detail="brief"
-                      onOpen={() => openPreview(s.profile.id, s.score, s.profile.lastActiveAt)}
+                      onOpen={() => openPreview(s.profile.id, s.score, s.profile.lastActiveAt, s.breakdown)}
                       onSendInterest={
                         interestHandler ? () => sendInterest(s.profile.id) : undefined
                       }
@@ -851,7 +871,7 @@ export default function Matches() {
                       key={s.profile.id}
                       suggestion={s}
                       showScore
-                      onOpen={() => openPreview(s.profile.id, s.score, s.profile.lastActiveAt)}
+                      onOpen={() => openPreview(s.profile.id, s.score, s.profile.lastActiveAt, s.breakdown)}
                       onSendInterest={
                         interestHandler ? () => sendInterest(s.profile.id) : undefined
                       }
