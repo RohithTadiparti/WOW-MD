@@ -13,8 +13,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * event, which a wedding-level reply must not overwrite. Every answer given
  * before this migration was given that way, so those are marked as such.
  */
-export class Phase65WeddingInvitation1710000090000 implements MigrationInterface {
-  name = 'Phase65WeddingInvitation1710000090000';
+export class Phase65WeddingInvitation1710000099000 implements MigrationInterface {
+  name = 'Phase65WeddingInvitation1710000099000';
 
   private readonly columns: [string, string][] = [
     ['notes', 'text'],

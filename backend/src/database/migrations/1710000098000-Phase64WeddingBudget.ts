@@ -7,8 +7,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * total was whatever the event budgets happened to add up to. Nullable — no
  * existing plan has one, and event budgets are left exactly as they are.
  */
-export class Phase64WeddingBudget1710000089000 implements MigrationInterface {
-  name = 'Phase64WeddingBudget1710000089000';
+export class Phase64WeddingBudget1710000098000 implements MigrationInterface {
+  name = 'Phase64WeddingBudget1710000098000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(

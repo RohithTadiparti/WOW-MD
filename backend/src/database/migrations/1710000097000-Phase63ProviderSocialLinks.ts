@@ -7,8 +7,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * listings share one set of names. All nullable — an existing listing is not
  * invalid for having none.
  */
-export class Phase63ProviderSocialLinks1710000088000 implements MigrationInterface {
-  name = 'Phase63ProviderSocialLinks1710000088000';
+export class Phase63ProviderSocialLinks1710000097000 implements MigrationInterface {
+  name = 'Phase63ProviderSocialLinks1710000097000';
 
   private readonly links = ['instagramUrl', 'youtubeUrl'];
 
