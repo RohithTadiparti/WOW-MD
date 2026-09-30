@@ -130,7 +130,7 @@ export function ProvidersTab({ d }: { d: ReportsData }) {
         <div>
           <p className="font-medium text-gray-900">
             {r.name}
-            <span className={`ml-2 rounded-full px-2 py-0.5 text-[10px] font-medium ${r.providerType === 'planner' ? 'bg-caution-bg text-caution-fg' : 'bg-brand-soft text-brand-strong'}`}>
+            <span className={`ml-2 rounded-sm px-2 py-0.5 text-[10px] font-medium ${r.providerType === 'planner' ? 'bg-caution-bg text-caution-fg' : 'bg-brand-soft text-brand-strong'}`}>
               {r.providerType === 'planner' ? 'Planner' : 'Vendor'}
             </span>
           </p>

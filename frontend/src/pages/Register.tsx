@@ -26,13 +26,6 @@ interface AccountTypeOption {
   roles?: string[];
 }
 
-/** Presentation only — the server owns the list, we own how it looks. */
-const TYPE_ICONS: Record<string, string> = {
-  individual: '💍',
-  agent: '🤝',
-  vendor: '🏛️',
-  planner: '📋',
-};
 
 const ROLE_LABELS: Record<string, string> = {
   bride: 'Bride',
@@ -60,6 +53,10 @@ export default function Register() {
   const [chosenType, setChosenType] = useState<AccountType | null>(null);
   const [chosenRole, setChosenRole] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState('');
+  // An individual gives first and last name separately, as the biodata asks
+  // them; every other account type keeps one "Your name" box.
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -76,6 +73,10 @@ export default function Register() {
   // and how the other side gets in touch — so it is required at sign-up for all
   // personas, not offered as an optional afterthought.
   const phoneRequired = true;
+  const isIndividual = accountType === 'individual';
+  const name = isIndividual
+    ? [firstName.trim(), lastName.trim()].filter(Boolean).join(' ')
+    : displayName.trim();
 
   /**
    * The same rules the server applies, checked before the round trip.
@@ -86,13 +87,15 @@ export default function Register() {
    */
   function validate(): Record<string, string> {
     const errors: Record<string, string> = {};
-    const name = displayName.trim();
     const digits = phone.replace(/\s|-/g, '').replace(/^\+91/, '');
 
-    if (!name) errors.displayName = 'Enter your name';
-    else if (accountType === 'individual' && !NAME_PATTERN.test(name)) {
-      errors.displayName = 'A name may only contain letters and spaces';
-    }
+    if (isIndividual) {
+      const letters = 'A name may only contain letters and spaces';
+      if (!firstName.trim()) errors.firstName = 'Enter your first name';
+      else if (!NAME_PATTERN.test(firstName.trim())) errors.firstName = letters;
+      if (!lastName.trim()) errors.lastName = 'Enter your last name';
+      else if (!NAME_PATTERN.test(lastName.trim())) errors.lastName = letters;
+    } else if (!name) errors.displayName = 'Enter your name';
 
     if (!EMAIL_PATTERN.test(email.trim())) errors.email = 'Enter a valid email address';
     // Every portal registers with a Gmail address (EZ1-I104).
@@ -132,7 +135,7 @@ export default function Register() {
         email: email.trim(),
         password,
         accountType,
-        displayName: displayName.trim(),
+        displayName: name,
       };
       if (phone.trim()) payload.phone = phone.replace(/\s|-/g, '');
       // `role` is only meaningful where the server said the type needs one; it
@@ -174,7 +177,7 @@ export default function Register() {
             </p>
           )}
           <div className="grid gap-3 sm:grid-cols-2">
-            {accountTypes.map((opt) => {
+            {accountTypes.map((opt, i) => {
               const active = opt.type === accountType;
               return (
                 <button
@@ -191,10 +194,10 @@ export default function Register() {
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
                 >
-                  <span className="text-lg" aria-hidden>
-                    {TYPE_ICONS[opt.type] ?? '•'}
+                  <span className="font-serif text-[1.75rem] leading-none text-gold" aria-hidden>
+                    {String(i + 1).padStart(2, '0')}
                   </span>
-                  <p className="font-medium text-gray-900">{opt.label}</p>
+                  <p className="mt-2 font-serif text-[1.375rem] leading-tight text-brand">{opt.label}</p>
                   <p className="mt-0.5 text-xs text-gray-500">{opt.description}</p>
                 </button>
               );
@@ -222,23 +225,64 @@ export default function Register() {
           </div>
         )}
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label className="label" htmlFor="displayName">
-              {accountType === 'individual' ? 'Full name' : 'Your name'}
-            </label>
-            <input
-              id="displayName"
-              className="input"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              maxLength={120}
-              aria-invalid={Boolean(fieldErrors.displayName)}
-            />
-            {fieldErrors.displayName && (
-              <p className="mt-1 text-xs text-red-600">{fieldErrors.displayName}</p>
-            )}
+        {isIndividual && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="label" htmlFor="firstName">
+                First name
+              </label>
+              <input
+                id="firstName"
+                className="input"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                maxLength={60}
+                autoComplete="given-name"
+                aria-invalid={Boolean(fieldErrors.firstName)}
+              />
+              {fieldErrors.firstName && (
+                <p className="mt-1 text-xs text-red-600">{fieldErrors.firstName}</p>
+              )}
+            </div>
+            <div>
+              <label className="label" htmlFor="lastName">
+                Last name
+              </label>
+              <input
+                id="lastName"
+                className="input"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                maxLength={60}
+                autoComplete="family-name"
+                aria-invalid={Boolean(fieldErrors.lastName)}
+              />
+              {fieldErrors.lastName && (
+                <p className="mt-1 text-xs text-red-600">{fieldErrors.lastName}</p>
+              )}
+            </div>
           </div>
+        )}
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          {!isIndividual && (
+            <div>
+              <label className="label" htmlFor="displayName">
+                Your name
+              </label>
+              <input
+                id="displayName"
+                className="input"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                maxLength={120}
+                aria-invalid={Boolean(fieldErrors.displayName)}
+              />
+              {fieldErrors.displayName && (
+                <p className="mt-1 text-xs text-red-600">{fieldErrors.displayName}</p>
+              )}
+            </div>
+          )}
           <div>
             <label className="label" htmlFor="email">
               Email

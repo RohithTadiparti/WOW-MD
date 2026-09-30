@@ -253,7 +253,7 @@ export default function PlannerClientDetail() {
                   </p>
                 </div>
                 <span
-                  className={`rounded-full px-2 py-0.5 text-xs ${TASK_TONE[t.status] ?? TASK_TONE.pending}`}
+                  className={`rounded-sm px-2 py-0.5 text-xs ${TASK_TONE[t.status] ?? TASK_TONE.pending}`}
                 >
                   {labelFrom(TASK_STATUS_LABEL, t.status)}
                 </span>

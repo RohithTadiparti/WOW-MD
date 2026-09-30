@@ -195,7 +195,7 @@ export default function Planner() {
               </div>
               <button
                 onClick={() => cycleStatus(t)}
-                className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${
+                className={`shrink-0 rounded-sm px-3 py-1 text-xs font-medium ${
                   t.status === 'done'
                     ? 'bg-green-100 text-green-700'
                     : t.status === 'in_progress'

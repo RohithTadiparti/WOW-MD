@@ -28,18 +28,18 @@ export default function Sidebar({
   entries,
   groups,
   onNavigate,
-  gradient = false,
+  filled = false,
 }: {
   entries: SidebarEntry[];
   groups: { key: string; title: string | null }[];
   /** Closes the drawer on mobile. Absent on desktop, where nothing closes. */
   onNavigate?: () => void;
   /**
-   * The WOW rose→peach gradient active state, opt-in per caller (EZ1-I177).
-   * Only the Admin Portal turns it on; every other role keeps the soft flat
-   * highlight, so this stays a presentation change scoped to one surface.
+   * A solid maroon active state, opt-in per caller (EZ1-I177). Only the Admin
+   * Portal turns it on; every other role keeps the soft blush highlight, so
+   * this stays a presentation change scoped to one surface.
    */
-  gradient?: boolean;
+  filled?: boolean;
 }) {
   const { pathname } = useLocation();
   const reduce = useReducedMotion();
@@ -53,7 +53,7 @@ export default function Sidebar({
         return (
           <div key={key}>
             {title && (
-              <h2 className="mb-2 w-fit bg-canvas px-3 text-[0.6875rem] font-medium uppercase tracking-[0.09em] text-gray-400">
+              <h2 className="mb-2 w-fit bg-canvas px-3 text-[0.625rem] font-normal uppercase tracking-[0.24em] text-gray-500">
                 {title}
               </h2>
             )}
@@ -71,7 +71,7 @@ export default function Sidebar({
                       className={`group relative flex items-center gap-3 rounded-md px-3 py-2 text-sm
                         transition-colors duration-150 ${
                           active
-                            ? gradient
+                            ? filled
                               ? 'text-brand-fg'
                               : 'text-brand-strong'
                             : // The ground colour, so the heart field never runs behind a label.
@@ -90,8 +90,8 @@ export default function Sidebar({
                         <motion.span
                           layoutId="nav-active"
                           className={`absolute inset-0 -z-10 rounded-md ${
-                            gradient
-                              ? 'bg-gradient-to-r from-brand to-brand-strong shadow-btn'
+                            filled
+                              ? 'bg-brand'
                               : 'bg-brand-soft'
                           }`}
                           transition={
@@ -110,7 +110,7 @@ export default function Sidebar({
                       <span className="truncate">{entry.label}</span>
                       {entry.badge !== undefined && entry.badge > 0 && (
                         <span
-                          className="ml-auto shrink-0 rounded-full bg-brand px-1.5 py-0.5 font-mono
+                          className="ml-auto shrink-0 rounded-sm bg-brand px-1.5 py-0.5 font-mono
                             text-[0.625rem] font-semibold leading-none text-brand-fg"
                           aria-label={`${entry.badge} unread`}
                         >

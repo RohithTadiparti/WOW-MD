@@ -70,7 +70,8 @@ export default function ProfileCard({
     profile?.displayName ||
     'Your profile';
 
-  const photo = details.primaryPhotoUrl ?? profile?.photos?.[0] ?? null;
+  // The first photo is the profile photo; the server keeps the chosen one first.
+  const photo = profile?.photos?.[0] ?? details.primaryPhotoUrl ?? null;
 
   const age = (() => {
     if (!profile?.dateOfBirth) return null;
@@ -127,7 +128,7 @@ export default function ProfileCard({
               </p>
             </div>
             <span
-              className={`rounded-full px-2 py-1 text-xs font-medium ${
+              className={`rounded-sm px-2 py-1 text-xs font-medium ${
                 complete ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'
               }`}
             >

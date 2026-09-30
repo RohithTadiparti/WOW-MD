@@ -136,7 +136,7 @@ export default function AdminProfileDetail() {
     <div className="space-y-5">
       {back}
 
-      <div className="card bg-gradient-to-br from-brand-soft to-surface">
+      <div className="card">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-xs uppercase tracking-wide text-brand-strong">Marriage profile</p>

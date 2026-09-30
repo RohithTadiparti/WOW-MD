@@ -26,6 +26,11 @@ export default function Genie() {
   }
 
   return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="page-title">WOW Genie</h1>
+        <p className="page-subtitle">A budget split to start from, and answers to planning questions.</p>
+      </div>
     <div className="grid gap-6 md:grid-cols-2">
       <div className="card space-y-4">
         <h2 className="section-title">Budget Insights</h2>
@@ -56,6 +61,7 @@ export default function Genie() {
         </form>
         {answer && <p className="rounded-sm bg-brand-light p-3 text-sm text-brand-dark">{answer}</p>}
       </div>
+    </div>
     </div>
   );
 }

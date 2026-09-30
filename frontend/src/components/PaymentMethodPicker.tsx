@@ -72,7 +72,7 @@ export default function PaymentMethodPicker({
               type="button"
               aria-pressed={active}
               onClick={() => onChange(m)}
-              className={`rounded-full border px-3 py-1 text-sm transition ${
+              className={`rounded-sm border px-3 py-1 text-sm transition ${
                 active
                   ? 'border-brand bg-brand-light text-brand-strong'
                   : 'border-gray-200 text-gray-600 hover:border-gray-300'

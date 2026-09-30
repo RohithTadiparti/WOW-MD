@@ -254,6 +254,6 @@ export default function Travel() {
 
 function chip(active: boolean): string {
   return active
-    ? 'rounded-full border border-brand bg-brand-light px-3 py-1 text-sm text-brand-dark'
-    : 'rounded-full border border-gray-200 px-3 py-1 text-sm text-gray-600 hover:bg-gray-50';
+    ? 'rounded-sm border border-brand bg-brand-light px-3 py-1 text-sm text-brand-dark'
+    : 'rounded-sm border border-gray-200 px-3 py-1 text-sm text-gray-600 hover:bg-gray-50';
 }

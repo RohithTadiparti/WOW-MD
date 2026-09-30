@@ -106,7 +106,7 @@ export function BookingProgress({
             aria-current={i === current ? 'step' : undefined}
             className={
               i === current
-                ? 'rounded-full bg-brand px-2 py-0.5 font-medium text-brand-fg'
+                ? 'rounded-sm bg-brand px-2 py-0.5 font-medium text-brand-fg'
                 : i < current
                   ? 'text-positive-fg'
                   : 'text-gray-400'
@@ -163,7 +163,7 @@ export function QuotationHistory({ summary }: { summary: BookingSummaryData }) {
           <li key={q.id} className="rounded-sm bg-surface-sunken p-2">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-mono font-medium">{money(q.amount)}</span>
-              <span className={`rounded-full px-2 py-0.5 ${QUOTATION_STAGE_TONE[q.stage]}`}>
+              <span className={`rounded-sm px-2 py-0.5 ${QUOTATION_STAGE_TONE[q.stage]}`}>
                 {QUOTATION_STAGE_LABEL[q.stage]}
               </span>
             </div>

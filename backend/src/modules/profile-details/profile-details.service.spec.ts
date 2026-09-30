@@ -205,4 +205,59 @@ describe('ProfileDetailsService section saves', () => {
     expect(stored?.institution).toBeNull();
     expect(stored?.collegePlace).toBe('Delhi');
   });
+
+  const EDUCATION = {
+    highestQualification: 'Masters',
+    course: 'M.Tech',
+    occupationStatus: OccupationStatus.EMPLOYED,
+    employment: { company: 'Acme', designation: 'Engineer', salary: '1200000' },
+  };
+
+  it('keeps other income when a save does not send it, and replaces it when one does', async () => {
+    await service.saveEducation(owner, 'p1', {
+      ...EDUCATION,
+      otherIncome: [{ source: 'business', details: '  Textile shop ', annualIncome: '600000' }],
+    } as EducationDetailsDto);
+    expect(stored?.otherIncome).toEqual([
+      { source: 'business', details: 'Textile shop', annualIncome: '600000' },
+    ]);
+
+    // An older client, which knows nothing of the field.
+    await service.saveEducation(owner, 'p1', EDUCATION as EducationDetailsDto);
+    expect(stored?.otherIncome).toHaveLength(1);
+
+    await service.saveEducation(owner, 'p1', {
+      ...EDUCATION,
+      otherIncome: [],
+    } as EducationDetailsDto);
+    expect(stored?.otherIncome).toEqual([]);
+  });
+
+  it('shares other income without the amounts unless income is shown', async () => {
+    const sharing = new ProfileDetailsService(
+      details,
+      { find: jest.fn(async () => []) } as unknown as Repository<ProfileSibling>,
+      { find: jest.fn(async () => []) } as unknown as Repository<ProfileAsset>,
+      profiles,
+      {} as Repository<User>,
+      redis,
+      {} as ModerationService,
+      {} as Repository<Interest>,
+    );
+    stored = {
+      profileId: 'p1',
+      ...EDUCATION,
+      business: {},
+      otherIncome: [{ source: 'rental', annualIncome: '300000' }],
+      incomeVisible: false,
+    };
+
+    const hidden = await sharing.findShareable('p1');
+    expect(hidden.details?.otherIncome).toEqual([{ source: 'rental' }]);
+    expect(hidden.details?.employment).not.toHaveProperty('salary');
+
+    stored.incomeVisible = true;
+    const shown = await sharing.findShareable('p1');
+    expect(shown.details?.otherIncome).toEqual([{ source: 'rental', annualIncome: '300000' }]);
+  });
 });

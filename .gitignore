@@ -5,6 +5,7 @@ node_modules/
 dist/
 build/
 coverage/
+e2e-results/
 
 # Environment and secrets
 .env
@@ -21,3 +22,5 @@ coverage/
 
 # Local compose secrets
 docker/.env
+
+mobile/.env

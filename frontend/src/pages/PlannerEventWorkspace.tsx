@@ -226,7 +226,7 @@ export default function PlannerEventWorkspace() {
                       {t.dueDate ? ` · due ${formatDate(t.dueDate)}` : ''}
                     </p>
                   </div>
-                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+                  <span className="rounded-sm bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
                     {labelFrom(TASK_STATUS_LABEL, t.status)}
                   </span>
                 </div>

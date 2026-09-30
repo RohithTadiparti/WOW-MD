@@ -1,4 +1,4 @@
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 
@@ -8,7 +8,7 @@ import { SectionHeader, StatTile, TileGrid } from '@/components/chrome';
 import { MyAvailability } from '@/components/verification/my-availability';
 import { Sla } from '@/components/verification/sla';
 import { Body, Caption, Card, Loading, SectionTitle } from '@/components/ui';
-import { space } from '@/theme';
+import { rgb, space, useTheme } from '@/theme';
 
 /**
  * The officer's home screen.
@@ -25,6 +25,7 @@ import { space } from '@/theme';
  */
 export function OfficerHome({ canFieldwork }: { canFieldwork: boolean }) {
   const router = useRouter();
+  const theme = useTheme();
 
   const { data: metrics, isLoading } = useQuery({
     queryKey: ['verification-metrics'],
@@ -108,13 +109,23 @@ export function OfficerHome({ canFieldwork }: { canFieldwork: boolean }) {
           <Caption tone="faint">Nothing is waiting on you right now.</Caption>
         ) : (
           next.map((request) => (
-            <View key={request.id} style={{ gap: space(1.5) }}>
+            <Pressable
+              key={request.id}
+              accessibilityRole="button"
+              accessibilityLabel={`Open visit for ${request.subjectName ?? request.applicantType}`}
+              onPress={() => router.push(`/visit/${request.id}`)}
+              style={({ pressed }) => [
+                { gap: space(1.5), paddingVertical: space(1) },
+                pressed && { opacity: 0.7 },
+              ]}
+            >
               <Body numberOfLines={2}>
                 {request.subjectName ?? `${request.applicantType} verification`}
                 {request.applicantCity ? ` · ${request.applicantCity}` : ''}
               </Body>
               <Sla request={request} />
-            </View>
+              <Caption style={{ color: rgb(theme.brandStrong) }}>Open the visit</Caption>
+            </Pressable>
           ))
         )}
       </Card>

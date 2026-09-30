@@ -154,7 +154,7 @@ function Control({
                 onClick={() =>
                   set(on ? chosen.filter((v) => v !== o.value) : [...chosen, o.value])
                 }
-                className={`rounded-full border px-3 py-1 text-xs ${
+                className={`rounded-sm border px-3 py-1 text-xs ${
                   on
                     ? 'border-brand bg-brand text-brand-fg'
                     : 'border-gray-300 text-gray-700 hover:border-brand'

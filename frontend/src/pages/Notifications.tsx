@@ -363,7 +363,7 @@ function SubjectRow({
               </span>
             )}
             {unread > 1 && (
-              <span className="ml-2 rounded-full bg-brand px-1.5 py-0.5 text-xs font-normal text-white">
+              <span className="ml-2 rounded-sm bg-brand px-1.5 py-0.5 text-xs font-normal text-white">
                 {unread}
               </span>
             )}

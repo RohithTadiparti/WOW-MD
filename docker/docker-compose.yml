@@ -165,6 +165,8 @@ services:
       # Read only by the one-shot admin seeder, never by the running API.
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      # Test-only opt-in for the shared local test login; leave false elsewhere.
+      SEED_ADMIN_ALLOW_WEAK_PASSWORD: ${SEED_ADMIN_ALLOW_WEAK_PASSWORD:-false}
       # Optional integrations. Off by default; start them with `--profile full`
       # and set the ENABLED flags to true to activate.
       NEO4J_ENABLED: ${NEO4J_ENABLED:-false}
@@ -202,6 +204,7 @@ services:
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change-me-refresh-in-production-min-32-chars}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      SEED_ADMIN_ALLOW_WEAK_PASSWORD: ${SEED_ADMIN_ALLOW_WEAK_PASSWORD:-false}
     depends_on:
       postgres:
         condition: service_healthy
@@ -237,6 +240,33 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  # One sign-in per role, for walking the interface locally. Writes nothing
+  # unless DEMO_PASSWORD is set in docker/.env; never set it on a stack anyone
+  # else can reach.
+  #
+  #   docker compose -f docker/docker-compose.yml --profile seed run --rm seed-demo
+  seed-demo:
+    image: wow-backend:local
+    container_name: wow-seed-demo
+    profiles: ["seed"]
+    command: ["node", "dist/database/seed-demo.js"]
+    environment:
+      NODE_ENV: production
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-wow_user}
+      DB_PASSWORD: ${DB_PASSWORD:-wow_password}
+      DB_NAME: ${DB_NAME:-wow_db}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-min-32-characters-long}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change-me-refresh-in-production-min-32-chars}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
 
   frontend:
     build:

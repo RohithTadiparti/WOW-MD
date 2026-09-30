@@ -20,6 +20,7 @@ import {
 import { Permission, roleHasPermission } from '../../common/authz/permissions';
 import { bookingContextOf } from '../bookings/booking-venue';
 import { displayNamesByUserIds } from '../users/display-names';
+import { profilePhotoOf } from '../users/dto/public-profile.dto';
 
 /**
  * Translates domain events (delivered via the outbox to the event bus) into
@@ -351,7 +352,7 @@ export class NotificationsConsumer implements OnModuleInit {
       counterpartProfileId: from.id,
       counterpartName: from.displayName ?? null,
       counterpartCity: from.city ?? null,
-      counterpartPhotoUrl: from.photos?.[0] ?? null,
+      counterpartPhotoUrl: profilePhotoOf(from),
       // The agency's own client, named so an agency running many can tell
       // which of them this is about.
       subjectProfileId: target.id,
@@ -421,7 +422,7 @@ export class NotificationsConsumer implements OnModuleInit {
         counterpartProfileId: other?.id ?? null,
         counterpartName: other?.displayName ?? null,
         counterpartCity: other?.city ?? null,
-        counterpartPhotoUrl: other?.photos?.[0] ?? null,
+        counterpartPhotoUrl: profilePhotoOf(other),
         // The reader's own side of the pairing, so an agent running many
         // profiles can tell which client the acceptance is for (EZ1-I80):
         // "Shravani accepted your interest in <subjectName>".

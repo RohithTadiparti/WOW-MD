@@ -270,7 +270,7 @@ function Section({
                 </span>
               </span>
               <span
-                className={`shrink-0 rounded-full px-2 py-1 text-xs ${
+                className={`shrink-0 rounded-sm px-2 py-1 text-xs ${
                   STATUS_TONE[c.status] ?? 'bg-gray-100 text-gray-600'
                 }`}
               >

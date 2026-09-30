@@ -133,7 +133,7 @@ export default function Visits() {
             key={s.key}
             type="button"
             onClick={() => setBucket(s.key)}
-            className={`card text-left transition hover:border-brand hover:shadow-sm ${
+            className={`card text-left transition hover:border-brand hover:bg-brand-soft/40 ${
               bucket === s.key ? 'border-brand ring-1 ring-brand' : ''
             }`}
           >
@@ -250,7 +250,7 @@ function VisitRow({ visit }: { visit: Visit }) {
       </div>
       <div className="flex shrink-0 flex-col items-end gap-2">
         <span
-          className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+          className={`rounded-sm px-2 py-0.5 text-xs font-medium ${
             VISIT_TONE[visit.status] ?? 'bg-gray-100 text-gray-600'
           }`}
         >

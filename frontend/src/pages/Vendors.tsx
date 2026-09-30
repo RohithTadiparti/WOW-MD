@@ -45,7 +45,7 @@ const SORTS: { value: string; label: string }[] = [
 /** A removable active-filter pill (EZ1-I164). */
 function FilterChip({ label, onClear }: { label: string; onClear: () => void }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-sunken px-2.5 py-1 text-xs text-gray-700">
+    <span className="inline-flex items-center gap-1.5 rounded-sm bg-surface-sunken px-2.5 py-1 text-xs text-gray-700">
       {label}
       <button
         type="button"
@@ -292,7 +292,7 @@ export default function Vendors() {
                   rather than one per category: a directory that changes colour
                   every tile has no accent, it has a palette.
                 */
-                <span className="grid h-full w-full place-items-center bg-gradient-to-br from-brand/[0.07] to-transparent text-gray-300">
+                <span className="grid h-full w-full place-items-center bg-surface-sunken text-gray-300">
                   <Storefront size={24} weight="light" aria-hidden />
                 </span>
               )}
@@ -316,7 +316,7 @@ export default function Vendors() {
               {/* Only approved listings reach search, but a verified badge says
                   an officer actually visited — worth surfacing (EZ1-I164). */}
               {v.verifiedAt && (
-                <span className="mt-1.5 inline-flex w-fit items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand-strong">
+                <span className="mt-1.5 inline-flex w-fit items-center gap-1 rounded-sm bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand-strong">
                   <SealCheck size={12} weight="fill" aria-hidden /> Verified
                 </span>
               )}

@@ -110,7 +110,7 @@ export default function OfficerCases() {
               key={f.key}
               onClick={() => setCaseFilter(f.key === caseFilter ? null : f.key)}
               aria-pressed={f.key === caseFilter}
-              className={`rounded-full border px-3 py-1 text-xs ${
+              className={`rounded-sm border px-3 py-1 text-xs ${
                 f.key === caseFilter
                   ? 'border-brand bg-brand text-brand-fg'
                   : count > 0

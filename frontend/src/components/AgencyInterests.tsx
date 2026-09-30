@@ -348,8 +348,8 @@ function Chip({
       aria-pressed={active}
       className={
         active
-          ? 'rounded-full bg-brand px-3 py-1 text-xs font-medium text-brand-fg'
-          : 'rounded-full bg-surface-sunken px-3 py-1 text-xs text-gray-600 hover:bg-gray-100'
+          ? 'rounded-sm bg-brand px-3 py-1 text-xs font-medium text-brand-fg'
+          : 'rounded-sm bg-surface-sunken px-3 py-1 text-xs text-gray-600 hover:bg-gray-100'
       }
     >
       {children}

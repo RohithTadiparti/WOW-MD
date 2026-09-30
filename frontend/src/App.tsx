@@ -47,7 +47,7 @@ import {
 } from '@phosphor-icons/react';
 import Sidebar, { SidebarEntry } from './components/Sidebar';
 import ErrorBoundary from './components/ErrorBoundary';
-import { useTheme } from './store/theme';
+import { DARK_MODE_ENABLED, useTheme } from './store/theme';
 import { motion, useReducedMotion } from 'motion/react';
 import Login from './pages/Login';
 import Home from './pages/Home';
@@ -513,6 +513,7 @@ function AccountMenu({
               <UserCircle size={17} aria-hidden /> My Profile
             </Link>
 
+            {DARK_MODE_ENABLED && (
             <div className="my-1.5 px-2.5">
               <p className="mb-1.5 text-[0.6875rem] font-medium uppercase tracking-[0.09em] text-gray-400">
                 Appearance
@@ -552,6 +553,7 @@ function AccountMenu({
                 ))}
               </div>
             </div>
+            )}
 
             <button
               className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm
@@ -639,7 +641,7 @@ function Layout({ children }: { children: ReactNode }) {
         <aside className="sticky top-0 hidden h-[100dvh] w-[15.5rem] shrink-0 flex-col gap-5 py-5 lg:flex">
           <Wordmark />
           <div className="-mr-2 flex-1 overflow-y-auto pr-2">
-            <Sidebar entries={entries} groups={groups} gradient={isAdmin} />
+            <Sidebar entries={entries} groups={groups} filled={isAdmin} />
           </div>
         </aside>
 
@@ -659,7 +661,7 @@ function Layout({ children }: { children: ReactNode }) {
               <span className="lg:hidden">
                 <Wordmark compact />
               </span>
-              <h1 className="hidden truncate text-sm font-medium text-gray-500 lg:block">
+              <h1 className="hidden truncate text-[0.75rem] font-normal uppercase tracking-[0.18em] text-gray-600 lg:block">
                 {entries.find((e) => e.to === loc.pathname)?.label ?? ''}
               </h1>
             </div>
@@ -736,7 +738,7 @@ function Layout({ children }: { children: ReactNode }) {
             <Sidebar
               entries={entries}
               groups={groups}
-              gradient={isAdmin}
+              filled={isAdmin}
               onNavigate={() => setDrawer(false)}
             />
           </motion.div>

@@ -114,11 +114,26 @@ export default {
         },
       },
 
+      /*
+       * Borders are the template's hairline — its ink at 14%, or 28% round a
+       * field — not a step of the grey ramp. Only border and divide utilities
+       * take these; a `bg-gray-200` is still the opaque grey it always was.
+       */
+      borderColor: {
+        DEFAULT: 'var(--line)',
+        gray: { 100: 'var(--line)', 200: 'var(--line)', 300: 'var(--line-strong)' },
+      },
+
+      // Every step resolves to the template's square corner; `full` stays round
+      // for avatars and dots, which are shapes rather than panels.
       borderRadius: {
+        DEFAULT: 'var(--radius-sm)',
         sm: 'var(--radius-sm)',
         md: 'var(--radius-md)',
         lg: 'var(--radius-lg)',
-        xl: 'calc(var(--radius-lg) + 0.25rem)',
+        xl: 'var(--radius-lg)',
+        '2xl': 'var(--radius-lg)',
+        '3xl': 'var(--radius-lg)',
       },
 
       /*

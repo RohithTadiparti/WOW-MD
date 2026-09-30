@@ -100,7 +100,7 @@ export default function CategoryPicker({
                 aria-pressed={on}
                 disabled={disabled}
                 onClick={() => toggle(c.slug)}
-                className={`rounded-full border px-3 py-1 text-xs ${
+                className={`rounded-sm border px-3 py-1 text-xs ${
                   on
                     ? 'border-brand bg-brand text-brand-fg'
                     : disabled

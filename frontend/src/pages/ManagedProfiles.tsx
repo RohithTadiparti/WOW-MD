@@ -87,7 +87,6 @@ const emptyDraft = {
   firstName: '',
   lastName: '',
   nativePlace: '',
-  displayName: '',
   stewardRelation: '',
   contactPhone: '',
   contactEmail: '',
@@ -137,11 +136,16 @@ const IMPORT_REVIEW_SECTIONS = [
   },
 ] as const;
 
+/*
+ * The biodata sections an intake may fill. The profile's own fields (display
+ * name, mobile, email, date of birth, gender, city) are deliberately absent:
+ * they are sent once, at the top level, from the form the agent reviewed.
+ */
 const ALLOWED_BIODATA_KEYS = new Set([
-  'firstName', 'lastName', 'surname', 'displayName', 'heightCm', 'complexion',
+  'firstName', 'lastName', 'surname', 'heightCm', 'complexion',
   'nativePlace', 'nativeState', 'nativeCountry', 'nativeDistrict', 'placeOfBirth',
-  'communicationAddress', 'address', 'contactPhone', 'alternateMobile', 'contactEmail',
-  'dateOfBirth', 'gender', 'city', 'religion', 'caste', 'subCaste', 'motherTongue',
+  'communicationAddress', 'address', 'alternateMobile',
+  'religion', 'caste', 'subCaste', 'motherTongue',
   'denomination', 'gothram', 'rashi', 'star', 'padam', 'kujaDosham', 'timeOfBirth',
   'horoscopeAvailable', 'maritalStatus', 'fatherName', 'fatherProfession', 'motherName',
   'motherProfession', 'familyType', 'familyStatus', 'brothers', 'sisters',
@@ -161,6 +165,45 @@ function applyImportedFields(
     if (fields[key]) next[key] = fields[key];
   }
   return next;
+}
+
+/*
+ * The review fields the API only accepts from a fixed list. They are selects
+ * rather than free text, so what the agent confirms is what gets saved; the
+ * API refuses anything else with a 400 naming the field.
+ */
+const REVIEW_CHOICES: Record<string, ReadonlyArray<readonly [string, string]>> = {
+  maritalStatus: [
+    ['never_married', 'Never married'], ['divorced', 'Divorced'], ['widowed', 'Widowed'],
+    ['separated', 'Separated'], ['annulled', 'Annulled'],
+  ],
+  occupationStatus: [
+    ['employed', 'Employed'], ['self_employed', 'Self-employed / business'],
+    ['not_employed', 'Not employed'], ['student', 'Student'], ['homemaker', 'Homemaker'],
+    ['retired', 'Retired'],
+  ],
+  familyType: [
+    ['joint', 'Joint'], ['nuclear', 'Nuclear'], ['extended', 'Extended'],
+    ['single_parent', 'Single parent'],
+  ],
+};
+
+const CHOICE_SYNONYMS: Record<string, string> = {
+  unmarried: 'never_married', single: 'never_married', divorce: 'divorced', widow: 'widowed',
+  widower: 'widowed', business: 'self_employed', unemployed: 'not_employed',
+  housewife: 'homemaker',
+};
+
+/** An extracted value as one of the choices, or '' when it matches none. */
+function normaliseChoice(key: string, raw: string): string {
+  const choices = REVIEW_CHOICES[key];
+  if (!choices) return raw;
+  const folded = raw.trim().toLowerCase().replace(/[\s/-]+/g, '_').replace(/_family$/, '');
+  const value = CHOICE_SYNONYMS[folded] ?? folded;
+  const hit = choices.find(
+    ([v, label]) => v === value || label.toLowerCase().replace(/[\s/-]+/g, '_') === folded,
+  );
+  return hit ? hit[0] : '';
 }
 
 /**
@@ -213,7 +256,9 @@ export default function ManagedProfiles({
   const [intakeMode, setIntakeMode] = useState<IntakeMode | null>(null);
   const [extractedBiodata, setExtractedBiodata] = useState<Record<string, string>>({});
   const [documentUrl, setDocumentUrl] = useState('');
-  const validIntakePhone = isValidMobile(draft.contactPhone) || Boolean(documentUrl && !draft.contactPhone);
+  // The API needs a valid mobile and a bride-or-groom choice in both modes,
+  // so Save waits for both rather than failing after the agent presses it.
+  const readyToSave = isValidMobile(draft.contactPhone) && Boolean(draft.gender);
   const [importing, setImporting] = useState(false);
   const [consent, setConsent] = useState<ConsentDraft>(emptyConsent());
   const [error, setError] = useState('');
@@ -239,9 +284,11 @@ export default function ManagedProfiles({
     mutationFn: async (inviteNow: boolean) => {
       const values = draft;
       const payload: Record<string, unknown> = {
-        displayName: values.displayName,
-        ...(values.contactPhone ? { contactPhone: values.contactPhone } : {}),
-        ...(values.gender ? { gender: values.gender } : {}),
+        displayName: [values.firstName.trim(), values.lastName.trim()].filter(Boolean).join(' '),
+        // Required in both modes, as the API requires it: an uploaded
+        // biodata without a number still needs one before the client exists.
+        contactPhone: values.contactPhone,
+        gender: values.gender,
         consent: consentPayload(consent),
         inviteNow,
       };
@@ -361,7 +408,7 @@ export default function ManagedProfiles({
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    if (importing || !validIntakePhone) return;
+    if (importing || !readyToSave) return;
     setError('');
     create.mutate(false);
   }
@@ -473,13 +520,16 @@ export default function ManagedProfiles({
             busy={importing || create.isPending}
             onBusy={setImporting}
             onImported={(fields, url) => {
+              // The profile's own fields (name, mobile, gender, date of birth,
+              // city) go to the form above; only the biodata sections travel
+              // in `biodata`, so no stale extracted copy is sent alongside.
               const allowedFields: Record<string, string> = {};
               for (const [key, value] of Object.entries(fields)) {
                 if (ALLOWED_BIODATA_KEYS.has(key)) {
-                  allowedFields[key] = value;
+                  allowedFields[key] = normaliseChoice(key, value);
                 }
               }
-              setDraft(applyImportedFields(emptyDraft, allowedFields));
+              setDraft(applyImportedFields(emptyDraft, fields));
               setDocumentUrl(url);
               setExtractedBiodata(allowedFields);
             }}
@@ -492,43 +542,18 @@ export default function ManagedProfiles({
         )}
 
         {intakeMode && <><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {/* Asked separately, as the biodata asks them. */}
           <div>
-            <label className="label">First Name</label>
-            <input
-              className="input"
-              value={draft.firstName}
-              onChange={(e) => {
-                const fn = e.target.value;
-                setDraft((d) => ({
-                  ...d,
-                  firstName: fn,
-                  displayName: [fn, d.lastName].filter(Boolean).join(' '),
-                }));
-              }}
-            />
+            <label className="label">First name</label>
+            <input className="input" value={draft.firstName} onChange={set('firstName')} required />
           </div>
           <div>
-            <label className="label">Last Name</label>
-            <input
-              className="input"
-              value={draft.lastName}
-              onChange={(e) => {
-                const ln = e.target.value;
-                setDraft((d) => ({
-                  ...d,
-                  lastName: ln,
-                  displayName: [d.firstName, ln].filter(Boolean).join(' '),
-                }));
-              }}
-            />
+            <label className="label">Last name</label>
+            <input className="input" value={draft.lastName} onChange={set('lastName')} required />
           </div>
           <div>
-            <label className="label">Native Place</label>
+            <label className="label">Native place</label>
             <input className="input" value={draft.nativePlace} onChange={set('nativePlace')} />
-          </div>
-          <div>
-            <label className="label">Full name</label>
-            <input className="input" value={draft.displayName} onChange={set('displayName')} required />
           </div>
           {/*
             Only asked of a family member. An agency's relationship to a client
@@ -598,7 +623,7 @@ export default function ManagedProfiles({
               value={draft.contactPhone}
               onChange={set('contactPhone')}
               aria-invalid={Boolean(draft.contactPhone) && !isValidMobile(draft.contactPhone)}
-              required={!documentUrl}
+              required
             />
             {draft.contactPhone && !isValidMobile(draft.contactPhone) ? (
               <p className="mt-1 text-xs text-red-600">Enter a 10-digit Indian mobile number.</p>
@@ -631,7 +656,7 @@ export default function ManagedProfiles({
               is the question, and the one that was asked as "User Type" before.
             */}
             <label className="label">Managing profile for</label>
-            <select className="input" value={draft.gender} onChange={set('gender')}>
+            <select className="input" value={draft.gender} onChange={set('gender')} required>
               <option value="">Choose gender</option>
               <option value="female">Bride</option>
               <option value="male">Groom</option>
@@ -671,11 +696,24 @@ export default function ManagedProfiles({
                   {section.fields.map(([key, label]) => (
                     <label key={key} className="block">
                       <span className="label">{label}</span>
-                      <input
-                        className="input"
-                        value={extractedBiodata[key] ?? ''}
-                        onChange={setBiodata(key)}
-                      />
+                      {REVIEW_CHOICES[key] ? (
+                        <select
+                          className="input"
+                          value={extractedBiodata[key] ?? ''}
+                          onChange={setBiodata(key)}
+                        >
+                          <option value="">Not stated</option>
+                          {REVIEW_CHOICES[key].map(([value, text]) => (
+                            <option key={value} value={value}>{text}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          className="input"
+                          value={extractedBiodata[key] ?? ''}
+                          onChange={setBiodata(key)}
+                        />
+                      )}
                     </label>
                   ))}
                 </div>
@@ -689,7 +727,7 @@ export default function ManagedProfiles({
         {error && <p className="alert-critical">{error}</p>}
 
         <div className="flex flex-wrap gap-2">
-          <button className="btn" disabled={importing || create.isPending || !validIntakePhone}>
+          <button className="btn" disabled={importing || create.isPending || !readyToSave}>
             {create.isPending ? 'Saving...' : 'Save profile'}
           </button>
           {/*
@@ -703,7 +741,7 @@ export default function ManagedProfiles({
           <button
             type="button"
             className="btn-outline"
-            disabled={importing || create.isPending || !isValidMobile(draft.contactPhone)}
+            disabled={importing || create.isPending || !readyToSave}
             onClick={() => {
               setError('');
               create.mutate(true);
@@ -748,7 +786,7 @@ export default function ManagedProfiles({
                   <p className="font-medium">
                     {p.displayName}
                     <span
-                      className={`ml-2 rounded-full px-2 py-0.5 text-xs ${
+                      className={`ml-2 rounded-sm px-2 py-0.5 text-xs ${
                         p.claimStatus === 'claimed'
                           ? 'bg-green-50 text-green-700'
                           : p.claimStatus === 'invited'

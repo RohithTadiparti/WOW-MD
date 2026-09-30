@@ -70,11 +70,9 @@ export default function AdminDashboard() {
    * what it counts, with the relevant filter pre-applied where one exists — the
    * escrow card opens Payments filtered to what is held, not the whole ledger.
    *
-   * Each card wears a soft gradient (EZ1-I177) drawn from the WOW palette the
-   * design system actually holds — rose/pink (brand), peach (the warm caution
-   * token) and mint (the positive token) — and an accent that tints its icon to
-   * the same family. Everything is a live token, so a card that reads as a warm
-   * cream in light mode themes to a lifted rose in dark rather than glowing.
+   * Each card is a flat template panel with an accent that tints its icon —
+   * brand, the warm caution token or the positive token. Everything is a live
+   * token, so the tiles theme with the rest of the page.
    */
   const cards: SummaryCard[] = analytics
     ? [
@@ -82,16 +80,16 @@ export default function AdminDashboard() {
         // and family members who came here to get married. It read "Total Users"
         // over a count of every row in the table, which double-counted the four
         // tiles beside it (EZ1-I224).
-        { label: 'Individual Users', value: analytics.totalUsers, to: '/admin/users', icon: UsersThree, gradient: 'from-brand-100 to-brand-50', accent: 'brand' },
-        { label: 'Total Agents', value: analytics.totalAgents, to: '/admin/agents', icon: IdentificationCard, gradient: 'from-brand-soft to-surface', accent: 'brand' },
-        { label: 'Total Vendors', value: analytics.totalVendors, to: '/admin/vendors', icon: Storefront, gradient: 'from-caution-bg to-surface', accent: 'caution' },
+        { label: 'Individual Users', value: analytics.totalUsers, to: '/admin/users', icon: UsersThree, accent: 'brand' },
+        { label: 'Total Agents', value: analytics.totalAgents, to: '/admin/agents', icon: IdentificationCard, accent: 'brand' },
+        { label: 'Total Vendors', value: analytics.totalVendors, to: '/admin/vendors', icon: Storefront, accent: 'caution' },
         // The officer roster had a page and a nav entry but no tile, so the one
         // number an allocator most wants before assigning work was the one the
         // dashboard did not carry (EZ1-I222).
-        { label: 'Verification Officers', value: analytics.verification.officers, to: '/admin/officers', icon: SealCheck, gradient: 'from-positive-bg to-brand-50', accent: 'positive' },
-        { label: 'Wedding Planners', value: analytics.totalPlanners, to: '/admin/planners', icon: ClipboardText, gradient: 'from-brand-100 to-surface', accent: 'brand' },
-        { label: 'Total Bookings', value: analytics.totalBookings, to: '/admin/bookings', icon: Receipt, gradient: 'from-brand-soft to-brand-50', accent: 'brand' },
-        { label: 'Awaiting Verification', value: analytics.verification.awaitingAllocation, to: '/verification', icon: Hourglass, gradient: 'from-positive-bg to-surface', accent: 'positive' },
+        { label: 'Verification Officers', value: analytics.verification.officers, to: '/admin/officers', icon: SealCheck, accent: 'positive' },
+        { label: 'Wedding Planners', value: analytics.totalPlanners, to: '/admin/planners', icon: ClipboardText, accent: 'brand' },
+        { label: 'Total Bookings', value: analytics.totalBookings, to: '/admin/bookings', icon: Receipt, accent: 'brand' },
+        { label: 'Awaiting Verification', value: analytics.verification.awaitingAllocation, to: '/verification', icon: Hourglass, accent: 'positive' },
         /*
          * Cases and disputes are Support's, not Verification's.
          *
@@ -100,14 +98,13 @@ export default function AdminDashboard() {
          * had no way to reach a single one of them. They stay two tiles because
          * they are two tables with two resolution paths (EZ1-I222).
          */
-        { label: 'Open Cases', value: analytics.verification.casesOpen, to: '/admin/support?tab=cases', icon: Lifebuoy, gradient: 'from-caution-bg to-brand-50', accent: 'caution' },
-        { label: 'Open Disputes', value: analytics.openDisputes, to: '/admin/support?tab=disputes', icon: Scales, gradient: 'from-brand-50 to-surface', accent: 'brand' },
+        { label: 'Open Cases', value: analytics.verification.casesOpen, to: '/admin/support?tab=cases', icon: Lifebuoy, accent: 'caution' },
+        { label: 'Open Disputes', value: analytics.openDisputes, to: '/admin/support?tab=disputes', icon: Scales, accent: 'brand' },
         {
           label: 'Held in Escrow',
           value: `₹${Number(analytics.escrow?.bookings?.held ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`,
           to: '/admin/payments?status=held_in_escrow',
           icon: Vault,
-          gradient: 'from-positive-bg to-brand-50',
           accent: 'positive',
         },
       ]
@@ -180,7 +177,7 @@ export default function AdminDashboard() {
                 <Link
                   key={status}
                   to={`/admin/bookings?status=${status}`}
-                  className="rounded-full bg-brand-soft px-3 py-1 text-sm text-brand-strong transition-colors hover:bg-brand-100"
+                  className="rounded-sm bg-brand-soft px-3 py-1 text-sm text-brand-strong transition-colors hover:bg-brand-100"
                 >
                   {BOOKING_STATUS_LABEL[status] ?? status}: <strong>{count}</strong>
                 </Link>
@@ -194,7 +191,7 @@ export default function AdminDashboard() {
           <h2 className="section-title mb-2">Accounts by type</h2>
           <div className="flex flex-wrap gap-2">
             {analytics.usersByRole.map((r) => (
-              <span key={r.role} className="rounded-full bg-gray-100 px-3 py-1 text-sm">
+              <span key={r.role} className="rounded-sm bg-gray-100 px-3 py-1 text-sm">
                 {r.role}: <strong>{r.count}</strong>
               </span>
             ))}
@@ -212,7 +209,6 @@ interface SummaryCard {
   value: number | string;
   to: string;
   icon: ComponentType<IconProps>;
-  gradient: string;
   accent: Accent;
 }
 
@@ -225,14 +221,14 @@ const ACCENT_CHIP: Record<Accent, string> = {
 
 /**
  * One headline metric: an icon chip, a large live count and its label, sitting
- * on a soft gradient. The whole tile is the link — it lifts on hover and the
+ * on a flat panel. The whole tile is the link — its rule turns maroon and the
  * arrow slides in to say so — so a click anywhere lands on the owning page.
  */
-function SummaryTile({ label, value, to, icon: Glyph, gradient, accent }: SummaryCard) {
+function SummaryTile({ label, value, to, icon: Glyph, accent }: SummaryCard) {
   return (
     <Link
       to={to}
-      className={`card group relative overflow-hidden bg-gradient-to-br ${gradient} shadow-card transition duration-200 ease-out hover:-translate-y-0.5 hover:shadow-lifted focus-visible:-translate-y-0.5`}
+      className="card group relative overflow-hidden transition-colors duration-200 ease-out hover:border-brand focus-visible:border-brand"
     >
       <div className="flex items-start justify-between gap-3">
         <span className={`inline-flex h-10 w-10 items-center justify-center rounded-[--radius-md] ${ACCENT_CHIP[accent]}`}>
@@ -244,7 +240,7 @@ function SummaryTile({ label, value, to, icon: Glyph, gradient, accent }: Summar
           aria-hidden
         />
       </div>
-      <p className="mt-3 text-[1.75rem] font-semibold leading-none tracking-[-0.02em] tabular-nums text-gray-900">
+      <p className="mt-3 font-serif text-[2.25rem] font-normal leading-none tabular-nums text-brand">
         {value}
       </p>
       <p className="mt-1.5 text-sm font-medium text-gray-600">{label}</p>

@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
   IsDateString,
   IsEnum,
@@ -504,6 +506,38 @@ export class AssetDto {
   visible?: boolean;
 }
 
+/** Where income beyond the main occupation comes from. */
+export const OTHER_INCOME_SOURCES = [
+  'business',
+  'rental',
+  'agriculture',
+  'investments',
+  'freelance',
+  'other',
+] as const;
+
+/**
+ * One income besides the main occupation — a job with a business on the side
+ * is common, and the occupation field has room for only one of them.
+ */
+export class OtherIncomeDto {
+  @ApiProperty({ enum: OTHER_INCOME_SOURCES })
+  @IsIn(OTHER_INCOME_SOURCES)
+  source: (typeof OTHER_INCOME_SOURCES)[number];
+
+  @ApiPropertyOptional({ example: 'Family textile shop' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  details?: string;
+
+  /** Annual, in rupees; digits only, like salary. Hidden unless income is shown. */
+  @ApiPropertyOptional({ example: '600000' })
+  @IsOptional()
+  @Matches(/^\d{1,12}$/, { message: 'Other income must be a whole number of rupees' })
+  annualIncome?: string;
+}
+
 export class EducationDetailsDto {
   @ApiProperty({ example: 'Masters' })
   @IsString()
@@ -533,6 +567,18 @@ export class EducationDetailsDto {
   @ValidateIf((o: EducationDetailsDto) => o.occupationStatus === OccupationStatus.SELF_EMPLOYED)
   @IsObject({ message: 'Business details are required for a self-employed candidate' })
   business?: Record<string, unknown>;
+
+  /**
+   * Optional, whatever the occupation. Absent leaves the stored list alone, so
+   * a client that predates the field cannot wipe it; an empty list clears it.
+   */
+  @ApiPropertyOptional({ type: [OtherIncomeDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(5)
+  @ValidateNested({ each: true })
+  @Type(() => OtherIncomeDto)
+  otherIncome?: OtherIncomeDto[];
 
   @ApiPropertyOptional({ default: false })
   @IsOptional()

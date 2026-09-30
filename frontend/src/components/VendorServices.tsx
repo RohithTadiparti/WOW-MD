@@ -180,7 +180,7 @@ export default function VendorServices({ vendorId }: { vendorId: string }) {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <span
-                className={`rounded-full px-2 py-1 text-xs ${
+                className={`rounded-sm px-2 py-1 text-xs ${
                   service.bookable
                     ? 'bg-emerald-50 text-emerald-800'
                     : 'bg-amber-50 text-amber-800'

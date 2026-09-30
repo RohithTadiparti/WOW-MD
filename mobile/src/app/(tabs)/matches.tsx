@@ -1,207 +1,384 @@
-import { useState } from 'react';
-import { FlatList, Image, View } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle } from 'phosphor-react-native';
+import { useState } from "react";
+import {
+  FlatList,
+  Image,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  View,
+  useWindowDimensions,
+} from "react-native";
+import { useRouter } from "expo-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  CaretDown,
+  Heart,
+  MagnifyingGlass,
+  SlidersHorizontal,
+  UserCircle,
+} from "phosphor-react-native";
 
-import { HeartBackdrop } from '@/components/heart-field';
-import { ProfileSilhouette } from '@/components/profile-silhouette';
-import { api, apiMessage } from '@/lib/api';
-import { useMatchmakingGate } from '@/lib/matchmaking';
-import { ActingClientPicker, useActingClient } from '@/components/matches/acting-client';
-import { FilterChips } from '@/components/chrome';
+import { HeartBackdrop } from "@/components/heart-field";
+import { NotificationBell } from "@/components/home/notification-bell";
+import {
+  ActingClientPicker,
+  useActingClient,
+} from "@/components/matches/acting-client";
+import { ProfileSilhouette } from "@/components/profile-silhouette";
 import {
   Alert,
-  Body,
-  Button,
   Caption,
-  Card,
   EmptyState,
-  Eyebrow,
   Loading,
   PageSubtitle,
   PageTitle,
   SectionTitle,
-} from '@/components/ui';
-import { radius, rgb, rgba, space, useTheme } from '@/theme';
+} from "@/components/ui";
+import { api, apiMessage } from "@/lib/api";
+import { useMatchmakingGate } from "@/lib/matchmaking";
+import { useAuth } from "@/store/auth";
+import { rgb, space, useTheme, radius } from "@/theme";
+import { Txt, typeface } from "@/theme/fonts";
 
-interface PublicProfile {
+interface Profile {
   id: string;
   displayName: string;
   gender?: string | null;
   ageRange: string | null;
-  city?: string;
+  city?: string | null;
   photos: string[];
   profileCode: string;
-  verified: boolean;
   card?: {
     religion: string | null;
-    caste: string | null;
     motherTongue: string | null;
     profession: string | null;
-    // The horoscope headline, on the card so families can compare it while
-    // deciding — the same facts the web card carries (EZ1-I48).
-    rashi: string | null;
-    star: string | null;
-    padam: string | null;
-    gothram: string | null;
-    kujaDosham: string | null;
+    highestQualification?: string | null;
   };
 }
-
-type InteractionState =
-  | 'none'
-  | 'interest_sent'
-  | 'interest_received'
-  | 'accepted'
-  | 'declined_by_you'
-  | 'declined_by_them';
-
-/**
- * The web page's four tiles, as chips: each is a count and the filter that
- * shows those rows. The server counts them over the same list it pages, so a
- * chip's number is how many cards it opens.
- */
-type MatchView = 'all' | 'active' | 'high' | 'shortlisted';
-interface MatchViewCounts {
-  total: number;
-  activeToday: number;
-  highCompatibility: number;
-  shortlisted: number;
+interface Suggestion {
+  profile: Profile;
+  score: number;
+  shortlisted?: boolean;
+  interaction?: string;
 }
-const VIEW_CHIPS: { key: MatchView; label: string; count: keyof MatchViewCounts }[] = [
-  { key: 'all', label: 'All matches', count: 'total' },
-  { key: 'active', label: 'Active today', count: 'activeToday' },
-  { key: 'high', label: 'High compatibility', count: 'highCompatibility' },
-  { key: 'shortlisted', label: 'Shortlisted', count: 'shortlisted' },
+type Tab = "for-you" | "nearby" | "new" | "shortlisted";
+const tabs: { key: Tab; label: string }[] = [
+  { key: "for-you", label: "For You" },
+  { key: "nearby", label: "Nearby" },
+  { key: "new", label: "New" },
+  { key: "shortlisted", label: "Shortlisted" },
 ];
 
-interface Suggestion {
-  profile: PublicProfile;
-  score: number;
-  interaction?: InteractionState;
-  sharedByFamily?: { sharerEmail: string | null };
-}
-
-/**
- * Matches.
- *
- * The web page carries filters, a shortlist, a preview panel and paging. This
- * carries the list and the one action the list exists for, because a phone
- * screen that opens with six filter controls above the first result is a screen
- * that has decided browsing is a form-filling exercise.
- */
 export default function Matches() {
+  const theme = useTheme();
   const router = useRouter();
-  const [error, setError] = useState('');
-  const [view, setView] = useState<MatchView>('all');
   const qc = useQueryClient();
   const acting = useActingClient();
+  const user = useAuth((s) => s.user);
+  const [tab, setTab] = useState<Tab>("for-you");
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<"score" | "recent" | "age">("score");
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [error, setError] = useState("");
+  const { status, gate, settled } = useMatchmakingGate(
+    acting.profileId,
+    acting.ready,
+  );
   const clientParam = acting.profileId ? { profileId: acting.profileId } : {};
-  // Asked before the list, so a profile the server would refuse is told why
-  // rather than shown a refusal.
-  const { status, gate, settled } = useMatchmakingGate(acting.profileId, acting.ready);
-
-  const { data, isLoading, error: loadError } = useQuery({
-    queryKey: ['suggestions', acting.profileId, view],
-    queryFn: async () =>
-      (
-        await api.get('/matches/suggestions', {
-          params: { limit: 20, ...clientParam, ...(view !== 'all' ? { view } : {}) },
+  // These map onto the existing suggestions endpoint: its active view is the
+  // closest available proximity/activity signal, and New is server-sorted by creation date.
+  const tabParams =
+    tab === "shortlisted"
+      ? { view: "shortlisted" }
+      : tab === "new"
+        ? { addedWithinDays: 30, sort: "recent" }
+        : tab === "nearby"
+          ? { view: "active" }
+          : { sort };
+  const {
+    data,
+    isLoading,
+    error: loadError,
+  } = useQuery({
+    queryKey: ["suggestions", acting.profileId, tab, search, sort],
+    queryFn: async () => {
+      if (tab === "shortlisted") {
+        const response = await api.get("/matches/shortlist", {
+          params: {
+            q: search.trim() || undefined,
+            ...clientParam,
+          },
+        });
+        return { data: response.data, meta: { total: response.data.length } };
+      }
+      return (
+        await api.get("/matches/suggestions", {
+          params: {
+            limit: 40,
+            q: search.trim() || undefined,
+            ...clientParam,
+            ...tabParams,
+          },
         })
-      ).data,
-    // The previous list stays up while another chip's loads, rather than the
-    // whole screen dropping back to a skeleton on every press.
-    placeholderData: (previous) => previous,
+      ).data;
+    },
     enabled: acting.ready && settled && !gate,
+    placeholderData: (previous) => previous,
     retry: false,
   });
-
-  const sendInterest = useMutation({
-    mutationFn: (toProfileId: string) =>
-      api.post('/matches/interest', { toProfileId, ...clientParam }),
-    onSuccess: () => {
-      setError('');
-      void qc.invalidateQueries({ queryKey: ['suggestions'] });
-    },
-    onError: (err) => setError(apiMessage(err, 'That interest could not be sent.')),
-  });
-
-  /*
-   * `{ data, meta }` -- the same paginated envelope every list endpoint
-   * returns. This read was `data?.items ?? data ?? []`, and there is no
-   * `items` key, so the fallback handed FlatList the envelope OBJECT. RN's
-   * _getItemCount returns 0 for anything not array-like, silently, so the
-   * request succeeded and the screen showed "No matches to show yet" forever
-   * (council round 2). The web client has always read it as `data?.data`.
-   */
   const suggestions: Suggestion[] = data?.data ?? [];
-  const counts = data?.counts as MatchViewCounts | undefined;
-
-  if (isLoading || (acting.ready && !settled)) {
+  const total = data?.meta?.total ?? data?.total ?? suggestions.length;
+  const shortlist = useMutation({
+    mutationFn: ({ id, selected }: { id: string; selected: boolean }) =>
+      selected
+        ? api.delete(`/matches/shortlist/${id}`, { params: clientParam })
+        : api.put(`/matches/shortlist/${id}`, {}, { params: clientParam }),
+    onSuccess: () => {
+      setError("");
+      void qc.invalidateQueries({ queryKey: ["suggestions"] });
+    },
+    onError: (e) =>
+      setError(apiMessage(e, "That shortlist could not be updated.")),
+  });
+  const interest = useMutation({
+    mutationFn: (id: string) =>
+      api.post("/matches/interest", { toProfileId: id, ...clientParam }),
+    onSuccess: () => {
+      setError("");
+      void qc.invalidateQueries({ queryKey: ["suggestions"] });
+    },
+    onError: (e) => setError(apiMessage(e, "That interest could not be sent.")),
+  });
+  if (isLoading || (acting.ready && !settled))
     return (
-      <HeartBackdrop style={{ padding: space(4), gap: space(4) }}>
-        <Header />
-        <Loading rows={3} />
+      <HeartBackdrop style={{ padding: space(4) }}>
+        <Header initial={user?.email?.[0]} />
+        <Loading rows={5} />
       </HeartBackdrop>
     );
-  }
-
   return (
     <HeartBackdrop>
       <FlatList
+        key="two"
         data={suggestions}
-        keyExtractor={(s) => s.profile.id}
-        contentContainerStyle={{ padding: space(4), gap: space(3), paddingBottom: space(12) }}
+        numColumns={2}
+        keyExtractor={(row) => row.profile.id}
+        columnWrapperStyle={{ gap: space(2) }}
+        contentContainerStyle={{
+          padding: space(4),
+          paddingBottom: space(12),
+          gap: space(2),
+        }}
         ListHeaderComponent={
           <View style={{ gap: space(3), marginBottom: space(1) }}>
-            <Header />
+            <Header initial={user?.email?.[0]} />
+            <View>
+              <PageTitle style={{ fontSize: 34, lineHeight: 38 }}>
+                Find Your Match
+              </PageTitle>
+              <PageSubtitle>
+                Meaningful connections for a brighter tomorrow.
+              </PageSubtitle>
+            </View>
+            <View style={{ gap: space(2) }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  borderRadius: radius.md,
+                  backgroundColor: rgb(theme.surface),
+                  borderWidth: StyleSheet.hairlineWidth,
+                  borderColor: rgb(theme.border),
+                  paddingLeft: space(3),
+                  minHeight: 48,
+                }}
+              >
+                <MagnifyingGlass size={19} color={rgb(theme.brand)} />
+                <TextInput
+                  value={search}
+                  onChangeText={setSearch}
+                  placeholder="Search by name, location, profession..."
+                  placeholderTextColor={rgb(theme.ink[400])}
+                  style={typeface({
+                    flex: 1,
+                    fontSize: 13,
+                    color: rgb(theme.ink[900]),
+                    paddingHorizontal: space(2),
+                  })}
+                />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Show match filters"
+                  onPress={() => setFilterOpen((v) => !v)}
+                  style={{
+                    width: 40,
+                    height: 40,
+                    marginRight: space(1),
+                    borderRadius: radius.md,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: rgb(theme.brand),
+                  }}
+                >
+                  <SlidersHorizontal size={18} color={rgb(theme.brandFg)} />
+                </Pressable>
+              </View>
+              {filterOpen ? (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    gap: space(2),
+                    alignItems: "center",
+                    padding: space(2),
+                    borderRadius: radius.md,
+                    backgroundColor: rgb(theme.surfaceSunken),
+                  }}
+                >
+                  <Caption style={{ flex: 1 }}>Sort matches</Caption>
+                  {(["score", "recent", "age"] as const).map((v) => (
+                    <Pressable
+                      key={v}
+                      onPress={() => {
+                        setSort(v);
+                        setFilterOpen(false);
+                      }}
+                      style={{
+                        paddingHorizontal: space(2),
+                        paddingVertical: space(1),
+                        borderRadius: radius.md,
+                        backgroundColor:
+                          sort === v ? rgb(theme.brand) : rgb(theme.surface),
+                      }}
+                    >
+                      <Caption tone={sort === v ? "onBrand" : "muted"}>
+                        {v === "score"
+                          ? "Relevance"
+                          : v === "recent"
+                            ? "Newest"
+                            : "Age"}
+                      </Caption>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
+            </View>
+            <View style={{ flexDirection: "row", gap: space(1) }}>
+              {tabs.map((item) => (
+                <Pressable
+                  key={item.key}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: tab === item.key }}
+                  onPress={() => setTab(item.key)}
+                  style={{
+                    flex: 1,
+                    minHeight: 36,
+                    borderRadius: radius.md,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor:
+                      tab === item.key
+                        ? rgb(theme.brand)
+                        : rgb(theme.brandSoft),
+                  }}
+                >
+                  <Txt
+                    style={{
+                      fontSize: 11,
+                      fontWeight: "600",
+                      color: rgb(
+                        tab === item.key ? theme.brandFg : theme.brandStrong,
+                      ),
+                    }}
+                  >
+                    {item.label}
+                  </Txt>
+                </Pressable>
+              ))}
+            </View>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <Caption>
+                {total} profile{total === 1 ? "" : "s"} found
+              </Caption>
+              <Pressable
+                onPress={() => setFilterOpen(true)}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: space(1),
+                }}
+              >
+                <Caption style={{ fontWeight: "600" }}>Sort by</Caption>
+                <Caption tone="brand">
+                  {sort === "score"
+                    ? "Relevance"
+                    : sort === "recent"
+                      ? "Newest"
+                      : "Age"}
+                </Caption>
+                <CaretDown size={13} color={rgb(theme.brandStrong)} />
+              </Pressable>
+            </View>
             <ActingClientPicker acting={acting} />
-            {acting.ready && !gate ? (
-              <FilterChips
-                options={VIEW_CHIPS.map((c) => ({
-                  key: c.key,
-                  label: c.label,
-                  count: counts?.[c.count],
-                }))}
-                value={view}
-                // Pressing the chosen chip again goes back to everything.
-                onChange={(key) => setView((key as MatchView | null) ?? 'all')}
-              />
-            ) : null}
             {error ? <Alert tone="critical">{error}</Alert> : null}
             {loadError ? (
-              <Alert tone="critical">{apiMessage(loadError, 'Matches could not be loaded.')}</Alert>
+              <Alert tone="critical">
+                {apiMessage(loadError, "Matches could not be loaded.")}
+              </Alert>
             ) : null}
           </View>
         }
         ListEmptyComponent={
           loadError ? null : !acting.ready ? (
             <EmptyState title="Choose a client">
-              Pick which client you are browsing for, and the matches suggested for them appear here.
+              Pick a client to browse their matches.
             </EmptyState>
           ) : gate ? (
-            <EmptyState title={status?.profileCompleted ? 'Matchmaking is closed' : 'Finish the profile first'}>
+            <EmptyState
+              title={
+                status?.profileCompleted
+                  ? "Matchmaking is closed"
+                  : "Finish the profile first"
+              }
+            >
               {gate}
-            </EmptyState>
-          ) : view !== 'all' ? (
-            <EmptyState title="Nobody here right now">
-              No profiles under {VIEW_CHIPS.find((c) => c.key === view)?.label} at the moment.
             </EmptyState>
           ) : (
             <EmptyState title="No matches to show yet">
-              As more profiles are completed and verified, the ones worth your attention appear here.
+              Try changing your search or match tab.
             </EmptyState>
           )
         }
         renderItem={({ item }) => (
           <MatchCard
             suggestion={item}
-            onSendInterest={() => sendInterest.mutate(item.profile.id)}
-            onOpenProfile={() =>
-              router.push({ pathname: '/match/[id]', params: { id: item.profile.id } })
+            onOpen={() =>
+              router.push({
+                pathname: "/match/[id]",
+                params: {
+                  id: item.profile.id,
+                  score: String(Math.round(item.score)),
+                  shortlisted: String(Boolean(item.shortlisted)),
+                  interaction: item.interaction ?? "none",
+                  actingProfileId: acting.profileId ?? "",
+                },
+              })
             }
-            busy={sendInterest.isPending && sendInterest.variables === item.profile.id}
+            onShortlist={() =>
+              shortlist.mutate({
+                id: item.profile.id,
+                selected: Boolean(item.shortlisted),
+              })
+            }
+            shortlistBusy={
+              shortlist.isPending && shortlist.variables?.id === item.profile.id
+            }
+            onInterest={() => interest.mutate(item.profile.id)}
           />
         )}
       />
@@ -209,157 +386,171 @@ export default function Matches() {
   );
 }
 
-function Header() {
+function Header({ initial }: { initial?: string }) {
+  const theme = useTheme();
   return (
-    <View style={{ gap: space(1), marginTop: space(4) }}>
-      <PageTitle>Matches</PageTitle>
-      <PageSubtitle>Suggested for you, most compatible first.</PageSubtitle>
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        paddingTop: space(2),
+      }}
+    >
+      <View style={{ width: 40 }} />
+      <Txt
+        serif
+        style={{
+          fontSize: 31,
+          lineHeight: 34,
+          fontWeight: "600",
+          letterSpacing: 1,
+          color: rgb(theme.brand),
+        }}
+      >
+        WOW
+      </Txt>
+      <View style={{ flexDirection: "row", gap: space(1) }}>
+        <NotificationBell />
+        <View
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: radius.md,
+            backgroundColor: rgb(theme.brandSoft),
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          {initial ? (
+            <Txt
+              style={{
+                fontSize: 16,
+                fontWeight: "700",
+                color: rgb(theme.brandStrong),
+              }}
+            >
+              {initial.toUpperCase()}
+            </Txt>
+          ) : (
+            <UserCircle size={23} color={rgb(theme.brandStrong)} />
+          )}
+        </View>
+      </View>
     </View>
   );
 }
 
-/** What the interaction state means, said plainly rather than as a status word. */
-const INTERACTION_LABEL: Partial<Record<InteractionState, string>> = {
-  interest_sent: 'Interest sent',
-  interest_received: 'They are interested in you',
-  accepted: 'Matched',
-  declined_by_you: 'You passed on this one',
-  declined_by_them: 'Not taken forward',
-};
-
 function MatchCard({
   suggestion,
-  onSendInterest,
-  onOpenProfile,
-  busy,
+  onOpen,
+  onShortlist,
+  shortlistBusy,
+  onInterest,
 }: {
   suggestion: Suggestion;
-  onSendInterest: () => void;
-  onOpenProfile: () => void;
-  busy: boolean;
+  onOpen: () => void;
+  onShortlist: () => void;
+  shortlistBusy: boolean;
+  onInterest: () => void;
 }) {
   const theme = useTheme();
-  const { profile, score, interaction } = suggestion;
-  const cover = profile.photos?.[0];
-
-  // Chips, not a comma-separated run-on: these are separate facts and a reader
-  // scans them rather than reading them.
-  const facts = [
-    profile.ageRange,
-    profile.city,
-    [profile.card?.religion, profile.card?.caste].filter(Boolean).join(' · ') || null,
-    profile.card?.profession,
-    profile.card?.motherTongue,
-  ].filter(Boolean) as string[];
-
-  // The horoscope chips, labelled so a reader who does not use them can skip
-  // them and one who does can read them (EZ1-I48).
-  const chart = (
-    [
-      ['Rashi', profile.card?.rashi],
-      ['Star', profile.card?.star],
-      ['Padam', profile.card?.padam],
-      ['Gothram', profile.card?.gothram],
-      ['Kuja dosham', profile.card?.kujaDosham],
-    ] as const
-  ).filter(([, v]) => Boolean(v)) as [string, string][];
-
-  const settled = interaction && interaction !== 'none';
-
+  const { width } = useWindowDimensions();
+  const { profile, score } = suggestion;
+  const cardWidth = (width - space(8) - space(2)) / 2;
+  const facts = [profile.ageRange, profile.city].filter(Boolean).join(" • ");
   return (
-    <Card style={{ padding: 0, overflow: 'hidden', gap: 0 }}>
-      <View style={{ aspectRatio: 3 / 2, backgroundColor: rgb(theme.surfaceSunken) }}>
-        {cover ? (
-          <Image source={{ uri: cover }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+    <Pressable
+      accessibilityLabel={`View ${profile.displayName}`}
+      onPress={onOpen}
+      style={({ pressed }) => [
+        {
+          width: cardWidth,
+          backgroundColor: rgb(theme.surface),
+          borderRadius: radius.md,
+          overflow: "hidden",
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: rgb(theme.border),
+          opacity: pressed ? 0.78 : 1,
+        },
+      ]}
+    >
+      <View
+        style={{
+          height: cardWidth * 1.08,
+          backgroundColor: rgb(theme.surfaceSunken),
+        }}
+      >
+        {profile.photos?.[0] ? (
+          <Image
+            source={{ uri: profile.photos[0] }}
+            style={{ width: "100%", height: "100%" }}
+            resizeMode="cover"
+          />
         ) : (
           <ProfileSilhouette gender={profile.gender} style={{ flex: 1 }} />
         )}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            suggestion.shortlisted
+              ? "Remove from shortlist"
+              : "Add to shortlist"
+          }
+          onPress={(e) => {
+            e.stopPropagation();
+            onShortlist();
+          }}
+          disabled={shortlistBusy}
+          style={{
+            position: "absolute",
+            top: 8,
+            right: 8,
+            width: 32,
+            height: 32,
+            borderRadius: radius.md,
+            backgroundColor: rgb(theme.surface),
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Heart
+            size={18}
+            weight={suggestion.shortlisted ? "fill" : "regular"}
+            color={rgb(theme.brand)}
+          />
+        </Pressable>
       </View>
-
-      <View style={{ padding: space(4), gap: space(3) }}>
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space(3) }}>
-          <View style={{ flex: 1, gap: space(0.5) }}>
-            <SectionTitle numberOfLines={1}>{profile.displayName}</SectionTitle>
-            <Eyebrow>{profile.profileCode}</Eyebrow>
-          </View>
-          {/*
-            The number and its unit set apart, so "84" reads as the figure and
-            "%" does not compete with it for the same weight.
-          */}
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'baseline',
-              backgroundColor: rgba(theme.brand, theme.dark ? 0.18 : 0.1),
-              paddingHorizontal: space(2.5),
-              paddingVertical: space(1),
-              borderRadius: radius.sm,
-            }}
-          >
-            <Body style={{ fontWeight: '600', fontVariant: ['tabular-nums'], color: rgb(theme.brandStrong) }}>
-              {Math.round(score)}
-            </Body>
-            <Caption tone="brand" style={{ fontSize: 11 }}>
-              %
-            </Caption>
-          </View>
-        </View>
-
-        {facts.length > 0 ? (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(1.5) }}>
-            {facts.map((fact) => (
-              <View
-                key={fact}
-                style={{
-                  backgroundColor: rgb(theme.surfaceSunken),
-                  paddingHorizontal: space(2.5),
-                  paddingVertical: space(1),
-                  borderRadius: radius.sm,
-                }}
-              >
-                <Caption>{fact}</Caption>
-              </View>
-            ))}
-          </View>
+      <View style={{ padding: space(2), gap: 2, minHeight: 110 }}>
+        <SectionTitle numberOfLines={1} style={{ fontSize: 15 }}>
+          {profile.displayName}
+        </SectionTitle>
+        <Caption numberOfLines={1} style={{ fontSize: 11 }}>
+          {facts || profile.profileCode}
+        </Caption>
+        {profile.card?.profession ? (
+          <Caption numberOfLines={1} style={{ fontSize: 11 }}>
+            {profile.card.profession}
+          </Caption>
         ) : null}
-
-        {chart.length > 0 ? (
-          <View
-            style={{
-              flexDirection: 'row',
-              flexWrap: 'wrap',
-              gap: space(3),
-              borderTopWidth: 1,
-              borderTopColor: rgb(theme.border),
-              paddingTop: space(2),
-            }}
-          >
-            {chart.map(([label, value]) => (
-              <View key={label} style={{ flexDirection: 'row', gap: space(1) }}>
-                <Caption tone="faint">{label}</Caption>
-                <Caption>{value}</Caption>
-              </View>
-            ))}
-          </View>
-        ) : null}
-
-        {suggestion.sharedByFamily ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(1.5) }}>
-            <CheckCircle size={15} color={rgb(theme.positiveFg)} weight="fill" />
-            <Caption>Sent over by your family</Caption>
-          </View>
-        ) : null}
-
-        {/* The whole profile, including the horoscope chart families actually
-            compare on before deciding (EZ1-I231, EZ1-I261). */}
-        <Button label="View profile" variant="outline" small onPress={onOpenProfile} />
-
-        {settled ? (
-          <Body tone="muted">{INTERACTION_LABEL[interaction] ?? 'Already actioned'}</Body>
-        ) : (
-          <Button label="Send interest" onPress={onSendInterest} busy={busy} small />
-        )}
+        <Pressable
+          onPress={(e) => {
+            e.stopPropagation();
+            onInterest();
+          }}
+          style={{
+            marginTop: "auto",
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 3,
+          }}
+        >
+          <Heart size={14} weight="fill" color={rgb(theme.brand)} />
+          <Caption tone="brand" style={{ fontSize: 11, fontWeight: "700" }}>
+            {Math.round(score)}% Match
+          </Caption>
+        </Pressable>
       </View>
-    </Card>
+    </Pressable>
   );
 }

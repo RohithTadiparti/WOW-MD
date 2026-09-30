@@ -249,6 +249,14 @@ export class ProfileDetails {
   business: Record<string, unknown>;
 
   /**
+   * Income besides the main occupation — `{ source, details?, annualIncome? }`
+   * each, up to five. Optional whatever the occupation; the amounts follow
+   * `incomeVisible` like salary does.
+   */
+  @Column({ type: 'jsonb', default: [] })
+  otherIncome: Record<string, unknown>[];
+
+  /**
    * Income is the field people are least willing to publish, so it carries its
    * own visibility rather than riding on the profile's.
    */
