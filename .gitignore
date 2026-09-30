@@ -23,7 +23,11 @@ e2e-results/
 # Local compose secrets
 docker/.env
 
+# Android test builds served by the frontend container
+docker/downloads/
+
 mobile/.env
+
 # Local editor settings (may hold personal tokens)
 .claude/settings.json
 .claude/settings.local.json

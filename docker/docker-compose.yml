@@ -275,6 +275,10 @@ services:
     container_name: wow-frontend
     ports:
       - "${FRONTEND_PORT:-8080}:80"
+    # Android test builds, served at /downloads/. Git-ignored; drop a new APK
+    # in and it is live without rebuilding the image.
+    volumes:
+      - ./downloads:/usr/share/nginx/html/downloads:ro
     depends_on:
       - backend
     restart: unless-stopped
