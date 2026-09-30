@@ -356,7 +356,7 @@ describe('ProfileDetailsService section saves', () => {
     ).resolves.toBeDefined();
   });
 
-  it('replaces the employment and business blocks when the occupation changes', async () => {
+  it('changes only the occupation blocks that were sent', async () => {
     stored = {
       profileId: 'p1',
       occupationStatus: OccupationStatus.SELF_EMPLOYED,
@@ -373,7 +373,7 @@ describe('ProfileDetailsService section saves', () => {
     expect(stored).toMatchObject({
       occupationStatus: OccupationStatus.EMPLOYED,
       employment: { company: 'Acme', designation: 'Engineer' },
-      business: {},
+      business: { businessName: 'Shop', entries: [{ id: 'b1', businessName: 'Shop' }] },
     });
   });
 

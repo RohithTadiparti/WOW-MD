@@ -85,22 +85,20 @@ const SECTION_LABEL: Record<ProfileSection, string> = {
 /**
  * The occupation fields of an education or occupation save.
  *
- * Sending the occupation replaces the employment and business blocks, so a
- * switch from self-employed to employed does not leave the old business on the
- * biodata. Without it, only the blocks that were sent change. A business is
- * merged through `saveBusiness`, which keeps the extra entries a single-business
- * client cannot see.
+ * Only what was sent changes. Switching the occupation without a business
+ * leaves the saved businesses alone, so a family that tries another option
+ * and switches back has not lost them; what is shown follows the occupation.
+ * A business is merged through `saveBusiness`, which keeps the extra entries a
+ * single-business client cannot see.
  */
 function occupationFields(
   row: ProfileDetails,
   dto: Pick<EducationDetailsDto, 'occupationStatus' | 'employment' | 'business' | 'incomeVisible'>,
 ): Partial<ProfileDetails> {
-  const replacing = dto.occupationStatus !== undefined;
   const fields: Partial<ProfileDetails> = {};
-  if (replacing) fields.occupationStatus = dto.occupationStatus;
-  if (replacing || dto.employment !== undefined) fields.employment = dto.employment ?? {};
+  if (dto.occupationStatus !== undefined) fields.occupationStatus = dto.occupationStatus;
+  if (dto.employment !== undefined) fields.employment = dto.employment;
   if (dto.business !== undefined) fields.business = saveBusiness(row.business ?? {}, dto.business);
-  else if (replacing) fields.business = {};
   if (dto.incomeVisible !== undefined) fields.incomeVisible = dto.incomeVisible;
   return fields;
 }
