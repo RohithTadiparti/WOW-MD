@@ -25,4 +25,7 @@ frontend/public/ocr/
 # Local compose secrets
 docker/.env
 
+# Android test builds served by the frontend container
+docker/downloads/
+
 mobile/.env
