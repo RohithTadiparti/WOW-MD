@@ -10,6 +10,9 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.worldofweddings.app",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
       "infoPlist": {
         "NSCameraUsageDescription": "WOW uses the camera for video calls with the people you are matched with, and to add photographs to your profile and albums.",
         "NSMicrophoneUsageDescription": "WOW uses the microphone for voice and video calls with the people you are matched with.",
