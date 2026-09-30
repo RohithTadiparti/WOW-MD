@@ -6,6 +6,7 @@ import { api, apiMessage } from '@/lib/api';
 import { PRICING_LABEL, QUANTITY_MODELS, QUOTE_ONLY, priceLabel } from '@/lib/pricing';
 import { Badge, Divider } from '@/components/chrome';
 import { CheckRow, SelectField, Textarea } from '@/components/form';
+import { PromptSheet } from '@/components/prompt';
 import { Alert, Body, Button, Caption, Field } from '@/components/ui';
 import { rgb, radius, space, useTheme } from '@/theme';
 import type { Offering, VendorService } from '@/components/business/service-types';
@@ -31,6 +32,7 @@ export function Offerings({
   const qc = useQueryClient();
   const [error, setError] = useState('');
   const [editing, setEditing] = useState<string | 'new' | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Offering | null>(null);
 
   const allowed = service.definition?.allowedPricingModels ?? [];
 
@@ -93,13 +95,7 @@ export function Offerings({
             }
             onCancel={() => setEditing(null)}
             onRemove={() =>
-              act(
-                () =>
-                  api.delete(
-                    `/vendors/${vendorId}/services/${service.id}/offerings/${offering.id}`,
-                  ),
-                'Price removed.',
-              )
+              setDeleteTarget(offering)
             }
           />
         ) : (
@@ -130,6 +126,12 @@ export function Offerings({
               small
               onPress={() => setEditing(offering.id)}
             />
+            <Button
+              label="Delete"
+              variant="outline"
+              small
+              onPress={() => setDeleteTarget(offering)}
+            />
           </View>
         ),
       )}
@@ -139,6 +141,33 @@ export function Offerings({
           No prices yet — clients cannot request this service until there is one.
         </Caption>
       )}
+
+      <PromptSheet
+        visible={deleteTarget !== null}
+        title="Delete pricing/package?"
+        message={
+          deleteTarget
+            ? `Delete "${deleteTarget.name}" permanently? This cannot be undone.`
+            : undefined
+        }
+        confirmLabel="Delete"
+        input={false}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (!deleteTarget) return;
+          const target = deleteTarget;
+          void (async () => {
+            await act(
+              () =>
+                api.delete(
+                  `/vendors/${vendorId}/services/${service.id}/offerings/${target.id}`,
+                ),
+              'Pricing/package deleted.',
+            );
+            setDeleteTarget(null);
+          })();
+        }}
+      />
     </View>
   );
 }

@@ -224,6 +224,7 @@ export class AdminAccountsService {
         id: v.id,
         name: v.name,
         category: v.category,
+        categories: v.categories ?? [],
         status: v.status,
         isApproved: v.isApproved,
       })),

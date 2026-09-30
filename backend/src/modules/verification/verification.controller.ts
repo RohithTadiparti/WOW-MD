@@ -32,6 +32,7 @@ import {
   AllocateCaseDto,
   CaseQueryDto,
   EscalateCaseDto,
+  GrantBusinessChangeAccessDto,
   RaiseCaseDto,
   RecordFindingsDto,
   ReviewCaseDto,
@@ -341,6 +342,21 @@ export class VerificationController {
     @Body() dto: AllocateCaseDto,
   ) {
     return this.cases.allocate(actor, id, dto);
+  }
+
+  @RequirePermissions(Permission.CASE_ALLOCATE)
+  @ApiOperation({
+    summary: 'Grant temporary edit access for a vendor business-details change',
+    description:
+      'Does not allocate a verification officer. The vendor edits and submits first; only then does a verification request enter the allocation queue.',
+  })
+  @Put('cases/:id/grant-business-edit-access')
+  grantBusinessEditAccess(
+    @CurrentUser() actor: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: GrantBusinessChangeAccessDto,
+  ) {
+    return this.cases.grantBusinessChangeAccess(actor, id, dto);
   }
 
   @RequirePermissions(Permission.CASE_INVESTIGATE)

@@ -66,6 +66,9 @@ export class AppConfigService {
   get payments() {
     return this.section('payments');
   }
+  get payout() {
+    return this.section('payout');
+  }
   get identity() {
     return this.section('identity');
   }

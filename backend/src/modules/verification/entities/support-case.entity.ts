@@ -120,6 +120,10 @@ export class SupportCase {
   @Column({ type: 'varchar', length: 64, nullable: true })
   category: string | null;
 
+  /** Fields requested for a vendor business-details change. */
+  @Column({ type: 'jsonb', nullable: true })
+  requestedFields: string[] | null;
+
   /**
    * When the platform finished with it, as distinct from when the complainant
    * did. Two timestamps because they answer two different questions: how fast
@@ -192,6 +196,7 @@ export class SupportCase {
     id: string;
     name: string;
     category: string;
+    categories: string[];
     city: string | null;
     status: string;
     isApproved: boolean;

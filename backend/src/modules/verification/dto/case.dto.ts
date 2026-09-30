@@ -1,7 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayNotEmpty,
   IsArray,
   IsEnum,
   IsIn,
@@ -24,6 +25,13 @@ import {
   SettlementOutcome,
 } from '../../../common/enums';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
+import {
+  CORRECTABLE_BUSINESS_FIELDS,
+  normaliseCorrectionFields,
+} from '../../vendors/business-lifecycle';
+
+/** The case category of a vendor asking to change verified business details. */
+export const BUSINESS_CHANGE_CATEGORY = 'business_change';
 
 export class RaiseCaseDto {
   @ApiProperty({ enum: CaseSubject })
@@ -70,6 +78,54 @@ export class RaiseCaseDto {
   @MinLength(10, { message: 'Describe the issue in at least 10 characters' })
   @MaxLength(4000)
   description: string;
+
+  /**
+   * What kind of case this is, when the client knows.
+   *
+   * Only 'business_change' is accepted: a vendor asking for temporary edit
+   * access to details that were verified. It has to be said explicitly,
+   * because an ordinary "My business listing" case from the Support page is
+   * also about a vendor and must stay on the ordinary path.
+   */
+  @ApiPropertyOptional({ enum: [BUSINESS_CHANGE_CATEGORY] })
+  @IsOptional()
+  @IsIn([BUSINESS_CHANGE_CATEGORY])
+  category?: typeof BUSINESS_CHANGE_CATEGORY;
+
+  /**
+   * Required for a vendor business-details change request.  Keeping the field
+   * list structured lets the administrator grant edit access to exactly what
+   * was requested; it must never be inferred from prose in `description`.
+   */
+  @ApiPropertyOptional({ enum: CORRECTABLE_BUSINESS_FIELDS, isArray: true })
+  @IsOptional()
+  @Transform(({ value }) => normaliseCorrectionFields(value))
+  @IsArray()
+  @ArrayMaxSize(CORRECTABLE_BUSINESS_FIELDS.length)
+  @IsIn(CORRECTABLE_BUSINESS_FIELDS as unknown as string[], {
+    each: true,
+    message: 'Not a business detail that can be changed on request',
+  })
+  requestedFields?: string[];
+}
+
+export class GrantBusinessChangeAccessDto {
+  @ApiProperty({ enum: CORRECTABLE_BUSINESS_FIELDS, isArray: true, minItems: 1 })
+  @Transform(({ value }) => normaliseCorrectionFields(value))
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayMaxSize(CORRECTABLE_BUSINESS_FIELDS.length)
+  @IsIn(CORRECTABLE_BUSINESS_FIELDS as unknown as string[], {
+    each: true,
+    message: 'Not a business detail that can be opened for editing',
+  })
+  fields: string[];
+
+  @ApiPropertyOptional({ maxLength: 1000 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  note?: string;
 }
 
 /**

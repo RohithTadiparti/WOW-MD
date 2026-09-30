@@ -3,6 +3,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { WeddingPlannersService } from './wedding-planners.service';
 import { PlannerSearchDto, UpsertPlannerProfileDto } from './dto/wedding-planner.dto';
 import { PayoutAccountDto } from '../vendors/dto/vendor.dto';
+import { PayoutAccountsService } from '../vendors/payout-accounts.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
@@ -11,7 +12,10 @@ import { Permission } from '../../common/authz/permissions';
 @ApiTags('wedding-planners')
 @Controller('wedding-planners')
 export class WeddingPlannersController {
-  constructor(private readonly planners: WeddingPlannersService) {}
+  constructor(
+    private readonly planners: WeddingPlannersService,
+    private readonly payoutAccounts: PayoutAccountsService,
+  ) {}
 
   @Public()
   @Get('search')
@@ -46,7 +50,18 @@ export class WeddingPlannersController {
   })
   @Put('me/payout-account')
   setPayoutAccount(@CurrentUser('userId') userId: string, @Body() dto: PayoutAccountDto) {
-    return this.planners.setPayoutAccount(userId, dto.payoutAccountId);
+    return this.payoutAccounts.setForPlanner(userId, dto);
+  }
+
+  @ApiBearerAuth()
+  @RequirePermissions(Permission.PLANNER_LISTING_MANAGE)
+  @ApiOperation({
+    summary: 'Where escrow pays out to, and how far its setup has got',
+    description: 'The bank account number only ever comes back masked.',
+  })
+  @Get('me/payout-account')
+  getPayoutAccount(@CurrentUser('userId') userId: string) {
+    return this.payoutAccounts.getForPlanner(userId);
   }
 
   @Public()

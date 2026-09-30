@@ -5,6 +5,7 @@ import { api, apiMessage } from '../lib/api';
 import { todayIso } from '../lib/dates';
 import { useAuth } from '../store/auth';
 import { Loading } from '../components/ui/Feedback';
+import { useCategoryNames } from '../components/CategoryPicker';
 import {
   CASE_ACTION_LABEL,
   CORRECTABLE_FIELD_KEYS,
@@ -19,7 +20,6 @@ import {
 import {
   BUSINESS_STATUS_LABEL,
   bookingStatusLabel,
-  humanize,
   labelFrom,
   milestoneLabel,
   paymentStatusLabel,
@@ -67,6 +67,8 @@ export interface SupportCase {
   subjectId: string | null;
   title: string;
   description: string;
+  category?: string | null;
+  requestedFields?: string[] | null;
   status: CaseStatus;
   assignedToUserId: string | null;
   findings: string | null;
@@ -104,6 +106,7 @@ export interface SupportCase {
     id: string;
     name: string;
     category: string;
+    categories?: string[];
     city: string | null;
     status: string;
     isApproved: boolean;
@@ -1363,6 +1366,7 @@ export function CaseRow({
   canAllocate: boolean;
   onRun: (fn: () => Promise<unknown>, done?: string) => Promise<void>;
 }) {
+  const categoryNames = useCategoryNames();
   const [officerUserId, setOfficerUserId] = useState('');
   const [findings, setFindings] = useState(item.findings ?? '');
   const [amount, setAmount] = useState('');
@@ -1370,6 +1374,7 @@ export function CaseRow({
   // (EZ1-I181). Recorded as the settlement note the vendor reads.
   const [resNotes, setResNotes] = useState('');
   const settled = item.status === 'resolved' || item.status === 'closed';
+  const businessChange = item.subjectType === 'vendor' && item.category === 'business_change';
   // An officer has proposed a resolution and it is waiting on an administrator
   // to approve it or send it back (EZ1-I49) — a different screen from settling a
   // fresh case, so the two do not blur into one another.
@@ -1416,6 +1421,15 @@ export function CaseRow({
       </div>
 
       <p className="text-sm text-gray-700">{item.description}</p>
+
+      {businessChange && item.requestedFields?.length ? (
+        <p className="rounded-sm bg-sky-50 p-2 text-sm text-sky-900">
+          Requested fields:{' '}
+          {item.requestedFields
+            .map((field) => CORRECTION_FIELD_LABELS[field === 'categories' ? 'category' : field] ?? field)
+            .join(', ')}
+        </p>
+      ) : null}
 
       {/* Who raised it and, for a booking/payment case, the booking and parties
           — so an admin can investigate without opening other screens (EZ1-I74). */}
@@ -1470,7 +1484,12 @@ export function CaseRow({
       {item.business && (
         <div className="rounded-sm bg-gray-50 p-2 text-sm text-gray-700">
           <p className="font-medium text-gray-900">
-            {item.business.name} · <span>{humanize(item.business.category)}</span>
+            {item.business.name} ·{' '}
+            <span>
+              {item.business.categories?.length
+                ? categoryNames(item.business.categories).join(', ')
+                : categoryNames([item.business.category]).join(', ')}
+            </span>
           </p>
           <p className="text-gray-600">
             <span>{labelFrom(BUSINESS_STATUS_LABEL, item.business.status)}</span>
@@ -1629,6 +1648,29 @@ export function CaseRow({
         assignment and what it is waiting on stay visible above; only the
         actions go (EZ1-I218).
       */}
+      {canAllocate && businessChange && item.status === 'open' && (
+        <div className="flex flex-wrap items-end gap-2 rounded-sm bg-sky-50 p-3">
+          <p className="mr-auto text-sm text-sky-900">
+            Review the request, then give the vendor temporary edit access. An officer is assigned after the vendor submits the update.
+          </p>
+          <button
+            className="btn"
+            onClick={() =>
+              onRun(
+                () =>
+                  api.put(`/verification/cases/${item.id}/grant-business-edit-access`, {
+                    fields: item.requestedFields ?? [],
+                  }),
+                'Edit access granted. The vendor has been notified.',
+              )
+            }
+            disabled={!item.requestedFields?.length}
+          >
+            Grant edit access
+          </button>
+        </div>
+      )}
+
       {canAllocate && !settled && !inReview && withSomebodyElse && (
         <p className="text-xs text-gray-500">
           {item.status === 'waiting_for_information'
@@ -1637,7 +1679,7 @@ export function CaseRow({
         </p>
       )}
 
-      {canAllocate && !settled && !inReview && !withSomebodyElse && (
+      {canAllocate && !settled && !inReview && !withSomebodyElse && !businessChange && (
         <div className="flex flex-wrap items-end gap-2">
           <AllocateePicker
             officers={officers}
@@ -2114,6 +2156,7 @@ function SubjectDetails({
   applicantType?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const categoryNames = useCategoryNames();
 
   const { data } = useQuery({
     queryKey: ['verification-request', requestId],
@@ -2168,15 +2211,18 @@ function SubjectDetails({
             not. The applicant type is what the queue already knows.
           */}
           <Row label="Category">
-            {text(
-              subject.otherCategory ??
-                subject.category ??
-                (applicantType === 'planner'
-                  ? 'Wedding planner'
-                  : applicantType === 'agent'
-                    ? 'Marriage agency'
-                    : null),
-            )}
+            {Array.isArray(subject.categories) && subject.categories.length > 0
+              ? categoryNames(subject.categories as string[]).join(', ')
+              : subject.category
+                ? categoryNames([String(subject.category)]).join(', ')
+                : text(
+                    subject.otherCategory ??
+                      (applicantType === 'planner'
+                        ? 'Wedding planner'
+                        : applicantType === 'agent'
+                          ? 'Marriage agency'
+                          : null),
+                  )}
           </Row>
           <Row label="City">{text(subject.city)}</Row>
           <Row label="Registered address">

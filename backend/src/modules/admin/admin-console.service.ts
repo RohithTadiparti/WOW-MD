@@ -3,10 +3,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
 import { Vendor } from '../vendors/entities/vendor.entity';
+import { VendorReview } from '../vendors/entities/vendor-review.entity';
 import { Booking } from '../bookings/entities/booking.entity';
 import { Profile } from '../users/entities/profile.entity';
 import { VendorService } from '../catalog/entities/vendor-service.entity';
 import { ServiceOffering } from '../catalog/entities/service-offering.entity';
+import { ServiceDefinition } from '../catalog/entities/service-definition.entity';
+import { ServiceCategory } from '../catalog/entities/service-category.entity';
 import { OfficerServiceArea } from '../verification/entities/officer-service-area.entity';
 import { SupportCase } from '../verification/entities/support-case.entity';
 import { VerificationRequest } from '../verification/entities/verification-request.entity';
@@ -32,10 +35,13 @@ export class AdminConsoleService {
   constructor(
     @InjectRepository(User) private readonly users: Repository<User>,
     @InjectRepository(Vendor) private readonly vendors: Repository<Vendor>,
+    @InjectRepository(VendorReview) private readonly reviews: Repository<VendorReview>,
     @InjectRepository(Booking) private readonly bookings: Repository<Booking>,
     @InjectRepository(Profile) private readonly profiles: Repository<Profile>,
     @InjectRepository(VendorService) private readonly vendorServices: Repository<VendorService>,
     @InjectRepository(ServiceOffering) private readonly offerings: Repository<ServiceOffering>,
+    @InjectRepository(ServiceDefinition) private readonly definitions: Repository<ServiceDefinition>,
+    @InjectRepository(ServiceCategory) private readonly categories: Repository<ServiceCategory>,
     @InjectRepository(OfficerServiceArea)
     private readonly serviceAreas: Repository<OfficerServiceArea>,
     @InjectRepository(SupportCase) private readonly cases: Repository<SupportCase>,
@@ -56,14 +62,14 @@ export class AdminConsoleService {
    * The vendor account drill-down lists a vendor's businesses by name and
    * status; this is what opens when an administrator clicks one — the
    * registration and compliance details, every service in the catalogue with
-   * its offerings and concurrency, the uploaded documents, the verification
+  * its offerings, the uploaded documents, the verification
    * history, and the bookings taken against it.
    */
   async businessDetail(vendorId: string) {
     const vendor = await this.vendors.findOne({ where: { id: vendorId } });
     if (!vendor) throw new NotFoundException('Business not found');
 
-    const [owner, services, verifications, receivedRaw] = await Promise.all([
+    const [owner, services, verifications, receivedRaw, reviews] = await Promise.all([
       this.users.findOne({
         where: { id: vendor.ownerUserId },
         select: ['id', 'email', 'role', 'isActive', 'phone', 'createdAt'],
@@ -75,9 +81,31 @@ export class AdminConsoleService {
         order: { createdAt: 'DESC' },
         take: 20,
       }),
+      this.reviews.find({ where: { vendorId }, order: { createdAt: 'DESC' }, take: 50 }),
     ]);
 
-    const serviceIds = services.map((s) => s.id);
+    const allServiceIds = services.map((s) => s.id);
+    const definitions = allServiceIds.length
+      ? await this.definitions.find({ where: { id: In(services.map((s) => s.definitionId)) } })
+      : [];
+    const categoryIds = [...new Set(definitions.map((definition) => definition.categoryId))];
+    const categories = categoryIds.length
+      ? await this.categories.find({ where: { id: In(categoryIds) } })
+      : [];
+    const definitionById = new Map(definitions.map((definition) => [definition.id, definition]));
+    const categoryById = new Map(categories.map((category) => [category.id, category]));
+    // Every service is shown, including one whose category the business no
+    // longer lists: an administrator has to see everything the business could
+    // still be holding bookings against. Those are flagged instead.
+    const selectedCategories = vendor.categories ?? [];
+    const categoryOf = (service: VendorService) =>
+      categoryById.get(definitionById.get(service.definitionId)?.categoryId ?? '') ?? null;
+    const outsideSelected = (service: VendorService) => {
+      if (selectedCategories.length === 0) return false;
+      const category = categoryOf(service);
+      return !category || !selectedCategories.includes(category.slug);
+    };
+    const serviceIds = allServiceIds;
     const offerings = serviceIds.length
       ? await this.offerings.find({
           where: { vendorServiceId: In(serviceIds) },
@@ -131,13 +159,14 @@ export class AdminConsoleService {
         updatedAt: vendor.updatedAt,
       },
       owner,
-      /** Services & catalogue, each with its priced offerings and concurrency. */
+      /** Services & catalogue, each with its priced offerings and category. */
       services: services.map((s) => ({
         id: s.id,
         displayName: s.displayName,
         name: serviceNames.get(s.id) ?? null,
+        category: categoryOf(s),
+        outsideSelectedCategories: outsideSelected(s),
         description: s.description,
-        concurrentCapacity: s.concurrentCapacity,
         active: s.active,
         offerings: (offeringsByService.get(s.id) ?? []).map((o) => ({
           id: o.id,
@@ -162,6 +191,14 @@ export class AdminConsoleService {
         createdAt: v.createdAt,
       })),
       bookings,
+      reviews: reviews.map((review) => ({
+        id: review.id,
+        rating: review.rating,
+        comment: review.comment,
+        status: review.status,
+        moderationReason: review.moderationReason,
+        createdAt: review.createdAt,
+      })),
     };
   }
 
@@ -172,18 +209,49 @@ export class AdminConsoleService {
    * lists the businesses — which is what a question like "how many listings are
    * stuck in first review" is actually about.
    */
-  async businesses(q: DirectoryQueryDto): Promise<PaginatedResult<Vendor>> {
+  async businesses(q: DirectoryQueryDto): Promise<
+    PaginatedResult<
+      Vendor & { owner: { email: string | null; isActive: boolean; createdAt: Date } | null }
+    >
+  > {
     const qb = this.vendors.createQueryBuilder('v');
     if (q.status) qb.andWhere('v.status = :status', { status: q.status });
     if (q.q) qb.andWhere('LOWER(v.name) LIKE :needle', { needle: `%${q.q.toLowerCase()}%` });
     if (q.city) qb.andWhere('LOWER(v.city) = LOWER(:city)', { city: q.city });
+    // Filtered here, against every owner, rather than by the client against
+    // whichever page of accounts it happened to load.
+    if (q.active !== undefined) {
+      qb.innerJoin(User, 'owner', 'owner.id = v.ownerUserId').andWhere(
+        'owner.isActive = :active',
+        { active: q.active === true },
+      );
+    }
 
     qb.orderBy('v.createdAt', 'DESC')
       .skip((q.page - 1) * q.limit)
       .take(q.limit);
 
     const [data, total] = await qb.getManyAndCount();
-    return paginate(data, total, q.page, q.limit);
+
+    // Each row names its owner's account, so a page of businesses is complete
+    // on its own.
+    const ownerIds = [...new Set(data.map((v) => v.ownerUserId))];
+    const owners = ownerIds.length
+      ? await this.users.find({
+          where: { id: In(ownerIds) },
+          select: ['id', 'email', 'isActive', 'createdAt'],
+        })
+      : [];
+    const ownerById = new Map(owners.map((o) => [o.id, o]));
+    const rows = data.map((v) => {
+      const owner = ownerById.get(v.ownerUserId);
+      return Object.assign(v, {
+        owner: owner
+          ? { email: owner.email, isActive: owner.isActive, createdAt: owner.createdAt }
+          : null,
+      });
+    });
+    return paginate(rows, total, q.page, q.limit);
   }
 
   /**

@@ -74,6 +74,20 @@ describe('StorageService', () => {
       expect(r.uploadUrl).toBe(`http://192.168.31.178:8085/api/mock-storage/${KEY}`);
     });
 
+    /*
+     * A private address is a real deployment (a staging box, an internal load
+     * balancer) and the request origin comes from Host / X-Forwarded-Host,
+     * which the client controls. Trusting it there would let one user store a
+     * photo URL pointing at a host of their choosing for everyone else to load.
+     */
+    it('keeps a configured private storage address rather than the request origin', async () => {
+      const r = await storage({
+        mockBaseUrl: 'http://192.168.0.55:3000/api/mock-storage',
+      }).presignUpload(KEY, { requestOrigin: 'http://attacker.example:8085' });
+      expect(r.uploadUrl).toBe(`http://192.168.0.55:3000/api/mock-storage/${KEY}`);
+      expect(r.publicUrl).toBe(r.uploadUrl);
+    });
+
     it.each(['http://127.0.0.1:8085/api/mock-storage', 'http://[::1]:8085/api/mock-storage'])(
       'treats %s as loopback too',
       async (mockBaseUrl) => {

@@ -54,7 +54,6 @@ interface Summary {
 interface ServiceOption {
   id: string;
   displayName: string | null;
-  concurrentCapacity: number;
   definition: { name: string } | null;
 }
 

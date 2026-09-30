@@ -108,6 +108,7 @@ export default function Login() {
           value={password}
           onChangeText={setPassword}
           secureTextEntry
+          showPasswordToggle
           autoCapitalize="none"
           autoComplete="current-password"
           textContentType="password"

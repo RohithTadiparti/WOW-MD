@@ -1,13 +1,19 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiMessage } from '../lib/api';
 import { MILESTONE_LABEL, Permission, can } from '../lib/permissions';
 import { paymentStatusLabel } from '../lib/labels';
 import { Loading } from '../components/ui/Feedback';
-import PayoutAccount from '../components/PayoutAccount';
+import PayoutAccount, { type PayoutAccountView } from '../components/PayoutAccount';
 import { useAuth } from '../store/auth';
 import { useBusinesses } from '../store/business';
+
+const maskAccountId = (value: string | null | undefined) => {
+  if (!value) return 'Not configured';
+  if (value.length <= 8) return value;
+  return `${value.slice(0, 4)}••••${value.slice(-4)}`;
+};
 
 interface LedgerRow {
   paymentId: string;
@@ -17,11 +23,14 @@ interface LedgerRow {
   amount: string;
   commissionAmount: string;
   payoutAmount: string;
+  releasedAmount: string;
+  availableAmount: string;
   confirmedAt: string | null;
   createdAt: string;
   /** Who the booking was for and what was sold, when the server names them. */
   clientName?: string | null;
   serviceName?: string | null;
+  eventDate: string | null;
 }
 
 interface Earnings {
@@ -67,29 +76,62 @@ export default function Accounts() {
   const isPlanner = can(permissions, Permission.PLANNER_LISTING_MANAGE);
   const { activeId } = useBusinesses();
 
+  const qc = useQueryClient();
+
   const { data, isLoading } = useQuery<Earnings>({
     queryKey: ['earnings'],
     queryFn: async () => (await api.get('/bookings/earnings')).data,
   });
 
   // The provider's payout account lives here now, not in My Business (EZ1-I100).
-  const { data: payout } = useQuery<{ payoutAccountId: string | null } | null>({
+  const payoutEndpoint = isPlanner
+    ? '/wedding-planners/me/payout-account'
+    : activeId
+      ? `/vendors/${activeId}/payout-account`
+      : null;
+  const { data: payout } = useQuery<PayoutAccountView | null>({
     queryKey: ['payout-account', isPlanner ? 'planner' : activeId],
-    enabled: (isVendor && Boolean(activeId)) || isPlanner,
-    queryFn: async () => {
-      if (isPlanner) {
-        return (await api.get('/wedding-planners/me')).data as { payoutAccountId: string | null };
-      }
-      const listings = (await api.get('/vendors/me')).data as { id: string; payoutAccountId: string | null }[];
-      return listings.find((l) => l.id === activeId) ?? null;
-    },
+    enabled: ((isVendor && Boolean(activeId)) || isPlanner) && Boolean(payoutEndpoint),
+    queryFn: async () => (await api.get<PayoutAccountView>(payoutEndpoint as string)).data,
     retry: false,
   });
+  const payoutActive = payout?.status === 'active';
+  const [releasing, setReleasing] = useState<string | null>(null);
+  const [releaseNotice, setReleaseNotice] = useState('');
+
+  async function releasePayment(row: LedgerRow) {
+    setReleasing(row.paymentId);
+    setReleaseNotice('');
+    try {
+      const { data: result } = await api.put<{ released: number; notReleased: string[] }>(
+        `/bookings/${row.bookingId}/release-payout?milestone=${encodeURIComponent(row.milestone)}`,
+      );
+      setReleaseNotice(
+        result.released > 0
+          ? 'Payment released to your payout account.'
+          : result.notReleased[0] ?? 'Nothing was released. It may already be on its way.',
+      );
+      await qc.invalidateQueries({ queryKey: ['earnings'] });
+    } catch (err) {
+      setReleaseNotice(apiMessage(err, 'That payment could not be released.'));
+    } finally {
+      setReleasing(null);
+    }
+  }
 
   const money = (value: string) =>
     `${data?.currency === 'INR' ? '₹' : ''}${Number(value).toLocaleString('en-IN', {
       minimumFractionDigits: 2,
     })}`;
+
+  const eligibleRows = useMemo(
+    () => (data?.ledger ?? []).filter((row) => row.status === 'pending_payout'),
+    [data?.ledger],
+  );
+  const escrowRows = useMemo(
+    () => (data?.ledger ?? []).filter((row) => ['held_in_escrow', 'disputed'].includes(row.status)),
+    [data?.ledger],
+  );
 
   return (
     <div className="space-y-6">
@@ -100,59 +142,146 @@ export default function Accounts() {
         </p>
       </div>
 
-      {isVendor && activeId && (
-        <PayoutAccount
-          endpoint={`/vendors/${activeId}/payout-account`}
-          current={payout?.payoutAccountId ?? null}
-        />
-      )}
-      {isPlanner && (
-        <PayoutAccount
-          endpoint="/wedding-planners/me/payout-account"
-          current={payout?.payoutAccountId ?? null}
-        />
+      {((isVendor && activeId) || isPlanner) && payoutEndpoint && (
+        <PayoutAccount endpoint={payoutEndpoint} view={payout ?? null} />
       )}
 
       {isLoading && <Loading rows={3} />}
 
       {data && (
         <>
-          <div className="grid gap-3 sm:grid-cols-4">
-            <Figure
-              label="Paid out to you"
-              value={money(data.released)}
-              tone="text-emerald-700"
-              note="Already released from escrow"
-            />
-            <Figure
-              label="Held in escrow"
-              value={money(data.heldInEscrow)}
-              tone="text-amber-700"
-              note="Yours once the work is signed off"
-            />
-            {/*
-              Only shown when there is some. "Owed" is a different fact from
-              "held" — the work is done and the money is no longer the buyer's —
-              and a provider seeing a zero here every day would stop reading it.
-            */}
-            {Number(data.pendingPayout) > 0 && (
-              <Figure
-                label="Owed to you"
-                value={money(data.pendingPayout)}
-                tone="text-amber-700"
-                note="Earned. Waiting on a payout account to send it to."
-              />
+          <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
+            <Figure label="Total earned" value={money(data.gross)} tone="text-brand-700" note="Gross bookings revenue" />
+            <Figure label="Escrow" value={money(data.heldInEscrow)} tone="text-amber-700" note="Currently on hold" />
+            <Figure label="Available for payout" value={money(data.pendingPayout)} tone="text-sky-700" note="Eligible for transfer" />
+            <Figure label="Paid" value={money(data.released)} tone="text-emerald-700" note="Already released" />
+            <Figure label="Commission" value={money(data.commission)} tone="text-gray-700" note="Deducted from payouts" />
+            <Figure label="Refunded" value={money(data.refunded)} tone="text-gray-700" note="Returned to the customer" />
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="card space-y-3 lg:col-span-2">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="section-title">Eligible payouts</h2>
+                <span className="rounded-full bg-sky-50 px-2 py-1 text-xs font-medium text-sky-700">
+                  Available: {money(data.pendingPayout)}
+                </span>
+              </div>
+              {releaseNotice && (
+                <p className="rounded-sm bg-sky-50 p-2 text-sm text-sky-800">{releaseNotice}</p>
+              )}
+              {eligibleRows.length === 0 ? (
+                <div className="py-4 text-center text-sm text-gray-500">No milestones are currently eligible for release.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[980px] text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-xs uppercase tracking-wide text-gray-500">
+                        <th className="pb-2">Booking ID</th>
+                        <th className="pb-2">Customer</th>
+                        <th className="pb-2">Service</th>
+                        <th className="pb-2">Event date</th>
+                        <th className="pb-2">Milestone</th>
+                        <th className="pb-2 text-right">Total amount</th>
+                        <th className="pb-2 text-right">Released</th>
+                        <th className="pb-2 text-right">Available</th>
+                        <th className="pb-2" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                      {eligibleRows.map((row) => (
+                        <tr key={row.paymentId}>
+                          <td className="py-3 font-mono text-xs text-gray-700">{row.bookingId.slice(0, 8)}</td>
+                          <td className="py-3 text-gray-700">{row.clientName ?? 'Customer'}</td>
+                          <td className="py-3 text-gray-700">{row.serviceName ?? 'Booking'}</td>
+                          <td className="py-3 text-gray-700">{row.eventDate ? new Date(row.eventDate).toLocaleDateString() : '—'}</td>
+                          <td className="py-3">{MILESTONE_LABEL[row.milestone] ?? row.milestone}</td>
+                          <td className="py-3 text-right">{money(row.amount)}</td>
+                          <td className="py-3 text-right">{money(row.releasedAmount)}</td>
+                          <td className="py-3 text-right font-medium">{money(row.availableAmount)}</td>
+                          <td className="py-3 text-right">
+                            <button
+                              type="button"
+                              className="btn whitespace-nowrap disabled:cursor-not-allowed disabled:bg-slate-200"
+                              disabled={releasing !== null || !payoutActive}
+                              title={payoutActive ? undefined : 'Set up an active payout account first'}
+                              onClick={() => void releasePayment(row)}
+                            >
+                              {releasing === row.paymentId ? 'Releasing…' : 'Release Payment'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="card space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="section-title">Payout account</h2>
+                <span
+                  className={`rounded-full px-2 py-1 text-xs ${payoutActive ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'}`}
+                >
+                  {payoutActive
+                    ? 'Active'
+                    : payout?.status === 'pending_verification'
+                      ? 'Pending verification'
+                      : 'Not configured'}
+                </span>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                <div className="font-medium text-slate-900">Linked account</div>
+                <div className="mt-1 font-mono">{maskAccountId(payout?.payoutAccountId ?? null)}</div>
+                <div className="mt-2 text-xs text-slate-500">
+                  {payoutActive
+                    ? 'Released payments are transferred to this account.'
+                    : payout?.status === 'pending_verification'
+                      ? 'Your bank details are waiting to be verified. Payouts are held until then.'
+                      : 'Add a payout account to allow transfers from escrow.'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="card overflow-x-auto">
+            <div className="mb-3 flex items-baseline justify-between gap-3">
+              <h2 className="font-semibold text-gray-900">Escrow</h2>
+              <span className="text-xs text-gray-400">Only eligible milestones can move to available for payout</span>
+            </div>
+            {escrowRows.length === 0 ? (
+              <div className="py-4 text-center text-sm text-gray-500">No escrow is currently pending release.</div>
+            ) : (
+              <table className="w-full min-w-[720px] text-sm">
+                <thead>
+                  <tr className="border-b text-left text-xs uppercase tracking-wide text-gray-500">
+                    <th className="pb-2">Booking</th>
+                    <th className="pb-2">Customer</th>
+                    <th className="pb-2">Milestone</th>
+                    <th className="pb-2 text-right">Amount</th>
+                    <th className="pb-2">Status</th>
+                    <th className="pb-2">Expected release</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  {escrowRows.map((row) => (
+                    <tr key={row.paymentId}>
+                      <td className="py-2 font-mono text-xs text-gray-700">{row.bookingId.slice(0, 8)}</td>
+                      <td className="py-2 text-gray-700">{row.clientName ?? 'Customer'}</td>
+                      <td className="py-2">{MILESTONE_LABEL[row.milestone] ?? row.milestone}</td>
+                      <td className="py-2 text-right font-medium">{money(row.payoutAmount)}</td>
+                      <td className="py-2">
+                        <span className={`rounded-full px-2 py-1 text-xs ${row.status === 'disputed' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`}>
+                          {paymentStatusLabel(row.status, 'provider')}
+                        </span>
+                      </td>
+                      <td className="py-2 text-gray-600">{row.confirmedAt ? new Date(row.confirmedAt).toLocaleDateString() : 'Awaiting confirmation'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             )}
-            <Figure
-              label="Platform commission"
-              value={money(data.commission)}
-              note="Deducted from released payments"
-            />
-            <Figure
-              label="Refunded"
-              value={money(data.refunded)}
-              note="Returned to the buyer"
-            />
           </div>
 
           <div className="card overflow-x-auto">
@@ -208,17 +337,6 @@ export default function Accounts() {
                       >
                         {paymentStatusLabel(row.status, 'provider')}
                       </span>
-                      {/*
-                        Only where the money is stuck. A "settle my payment"
-                        button beside every row would be a button people press
-                        on payments that are working, and the desk would fill
-                        with requests that have no answer.
-                      */}
-                      {row.status === 'pending_payout' && (
-                        <div onClick={(e) => e.stopPropagation()}>
-                          <SettleMyPayment bookingId={row.bookingId} />
-                        </div>
-                      )}
                     </td>
                   </tr>
                 ))}
@@ -234,56 +352,6 @@ export default function Accounts() {
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-/**
- * "Settle my payment", on a payment that has not landed.
- *
- * It answers before it routes. The commonest reason a payout is stuck is a
- * provider who has not finished their own onboarding, and saying so is a better
- * outcome than putting a request on somebody's desk and making them wait for
- * the same sentence. Only if they still want a person does a case exist — and
- * the second press returns the one already open rather than raising another.
- */
-function SettleMyPayment({ bookingId }: { bookingId: string }) {
-  const [state, setState] = useState<{ reason: string; owed: string; open: boolean } | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function ask() {
-    setBusy(true);
-    setError(null);
-    try {
-      const { data } = await api.post(`/verification/cases/settlement/${bookingId}`, {});
-      setState({ reason: data.reason, owed: data.owed, open: data.alreadyOpen });
-    } catch (err) {
-      setError(apiMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (state) {
-    return (
-      <div className="mt-1 max-w-xs rounded-sm bg-amber-50 p-2 text-xs text-amber-900">
-        <p>{state.reason}</p>
-        <p className="mt-1 text-amber-700">
-          {state.open
-            ? 'A request on this is already with the support desk.'
-            : 'Raised with the support desk.'}
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="mt-1">
-      <button className="text-xs text-brand underline" disabled={busy} onClick={() => void ask()}>
-        {busy ? 'Checking…' : 'Settle my payment'}
-      </button>
-      {error && <p className="mt-1 max-w-xs text-xs text-red-600">{error}</p>}
     </div>
   );
 }

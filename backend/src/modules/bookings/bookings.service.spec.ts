@@ -484,4 +484,100 @@ describe('BookingsService', () => {
       ).rejects.toThrow(/what you need/);
     });
   });
+
+  describe('releasing an owed payout', () => {
+    const owed = {
+      id: 'pay1',
+      bookingId: 'b1',
+      providerRef: 'pay_ref',
+      payoutAmount: '900.00',
+      commissionAmount: '100.00',
+      amount: '1000.00',
+      currency: 'INR',
+      milestone: 'final',
+      status: 'pending_payout',
+    };
+    const provider = asUser('vendor-owner', UserRole.VENDOR);
+    const audit = () => (service as unknown as { audit: { record: jest.Mock } }).audit.record;
+    const listing = (payoutAccountId: string | null) => {
+      vendorsRepo.findOne.mockResolvedValueOnce({ id: 'v1', ownerUserId: 'vendor-owner', isApproved: true });
+      vendorsRepo.findOne.mockResolvedValueOnce({
+        id: 'v1',
+        ownerUserId: 'vendor-owner',
+        isApproved: true,
+        name: 'Shop',
+        payoutAccountId,
+      } as never);
+    };
+
+    // The claim runs inside a transaction; the manager hands back a payments
+    // repository whose locked read says whether this call won the row.
+    const claim = (row: typeof owed | null) => {
+      const update = jest.fn();
+      (dataSource.transaction as jest.Mock).mockImplementationOnce(
+        async (fn: (m: unknown) => unknown) =>
+          fn({ getRepository: () => ({ findOne: jest.fn(async () => row), update }) }),
+      );
+      return update;
+    };
+
+    beforeEach(() => {
+      current = baseBooking({ status: BookingStatus.COMPLETED });
+      paymentsRepo.find.mockResolvedValueOnce([owed] as never);
+    });
+
+    it('refuses with a 400 when there is no payout account, and records nothing', async () => {
+      listing(null);
+      await expect(service.releasePayout(provider, 'b1')).rejects.toBeInstanceOf(BadRequestException);
+      expect(gateway.release).not.toHaveBeenCalled();
+      expect(audit()).not.toHaveBeenCalled();
+    });
+
+    it('transfers once, writes back only a still-owed row, and audits the transfer', async () => {
+      listing('acc_1');
+      gateway.release.mockResolvedValueOnce({ transferred: true, transferRef: 'trf_1', reason: null });
+      const update = claim(owed);
+
+      const result = await service.releasePayout(provider, 'b1');
+
+      expect(result).toEqual({ bookingId: 'b1', released: 1, notReleased: [] });
+      expect(gateway.release).toHaveBeenCalledTimes(1);
+      expect(update).toHaveBeenCalledWith(
+        { id: 'pay1', status: 'pending_payout' },
+        { status: 'released', payoutRef: 'trf_1', payoutNote: null },
+      );
+      expect(audit()).toHaveBeenCalledTimes(1);
+    });
+
+    it('does nothing when a concurrent release already claimed the payment', async () => {
+      listing('acc_1');
+      const update = claim(null);
+
+      const result = await service.releasePayout(provider, 'b1');
+
+      expect(result.released).toBe(0);
+      expect(gateway.release).not.toHaveBeenCalled();
+      expect(update).not.toHaveBeenCalled();
+      expect(audit()).not.toHaveBeenCalled();
+    });
+
+    it('keeps a refused transfer owed without touching its status', async () => {
+      listing('acc_1');
+      gateway.release.mockResolvedValueOnce({
+        transferred: false,
+        transferRef: null,
+        reason: 'Gateway refused: 400',
+      });
+      const update = claim(owed);
+
+      const result = await service.releasePayout(provider, 'b1');
+
+      expect(result).toEqual({ bookingId: 'b1', released: 0, notReleased: ['Gateway refused: 400'] });
+      expect(update).toHaveBeenCalledWith(
+        { id: 'pay1', status: 'pending_payout' },
+        { payoutNote: 'Gateway refused: 400' },
+      );
+      expect(audit()).not.toHaveBeenCalled();
+    });
+  });
 });

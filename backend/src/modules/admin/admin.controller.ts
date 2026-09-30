@@ -119,7 +119,7 @@ export class AdminController {
     summary: 'One vendor business in full (EZ1-I188)',
     description:
       'Registration and compliance, every service in the catalogue with its offerings and ' +
-      'concurrency, uploaded documents, verification history and bookings taken — what opens ' +
+      'selected categories, uploaded documents, verification history and bookings taken — what opens ' +
       'when an administrator clicks a business on a vendor account.',
   })
   @Get('businesses/:id')

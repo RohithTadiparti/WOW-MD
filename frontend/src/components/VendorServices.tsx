@@ -1,7 +1,8 @@
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiMessage } from '../lib/api';
 import { Loading } from './ui/Feedback';
+import ConfirmDialog from './ConfirmDialog';
 import DynamicForm, {
   Answers,
   FieldSpec,
@@ -25,7 +26,6 @@ interface Definition {
   allowedPricingModels: string[];
   availabilityModel: string;
   packagesAllowed: boolean;
-  defaultCapacity: number;
 }
 
 interface Offering {
@@ -49,9 +49,10 @@ interface VendorService {
   displayName: string | null;
   description: string | null;
   attributes: Answers;
-  concurrentCapacity: number;
   active: boolean;
   bookable: boolean;
+  /** Its category is no longer one the business lists, so it is off sale. */
+  outsideSelectedCategories?: boolean;
   definition: Definition | null;
   category: Category | null;
   serviceForm: FieldSpec[];
@@ -94,13 +95,23 @@ export function priceLabel(
  * it is sold as a package at all. Nothing here is written per vendor type,
  * which is what lets an administrator add a trade without a deployment.
  */
-export default function VendorServices({ vendorId }: { vendorId: string }) {
+export default function VendorServices({
+  vendorId,
+  selectedCategories,
+}: {
+  vendorId: string;
+  selectedCategories: string[];
+}) {
   const qc = useQueryClient();
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [pricing, setPricing] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<
+    { kind: 'service'; id: string; name: string } | { kind: 'offering'; serviceId: string; id: string; name: string } | null
+  >(null);
+  const [deleting, setDeleting] = useState(false);
 
   const { data: services = [], isLoading } = useQuery<VendorService[]>({
     queryKey: ['vendor-services', vendorId],
@@ -122,6 +133,12 @@ export default function VendorServices({ vendorId }: { vendorId: string }) {
     }
   }
 
+  /*
+   * Every service is listed, including one whose category the business no
+   * longer lists. The server takes those off sale; the vendor still has to see
+   * them to switch them off or remove them.
+   */
+  const visibleServices = services;
   const takenDefinitionIds = useMemo(() => services.map((s) => s.definitionId), [services]);
 
   return (
@@ -130,8 +147,7 @@ export default function VendorServices({ vendorId }: { vendorId: string }) {
         <div>
           <h2 className="section-title">Services you offer</h2>
           <p className="text-sm text-gray-600">
-            What you sell, what it costs, and how many you can run at once. Clients see these, and
-            the questions they are asked come from the service they pick.
+            What you sell, what it costs, and the questions clients are asked when they pick a service.
           </p>
         </div>
         <button className="btn" onClick={() => setAdding(!adding)}>
@@ -145,6 +161,7 @@ export default function VendorServices({ vendorId }: { vendorId: string }) {
       {adding && (
         <AddService
           taken={takenDefinitionIds}
+          selectedCategories={selectedCategories}
           onAdd={async (body) => {
             const ok = await act(
               () => api.post(`/vendors/${vendorId}/services`, body),
@@ -158,13 +175,13 @@ export default function VendorServices({ vendorId }: { vendorId: string }) {
       {isLoading && <div className="card">
           <Loading rows={2} />
         </div>}
-      {!isLoading && services.length === 0 && !adding && (
+      {!isLoading && visibleServices.length === 0 && !adding && (
         <p className="card text-sm text-gray-400">
           Nothing listed yet. Add a service to start taking requests.
         </p>
       )}
 
-      {services.map((service) => (
+      {visibleServices.map((service) => (
         <div key={service.id} className="card space-y-3">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0">
@@ -174,8 +191,6 @@ export default function VendorServices({ vendorId }: { vendorId: string }) {
               <p className="text-xs text-gray-500">
                 {service.category?.name}
                 {service.definition ? ` · ${service.definition.name}` : ''}
-                {' · '}
-                up to {service.concurrentCapacity} at once
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -188,15 +203,29 @@ export default function VendorServices({ vendorId }: { vendorId: string }) {
               >
                 {service.bookable
                   ? 'Bookable'
-                  : service.active
-                    ? 'No price published'
-                    : 'Switched off'}
+                  : !service.active
+                    ? 'Switched off'
+                    : service.outsideSelectedCategories
+                      ? 'Outside your categories'
+                      : 'No price published'}
               </span>
               <button
                 className="btn-outline"
                 onClick={() => setEditing(editing === service.id ? null : service.id)}
               >
                 {editing === service.id ? 'Close' : 'Edit'}
+              </button>
+              <button
+                className="btn-outline text-critical-fg"
+                onClick={() =>
+                  setDeleteTarget({
+                    kind: 'service',
+                    id: service.id,
+                    name: service.displayName ?? service.definition?.name ?? 'this service',
+                  })
+                }
+              >
+                Delete
               </button>
               <button
                 className="btn-outline"
@@ -222,6 +251,12 @@ export default function VendorServices({ vendorId }: { vendorId: string }) {
             </div>
           </div>
 
+          {service.outsideSelectedCategories && (
+            <p className="rounded-sm bg-amber-50 p-2 text-xs text-amber-800">
+              This service is under a category your business no longer lists, so clients cannot
+              book it. Add the category back to your business, or switch the service off.
+            </p>
+          )}
           {service.description && <p className="text-sm text-gray-700">{service.description}</p>}
 
           {/* The vendor's own answers, read back. */}
@@ -243,17 +278,17 @@ export default function VendorServices({ vendorId }: { vendorId: string }) {
           {editing === service.id && (
             <EditService
               service={service}
+              onDelete={() =>
+                setDeleteTarget({
+                  kind: 'service',
+                  id: service.id,
+                  name: service.displayName ?? service.definition?.name ?? 'this service',
+                })
+              }
               onSave={async (body) => {
                 const ok = await act(
                   () => api.put(`/vendors/${vendorId}/services/${service.id}`, body),
                   'Service updated.',
-                );
-                if (ok) setEditing(null);
-              }}
-              onRemove={async () => {
-                const ok = await act(
-                  () => api.delete(`/vendors/${vendorId}/services/${service.id}`),
-                  'Service removed.',
                 );
                 if (ok) setEditing(null);
               }}
@@ -264,26 +299,90 @@ export default function VendorServices({ vendorId }: { vendorId: string }) {
             <Offerings
               vendorId={vendorId}
               service={service}
+              onDelete={(offering) =>
+                setDeleteTarget({
+                  kind: 'offering',
+                  serviceId: service.id,
+                  id: offering.id,
+                  name: offering.name,
+                })
+              }
               onChanged={(ok) => act(async () => undefined, ok)}
             />
           )}
         </div>
       ))}
+
+      {deleteTarget && (
+        <ConfirmDialog
+          title={deleteTarget.kind === 'service' ? 'Delete service?' : 'Delete pricing/package?'}
+          body={`Delete "${deleteTarget.name}" permanently? This cannot be undone.`}
+          confirmLabel="Delete"
+          busy={deleting}
+          onDismiss={() => {
+            if (!deleting) setDeleteTarget(null);
+          }}
+          onConfirm={async () => {
+            setDeleting(true);
+            const target = deleteTarget;
+            const ok = await act(
+              () =>
+                target.kind === 'service'
+                  ? api.delete(`/vendors/${vendorId}/services/${target.id}`)
+                  : api.delete(
+                      `/vendors/${vendorId}/services/${target.serviceId}/offerings/${target.id}`,
+                    ),
+              target.kind === 'service' ? 'Service deleted.' : 'Pricing/package deleted.',
+            );
+            setDeleting(false);
+            if (ok) {
+              setDeleteTarget(null);
+              setEditing(null);
+              setPricing(null);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function AddService({ taken, onAdd }: { taken: string[]; onAdd: (b: unknown) => void }) {
+function AddService({
+  taken,
+  selectedCategories,
+  onAdd,
+}: {
+  taken: string[];
+  selectedCategories: string[];
+  onAdd: (b: unknown) => void;
+}) {
   const [categoryId, setCategoryId] = useState('');
   const [definitionId, setDefinitionId] = useState('');
   const [answers, setAnswers] = useState<Answers>({});
-  const [capacity, setCapacity] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ['catalog-categories'],
     queryFn: async () => (await api.get('/catalog/categories')).data,
   });
+
+  const availableCategories = useMemo(
+    // A business with no categories yet (moved over from the single legacy
+    // category) has not narrowed anything down, and the server agrees.
+    () =>
+      selectedCategories.length === 0
+        ? categories
+        : categories.filter((category) => selectedCategories.includes(category.slug)),
+    [categories, selectedCategories],
+  );
+
+  useEffect(() => {
+    if (categoryId && !availableCategories.some((category) => category.id === categoryId)) {
+      setCategoryId('');
+      setDefinitionId('');
+      setAnswers({});
+    }
+  }, [availableCategories, categoryId]);
 
   const { data: definitions = [] } = useQuery<Definition[]>({
     queryKey: ['catalog-definitions', categoryId],
@@ -307,7 +406,6 @@ function AddService({ taken, onAdd }: { taken: string[]; onAdd: (b: unknown) => 
     onAdd({
       definitionId,
       attributes: cleanAnswers(fields, answers),
-      concurrentCapacity: capacity ? Number(capacity) : undefined,
     });
   }
 
@@ -327,7 +425,7 @@ function AddService({ taken, onAdd }: { taken: string[]; onAdd: (b: unknown) => 
             required
           >
             <option value="">Choose…</option>
-            {categories.map((c) => (
+            {availableCategories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
@@ -363,21 +461,6 @@ function AddService({ taken, onAdd }: { taken: string[]; onAdd: (b: unknown) => 
             <p className="text-sm text-gray-600">{described.definition.description}</p>
           )}
           <DynamicForm fields={fields} answers={answers} errors={errors} onChange={(k, v) => setAnswers((a) => ({ ...a, [k]: v }))} />
-          <label className="block text-sm sm:max-w-xs">
-            <span className="font-medium text-gray-700">How many at once?</span>
-            <input
-              className="input mt-1"
-              type="number"
-              min={1}
-              placeholder={String(described.definition.defaultCapacity)}
-              value={capacity}
-              onChange={(e) => setCapacity(e.target.value)}
-            />
-            <span className="mt-1 block text-xs text-gray-500">
-              How many of these you can run simultaneously. Five if you have five teams, one for a
-              hall. This seeds the capacity of every window you publish.
-            </span>
-          </label>
           <button className="btn">Add this service</button>
         </>
       )}
@@ -387,17 +470,16 @@ function AddService({ taken, onAdd }: { taken: string[]; onAdd: (b: unknown) => 
 
 function EditService({
   service,
+  onDelete,
   onSave,
-  onRemove,
 }: {
   service: VendorService;
+  onDelete: () => void;
   onSave: (b: Record<string, unknown>) => void;
-  onRemove: () => void;
 }) {
   const [displayName, setDisplayName] = useState(service.displayName ?? '');
   const [description, setDescription] = useState(service.description ?? '');
   const [answers, setAnswers] = useState<Answers>(service.attributes);
-  const [capacity, setCapacity] = useState(String(service.concurrentCapacity));
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   function submit(e: FormEvent) {
@@ -410,7 +492,6 @@ function EditService({
       displayName: displayName.trim(),
       description: description.trim(),
       attributes: cleanAnswers(service.serviceForm, answers),
-      concurrentCapacity: Number(capacity) || 1,
     });
   }
 
@@ -424,16 +505,6 @@ function EditService({
             placeholder={service.definition?.name ?? ''}
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
-          />
-        </label>
-        <label className="text-sm">
-          <span className="font-medium text-gray-700">How many at once?</span>
-          <input
-            className="input mt-1"
-            type="number"
-            min={1}
-            value={capacity}
-            onChange={(e) => setCapacity(e.target.value)}
           />
         </label>
       </div>
@@ -459,9 +530,7 @@ function EditService({
         <button
           type="button"
           className="btn-outline"
-          onClick={() => {
-            if (confirm('Remove this service from your business?')) onRemove();
-          }}
+          onClick={onDelete}
         >
           Remove
         </button>
@@ -473,10 +542,12 @@ function EditService({
 function Offerings({
   vendorId,
   service,
+  onDelete,
   onChanged,
 }: {
   vendorId: string;
   service: VendorService;
+  onDelete: (offering: Offering) => void;
   onChanged: (ok: string) => void;
 }) {
   const qc = useQueryClient();
@@ -540,15 +611,7 @@ function Offerings({
                 )
               }
               onCancel={() => setEditing(null)}
-              onRemove={() =>
-                act(
-                  () =>
-                    api.delete(
-                      `/vendors/${vendorId}/services/${service.id}/offerings/${o.id}`,
-                    ),
-                  'Price removed.',
-                )
-              }
+              onRemove={() => onDelete(o)}
             />
           ) : (
             <div key={o.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
@@ -573,6 +636,9 @@ function Offerings({
               </div>
               <button className="btn-outline" onClick={() => setEditing(o.id)}>
                 Edit
+              </button>
+              <button className="btn-outline text-critical-fg" onClick={() => onDelete(o)}>
+                Delete
               </button>
             </div>
           ),
