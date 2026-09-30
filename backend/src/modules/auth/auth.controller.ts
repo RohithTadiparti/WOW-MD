@@ -229,6 +229,16 @@ export class AuthController {
   }
 
   /**
+   * Request an OTP for a mobile-only invitation.
+   */
+  @Public()
+  @Throttle({ default: AUTH_THROTTLE })
+  @Post('invitations/send-otp')
+  sendInvitationOtp(@Body('token') token: string) {
+    return this.invitations.sendOtp(token);
+  }
+
+  /**
    * Accepts an invitation: creates the account, hands the profile to its
    * subject and signs them in. The email address is treated as verified because
    * following the link proved control of it.
@@ -241,7 +251,7 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const user = await this.invitations.accept(dto.token, dto.password, dto.email);
+    const user = await this.invitations.accept(dto.token, dto.password, dto.email, dto.otpCode);
     return this.respond(req, res, await this.auth.issueTokens(user, this.ctx(req)));
   }
 
@@ -472,8 +482,9 @@ export class AuthController {
     @Body() dto: ChangePasswordDto,
     @Res({ passthrough: true }) res: Response,
   ) {
+    const result = await this.auth.changePassword(userId, dto);
     this.clearCookie(res);
-    return this.auth.changePassword(userId, dto);
+    return result;
   }
 
   // --------------------------------------------------------------------- MFA

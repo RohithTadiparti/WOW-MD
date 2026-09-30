@@ -294,6 +294,7 @@ export default function Matches() {
       qc.invalidateQueries({ queryKey: ['interest-board'] });
       qc.invalidateQueries({ queryKey: ['accepted-matches'] });
       qc.invalidateQueries({ queryKey: ['match-status'] });
+      qc.invalidateQueries({ queryKey: ['viewable-profile'] });
     } catch (err) {
       setError(apiMessage(err, 'That action was rejected.'));
     }

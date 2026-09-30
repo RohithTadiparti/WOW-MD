@@ -6,6 +6,8 @@ dist/
 build/
 coverage/
 e2e-results/
+# OCR runtime copied from node_modules by frontend/scripts/copy-ocr-assets.mjs
+frontend/public/ocr/
 
 # Environment and secrets
 .env
