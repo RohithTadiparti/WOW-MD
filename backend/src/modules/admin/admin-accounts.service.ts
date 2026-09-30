@@ -338,6 +338,7 @@ export class AdminAccountsService {
         state: p.state,
         pincode: p.pincode,
         website: p.website,
+        socialLinks: p.socialLinks ?? [],
         ratingAvg: p.ratingAvg,
         ratingCount: p.ratingCount,
       })),

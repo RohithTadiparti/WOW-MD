@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
+import RequiredMark from './ui/RequiredMark';
 
 export interface CatalogCategory {
   id: string;
@@ -58,10 +59,13 @@ export default function CategoryPicker({
   value,
   onChange,
   error,
+  required = false,
 }: {
   value: string[];
   onChange: (next: string[]) => void;
   error?: string;
+  /** Marks the heading; the form's own check is what enforces it. */
+  required?: boolean;
 }) {
   const { data: categories = [], isPending, isError } = useCatalogCategories();
   const full = value.length >= MAX_CATEGORIES;
@@ -74,7 +78,10 @@ export default function CategoryPicker({
   return (
     <div>
       <div className="flex items-baseline justify-between gap-2">
-        <span className="label">Categories</span>
+        <span className="label">
+          Categories
+          {required && <RequiredMark />}
+        </span>
         <span className={`text-xs ${full ? 'text-caution-fg' : 'text-gray-500'}`}>
           {value.length} of {MAX_CATEGORIES} selected
         </span>
