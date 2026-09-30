@@ -70,12 +70,12 @@ export const MAX_SOCIAL_LINKS = 10;
  * platform not listed here).
  */
 export const SOCIAL_PLATFORM_RULES: Record<SocialPlatform, { label: string; hosts: RegExp[] | null }> = {
-  instagram: { label: 'Instagram', hosts: [/^(www\.|m\.)?instagram\.com$/] },
-  youtube: { label: 'YouTube', hosts: [/^(www\.|m\.)?youtube\.com$/, /^youtu\.be$/] },
-  facebook: { label: 'Facebook', hosts: [/^(www\.|m\.|web\.)?facebook\.com$/, /^fb\.com$/] },
-  pinterest: { label: 'Pinterest', hosts: [/^(www\.|[a-z]{2}\.)?pinterest\.com$/, /^pin\.it$/] },
-  x: { label: 'X', hosts: [/^(www\.)?x\.com$/, /^(www\.)?twitter\.com$/] },
-  linkedin: { label: 'LinkedIn', hosts: [/^(www\.)?linkedin\.com$/] },
+  instagram: { label: 'Instagram', hosts: [/^(www\.|m\.)?instagram\.com$/i] },
+  youtube: { label: 'YouTube', hosts: [/^(www\.|m\.)?youtube\.com$/i, /^youtu\.be$/i] },
+  facebook: { label: 'Facebook', hosts: [/^(www\.|m\.|web\.)?facebook\.com$/i, /^fb\.com$/i] },
+  pinterest: { label: 'Pinterest', hosts: [/^(www\.|[a-z]{2}\.)?pinterest\.com$/i, /^pin\.it$/i] },
+  x: { label: 'X', hosts: [/^(www\.)?x\.com$/i, /^(www\.)?twitter\.com$/i] },
+  linkedin: { label: 'LinkedIn', hosts: [/^(www\.)?linkedin\.com$/i] },
   website: { label: 'website', hosts: null },
   other: { label: 'link', hosts: null },
 };

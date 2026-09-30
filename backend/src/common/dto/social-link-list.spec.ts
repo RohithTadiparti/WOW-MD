@@ -36,6 +36,10 @@ describe('SocialLinksDto socialLinks', () => {
     ['linkedin', 'https://www.linkedin.com/company/everafter'],
     ['website', 'https://everafter.in'],
     ['other', 'https://www.behance.net/everafter'],
+    // Phones capitalise what is typed; a host is case-insensitive, and the
+    // form (which lowercases before checking) must not pass what this refuses.
+    ['instagram', 'https://WWW.Instagram.com/everafter'],
+    ['youtube', 'https://YouTu.be/abc123'],
   ])('accepts a %s link %p', async (platform, url) => {
     expect((await linkErrors([{ platform, url }])).messages).toEqual([]);
   });
