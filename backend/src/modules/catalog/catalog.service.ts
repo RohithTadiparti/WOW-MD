@@ -162,6 +162,7 @@ export class CatalogService {
         allowedPricingModels: dto.allowedPricingModels,
         availabilityModel: dto.availabilityModel,
         packagesAllowed: dto.packagesAllowed ?? true,
+        defaultCapacity: dto.defaultCapacity ?? 1,
         sortOrder: dto.sortOrder ?? 0,
         active: true,
       }),
@@ -208,6 +209,7 @@ export class CatalogService {
       allowedPricingModels: dto.allowedPricingModels ?? definition.allowedPricingModels,
       availabilityModel: dto.availabilityModel ?? definition.availabilityModel,
       packagesAllowed: dto.packagesAllowed ?? definition.packagesAllowed,
+      defaultCapacity: dto.defaultCapacity ?? definition.defaultCapacity,
       active: dto.active ?? definition.active,
       sortOrder: dto.sortOrder ?? definition.sortOrder,
     });

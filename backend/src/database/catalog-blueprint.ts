@@ -36,6 +36,7 @@ export interface DefinitionBlueprint {
   allowedPricingModels: PricingModel[];
   availabilityModel: AvailabilityModel;
   packagesAllowed: boolean;
+  defaultCapacity: number;
   attributes: AttributeBlueprint[];
 }
 
@@ -93,6 +94,7 @@ export const CATALOG_BLUEPRINT: CategoryBlueprint[] = [
         allowedPricingModels: [PricingModel.FIXED, PricingModel.PER_DAY, PricingModel.STARTING_FROM],
         availabilityModel: AvailabilityModel.SLOT,
         packagesAllowed: true,
+        defaultCapacity: 1,
         attributes: [
           service({
             key: 'crew_size',
@@ -174,6 +176,7 @@ export const CATALOG_BLUEPRINT: CategoryBlueprint[] = [
         // The specification's own example: a caterer runs several teams, so one
         // published window takes several bookings.
         packagesAllowed: true,
+        defaultCapacity: 5,
         attributes: [
           service({
             key: 'cuisines',
@@ -268,6 +271,7 @@ export const CATALOG_BLUEPRINT: CategoryBlueprint[] = [
         availabilityModel: AvailabilityModel.FULL_DAY,
         packagesAllowed: true,
         // A hall is the specification's counter-example to catering: one booking.
+        defaultCapacity: 1,
         attributes: [
           service({
             key: 'seating_capacity',
@@ -357,6 +361,7 @@ export const CATALOG_BLUEPRINT: CategoryBlueprint[] = [
         // after, which is what MULTI_DAY exists for.
         availabilityModel: AvailabilityModel.MULTI_DAY,
         packagesAllowed: true,
+        defaultCapacity: 2,
         attributes: [
           service({
             key: 'themes',
@@ -418,6 +423,7 @@ export const CATALOG_BLUEPRINT: CategoryBlueprint[] = [
         allowedPricingModels: [PricingModel.PER_ITEM, PricingModel.FIXED, PricingModel.CUSTOM_QUOTE],
         availabilityModel: AvailabilityModel.SLOT,
         packagesAllowed: false,
+        defaultCapacity: 10,
         attributes: [
           service({
             key: 'flowers',
@@ -480,6 +486,7 @@ export const CATALOG_BLUEPRINT: CategoryBlueprint[] = [
         ],
         availabilityModel: AvailabilityModel.SLOT,
         packagesAllowed: true,
+        defaultCapacity: 1,
         attributes: [
           service({
             key: 'brands',
@@ -538,6 +545,7 @@ export const CATALOG_BLUEPRINT: CategoryBlueprint[] = [
         allowedPricingModels: [PricingModel.PER_SESSION, PricingModel.FIXED],
         availabilityModel: AvailabilityModel.SLOT,
         packagesAllowed: false,
+        defaultCapacity: 1,
         attributes: [
           service({
             key: 'traditions',
@@ -627,6 +635,7 @@ export const CATALOG_BLUEPRINT: CategoryBlueprint[] = [
         allowedPricingModels: [PricingModel.PER_ITEM, PricingModel.PER_DAY, PricingModel.PER_HOUR],
         availabilityModel: AvailabilityModel.SLOT,
         packagesAllowed: false,
+        defaultCapacity: 8,
         attributes: [
           service({
             key: 'vehicle_types',
@@ -707,6 +716,7 @@ export const CATALOG_BLUEPRINT: CategoryBlueprint[] = [
         ],
         availabilityModel: AvailabilityModel.MULTI_DAY,
         packagesAllowed: true,
+        defaultCapacity: 3,
         attributes: [
           service({
             key: 'services_covered',
@@ -788,6 +798,7 @@ export const CATALOG_BLUEPRINT: CategoryBlueprint[] = [
         allowedPricingModels: [PricingModel.PER_HOUR, PricingModel.PER_SESSION, PricingModel.FIXED],
         availabilityModel: AvailabilityModel.SLOT,
         packagesAllowed: true,
+        defaultCapacity: 2,
         attributes: [
           service({
             key: 'genres',
