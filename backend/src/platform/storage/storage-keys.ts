@@ -10,6 +10,7 @@ import { randomBytes } from 'crypto';
  *   users/{userId}/profile/…       photographs shown on a profile or biodata
  *   users/{userId}/albums/…        the couple's own albums
  *   users/{userId}/attachments/…   evidence, receipts, chat attachments
+ *   users/{userId}/biodata/…       a biodata document read by the extractor
  *   vendors/{vendorId}/portfolio/… a listing's portfolio
  *   bookings/{bookingId}/deliveries/…  what the provider hands the couple
  *   bookings/{bookingId}/references/…  what the couple shows the provider
@@ -20,7 +21,7 @@ export type KeyScope =
   | { owner: 'bookings'; id: string; area: 'deliveries' | 'references' };
 
 const AREAS: Record<KeyScope['owner'], readonly string[]> = {
-  users: ['profile', 'albums', 'attachments'],
+  users: ['profile', 'albums', 'attachments', 'biodata'],
   vendors: ['portfolio'],
   bookings: ['deliveries', 'references'],
 };

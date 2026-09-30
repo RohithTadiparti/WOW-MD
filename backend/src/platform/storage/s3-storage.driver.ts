@@ -104,11 +104,17 @@ export class S3StorageDriver implements StorageDriver {
    * response inside one window hands out the same URL for the same object. The
    * browser's cache keys on the whole URL, query included; signing at "now"
    * made every page load a new URL and every photograph a fresh download.
+   *
+   * A link with its own shorter life is signed at "now" instead: it is handed
+   * to one reader once, so there is no cache to keep, and rounding the signing
+   * time down would cut its life shorter still.
    */
   async urlFor(key: string, options: UrlOptions = {}, now: number = Date.now()) {
-    const expiry = this.s.getExpirySeconds;
+    const shortLived =
+      options.expiresInSeconds !== undefined && options.expiresInSeconds < this.s.getExpirySeconds;
+    const expiry = shortLived ? Math.max(1, Math.floor(options.expiresInSeconds as number)) : this.s.getExpirySeconds;
     const windowMs = Math.floor(expiry / 2) * 1000;
-    const signingDate = new Date(Math.floor(now / windowMs) * windowMs);
+    const signingDate = shortLived ? new Date(now) : new Date(Math.floor(now / windowMs) * windowMs);
     const command = new GetObjectCommand({
       Bucket: this.s.s3Bucket,
       Key: key,

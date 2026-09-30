@@ -680,6 +680,22 @@ export class SetPrimaryPhotoDto {
 }
 
 /** One photograph, addressed by the URL it was uploaded to. */
+/**
+ * The uploaded biodata to read, named by its storage key.
+ *
+ * A key rather than a URL, so the only thing the extractor can be pointed at
+ * is a file the caller uploaded through `POST /media/biodata/presign`. The
+ * service checks the key is under the caller's own biodata area and signs a
+ * short-lived link to it itself.
+ */
+export class ExtractBiodataDto {
+  @ApiProperty({ example: 'users/5b1d…/biodata/1767000000000-3f2a…-biodata.jpg', maxLength: 1024 })
+  @IsString()
+  @MaxLength(1024)
+  @Matches(/^[A-Za-z0-9._\-/]+$/, { message: 'key must be the key the biodata upload was issued for' })
+  key: string;
+}
+
 export class ProfilePhotoDto {
   @ApiProperty({ example: 'https://cdn.example.com/profiles/a1b2.jpg' })
   @IsString()

@@ -12,7 +12,7 @@ import { LocalStorageDriver } from './local-storage.driver';
 import { S3StorageDriver } from './s3-storage.driver';
 import { StorageSettings, assertStorageConfig } from './storage-config';
 import { isSafeKey, refKey, toRef } from './storage-keys';
-import { STORAGE_DRIVER, StorageDriver } from './storage.driver';
+import { STORAGE_DRIVER, StorageDriver, UrlOptions } from './storage.driver';
 
 export interface PresignedUpload {
   /** The client PUTs the file here. */
@@ -146,7 +146,7 @@ export class StorageService {
   }
 
   /** A link to one object, for someone already allowed to see it. */
-  signedUrl(key: string, options: { downloadName?: string; requestOrigin?: string } = {}) {
+  signedUrl(key: string, options: UrlOptions = {}) {
     return this.driver.urlFor(key, options);
   }
 

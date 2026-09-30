@@ -45,6 +45,23 @@ const IMAGE_EXTENSIONS = [
 /** What the attachment route accepts: an image, or a PDF. */
 const DOCUMENT_EXTENSIONS = [...IMAGE_EXTENSIONS, 'pdf'];
 
+/**
+ * What the biodata reader can look at. Kept in step with
+ * `BIODATA_IMAGE_EXTENSIONS` on the API: the file goes to a vision model that
+ * reads these and nothing else, so a PDF is refused here rather than uploaded
+ * and read as nothing.
+ */
+const BIODATA_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp'];
+
+const ALLOWED: Record<Kind, { extensions: string[]; message: string }> = {
+  photo: { extensions: IMAGE_EXTENSIONS, message: 'Choose an image — a JPEG, PNG, HEIC or WebP.' },
+  attachment: { extensions: DOCUMENT_EXTENSIONS, message: 'Choose an image or a PDF.' },
+  biodata: {
+    extensions: BIODATA_EXTENSIONS,
+    message: 'Choose a photo of your biodata: a JPEG, PNG or WebP image.',
+  },
+};
+
 /** The server's own MAX_FILE_SIZE default, checked here so a refusal is
  *  immediate rather than ten megabytes later. */
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -89,14 +106,10 @@ async function upload(
   mimeType: string,
   kind: Kind,
   onProgress?: (fraction: number) => void,
-): Promise<string> {
-  const allowed = kind === 'photo' ? IMAGE_EXTENSIONS : DOCUMENT_EXTENSIONS;
-  if (!allowed.includes(extensionOf(fileName))) {
-    throw new UploadError(
-      kind === 'photo'
-        ? 'Choose an image — a JPEG, PNG, HEIC or WebP.'
-        : 'Choose an image or a PDF.',
-    );
+): Promise<Uploaded> {
+  const allowed = ALLOWED[kind];
+  if (!allowed.extensions.includes(extensionOf(fileName))) {
+    throw new UploadError(allowed.message);
   }
 
   let size = 0;
@@ -188,10 +201,16 @@ async function upload(
   // claimed to be, before anything is attached to it.
   await api.post('/media/complete', { key: data.key });
 
-  return reachable(data.publicUrl as string);
+  return { url: reachable(data.publicUrl as string), key: data.key as string };
 }
 
 type Kind = 'photo' | 'attachment' | 'biodata';
+
+/** Where an upload landed: a link to show it, and the key the API knows it by. */
+interface Uploaded {
+  url: string;
+  key: string;
+}
 
 export function PhotoPicker({
   label = 'Add a photo',
@@ -200,7 +219,8 @@ export function PhotoPicker({
 }: {
   label?: string;
   kind?: Kind;
-  onUploaded: (url: string) => void;
+  /** `key` is what a route that takes a storage key (the biodata reader) expects. */
+  onUploaded: (url: string, key: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -251,8 +271,8 @@ export function PhotoPicker({
     try {
       const name =
         asset.fileName ?? `upload-${Date.now()}.${asset.uri.split('.').pop() ?? FALLBACK_EXTENSION}`;
-      const url = await upload(asset.uri, name, asset.mimeType ?? 'image/jpeg', kind, setProgress);
-      onUploaded(url);
+      const { url, key } = await upload(asset.uri, name, asset.mimeType ?? 'image/jpeg', kind, setProgress);
+      onUploaded(url, key);
     } catch (err) {
       report(err, 'That photo could not be uploaded.');
     } finally {
@@ -283,14 +303,14 @@ export function PhotoPicker({
     setProgress(0);
     try {
       const name = asset.name || `document-${Date.now()}.pdf`;
-      const url = await upload(
+      const { url, key } = await upload(
         asset.uri,
         name,
         asset.mimeType ?? 'application/pdf',
         'attachment',
         setProgress,
       );
-      onUploaded(url);
+      onUploaded(url, key);
     } catch (err) {
       report(err, 'That document could not be uploaded.');
     } finally {
@@ -318,7 +338,7 @@ export function PhotoPicker({
           onPress={() => void run('camera')}
         />
       </View>
-      {kind === 'attachment' || kind === 'biodata' ? (
+      {kind === 'attachment' ? (
         <Button
           label="Choose a PDF or file"
           variant="outline"
@@ -329,7 +349,13 @@ export function PhotoPicker({
       ) : null}
       {busy ? <ProgressBar fraction={progress} /> : null}
       {error ? <Caption tone="critical">{error}</Caption> : null}
-      {kind === 'attachment' || kind === 'biodata' ? (
+      {kind === 'biodata' ? (
+        <Caption tone="faint">
+          A clear photo or screenshot of your biodata: JPEG, PNG or WebP, up to 10MB. For a PDF,
+          take a screenshot of the page first.
+        </Caption>
+      ) : null}
+      {kind === 'attachment' ? (
         <Caption tone="faint">
           A PDF, or a photograph of the document — the officer checks what it says, not what it was
           scanned on. Up to 10MB.

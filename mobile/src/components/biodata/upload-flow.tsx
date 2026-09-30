@@ -6,6 +6,9 @@ import { Body, Button, Card, SectionTitle, Alert, Screen, PageTitle, PageSubtitl
 import { PhotoPicker } from '@/components/uploader';
 import { radius, rgb, space, useTheme } from '@/theme';
 
+const NOTHING_READ =
+  'We could not read that document. Try a clearer photo of it, or enter the details yourself.';
+
 export function UploadFlow({
   profileId,
   onExtracted,
@@ -19,18 +22,31 @@ export function UploadFlow({
   const [mode, setMode] = useState<'select' | 'upload' | 'processing' | 'success'>('select');
   const [error, setError] = useState('');
 
-  const handleUpload = async (url: string) => {
+  const handleUpload = async (_url: string, key: string) => {
+    if (!profileId) {
+      setError('Your profile is not ready yet. Please try again in a moment.');
+      return;
+    }
     setMode('processing');
     setError('');
     try {
-      // Call the backend API to extract biodata from the uploaded document
-      const res = await api.post(`/profiles/${profileId}/details/extract`, { documentUrl: url });
+      // The API reads the upload by its storage key and signs its own link to
+      // it; it answers 422 when nothing could be read from the photo.
+      const res = await api.post(`/profiles/${profileId}/details/extract`, { key });
+      const data = res.data as Record<string, unknown> | null;
+      if (!data || Object.keys(data).length === 0) {
+        throw new Error(NOTHING_READ);
+      }
       setMode('success');
       setTimeout(() => {
-        onExtracted(res.data);
+        onExtracted(data);
       }, 2000);
     } catch (err) {
-      setError(apiMessage(err, 'Failed to process document. Please try again or enter details manually.'));
+      setError(
+        err instanceof Error && err.message === NOTHING_READ
+          ? NOTHING_READ
+          : apiMessage(err, 'We could not read that document. Try a clearer photo, or enter the details yourself.'),
+      );
       setMode('upload');
     }
   };

@@ -7,6 +7,7 @@ import { Profile } from '../users/entities/profile.entity';
 import { User } from '../auth/entities/user.entity';
 import { Interest } from '../matchmaking/entities/interest.entity';
 import { AiService } from '../ai/ai.service';
+import { StorageService } from '../../platform/storage/storage.service';
 import { RedisService } from '../../platform/redis/redis.service';
 import { ModerationService } from '../../platform/moderation/moderation.service';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
@@ -76,6 +77,7 @@ describe('ProfileDetailsService section saves', () => {
     {} as ModerationService,
     {} as Repository<Interest>,
     {} as AiService,
+    {} as StorageService,
   );
 
   const personal = (over: Partial<PersonalDetailsDto> = {}) =>
@@ -206,5 +208,62 @@ describe('ProfileDetailsService section saves', () => {
     } as EducationDetailsDto);
     expect(stored?.institution).toBeNull();
     expect(stored?.collegePlace).toBe('Delhi');
+  });
+});
+
+/**
+ * The biodata reader may only be pointed at the caller's own biodata upload,
+ * and reads it through a link signed here rather than one the client sent.
+ */
+describe('ProfileDetailsService.extractBiodata', () => {
+  const profile = { id: 'p1', userId: 'u1', managedByUserId: null } as unknown as Profile;
+  const details = {
+    findOne: jest.fn(async () => null),
+    create: jest.fn((init: Partial<ProfileDetails>) => ({ ...init }) as ProfileDetails),
+  } as unknown as Repository<ProfileDetails>;
+  const profiles = { findOne: jest.fn(async () => profile) } as unknown as Repository<Profile>;
+  const ai = { extractBiodata: jest.fn(async () => ({ firstName: 'Bhavana' })) };
+  const storage = { signedUrl: jest.fn(async (key: string) => `https://signed.example/${key}`) };
+
+  const service = new ProfileDetailsService(
+    details,
+    {} as Repository<ProfileSibling>,
+    {} as Repository<ProfileAsset>,
+    profiles,
+    {} as Repository<User>,
+    {} as RedisService,
+    {} as ModerationService,
+    {} as Repository<Interest>,
+    ai as unknown as AiService,
+    storage as unknown as StorageService,
+  );
+
+  beforeEach(() => jest.clearAllMocks());
+
+  it('signs a short-lived link to the caller\'s own biodata and reads that', async () => {
+    const key = 'users/u1/biodata/1767000000000-abcdef0123456789-biodata.jpg';
+    await expect(service.extractBiodata(owner, 'p1', key)).resolves.toEqual({ firstName: 'Bhavana' });
+    expect(storage.signedUrl).toHaveBeenCalledWith(key, {
+      expiresInSeconds: ProfileDetailsService.EXTRACT_LINK_SECONDS,
+    });
+    expect(ai.extractBiodata).toHaveBeenCalledWith(`https://signed.example/${key}`);
+  });
+
+  it.each([
+    ['somebody else\'s biodata', 'users/u2/biodata/1-a-biodata.jpg'],
+    ['a file from another area', 'users/u1/attachments/1-a-receipt.jpg'],
+    ['a key the platform never minted', 'https://attacker.example/x.jpg'],
+    ['a key that climbs out', 'users/u1/biodata/../profile/x.jpg'],
+  ])('refuses %s without calling the model', async (_what, key) => {
+    await expect(service.extractBiodata(owner, 'p1', key)).rejects.toThrow('That is not a biodata you uploaded');
+    expect(storage.signedUrl).not.toHaveBeenCalled();
+    expect(ai.extractBiodata).not.toHaveBeenCalled();
+  });
+
+  it('refuses a document the reader cannot look at', async () => {
+    await expect(
+      service.extractBiodata(owner, 'p1', 'users/u1/biodata/1-a-biodata.pdf'),
+    ).rejects.toThrow('JPEG, PNG or WebP');
+    expect(ai.extractBiodata).not.toHaveBeenCalled();
   });
 });

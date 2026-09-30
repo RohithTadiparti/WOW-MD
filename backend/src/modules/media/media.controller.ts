@@ -7,6 +7,7 @@ import {
   CompleteUploadDto,
   CreateAlbumDto,
   PresignAttachmentDto,
+  PresignBiodataDto,
   PresignBookingFileDto,
   PresignDto,
   SignMediaDto,
@@ -98,7 +99,7 @@ export class MediaController {
   @RawMediaRefs()
   presignBiodata(
     @CurrentUser() actor: AuthUser,
-    @Body() dto: PresignAttachmentDto,
+    @Body() dto: PresignBiodataDto,
     @Req() req: Request,
   ) {
     return this.media.presignUpload(

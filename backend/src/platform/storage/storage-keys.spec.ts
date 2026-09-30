@@ -9,6 +9,7 @@ describe('storage keys', () => {
       [{ owner: 'users', id: USER, area: 'profile' }, `users/${USER}/profile/`],
       [{ owner: 'users', id: USER, area: 'albums' }, `users/${USER}/albums/`],
       [{ owner: 'users', id: USER, area: 'attachments' }, `users/${USER}/attachments/`],
+      [{ owner: 'users', id: USER, area: 'biodata' }, `users/${USER}/biodata/`],
       [{ owner: 'vendors', id: USER, area: 'portfolio' }, `vendors/${USER}/portfolio/`],
       [{ owner: 'bookings', id: BOOKING, area: 'deliveries' }, `bookings/${BOOKING}/deliveries/`],
       [{ owner: 'bookings', id: BOOKING, area: 'references' }, `bookings/${BOOKING}/references/`],

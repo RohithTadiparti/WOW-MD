@@ -31,9 +31,15 @@ import {
 import { Interest } from '../matchmaking/entities/interest.entity';
 import { ageBand } from '../users/dto/public-profile.dto';
 import { AiService } from '../ai/ai.service';
+import { StorageService } from '../../platform/storage/storage.service';
+import { parseKey } from '../../platform/storage/storage-keys';
+import { BIODATA_IMAGE_EXTENSIONS } from '../media/dto/media.dto';
 
 /** The most brothers and sisters a profile may list (EZ1-I102). */
 export const SIBLING_LIMIT = 10;
+
+/** A biodata file the extractor can read, judged by the extension in its key. */
+const BIODATA_FILE = new RegExp(`\\.(${BIODATA_IMAGE_EXTENSIONS})$`, 'i');
 
 /** The sections a profile has to complete before it is considered ready. */
 export const REQUIRED_SECTIONS = [
@@ -89,6 +95,7 @@ export class ProfileDetailsService {
     private readonly moderation: ModerationService,
     @InjectRepository(Interest) private readonly interests: Repository<Interest>,
     @Inject(forwardRef(() => AiService)) private readonly ai: AiService,
+    private readonly storage: StorageService,
   ) {}
 
   // ------------------------------------------------------------- sections
@@ -529,10 +536,36 @@ export class ProfileDetailsService {
     return { success: true };
   }
 
-  async extractBiodata(actor: AuthUser, profileId: string, documentUrl: string) {
+  /**
+   * Read an uploaded biodata photo into fields for the form.
+   *
+   * The file is named by its storage key and must sit in the caller's own
+   * biodata area, so the paid model can only ever be pointed at something this
+   * person uploaded for this purpose. The link it reads is signed here and
+   * lives only long enough for the one request.
+   */
+  async extractBiodata(actor: AuthUser, profileId: string, key: string) {
     await this.editable(actor, profileId);
-    return this.ai.extractBiodata(documentUrl);
+    const scope = parseKey(key);
+    if (
+      !scope ||
+      scope.owner !== 'users' ||
+      scope.area !== 'biodata' ||
+      scope.id !== actor.userId
+    ) {
+      throw new ForbiddenException('That is not a biodata you uploaded');
+    }
+    if (!BIODATA_FILE.test(key)) {
+      throw new BadRequestException('Upload a photo of the biodata: a JPEG, PNG or WebP image.');
+    }
+    const url = await this.storage.signedUrl(key, {
+      expiresInSeconds: ProfileDetailsService.EXTRACT_LINK_SECONDS,
+    });
+    return this.ai.extractBiodata(url);
   }
+
+  /** Long enough for the model to fetch the image once, and no longer. */
+  static readonly EXTRACT_LINK_SECONDS = 300;
 
   async listPhotos(actor: AuthUser, profileId: string) {
     const profile = await this.load(profileId);

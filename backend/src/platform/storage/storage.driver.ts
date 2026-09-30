@@ -17,6 +17,11 @@ export interface UrlOptions {
   requestOrigin?: string;
   /** Served as a download under this name rather than shown inline. */
   downloadName?: string;
+  /**
+   * A shorter life than the store's usual viewing link, for a URL handed to a
+   * third party rather than shown to a person. Ignored by a public store.
+   */
+  expiresInSeconds?: number;
 }
 
 /**

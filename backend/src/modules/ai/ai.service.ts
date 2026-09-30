@@ -1,4 +1,4 @@
-import { Inject, Injectable, forwardRef } from '@nestjs/common';
+import { Inject, Injectable, UnprocessableEntityException, forwardRef } from '@nestjs/common';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { MatchmakingService } from '../matchmaking/matchmaking.service';
 import { VendorsService } from '../vendors/vendors.service';
@@ -112,11 +112,48 @@ export class AiService {
   "family": { "father": { "name": "string", "profession": "string" }, "mother": { "name": "string", "profession": "string" } }
 }
 Do not invent values. If a field is not present in the document, omit it or set it to null. Return ONLY raw JSON, without markdown formatting or code blocks.`;
-    const responseText = await this.ai.complete(prompt, documentUrl);
-    try {
-      return JSON.parse(responseText.replace(/^```json|```$/g, '').trim());
-    } catch {
-      return {};
+    const responseText = await this.ai.complete(prompt, {
+      imageUrl: documentUrl,
+      temperature: EXTRACTION_TEMPERATURE,
+      json: true,
+    });
+    const extracted = parseExtraction(responseText);
+    // Nothing read is a failure, not an empty success: the app would otherwise
+    // announce that the details were filled in and show a blank form.
+    if (!extracted) {
+      throw new UnprocessableEntityException(
+        'We could not read that document. Try a clearer photo of it, or enter the details yourself.',
+      );
     }
+    return extracted;
   }
+}
+
+/** Extraction is transcription: the same document should read the same way twice. */
+export const EXTRACTION_TEMPERATURE = 0.1;
+
+/**
+ * The fields a model reply actually carries, or null when it carries none.
+ *
+ * The reply is untrusted text: it may be prose, a fenced block, or JSON whose
+ * every value is null. Only an object with at least one real value counts.
+ */
+export function parseExtraction(text: string): Record<string, unknown> | null {
+  const body = text.replace(/^\s*```(?:json)?/i, '').replace(/```\s*$/, '').trim();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  return hasValue(parsed) ? (parsed as Record<string, unknown>) : null;
+}
+
+function hasValue(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (Array.isArray(value)) return value.some(hasValue);
+  if (typeof value === 'object') return Object.values(value as object).some(hasValue);
+  return true;
 }
