@@ -151,6 +151,41 @@ describe('AuthService', () => {
     service = moduleRef.get(AuthService);
   });
 
+  describe('password change', () => {
+    it('rejects a random current password without updating credentials or sessions', async () => {
+      repo.findOne.mockResolvedValueOnce({ id: 'u1', passwordHash: await bcrypt.hash('OldPass123', 4) });
+      await expect(service.changePassword('u1', {
+        currentPassword: 'random', newPassword: 'NewPass456',
+      })).rejects.toThrow('Current password is incorrect.');
+      expect(repo.update).not.toHaveBeenCalled();
+      expect(sessions.revokeAllForUser).not.toHaveBeenCalled();
+    });
+
+    it('stores a new hash, retires sessions, and accepts only the new password at login', async () => {
+      const user = {
+        id: 'u1', email: 'a.tester@gmail.com', role: UserRole.BRIDE,
+        passwordHash: await bcrypt.hash('OldPass123', 4), isActive: true,
+        isVerified: true, mfaEnabled: false, failedLoginAttempts: 0, lockedUntil: null,
+      };
+      repo.findOne.mockResolvedValue(user);
+      const result = await service.changePassword('u1', {
+        currentPassword: 'OldPass123', newPassword: 'NewPass456',
+      });
+      expect(result).toEqual({ success: true });
+      const update = repo.update.mock.calls[0][1];
+      expect(update.passwordHash).not.toBe('NewPass456');
+      expect(update.passwordChangedAt).toBeInstanceOf(Date);
+      expect(update.mustResetPassword).toBe(false);
+      expect(update.tokenVersion()).toBe('"tokenVersion" + 1');
+      expect(sessions.revokeAllForUser).toHaveBeenCalledWith('u1', 'password changed');
+      user.passwordHash = update.passwordHash;
+      await expect(service.login({ email: user.email, password: 'OldPass123' }))
+        .rejects.toBeInstanceOf(UnauthorizedException);
+      await expect(service.login({ email: user.email, password: 'NewPass456' }))
+        .resolves.toHaveProperty('accessToken');
+    });
+  });
+
   const individual = (over: Partial<RegisterDto> = {}): RegisterDto =>
     ({
       email: 'a.tester@gmail.com',

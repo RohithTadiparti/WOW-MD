@@ -1,4 +1,6 @@
 import { FormEvent, useState } from 'react';
+import BiodataImport from '../components/BiodataImport';
+import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiMessage } from '../lib/api';
 import { adultDobMax } from '../lib/dates';
@@ -84,14 +86,125 @@ const STEWARD_RELATIONS = ['Self', 'Parent', 'Sibling', 'Relative', 'Friend', 'O
 const emptyDraft = {
   firstName: '',
   lastName: '',
+  nativePlace: '',
   stewardRelation: '',
   contactPhone: '',
   contactEmail: '',
-  gender: 'female',
+  gender: '',
   dateOfBirth: '',
   city: '',
   bio: '',
 };
+
+const IMPORT_REVIEW_SECTIONS = [
+  {
+    title: 'Personal and birth details',
+    fields: [
+      ['heightCm', 'Height (cm)'], ['complexion', 'Complexion'],
+      ['placeOfBirth', 'Place of birth'], ['timeOfBirth', 'Birth time'],
+      ['communicationAddress', 'Address'], ['alternateMobile', 'Alternate mobile'],
+      ['maritalStatus', 'Marital status'],
+    ],
+  },
+  {
+    title: 'Religion and horoscope',
+    fields: [
+      ['religion', 'Religion'], ['caste', 'Caste'], ['subCaste', 'Sub-caste'],
+      ['motherTongue', 'Mother tongue'], ['denomination', 'Denomination'], ['gothram', 'Gothram'], ['rashi', 'Rasi / Rashi'],
+      ['star', 'Nakshatram / Star'], ['padam', 'Padam'], ['kujaDosham', 'Kuja dosham'],
+    ],
+  },
+  {
+    title: 'Education and occupation',
+    fields: [
+      ['highestQualification', 'Qualification'], ['course', 'Course'], ['institution', 'Institution'],
+      ['collegePlace', 'College place'], ['profession', 'Occupation / Profession'],
+      ['occupationStatus', 'Occupation status'], ['designation', 'Designation'],
+      ['company', 'Employer / Company'], ['workLocation', 'Work location'],
+      ['annualIncome', 'Annual income'], ['salary', 'Salary'],
+    ],
+  },
+  {
+    title: 'Family details',
+    fields: [
+      ['fatherName', "Father's name"], ['fatherProfession', "Father's occupation"],
+      ['motherName', "Mother's name"], ['motherProfession', "Mother's occupation"],
+      ['brothers', 'Brothers'], ['sisters', 'Sisters'], ['familyType', 'Family type'],
+      ['familyStatus', 'Family status'], ['nativeState', 'Native state'],
+      ['nativeDistrict', 'Native district'], ['nativeCountry', 'Native country'],
+    ],
+  },
+] as const;
+
+/*
+ * The biodata sections an intake may fill. The profile's own fields (display
+ * name, mobile, email, date of birth, gender, city) are deliberately absent:
+ * they are sent once, at the top level, from the form the agent reviewed.
+ */
+const ALLOWED_BIODATA_KEYS = new Set([
+  'firstName', 'lastName', 'surname', 'heightCm', 'complexion',
+  'nativePlace', 'nativeState', 'nativeCountry', 'nativeDistrict', 'placeOfBirth',
+  'communicationAddress', 'address', 'alternateMobile',
+  'religion', 'caste', 'subCaste', 'motherTongue',
+  'denomination', 'gothram', 'rashi', 'star', 'padam', 'kujaDosham', 'timeOfBirth',
+  'horoscopeAvailable', 'maritalStatus', 'fatherName', 'fatherProfession', 'motherName',
+  'motherProfession', 'familyType', 'familyStatus', 'brothers', 'sisters',
+  'highestQualification', 'course', 'institution', 'collegePlace', 'occupationStatus',
+  'profession', 'designation', 'company', 'workLocation', 'annualIncome', 'salary',
+  'bio',
+]);
+
+type IntakeMode = 'manual' | 'upload';
+
+function applyImportedFields(
+  current: typeof emptyDraft,
+  fields: Record<string, string>,
+): typeof emptyDraft {
+  const next = { ...current };
+  for (const key of Object.keys(emptyDraft) as Array<keyof typeof emptyDraft>) {
+    if (fields[key]) next[key] = fields[key];
+  }
+  return next;
+}
+
+/*
+ * The review fields the API only accepts from a fixed list. They are selects
+ * rather than free text, so what the agent confirms is what gets saved; the
+ * API refuses anything else with a 400 naming the field.
+ */
+const REVIEW_CHOICES: Record<string, ReadonlyArray<readonly [string, string]>> = {
+  maritalStatus: [
+    ['never_married', 'Never married'], ['divorced', 'Divorced'], ['widowed', 'Widowed'],
+    ['separated', 'Separated'], ['annulled', 'Annulled'],
+  ],
+  occupationStatus: [
+    ['employed', 'Employed'], ['self_employed', 'Self-employed / business'],
+    ['not_employed', 'Not employed'], ['student', 'Student'], ['homemaker', 'Homemaker'],
+    ['retired', 'Retired'],
+  ],
+  familyType: [
+    ['joint', 'Joint'], ['nuclear', 'Nuclear'], ['extended', 'Extended'],
+    ['single_parent', 'Single parent'],
+  ],
+};
+
+const CHOICE_SYNONYMS: Record<string, string> = {
+  unmarried: 'never_married', single: 'never_married', divorce: 'divorced', widow: 'widowed',
+  widower: 'widowed', business: 'self_employed', unemployed: 'not_employed',
+  housewife: 'homemaker',
+};
+
+/** An extracted value as one of the choices, or '' when it matches none. */
+function normaliseChoice(key: string, raw: string): string {
+  const choices = REVIEW_CHOICES[key];
+  if (!choices) return raw;
+  const folded = raw.trim().toLowerCase().replace(/[\s/-]+/g, '_').replace(/_family$/, '');
+  const value = CHOICE_SYNONYMS[folded] ?? folded;
+  const hit = choices.find(
+    ([v, label]) => v === value || label.toLowerCase().replace(/[\s/-]+/g, '_') === folded,
+  );
+  return hit ? hit[0] : '';
+}
 
 /**
  * Where an agent (or a family member looking after a relative) builds a full
@@ -101,7 +214,26 @@ const emptyDraft = {
  * deliberate step: it emails the subject a link where THEY choose a password,
  * which is why the steward never sets one here.
  */
-export default function ManagedProfiles({ embedded = false }: { embedded?: boolean } = {}) {
+interface ManagedProfilesProps {
+  embedded?: boolean;
+  /** Lets a host page place the create action in its own header. */
+  creating?: boolean;
+  onCreatingChange?: (creating: boolean) => void;
+  hideCreateAction?: boolean;
+  /** Optional slot for putting the create form before a host page's list. */
+  createFormContainer?: Element | null;
+  /** Optional slot for putting the client sign-up link before a host page's list. */
+  signupLinkContainer?: Element | null;
+}
+
+export default function ManagedProfiles({
+  embedded = false,
+  creating: controlledCreating,
+  onCreatingChange,
+  hideCreateAction = false,
+  createFormContainer,
+  signupLinkContainer,
+}: ManagedProfilesProps = {}) {
   const qc = useQueryClient();
   const permissions = useAuth((s) => s.user?.permissions ?? []);
   // A family member holds the same stewardship capability an agency does, so
@@ -114,8 +246,20 @@ export default function ManagedProfiles({ embedded = false }: { embedded?: boole
    * exists to show the profiles, and it closes itself again on a successful
    * save so the agent lands back on the list with the new client in it.
    */
-  const [creating, setCreating] = useState(false);
+  const [uncontrolledCreating, setUncontrolledCreating] = useState(false);
+  const creating = controlledCreating ?? uncontrolledCreating;
+  const setCreating = (next: boolean) => {
+    if (controlledCreating !== undefined) onCreatingChange?.(next);
+    else setUncontrolledCreating(next);
+  };
   const [draft, setDraft] = useState(emptyDraft);
+  const [intakeMode, setIntakeMode] = useState<IntakeMode | null>(null);
+  const [extractedBiodata, setExtractedBiodata] = useState<Record<string, string>>({});
+  const [documentUrl, setDocumentUrl] = useState('');
+  // The API needs a valid mobile and a bride-or-groom choice in both modes,
+  // so Save waits for both rather than failing after the agent presses it.
+  const readyToSave = isValidMobile(draft.contactPhone) && Boolean(draft.gender);
+  const [importing, setImporting] = useState(false);
   const [consent, setConsent] = useState<ConsentDraft>(emptyConsent());
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -138,23 +282,44 @@ export default function ManagedProfiles({ embedded = false }: { embedded?: boole
 
   const create = useMutation({
     mutationFn: async (inviteNow: boolean) => {
+      const values = draft;
       const payload: Record<string, unknown> = {
-        displayName: [draft.firstName.trim(), draft.lastName.trim()].filter(Boolean).join(' '),
-        contactPhone: draft.contactPhone,
-        gender: draft.gender,
+        displayName: [values.firstName.trim(), values.lastName.trim()].filter(Boolean).join(' '),
+        // Required in both modes, as the API requires it: an uploaded
+        // biodata without a number still needs one before the client exists.
+        contactPhone: values.contactPhone,
+        gender: values.gender,
         consent: consentPayload(consent),
         inviteNow,
       };
+      const rawBiodata: Record<string, unknown> = {
+        ...extractedBiodata,
+        ...(values.firstName ? { firstName: values.firstName } : {}),
+        ...(values.lastName ? { lastName: values.lastName } : {}),
+        ...(values.nativePlace ? { nativePlace: values.nativePlace } : {}),
+      };
+      const biodata: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(rawBiodata)) {
+        if (ALLOWED_BIODATA_KEYS.has(k) && v !== undefined && v !== '') {
+          biodata[k] = v;
+        }
+      }
+      if (Object.keys(biodata).length) payload.biodata = biodata;
+      if (documentUrl) payload.biodataDocumentUrl = documentUrl;
       // Email is optional: a walk-in family often gives only a number.
-      if (draft.contactEmail) payload.contactEmail = draft.contactEmail;
-      if (draft.dateOfBirth) payload.dateOfBirth = draft.dateOfBirth;
-      if (draft.city) payload.city = draft.city;
-      if (draft.bio) payload.bio = draft.bio;
-      if (draft.stewardRelation) payload.stewardRelation = draft.stewardRelation;
+      if (values.contactEmail) payload.contactEmail = values.contactEmail;
+      if (values.dateOfBirth) payload.dateOfBirth = values.dateOfBirth;
+      if (values.city) payload.city = values.city;
+      if (values.bio) payload.bio = values.bio;
+      if (values.stewardRelation) payload.stewardRelation = values.stewardRelation;
       return (await api.post('/agents/profiles', payload)).data as ManagedProfile;
     },
-    onSuccess: (profile, inviteNow) => {
+    onSuccess: (profile, input) => {
+      const inviteNow = input === true;
       setDraft(emptyDraft);
+      setIntakeMode(null);
+      setExtractedBiodata({});
+      setDocumentUrl('');
       setConsent(emptyConsent());
       // Back to the list, with the profile just created in it (EZ1-I238).
       setCreating(false);
@@ -163,10 +328,13 @@ export default function ManagedProfiles({ embedded = false }: { embedded?: boole
         inviteNow
           ? profile.contactEmail
             ? `Profile created and an invitation sent to ${profile.contactEmail}.`
-            : 'Profile created and an invitation sent by SMS to their mobile. They add an email when they claim it.'
+            : 'Profile created and an invitation sent by SMS to their mobile. They can claim it without an email.'
           : 'Profile saved. It is matchable now: circulate it, or invite them to claim it later.',
       );
       qc.invalidateQueries({ queryKey: ['managed-profiles'] });
+      // My Clients includes these profiles as well as claimed accounts.
+      qc.invalidateQueries({ queryKey: ['agent-clients'] });
+      qc.invalidateQueries({ queryKey: ['actable-profiles'] });
     },
     onError: (err) => {
       setNotice('');
@@ -230,9 +398,18 @@ export default function ManagedProfiles({ embedded = false }: { embedded?: boole
   const set = (k: keyof typeof emptyDraft) => (e: { target: { value: string } }) =>
     setDraft((d) => ({ ...d, [k]: e.target.value }));
 
+  const setBiodata = (key: string) => (e: { target: { value: string } }) => {
+    const value = e.target.value;
+    setExtractedBiodata((current) => ({ ...current, [key]: value }));
+    if (key in emptyDraft) {
+      setDraft((current) => ({ ...current, [key]: value }));
+    }
+  };
+
   function submit(e: FormEvent) {
     e.preventDefault();
-    if (!isValidMobile(draft.contactPhone)) return;
+    if (importing || !readyToSave) return;
+    setError('');
     create.mutate(false);
   }
 
@@ -278,35 +455,93 @@ export default function ManagedProfiles({ embedded = false }: { embedded?: boole
         profile is doing what an agency does and holds the same permissions to
         do it, but "client" is not what she is to him (council round 2).
       */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          {!embedded && (
-            <>
-              <h1 className="page-title">{isFamily ? 'Family Profiles' : 'Client Profiles'}</h1>
-              <p className="page-subtitle">
-                {isFamily
-                  ? 'The relatives whose profiles you look after. Build one for someone who has not joined yet and it can be matched immediately; when you invite them, they set their own password and take ownership.'
-                  : 'The clients you look after. Build a profile for someone who has not joined yet and it can be matched immediately; when you invite them, they set their own password and take ownership.'}
-              </p>
-            </>
+      {(!embedded || !hideCreateAction) && (
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            {!embedded && (
+              <>
+                <h1 className="page-title">{isFamily ? 'Family Profiles' : 'Client Profiles'}</h1>
+                <p className="page-subtitle">
+                  {isFamily
+                    ? 'The relatives whose profiles you look after. Build one for someone who has not joined yet and it can be matched immediately; when you invite them, they set their own password and take ownership.'
+                    : 'The clients you look after. Build a profile for someone who has not joined yet and it can be matched immediately; when you invite them, they set their own password and take ownership.'}
+                </p>
+              </>
+            )}
+          </div>
+          {!hideCreateAction && (
+            <button className="btn shrink-0" onClick={() => setCreating(!creating)}>
+              {creating ? 'Cancel' : isFamily ? 'Add a relative' : 'Create new client'}
+            </button>
           )}
         </div>
-        <button className="btn shrink-0" onClick={() => setCreating((open) => !open)}>
-          {creating ? 'Cancel' : isFamily ? 'Add a relative' : 'Create new client'}
-        </button>
-      </div>
-
-      {notice && <p className="rounded-sm bg-brand-light p-3 text-sm text-brand-dark">{notice}</p>}
-      {error && <p className="alert-critical">{error}</p>}
-
-      {isAgent && agency?.approved && (
-        <ClientSignupLink active={Boolean(agency.shareLinkActive)} />
       )}
 
-      {creating && (
+      {notice && <p className="rounded-sm bg-brand-light p-3 text-sm text-brand-dark">{notice}</p>}
+      {!creating && error && <p className="alert-critical">{error}</p>}
+
+      {isAgent && agency?.approved && (
+        signupLinkContainer
+          ? createPortal(<ClientSignupLink active={Boolean(agency.shareLinkActive)} />, signupLinkContainer)
+          : <ClientSignupLink active={Boolean(agency.shareLinkActive)} />
+      )}
+
+      {renderCreateForm()}
+    </div>
+  );
+
+  function renderCreateForm() {
+    const form = (
       <form onSubmit={submit} className="card space-y-4">
         <h2 className="section-title">New profile</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+
+        <div>
+          <p className="label">How would you like to create this client?</p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className={intakeMode === 'manual' ? 'btn' : 'btn-outline'}
+              onClick={() => setIntakeMode('manual')}
+            >
+              Enter details manually
+            </button>
+            <button
+              type="button"
+              className={intakeMode === 'upload' ? 'btn' : 'btn-outline'}
+              onClick={() => setIntakeMode('upload')}
+            >
+              Upload image / PDF
+            </button>
+          </div>
+        </div>
+
+        {intakeMode === 'upload' && (
+          <BiodataImport
+            busy={importing || create.isPending}
+            onBusy={setImporting}
+            onImported={(fields, url) => {
+              // The profile's own fields (name, mobile, gender, date of birth,
+              // city) go to the form above; only the biodata sections travel
+              // in `biodata`, so no stale extracted copy is sent alongside.
+              const allowedFields: Record<string, string> = {};
+              for (const [key, value] of Object.entries(fields)) {
+                if (ALLOWED_BIODATA_KEYS.has(key)) {
+                  allowedFields[key] = normaliseChoice(key, value);
+                }
+              }
+              setDraft(applyImportedFields(emptyDraft, fields));
+              setDocumentUrl(url);
+              setExtractedBiodata(allowedFields);
+            }}
+          />
+        )}
+        {documentUrl && (
+          <p className="text-xs text-emerald-700 bg-emerald-50 p-2 rounded border border-emerald-200">
+            Biodata document attached. Review and edit the extracted fields below; no client has been created yet.
+          </p>
+        )}
+
+        {intakeMode && <><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {/* Asked separately, as the biodata asks them. */}
           <div>
             <label className="label">First name</label>
@@ -315,6 +550,10 @@ export default function ManagedProfiles({ embedded = false }: { embedded?: boole
           <div>
             <label className="label">Last name</label>
             <input className="input" value={draft.lastName} onChange={set('lastName')} required />
+          </div>
+          <div>
+            <label className="label">Native place</label>
+            <input className="input" value={draft.nativePlace} onChange={set('nativePlace')} />
           </div>
           {/*
             Only asked of a family member. An agency's relationship to a client
@@ -417,7 +656,8 @@ export default function ManagedProfiles({ embedded = false }: { embedded?: boole
               is the question, and the one that was asked as "User Type" before.
             */}
             <label className="label">Managing profile for</label>
-            <select className="input" value={draft.gender} onChange={set('gender')}>
+            <select className="input" value={draft.gender} onChange={set('gender')} required>
+              <option value="">Choose gender</option>
               <option value="female">Bride</option>
               <option value="male">Groom</option>
             </select>
@@ -443,10 +683,51 @@ export default function ManagedProfiles({ embedded = false }: { embedded?: boole
           <textarea className="input" rows={3} maxLength={2000} value={draft.bio} onChange={set('bio')} />
         </div>
 
+        {intakeMode === 'upload' && documentUrl && (
+          <div className="space-y-4 rounded-lg border border-brand-light bg-brand-light/20 p-4">
+            <div>
+              <h3 className="font-semibold text-gray-900">Extracted biodata</h3>
+              <p className="text-xs text-gray-600">Only values you confirm here will be saved to the new client.</p>
+            </div>
+            {IMPORT_REVIEW_SECTIONS.map((section) => (
+              <fieldset key={section.title} className="space-y-2">
+                <legend className="text-sm font-medium text-gray-800">{section.title}</legend>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {section.fields.map(([key, label]) => (
+                    <label key={key} className="block">
+                      <span className="label">{label}</span>
+                      {REVIEW_CHOICES[key] ? (
+                        <select
+                          className="input"
+                          value={extractedBiodata[key] ?? ''}
+                          onChange={setBiodata(key)}
+                        >
+                          <option value="">Not stated</option>
+                          {REVIEW_CHOICES[key].map(([value, text]) => (
+                            <option key={value} value={value}>{text}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          className="input"
+                          value={extractedBiodata[key] ?? ''}
+                          onChange={setBiodata(key)}
+                        />
+                      )}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            ))}
+          </div>
+        )}
+
         <ConsentFields value={consent} onChange={setConsent} />
 
+        {error && <p className="alert-critical">{error}</p>}
+
         <div className="flex flex-wrap gap-2">
-          <button className="btn" disabled={create.isPending || !isValidMobile(draft.contactPhone)}>
+          <button className="btn" disabled={importing || create.isPending || !readyToSave}>
             {create.isPending ? 'Saving...' : 'Save profile'}
           </button>
           {/*
@@ -460,19 +741,28 @@ export default function ManagedProfiles({ embedded = false }: { embedded?: boole
           <button
             type="button"
             className="btn-outline"
-            disabled={create.isPending || !isValidMobile(draft.contactPhone)}
-            onClick={() => create.mutate(true)}
+            disabled={importing || create.isPending || !readyToSave}
+            onClick={() => {
+              setError('');
+              create.mutate(true);
+            }}
           >
             Save and invite now
           </button>
           <p className="w-full text-xs text-gray-500">
             {draft.contactEmail
               ? 'The invitation goes to their email and mobile.'
-              : 'With no email, the invitation goes by SMS. They add an email when they claim it.'}
+              : 'With no email, the invitation goes by SMS. They can claim it without an email.'}
           </p>
         </div>
+        </>}
       </form>
-      )}
+    );
+
+    return (
+      <>
+        {creating &&
+          (createFormContainer ? createPortal(form, createFormContainer) : form)}
 
       <div className="card space-y-3">
         <h2 className="section-title">Profiles you manage</h2>
@@ -709,8 +999,9 @@ export default function ManagedProfiles({ embedded = false }: { embedded?: boole
           ))}
         </div>
       </div>
-    </div>
-  );
+      </>
+    );
+  }
 }
 
 /**

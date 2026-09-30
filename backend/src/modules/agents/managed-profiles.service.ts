@@ -1,3 +1,4 @@
+import { ProfileDetails } from '../profile-details/entities/profile-details.entity';
 import {
   BadRequestException,
   ConflictException,
@@ -22,10 +23,68 @@ import { InvitationsService } from '../invitations/invitations.service';
 import { ConsentService } from '../circulation/consent.service';
 import { AgentBillingService } from './agent-billing.service';
 import { ModerationService } from '../../platform/moderation/moderation.service';
-import { ConsentScope, NetworkVisibility, ProfileLifecycle, ProfileVisibility } from '../../common/enums';
+import { ConsentScope, FamilyType, MaritalStatus, NetworkVisibility, OccupationStatus, ProfileLifecycle, ProfileVisibility } from '../../common/enums';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
 import { ProfileClaimStatus, UserRole } from '../../common/enums';
+
+/*
+ * The words a biodata document uses for the three fixed-choice intake fields,
+ * folded to lower case with runs of spaces, hyphens and slashes as `_`. The
+ * enum values themselves are always accepted too.
+ */
+const MARITAL_WORDS: Record<string, MaritalStatus> = {
+  never_married: MaritalStatus.NEVER_MARRIED,
+  unmarried: MaritalStatus.NEVER_MARRIED,
+  single: MaritalStatus.NEVER_MARRIED,
+  divorced: MaritalStatus.DIVORCED,
+  divorce: MaritalStatus.DIVORCED,
+  widowed: MaritalStatus.WIDOWED,
+  widow: MaritalStatus.WIDOWED,
+  widower: MaritalStatus.WIDOWED,
+  separated: MaritalStatus.SEPARATED,
+  annulled: MaritalStatus.ANNULLED,
+};
+
+const FAMILY_TYPE_WORDS: Record<string, FamilyType> = {
+  joint: FamilyType.JOINT,
+  joint_family: FamilyType.JOINT,
+  nuclear: FamilyType.NUCLEAR,
+  nuclear_family: FamilyType.NUCLEAR,
+  extended: FamilyType.EXTENDED,
+  extended_family: FamilyType.EXTENDED,
+  single_parent: FamilyType.SINGLE_PARENT,
+};
+
+const OCCUPATION_WORDS: Record<string, OccupationStatus> = {
+  employed: OccupationStatus.EMPLOYED,
+  self_employed: OccupationStatus.SELF_EMPLOYED,
+  business: OccupationStatus.SELF_EMPLOYED,
+  student: OccupationStatus.STUDENT,
+  homemaker: OccupationStatus.HOMEMAKER,
+  housewife: OccupationStatus.HOMEMAKER,
+  not_employed: OccupationStatus.NOT_EMPLOYED,
+  unemployed: OccupationStatus.NOT_EMPLOYED,
+  retired: OccupationStatus.RETIRED,
+};
+
+/** One fixed-choice intake value, or a 400 naming the field when it matches none. */
+export function intakeChoice<T extends string>(
+  field: string,
+  raw: string | undefined,
+  words: Record<string, T>,
+): T | undefined {
+  if (!raw || !raw.trim()) return undefined;
+  const folded = raw.trim().toLowerCase().replace(/[\s/-]+/g, '_');
+  const value = words[folded];
+  if (!value) {
+    const choices = [...new Set(Object.values(words))].join(', ');
+    throw new BadRequestException(
+      `biodata.${field}: "${raw}" is not a recognised value. Use one of: ${choices}.`,
+    );
+  }
+  return value;
+}
 
 /**
  * Profiles built and maintained on somebody else's behalf.
@@ -108,17 +167,120 @@ export class ManagedProfilesService {
 
     await this.assertNotDuplicate(actor, dto.contactPhone, dto.contactEmail);
 
-    const { inviteNow, consent, ...fields } = dto;
-    const profile = await this.profiles.save(
-      this.profiles.create({
-        ...fields,
-        contactEmail: dto.contactEmail ?? null,
-        userId: null,
-        managedByUserId: actor.userId,
-        claimStatus: ProfileClaimStatus.UNCLAIMED,
-        profileCompleted: this.isComplete(fields),
-      }),
+    const { inviteNow, consent, biodata, biodataDocumentUrl, ...fields } = dto;
+    // Resolved before anything is written: a value the agent confirmed that
+    // matches none of the choices is refused, never silently dropped.
+    const maritalStatus = intakeChoice('maritalStatus', biodata?.maritalStatus, MARITAL_WORDS);
+    const familyType = intakeChoice('familyType', biodata?.familyType, FAMILY_TYPE_WORDS);
+    const occupationStatus = intakeChoice(
+      'occupationStatus',
+      biodata?.occupationStatus,
+      OCCUPATION_WORDS,
     );
+    const profile = await this.profiles.manager.transaction(async (manager) => {
+      const profiles = manager.getRepository(Profile);
+      const profile = await profiles.save(
+        profiles.create({
+          ...fields,
+          contactEmail: dto.contactEmail ?? null,
+          userId: null,
+          managedByUserId: actor.userId,
+          claimStatus: ProfileClaimStatus.UNCLAIMED,
+          profileCompleted: this.isComplete(fields),
+        }),
+      );
+
+      if (biodata || biodataDocumentUrl) {
+        const repo = manager.getRepository(ProfileDetails);
+        const row = repo.create({
+          profileId: profile.id,
+          biodataDocumentUrl: biodataDocumentUrl ?? null,
+        });
+
+        if (biodata) {
+          // Personal details
+          if (biodata.firstName) row.firstName = biodata.firstName;
+          if (biodata.lastName) row.lastName = biodata.lastName;
+          else if (biodata.surname) row.lastName = biodata.surname;
+          if (biodata.residence) row.residence = biodata.residence as Record<string, string>;
+          if (biodata.business) row.business = biodata.business as Record<string, unknown>;
+          if (biodata.heightCm) row.heightCm = Number(biodata.heightCm) || null;
+          if (biodata.complexion) row.complexion = biodata.complexion;
+          if (biodata.nativePlace) row.nativePlace = biodata.nativePlace;
+          if (biodata.nativeState) row.nativeState = biodata.nativeState;
+          if (biodata.nativeCountry) row.nativeCountry = biodata.nativeCountry;
+          if (biodata.nativeDistrict) row.nativeDistrict = biodata.nativeDistrict;
+          if (biodata.placeOfBirth) row.placeOfBirth = biodata.placeOfBirth;
+          const address = biodata.communicationAddress || biodata.address;
+          if (address) row.communicationAddress = address;
+          if (biodata.alternateMobile) row.alternateMobile = biodata.alternateMobile;
+
+          // Religion & Community
+          if (biodata.religion) row.religion = biodata.religion;
+          if (biodata.caste) row.caste = biodata.caste;
+          if (biodata.subCaste) row.subCaste = biodata.subCaste;
+          if (biodata.motherTongue) row.motherTongue = biodata.motherTongue;
+          if (biodata.denomination) row.denomination = biodata.denomination;
+
+          // Horoscope
+          const horoscopeData: Record<string, unknown> = { ...(biodata.horoscope ?? {}) };
+          if (biodata.rashi) horoscopeData.rashi = biodata.rashi;
+          if (biodata.star) horoscopeData.star = biodata.star;
+          if (biodata.padam) horoscopeData.padam = biodata.padam;
+          if (biodata.gothram) horoscopeData.gothram = biodata.gothram;
+          if (biodata.kujaDosham) horoscopeData.kujaDosham = biodata.kujaDosham;
+          if (biodata.timeOfBirth) horoscopeData.timeOfBirth = biodata.timeOfBirth;
+          if (Object.keys(horoscopeData).length > 0) {
+            row.horoscope = horoscopeData;
+            row.horoscopeAvailable = true;
+          }
+
+          // Marital Status
+          if (maritalStatus) row.maritalStatus = maritalStatus;
+
+          // Family details
+          const fatherData: Record<string, unknown> = {
+            ...(biodata.father ?? {}),
+            ...(biodata.fatherName ? { name: biodata.fatherName } : {}),
+            ...(biodata.fatherProfession ? { profession: biodata.fatherProfession } : {}),
+          };
+          if (Object.keys(fatherData).length > 0) row.father = fatherData;
+
+          const motherData: Record<string, unknown> = {
+            ...(biodata.mother ?? {}),
+            ...(biodata.motherName ? { name: biodata.motherName } : {}),
+            ...(biodata.motherProfession ? { profession: biodata.motherProfession } : {}),
+          };
+          if (Object.keys(motherData).length > 0) row.mother = motherData;
+
+          if (familyType) row.familyType = familyType;
+          if (biodata.familyStatus) row.familyStatus = biodata.familyStatus;
+          if (biodata.brothers !== undefined) row.brothers = Number(biodata.brothers) || 0;
+          if (biodata.sisters !== undefined) row.sisters = Number(biodata.sisters) || 0;
+
+          // Education & Career
+          if (biodata.highestQualification) row.highestQualification = biodata.highestQualification;
+          if (biodata.course) row.course = biodata.course;
+          if (biodata.institution) row.institution = biodata.institution;
+          if (biodata.collegePlace) row.collegePlace = biodata.collegePlace;
+
+          if (occupationStatus) row.occupationStatus = occupationStatus;
+
+          const empData: Record<string, unknown> = {
+            ...(biodata.employment ?? {}),
+            ...(biodata.profession ? { designation: biodata.profession, role: biodata.profession } : {}),
+            ...(biodata.designation ? { designation: biodata.designation } : {}),
+            ...(biodata.company ? { company: biodata.company } : {}),
+            ...(biodata.workLocation ? { workLocation: biodata.workLocation } : {}),
+            ...(biodata.annualIncome || biodata.salary ? { salary: biodata.annualIncome || biodata.salary } : {}),
+          };
+          if (Object.keys(empData).length > 0) row.employment = empData;
+        }
+
+        await repo.save(row);
+      }
+      return profile;
+    });
 
     // Consent is recorded with the profile, in the same request, so a profile
     // can never exist without a record of who agreed to it.
@@ -170,7 +332,7 @@ export class ManagedProfilesService {
    */
   private async assertNotDuplicate(
     actor: AuthUser,
-    phone: string,
+    phone?: string,
     email?: string,
     excludeProfileId?: string,
   ): Promise<void> {
@@ -183,14 +345,16 @@ export class ManagedProfilesService {
       }
     }
 
-    const byPhone = await this.profiles.find({ where: { contactPhone: phone } });
-    const clash = byPhone.find((p) => p.id !== excludeProfileId);
-    if (clash) {
-      throw new ConflictException(
-        clash.managedByUserId === actor.userId
-          ? `You already have a profile for that number: ${clash.displayName}.`
-          : 'A profile already exists for that mobile number.',
-      );
+    if (phone) {
+      const byPhone = await this.profiles.find({ where: { contactPhone: phone } });
+      const clash = byPhone.find((p) => p.id !== excludeProfileId);
+      if (clash) {
+        throw new ConflictException(
+          clash.managedByUserId === actor.userId
+            ? `You already have a profile for that number: ${clash.displayName}.`
+            : 'A profile already exists for that mobile number.',
+        );
+      }
     }
 
     if (email) {

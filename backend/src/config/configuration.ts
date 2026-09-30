@@ -22,6 +22,7 @@ export default () => ({
   runtime: {
     env: process.env.NODE_ENV || 'development',
     port: toNumber(process.env.PORT, 3000),
+    host: process.env.HOST || '0.0.0.0',
     apiPrefix: process.env.API_PREFIX || 'api',
     logLevel: process.env.LOG_LEVEL || 'info',
     corsOrigins: toList(process.env.CORS_ORIGINS, ['http://localhost:5173']),

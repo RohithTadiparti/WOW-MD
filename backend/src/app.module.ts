@@ -59,6 +59,9 @@ import { AiModule } from './modules/ai/ai.module';
           redact: [
             'req.headers.authorization',
             'req.body.password',
+            'req.body.currentPassword',
+            'req.body.newPassword',
+            'req.body.confirmPassword',
             'req.body.bankAccount.accountNumber',
           ],
         },
