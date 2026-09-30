@@ -1,4 +1,5 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 
@@ -19,7 +20,26 @@ import { useAuth, type AuthUser } from '@/store/auth';
  * statuses count as a token problem — is the same reasoning as the web client,
  * and the comments there are worth reading alongside these.
  */
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000/api';
+/**
+ * Where the API is.
+ *
+ * A build names it with EXPO_PUBLIC_API_URL (set per EAS environment). Only a
+ * development bundle may guess: it uses the machine serving the bundle, so a
+ * phone on the same network reaches the API on the developer's machine rather
+ * than its own localhost. A preview or release build without the URL fails
+ * here at startup instead of quietly pointing every request, passwords and
+ * bank details included, at an address that cannot be right.
+ */
+function resolveBaseUrl(): string {
+  const configured = process.env.EXPO_PUBLIC_API_URL;
+  if (configured) return configured;
+  if (__DEV__) {
+    const expoHost = Constants.expoConfig?.hostUri?.split(':')[0] ?? 'localhost';
+    return `http://${expoHost}:3000/api`;
+  }
+  throw new Error('EXPO_PUBLIC_API_URL is not set for this build, so the app has no API to talk to.');
+}
+const BASE_URL = resolveBaseUrl();
 /** Alphanumerics, dot, dash and underscore only: SecureStore rejects the rest. */
 const REFRESH_KEY = 'wow.refreshToken';
 
@@ -197,3 +217,4 @@ api.interceptors.response.use(
 );
 
 export { apiMessage } from '@/shared/api-errors';
+

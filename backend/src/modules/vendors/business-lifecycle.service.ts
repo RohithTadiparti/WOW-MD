@@ -17,6 +17,7 @@ import {
   CORRECTABLE_BUSINESS_FIELDS,
   POST_VERIFICATION_EDITABLE_FIELDS,
   canTransition,
+  normaliseCorrectionFields,
   rulesFor,
 } from './business-lifecycle';
 import { ApplicantType, BusinessStatus, UserRole } from '../../common/enums';
@@ -263,7 +264,7 @@ export class BusinessLifecycleService {
     const business = await this.vendors.findOne({ where: { id: businessId } });
     if (!business) return null;
 
-    const allowed = fields.filter((f) =>
+    const allowed = (normaliseCorrectionFields(fields) as string[]).filter((f) =>
       (CORRECTABLE_BUSINESS_FIELDS as readonly string[]).includes(f),
     );
     if (allowed.length === 0) {

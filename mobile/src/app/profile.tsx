@@ -6,10 +6,16 @@ import { api, apiMessage } from '@/lib/api';
 import { formatDate } from '@/shared/dates';
 import { ROLE_LABEL } from '@/shared/permissions';
 import { DetailGrid, DetailRow } from '@/components/chrome';
-import { SelectField, Textarea } from '@/components/form';
-import { WowCalendar } from '@/components/common/WowCalendar';
 import { ChoiceField } from '@/components/biodata/choice-field';
 import { STATES_BY_COUNTRY, districtsForState, DISTRICTS_BY_STATE } from '@/shared/locations';
+import {
+  adultDobMaxIso,
+  dobInputToIso,
+  DobField,
+  isoToDobInput,
+  SelectField,
+  Textarea,
+} from '@/components/form';
 import {
   Alert,
   Body,
@@ -70,11 +76,26 @@ function getStateForCity(city: string | null | undefined): string {
 /** The server's own rule, applied in the field so a typo costs no round trip. */
 const MOBILE_10 = /^[6-9]\d{9}$/;
 
-/** The server refuses anyone under 18, so the calendar stops at that birthday. */
-function latestAdultDob(): string {
-  const d = new Date();
-  d.setFullYear(d.getFullYear() - 18);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+/**
+ * What is wrong with a typed date of birth, if anything.
+ *
+ * While it is still being typed, a partial date is not an error yet. On
+ * save it is: a date the app cannot read is never sent to the server as typed.
+ */
+function dobError(value: string, final = false): string | undefined {
+  if (!value) return undefined;
+  const iso = dobInputToIso(value);
+  if (!iso) {
+    if (value.length === 10) return 'Enter a valid date of birth';
+    return final ? 'Enter the full date of birth as DD/MM/YYYY' : undefined;
+  }
+  const now = new Date();
+  const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  if (iso > todayIso) {
+    return 'A date of birth cannot be in the future';
+  }
+  if (iso > adultDobMaxIso()) return 'You must be at least 18 years old.';
+  return undefined;
 }
 
 const GENDERS = [
@@ -104,8 +125,8 @@ export default function Profile() {
     setForm({
       displayName: data.displayName ?? '',
       gender: data.gender ?? '',
-      dateOfBirth: data.dateOfBirth ?? '',
       state: getStateForCity(data.city),
+      dateOfBirth: isoToDobInput(data.dateOfBirth ?? ''),
       city: data.city ?? '',
       address: data.address ?? '',
       contactPhone: data.contactPhone ?? '',
@@ -120,7 +141,14 @@ export default function Profile() {
       const payload: Record<string, string> = { displayName: form.displayName.trim() };
       for (const key of ['gender', 'dateOfBirth', 'city', 'address', 'contactPhone', 'bio'] as const) {
         const value = form[key].trim();
-        if (value) payload[key] = value;
+        if (!value) continue;
+        if (key === 'dateOfBirth') {
+          // Checked complete in submit(); never sent as typed.
+          const iso = dobInputToIso(value);
+          if (iso) payload[key] = iso;
+        } else {
+          payload[key] = value;
+        }
       }
       await api.put('/users/me/profile', payload);
     },
@@ -138,6 +166,8 @@ export default function Profile() {
     setError('');
     const errors: Record<string, string> = {};
     if (!form.displayName.trim()) errors.displayName = 'Tell us what to call you';
+    const dateOfBirthError = dobError(form.dateOfBirth.trim(), true);
+    if (dateOfBirthError) errors.dateOfBirth = dateOfBirthError;
     if (form.contactPhone.trim()) {
       const digits = form.contactPhone.replace(/[\s-]/g, '').replace(/^\+91/, '');
       if (!MOBILE_10.test(digits)) errors.contactPhone = 'Enter a 10-digit Indian mobile number';
@@ -152,6 +182,11 @@ export default function Profile() {
     // The mark clears the moment they start fixing the field it is on.
     setFieldErrors((fe) => (fe[key] ? { ...fe, [key]: '' } : fe));
   };
+
+  function setDateOfBirth(value: string) {
+    setForm((f) => ({ ...f, dateOfBirth: value }));
+    setFieldErrors((fe) => ({ ...fe, dateOfBirth: dobError(value) ?? '' }));
+  }
 
   if (isPending) {
     return (
@@ -191,12 +226,11 @@ export default function Profile() {
             options={GENDERS}
             onChange={set('gender')}
           />
-          <WowCalendar
+          <DobField
             label="Date of birth"
-            title="Select date of birth"
             value={form.dateOfBirth}
-            onChange={set('dateOfBirth')}
-            maximumDate={latestAdultDob()}
+            onChange={setDateOfBirth}
+            error={fieldErrors.dateOfBirth}
           />
           <ChoiceField
             label="State"

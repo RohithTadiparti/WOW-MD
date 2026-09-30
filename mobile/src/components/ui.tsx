@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   ActivityIndicator,
@@ -12,6 +13,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Eye, EyeSlash } from 'phosphor-react-native';
 
 import { radius, rgb, rgba, space, useTheme, type Theme } from '@/theme';
 import { Txt, typeface } from '@/theme/fonts';
@@ -307,6 +309,7 @@ export function Button({
 interface FieldProps extends TextInputProps {
   label: string;
   hint?: string;
+  showPasswordToggle?: boolean;
   /**
    * What is wrong with this field, in words.
    *
@@ -320,10 +323,21 @@ interface FieldProps extends TextInputProps {
   autoFilled?: boolean;
 }
 
-export function Field({ label, hint, error, required, autoFilled, style, ...props }: FieldProps) {
+export function Field({
+  label,
+  hint,
+  error,
+  required,
+  autoFilled,
+  style,
+  showPasswordToggle = false,
+  ...props
+}: FieldProps) {
   const theme = useTheme();
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const secureTextEntry = Boolean(props.secureTextEntry) && !passwordVisible;
   return (
-    <View style={{ gap: 4 }}>
+    <View style={{ gap: space(1.5) }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(1) }}>
         <Txt style={{ fontSize: 13, fontWeight: '500', color: rgb(theme.ink[600]) }}>
           {label}
@@ -335,24 +349,51 @@ export function Field({ label, hint, error, required, autoFilled, style, ...prop
           </View>
         )}
       </View>
-      <TextInput
-        placeholderTextColor={rgb(theme.ink[400])}
-        style={typeface([
-          {
-            borderWidth: StyleSheet.hairlineWidth,
-            borderColor: rgb(error ? theme.criticalFg : theme.border),
-            backgroundColor: rgb(theme.surface),
-            borderRadius: radius.sm,
-            paddingHorizontal: space(3),
-            paddingVertical: 10,
-            fontSize: 16, // 16 or iOS zooms the field on focus.
-            color: rgb(theme.ink[900]),
-            minHeight: 48,
-          },
-          style,
-        ])}
-        {...props}
-      />
+      <View style={{ position: 'relative', justifyContent: 'center' }}>
+        <TextInput
+          placeholderTextColor={rgb(theme.ink[400])}
+          style={typeface([
+            {
+              borderWidth: StyleSheet.hairlineWidth,
+              borderColor: rgb(error ? theme.criticalFg : theme.border),
+              backgroundColor: rgb(theme.surface),
+              borderRadius: radius.sm,
+              paddingHorizontal: space(3),
+              ...(showPasswordToggle ? { paddingRight: space(12) } : {}),
+              paddingVertical: space(3),
+              fontSize: 16, // 16 or iOS zooms the field on focus.
+              color: rgb(theme.ink[900]),
+              minHeight: 46,
+            },
+            style,
+          ])}
+          {...props}
+          secureTextEntry={props.secureTextEntry ? secureTextEntry : undefined}
+        />
+        {showPasswordToggle && props.secureTextEntry ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={passwordVisible ? 'Hide password' : 'Show password'}
+            accessibilityState={{ selected: passwordVisible }}
+            hitSlop={10}
+            onPress={() => setPasswordVisible((visible) => !visible)}
+            style={{
+              position: 'absolute',
+              right: space(3),
+              minWidth: 44,
+              minHeight: 44,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            {passwordVisible ? (
+              <Eye size={20} color={rgb(theme.ink[500])} />
+            ) : (
+              <EyeSlash size={20} color={rgb(theme.ink[500])} />
+            )}
+          </Pressable>
+        ) : null}
+      </View>
       {error ? <Caption tone="critical">{error}</Caption> : null}
       {hint && !error ? <Caption tone="faint">{hint}</Caption> : null}
     </View>

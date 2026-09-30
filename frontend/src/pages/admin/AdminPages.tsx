@@ -1,12 +1,11 @@
 import { useState, type ReactNode } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiMessage } from '../../lib/api';
 import { MOBILE_10_PATTERN } from '../../lib/permissions';
-import { milestoneLabel, paymentStatusLabel } from '../../lib/labels';
+import { BUSINESS_STATUS_LABEL, labelFrom, milestoneLabel, paymentStatusLabel } from '../../lib/labels';
 import {
   AllBookings,
-  Businesses,
   Directory,
 } from '../../components/AdminConsole';
 import ReviewModeration from '../../components/ReviewModeration';
@@ -140,13 +139,222 @@ export function AdminAgents() {
 }
 
 export function AdminVendors() {
+  const [params, setParams] = useSearchParams();
+  const filter = params.get('status') ?? 'all';
+  const search = params.get('q') ?? '';
+  const page = Math.max(1, Number(params.get('page')) || 1);
+  const setFilter = (status: string) => {
+    const next = new URLSearchParams(params);
+    next.set('status', status);
+    next.delete('page');
+    setParams(next, { replace: true });
+  };
+  const setPage = (value: number) => {
+    const next = new URLSearchParams(params);
+    if (value > 1) next.set('page', String(value));
+    else next.delete('page');
+    setParams(next, { replace: true });
+  };
+
+  /*
+   * Filtered and paged by the server. Filtering one loaded page of businesses
+   * against one loaded page of accounts silently dropped every business whose
+   * owner fell outside that page once there were more than a page of either.
+   */
+  const filterParams: Record<string, string> =
+    filter === 'active'
+      ? { active: 'true' }
+      : filter === 'suspended'
+        ? { active: 'false' }
+        : filter === 'draft' || filter === 'rejected'
+          ? { status: filter }
+          : {};
+  const { data: businesses, isLoading: businessesLoading } = useQuery<{
+    data: VendorBusinessRow[];
+    meta: { total: number; totalPages: number };
+  }>({
+    queryKey: ['admin-vendor-businesses', search, filter, page],
+    queryFn: async () =>
+      (
+        await api.get('/admin/businesses', {
+          params: { limit: VENDORS_PAGE_SIZE, page, q: search || undefined, ...filterParams },
+        })
+      ).data,
+    refetchInterval: 60000,
+  });
+  const rows = businesses?.data ?? [];
+  const totalPages = businesses?.meta.totalPages ?? 1;
+
+  const counts = useVendorCounts();
+  const cards = [
+    { key: 'all', label: 'All Vendors', value: counts.all, tone: 'bg-brand-soft text-brand-strong' },
+    { key: 'active', label: 'Active', value: counts.active, tone: 'bg-positive-bg text-positive-fg' },
+    { key: 'draft', label: 'Draft', value: counts.draft, tone: 'bg-caution-bg text-caution-fg' },
+    { key: 'rejected', label: 'Rejected', value: counts.rejected, tone: 'bg-critical-bg text-critical-fg' },
+    { key: 'suspended', label: 'Suspended', value: counts.suspended, tone: 'bg-gray-100 text-gray-700' },
+  ];
+
   return (
-    <div className="space-y-6">
-      <Masthead title="Vendors">The people who sell on the marketplace, and the businesses they hold.</Masthead>
-      <Directory title="Vendor accounts" initialRole="vendor" roles={['vendor']} detailBase="/admin/vendors" />
-      <Businesses />
+    <div className="space-y-5">
+      <div>
+        <h1 className="page-title">Vendors</h1>
+        <p className="page-subtitle">Manage vendor accounts, businesses, verification and activity.</p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        {cards.map((card) => (
+          <button
+            key={card.key}
+            type="button"
+            onClick={() => setFilter(card.key)}
+            className={`card text-left transition-shadow hover:shadow-pop ${filter === card.key ? 'ring-2 ring-brand' : ''}`}
+          >
+            <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${card.tone}`}>{card.label}</span>
+            <span className="mt-3 block text-2xl font-semibold tabular-nums text-gray-900">
+              {counts.loading ? '—' : card.value}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <div className="card overflow-hidden p-0">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 p-4">
+          <div>
+            <h2 className="section-title">Vendor Accounts</h2>
+            <p className="text-xs text-gray-500">{businesses?.meta.total ?? 0} businesses from the backend</p>
+          </div>
+          <input
+            className="input w-full sm:w-80"
+            placeholder="Search by business name"
+            value={search}
+            onChange={(event) => {
+              const next = new URLSearchParams(params);
+              if (event.target.value) next.set('q', event.target.value);
+              else next.delete('q');
+              next.delete('page');
+              setParams(next, { replace: true });
+            }}
+          />
+        </div>
+
+        {businessesLoading ? <Loading rows={5} /> : rows.length === 0 ? (
+          <p className="p-6 text-sm text-gray-400">No vendors match this filter.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+                <tr>
+                  <th className="px-4 py-3">Name / Email</th>
+                  <th className="px-4 py-3">Business Name</th>
+                  <th className="px-4 py-3">Categories</th>
+                  <th className="px-4 py-3">Account Status</th>
+                  <th className="px-4 py-3">Verification Status</th>
+                  <th className="px-4 py-3">Joined Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {rows.map((business) => {
+                  const account = business.owner;
+                  return (
+                    <tr key={business.id} className="hover:bg-brand-soft/30">
+                      <td className="px-4 py-3">
+                        <Link className="block font-medium text-gray-900 hover:text-brand-strong" to={`/admin/vendors/${business.ownerUserId}`}>
+                          {account?.email ?? 'Unknown account'}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Link className="font-medium text-brand-strong hover:underline" to={`/admin/businesses/${business.id}`}>
+                          {business.name}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 text-gray-600">{business.categories?.join(', ') || business.category || '—'}</td>
+                      <td className="px-4 py-3"><StatusPill active={account?.isActive !== false} /></td>
+                      <td className="px-4 py-3"><span className="pill bg-gray-100 text-gray-700">{labelFrom(BUSINESS_STATUS_LABEL, business.status)}</span></td>
+                      <td className="px-4 py-3 text-gray-600">{new Date(account?.createdAt ?? business.createdAt).toLocaleDateString()}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between gap-3 border-t border-gray-100 p-3 text-sm">
+            <button type="button" className="btn-outline" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+              Previous
+            </button>
+            <span className="text-gray-500">
+              Page {page} of {totalPages}
+            </span>
+            <button
+              type="button"
+              className="btn-outline"
+              disabled={page >= totalPages}
+              onClick={() => setPage(page + 1)}
+            >
+              Next
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
+}
+
+const VENDORS_PAGE_SIZE = 25;
+
+interface VendorBusinessRow {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  category: string;
+  categories?: string[];
+  status: string;
+  createdAt: string;
+  /** The owning vendor account, named by the server on each row. */
+  owner: { email: string | null; isActive: boolean; createdAt: string } | null;
+}
+
+function StatusPill({ active }: { active: boolean }) {
+  return <span className={`pill ${active ? 'bg-positive-bg text-positive-fg' : 'bg-critical-bg text-critical-fg'}`}>{active ? 'Active' : 'Suspended'}</span>;
+}
+
+function useVendorCounts() {
+  const all = useQuery<{ meta: { total: number } }>({
+    queryKey: ['admin-vendor-count', 'all'],
+    queryFn: async () => (await api.get('/admin/businesses', { params: { limit: 1 } })).data,
+    refetchInterval: 60000,
+  });
+  const draft = useQuery<{ meta: { total: number } }>({
+    queryKey: ['admin-vendor-count', 'draft'],
+    queryFn: async () => (await api.get('/admin/businesses', { params: { limit: 1, status: 'draft' } })).data,
+    refetchInterval: 60000,
+  });
+  const rejected = useQuery<{ meta: { total: number } }>({
+    queryKey: ['admin-vendor-count', 'rejected'],
+    queryFn: async () => (await api.get('/admin/businesses', { params: { limit: 1, status: 'rejected' } })).data,
+    refetchInterval: 60000,
+  });
+  const active = useQuery<{ meta: { total: number } }>({
+    queryKey: ['admin-vendor-count', 'active'],
+    // Counted the same way the Active and Suspended filters list them: by
+    // business, on the state of the owning account.
+    queryFn: async () => (await api.get('/admin/businesses', { params: { limit: 1, active: 'true' } })).data,
+    refetchInterval: 60000,
+  });
+  const suspended = useQuery<{ meta: { total: number } }>({
+    queryKey: ['admin-vendor-count', 'suspended'],
+    queryFn: async () => (await api.get('/admin/businesses', { params: { limit: 1, active: 'false' } })).data,
+    refetchInterval: 60000,
+  });
+  return {
+    all: all.data?.meta.total ?? 0,
+    draft: draft.data?.meta.total ?? 0,
+    rejected: rejected.data?.meta.total ?? 0,
+    active: active.data?.meta.total ?? 0,
+    suspended: suspended.data?.meta.total ?? 0,
+    loading: all.isLoading || draft.isLoading || rejected.isLoading || active.isLoading || suspended.isLoading,
+  };
 }
 
 export function AdminPlanners() {

@@ -1,6 +1,7 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiHideProperty, ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
+  Allow,
   ArrayMaxSize,
   ArrayNotEmpty,
   IsArray,
@@ -302,17 +303,17 @@ export class UpsertVendorServiceDto {
   @IsObject()
   attributes?: Record<string, unknown>;
 
-  @ApiPropertyOptional({
-    default: 1,
-    minimum: 1,
-    maximum: 500,
-    description: 'How many of these the vendor can run at once. Five catering teams, one hall.',
-  })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(500)
-  concurrentCapacity?: number;
+  /**
+   * Retired: capacity is now set on each published window, not per service.
+   *
+   * App builds released before that change still send it on every service
+   * edit, and the validation pipe rejects unknown properties, so it is
+   * accepted and ignored rather than turning those edits into a 400. The
+   * stored per-service value is kept and still seeds new windows.
+   */
+  @ApiHideProperty()
+  @Allow()
+  concurrentCapacity?: unknown;
 
   @ApiPropertyOptional()
   @IsOptional()

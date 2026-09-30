@@ -10,6 +10,8 @@ const IMAGE_EXTENSIONS = [
 /** A type worth passing on: an image, a video or a PDF, never a blank. */
 const REPORTED_TYPE = /^(image|video)\/[a-z0-9.+-]+$|^application\/pdf$/i;
 
+class StorageUnavailableError extends Error {}
+
 /**
  * Picks a file, uploads it, and hands back the URL it now lives at.
  *
@@ -88,12 +90,19 @@ export default function PhotoUploader({
         },
       );
 
-      const response = await fetch(data.uploadUrl, {
-        method: 'PUT',
-        body: file,
-        headers: { 'Content-Type': file.type, ...(data.headers ?? {}) },
-      });
-      if (!response.ok) throw new Error(`Storage returned ${response.status}`);
+      let response: Response;
+      try {
+        response = await fetch(data.uploadUrl, {
+          method: 'PUT',
+          body: file,
+          headers: { 'Content-Type': file.type, ...(data.headers ?? {}) },
+        });
+      } catch {
+        throw new StorageUnavailableError(
+          `Could not reach storage at ${new URL(data.uploadUrl).origin}. Check your connection and try again.`,
+        );
+      }
+      if (!response.ok) throw new Error(`Storage refused the file (${response.status}). Try again.`);
 
       // The server reads the file back and refuses one that is not what it
       // claimed to be, before anything is attached to it.
@@ -101,7 +110,11 @@ export default function PhotoUploader({
 
       onUploaded(data.publicUrl);
     } catch (err) {
-      setError(apiMessage(err, 'That photo could not be uploaded.'));
+      setError(
+        err instanceof StorageUnavailableError
+          ? err.message
+          : apiMessage(err, 'That file could not be uploaded.'),
+      );
     } finally {
       setBusy(false);
       // Clearing the input matters: without it, choosing the same file twice
