@@ -65,6 +65,38 @@ the same way. Local Docker builds (no Expo account) are also possible with the
 `EXPO_PUBLIC_API_URL` set. Test APKs are served to testers from
 `docker/downloads` (see `frontend/nginx.conf`).
 
+## Automated builds (GitHub Actions)
+
+`.github/workflows/mobile-builds.yml` runs every day at 02:30 IST. It builds
+only when `main` has changed `mobile/` or `frontend/src/lib/` since its last
+successful run; otherwise it stops after a few seconds. To build on demand,
+open **Actions → Mobile builds → Run workflow** (tick *force* to build with no
+changes, and pick Android, iOS or both).
+
+- **Android**: built on the GitHub runner and published as the release
+  `android-latest`, replaced on each build. The download link never changes:
+  `https://github.com/RohithTadiparti/WOW-MD/releases/download/android-latest/wow.apk`.
+- **iOS**: started on EAS with the `production` profile and `--auto-submit`, so
+  it goes to TestFlight when it finishes. Build numbers are kept by EAS, so
+  nothing is committed back to the repository.
+
+One-time setup for the iOS half (until it is done the iOS job skips itself and
+Android still builds):
+
+1. Create an Expo access token (expo.dev → Account settings → Access tokens)
+   and add it to the repository as the secret `EXPO_TOKEN`
+   (GitHub → Settings → Secrets and variables → Actions).
+2. Create the app in App Store Connect with bundle id `com.worldofweddings.app`.
+3. From `mobile/`, run one production build interactively so EAS creates and
+   stores the distribution certificate and provisioning profile, and add an
+   App Store Connect API key for submissions when it asks:
+   ```bash
+   npx eas-cli build --platform ios --profile production --auto-submit
+   ```
+   (`npx eas-cli credentials` sets up the same things without building.)
+
+After that the daily run needs nothing from anybody.
+
 ## Notes
 
 - `ios/` and `android/` are git-ignored on purpose: EAS generates them on each
