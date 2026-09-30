@@ -1,6 +1,7 @@
 import { FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ProfileSilhouette } from '../components/ProfileSilhouette';
+import { ANDROID_APK } from '../components/AppDownload';
 
 /**
  * The public home page, from the matrimony home design template.
@@ -35,12 +36,6 @@ const SAMPLE_PROFILES = [
 ];
 
 const NAV_LINK = 'plate text-[0.8125rem] uppercase tracking-[0.16em] text-gray-700 hover:text-brand';
-
-/**
- * The Android app, served by the web container from docker/downloads (see
- * frontend/nginx.conf). A plain link rather than a router Link: it is a file.
- */
-const ANDROID_APK = '/downloads/wow.apk';
 
 export default function Home() {
   const nav = useNavigate();
