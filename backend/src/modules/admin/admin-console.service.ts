@@ -209,18 +209,49 @@ export class AdminConsoleService {
    * lists the businesses — which is what a question like "how many listings are
    * stuck in first review" is actually about.
    */
-  async businesses(q: DirectoryQueryDto): Promise<PaginatedResult<Vendor>> {
+  async businesses(q: DirectoryQueryDto): Promise<
+    PaginatedResult<
+      Vendor & { owner: { email: string | null; isActive: boolean; createdAt: Date } | null }
+    >
+  > {
     const qb = this.vendors.createQueryBuilder('v');
     if (q.status) qb.andWhere('v.status = :status', { status: q.status });
     if (q.q) qb.andWhere('LOWER(v.name) LIKE :needle', { needle: `%${q.q.toLowerCase()}%` });
     if (q.city) qb.andWhere('LOWER(v.city) = LOWER(:city)', { city: q.city });
+    // Filtered here, against every owner, rather than by the client against
+    // whichever page of accounts it happened to load.
+    if (q.active !== undefined) {
+      qb.innerJoin(User, 'owner', 'owner.id = v.ownerUserId').andWhere(
+        'owner.isActive = :active',
+        { active: q.active === true },
+      );
+    }
 
     qb.orderBy('v.createdAt', 'DESC')
       .skip((q.page - 1) * q.limit)
       .take(q.limit);
 
     const [data, total] = await qb.getManyAndCount();
-    return paginate(data, total, q.page, q.limit);
+
+    // Each row names its owner's account, so a page of businesses is complete
+    // on its own.
+    const ownerIds = [...new Set(data.map((v) => v.ownerUserId))];
+    const owners = ownerIds.length
+      ? await this.users.find({
+          where: { id: In(ownerIds) },
+          select: ['id', 'email', 'isActive', 'createdAt'],
+        })
+      : [];
+    const ownerById = new Map(owners.map((o) => [o.id, o]));
+    const rows = data.map((v) => {
+      const owner = ownerById.get(v.ownerUserId);
+      return Object.assign(v, {
+        owner: owner
+          ? { email: owner.email, isActive: owner.isActive, createdAt: owner.createdAt }
+          : null,
+      });
+    });
+    return paginate(rows, total, q.page, q.limit);
   }
 
   /**

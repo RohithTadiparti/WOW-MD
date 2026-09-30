@@ -142,38 +142,48 @@ export function AdminVendors() {
   const [params, setParams] = useSearchParams();
   const filter = params.get('status') ?? 'all';
   const search = params.get('q') ?? '';
+  const page = Math.max(1, Number(params.get('page')) || 1);
   const setFilter = (status: string) => {
     const next = new URLSearchParams(params);
     next.set('status', status);
+    next.delete('page');
+    setParams(next, { replace: true });
+  };
+  const setPage = (value: number) => {
+    const next = new URLSearchParams(params);
+    if (value > 1) next.set('page', String(value));
+    else next.delete('page');
     setParams(next, { replace: true });
   };
 
+  /*
+   * Filtered and paged by the server. Filtering one loaded page of businesses
+   * against one loaded page of accounts silently dropped every business whose
+   * owner fell outside that page once there were more than a page of either.
+   */
+  const filterParams: Record<string, string> =
+    filter === 'active'
+      ? { active: 'true' }
+      : filter === 'suspended'
+        ? { active: 'false' }
+        : filter === 'draft' || filter === 'rejected'
+          ? { status: filter }
+          : {};
   const { data: businesses, isLoading: businessesLoading } = useQuery<{
     data: VendorBusinessRow[];
-    meta: { total: number };
+    meta: { total: number; totalPages: number };
   }>({
-    queryKey: ['admin-vendor-businesses', search],
+    queryKey: ['admin-vendor-businesses', search, filter, page],
     queryFn: async () =>
-      (await api.get('/admin/businesses', { params: { limit: 100, q: search || undefined } })).data,
+      (
+        await api.get('/admin/businesses', {
+          params: { limit: VENDORS_PAGE_SIZE, page, q: search || undefined, ...filterParams },
+        })
+      ).data,
     refetchInterval: 60000,
   });
-
-  const { data: accounts } = useQuery<{ data: VendorAccountRow[]; meta: { total: number } }>({
-    queryKey: ['admin-vendor-accounts'],
-    queryFn: async () =>
-      (await api.get('/admin/directory', { params: { limit: 100, role: 'vendor' } })).data,
-    refetchInterval: 60000,
-  });
-
-  const accountById = new Map((accounts?.data ?? []).map((account) => [account.id, account]));
-  const rows = (businesses?.data ?? []).filter((business) => {
-    const account = accountById.get(business.ownerUserId);
-    if (filter === 'active') return account?.isActive === true;
-    if (filter === 'suspended') return account?.isActive === false;
-    if (filter === 'draft') return business.status === 'draft';
-    if (filter === 'rejected') return business.status === 'rejected';
-    return true;
-  });
+  const rows = businesses?.data ?? [];
+  const totalPages = businesses?.meta.totalPages ?? 1;
 
   const counts = useVendorCounts();
   const cards = [
@@ -221,6 +231,7 @@ export function AdminVendors() {
               const next = new URLSearchParams(params);
               if (event.target.value) next.set('q', event.target.value);
               else next.delete('q');
+              next.delete('page');
               setParams(next, { replace: true });
             }}
           />
@@ -243,7 +254,7 @@ export function AdminVendors() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {rows.map((business) => {
-                  const account = accountById.get(business.ownerUserId);
+                  const account = business.owner;
                   return (
                     <tr key={business.id} className="hover:bg-brand-soft/30">
                       <td className="px-4 py-3">
@@ -267,10 +278,30 @@ export function AdminVendors() {
             </table>
           </div>
         )}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between gap-3 border-t border-gray-100 p-3 text-sm">
+            <button type="button" className="btn-outline" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+              Previous
+            </button>
+            <span className="text-gray-500">
+              Page {page} of {totalPages}
+            </span>
+            <button
+              type="button"
+              className="btn-outline"
+              disabled={page >= totalPages}
+              onClick={() => setPage(page + 1)}
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
 }
+
+const VENDORS_PAGE_SIZE = 25;
 
 interface VendorBusinessRow {
   id: string;
@@ -280,13 +311,8 @@ interface VendorBusinessRow {
   categories?: string[];
   status: string;
   createdAt: string;
-}
-
-interface VendorAccountRow {
-  id: string;
-  email: string;
-  isActive: boolean;
-  createdAt: string;
+  /** The owning vendor account, named by the server on each row. */
+  owner: { email: string | null; isActive: boolean; createdAt: string } | null;
 }
 
 function StatusPill({ active }: { active: boolean }) {
@@ -311,12 +337,14 @@ function useVendorCounts() {
   });
   const active = useQuery<{ meta: { total: number } }>({
     queryKey: ['admin-vendor-count', 'active'],
-    queryFn: async () => (await api.get('/admin/directory', { params: { limit: 1, role: 'vendor', active: 'true' } })).data,
+    // Counted the same way the Active and Suspended filters list them: by
+    // business, on the state of the owning account.
+    queryFn: async () => (await api.get('/admin/businesses', { params: { limit: 1, active: 'true' } })).data,
     refetchInterval: 60000,
   });
   const suspended = useQuery<{ meta: { total: number } }>({
     queryKey: ['admin-vendor-count', 'suspended'],
-    queryFn: async () => (await api.get('/admin/directory', { params: { limit: 1, role: 'vendor', active: 'false' } })).data,
+    queryFn: async () => (await api.get('/admin/businesses', { params: { limit: 1, active: 'false' } })).data,
     refetchInterval: 60000,
   });
   return {
