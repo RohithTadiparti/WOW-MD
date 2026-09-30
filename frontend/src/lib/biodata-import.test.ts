@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseBiodata, readBiodata } from './biodata-import';
+import { parseBiodata, readBiodata, spreadsheetRowsToText } from './biodata-import';
 
 describe('biodata document extraction', () => {
   it('maps the supplied biodata without using relatives education or occupation', () => {
@@ -165,7 +165,16 @@ Religion: N/A`)).toEqual({ nativePlace: 'Hyderabad' });
 
   it('rejects unsupported files before trying OCR or uploading', async () => {
     const bytes = new TextEncoder().encode('not an image');
-    const file = { size: bytes.length, arrayBuffer: async () => bytes.buffer } as File;
-    await expect(readBiodata(file)).rejects.toThrow('valid PDF, JPG or PNG');
+    const file = { name: 'not-a-biodata.txt', size: bytes.length, arrayBuffer: async () => bytes.buffer } as File;
+    await expect(readBiodata(file)).rejects.toThrow('PDF, Word document, Excel file');
+  });
+
+  it('turns two-column and header-row spreadsheets into explicit biodata labels', () => {
+    expect(spreadsheetRowsToText([
+      ['Field', 'Value'], ['Name', 'Anjali Devi'], ['Height', '5 ft 2 in'],
+    ])).toBe('Name: Anjali Devi\nHeight: 5 ft 2 in');
+    expect(spreadsheetRowsToText([
+      ['Name', 'DOB', 'Caste'], ['Rahul Kumar', '15/08/1998', 'Kamma'],
+    ])).toBe('Name: Rahul Kumar\nDOB: 15/08/1998\nCaste: Kamma');
   });
 });

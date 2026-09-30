@@ -38,13 +38,14 @@ import { ageBand, toCardFacts } from '../users/dto/public-profile.dto';
 import { AiService } from '../ai/ai.service';
 import { StorageService } from '../../platform/storage/storage.service';
 import { parseKey } from '../../platform/storage/storage-keys';
-import { BIODATA_IMAGE_EXTENSIONS } from '../media/dto/media.dto';
+import { BIODATA_DOCUMENT_EXTENSIONS, BIODATA_IMAGE_EXTENSIONS } from '../media/dto/media.dto';
 
 /** The most brothers and sisters a profile may list (EZ1-I102). */
 export const SIBLING_LIMIT = 10;
 
 /** A biodata file the extractor can read, judged by the extension in its key. */
 const BIODATA_FILE = new RegExp(`\\.(${BIODATA_IMAGE_EXTENSIONS})$`, 'i');
+const BIODATA_DOCUMENT = new RegExp(`\\.(${BIODATA_DOCUMENT_EXTENSIONS})$`, 'i');
 
 /** The sections a profile has to complete before it is considered ready. */
 export const REQUIRED_SECTIONS = [
@@ -628,6 +629,20 @@ export class ProfileDetailsService {
       expiresInSeconds: ProfileDetailsService.EXTRACT_LINK_SECONDS,
     });
     return this.ai.extractBiodata(url);
+  }
+
+  /** Store the original upload without granting it any access outside this profile. */
+  async saveBiodataSourceDocument(actor: AuthUser, profileId: string, key: string) {
+    const row = await this.editable(actor, profileId);
+    const scope = parseKey(key);
+    if (!scope || scope.owner !== 'users' || scope.area !== 'biodata' || scope.id !== actor.userId) {
+      throw new ForbiddenException('That is not a biodata you uploaded');
+    }
+    if (!BIODATA_DOCUMENT.test(key)) {
+      throw new BadRequestException('That file type cannot be used as a biodata document.');
+    }
+    row.biodataDocumentUrl = `media://${key}`;
+    return this.persist(row);
   }
 
   /** Long enough for the model to fetch the image once, and no longer. */

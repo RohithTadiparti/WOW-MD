@@ -171,6 +171,16 @@ export class ProfileDetailsController {
     return this.details.extractBiodata(actor, id, dto.key);
   }
 
+  @ApiOperation({ summary: 'Keep the uploaded biodata document with this profile' })
+  @Put('details/source-document')
+  async sourceDocument(
+    @CurrentUser() actor: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ExtractBiodataDto,
+  ) {
+    return this.details.saveBiodataSourceDocument(actor, id, dto.key);
+  }
+
   // -------------------------------------------------------------- photographs
 
   @ApiOperation({

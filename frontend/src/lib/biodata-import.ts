@@ -218,6 +218,62 @@ export function parseBiodata(text: string): Record<string, string> {
   return result;
 }
 
+/**
+ * Turn the common two-column Excel layout ("Field" / "Value") into the
+ * labelled text the biodata parser already understands. If the first row is a
+ * set of field names, use the next populated row as its values instead.
+ */
+export function spreadsheetRowsToText(rows: unknown[][]): string {
+  const value = (cell: unknown) => String(cell ?? '').trim();
+  const nonEmpty = rows
+    .map((row) => row.map(value))
+    .filter((row) => row.some(Boolean));
+  if (!nonEmpty.length) return '';
+
+  const first = nonEmpty[0];
+  const fieldValueHeader = /^(field|label|detail|particular|attribute)$/i.test(first[0] ?? '')
+    && /^(value|answer|details?|information)$/i.test(first[1] ?? '');
+  if (fieldValueHeader) {
+    return nonEmpty.slice(1)
+      .filter((row) => row[0] && row[1])
+      .map((row) => `${row[0]}: ${row.slice(1).filter(Boolean).join(' ')}`)
+      .join('\n');
+  }
+
+  // A worksheet exported from a form commonly has its labels across row one.
+  // Pair each heading with the first completed response row below it.
+  const response = nonEmpty.slice(1).find((row) => row.some(Boolean));
+  if (response && first.length > 2) {
+    return first
+      .map((heading, index) => heading && response[index] ? `${heading}: ${response[index]}` : '')
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  return nonEmpty
+    .filter((row) => row[0] && row[1])
+    .map((row) => `${row[0]}: ${row.slice(1).filter(Boolean).join(' ')}`)
+    .join('\n');
+}
+
+function bufferFor(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
+type BiodataDocumentKind = 'pdf' | 'image' | 'docx' | 'spreadsheet';
+
+function documentKind(file: File, bytes: Uint8Array): BiodataDocumentKind | undefined {
+  const name = String(file.name ?? '').toLowerCase();
+  const pdf = new TextDecoder().decode(bytes.slice(0, 5)) === '%PDF-';
+  const png = bytes.slice(0, 8).join(',') === '137,80,78,71,13,10,26,10';
+  const jpeg = bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
+  if (pdf) return 'pdf';
+  if (png || jpeg) return 'image';
+  if (/\.docx$/i.test(name)) return 'docx';
+  if (/\.(?:xlsx|xls|csv)$/i.test(name)) return 'spreadsheet';
+  return undefined;
+}
+
 /** Converts only unambiguous, explicitly labelled Indian biodata dates to ISO. */
 function parseDateOfBirth(value: string): string | undefined {
   value = value.replace(/(?:\s*\([^()]*\))+\s*$/, '').trim();
@@ -252,10 +308,8 @@ function parseDateOfBirth(value: string): string | undefined {
 export async function readBiodata(file: File): Promise<Record<string, string>> {
   if (!file.size || file.size > 10 * 1024 * 1024) throw new Error('Choose a file under 10 MB.');
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const pdf = new TextDecoder().decode(bytes.slice(0, 5)) === '%PDF-';
-  const png = bytes.slice(0, 8).join(',') === '137,80,78,71,13,10,26,10';
-  const jpeg = bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
-  if (!(pdf || png || jpeg)) throw new Error('Choose a valid PDF, JPG or PNG file.');
+  const kind = documentKind(file, bytes);
+  if (!kind) throw new Error('Choose a PDF, Word document, Excel file, JPG or PNG biodata.');
   let worker: Awaited<ReturnType<typeof import('tesseract.js').createWorker>> | undefined;
   const ocr = async (source: File | HTMLCanvasElement) => {
     // All OCR runtime files are served with the application. Tesseract's defaults
@@ -272,7 +326,21 @@ export async function readBiodata(file: File): Promise<Record<string, string>> {
   };
   let text = '';
   try {
-    if (pdf) {
+    if (kind === 'docx') {
+      const mammoth = await import('mammoth');
+      text = (await mammoth.extractRawText({ arrayBuffer: bufferFor(bytes) })).value;
+    } else if (kind === 'spreadsheet') {
+      const XLSX = await import('xlsx');
+      const workbook = XLSX.read(bytes, { type: 'array', cellText: true, cellDates: false });
+      text = workbook.SheetNames
+        .map((name) => spreadsheetRowsToText(XLSX.utils.sheet_to_json(workbook.Sheets[name], {
+          header: 1,
+          defval: '',
+          raw: false,
+        }) as unknown[][]))
+        .filter(Boolean)
+        .join('\n');
+    } else if (kind === 'pdf') {
       const lib = await import('pdfjs-dist');
       lib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href;
       const doc = await lib.getDocument({ data: bytes, isEvalSupported: false }).promise;

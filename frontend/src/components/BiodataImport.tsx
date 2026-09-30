@@ -5,7 +5,18 @@ import { readBiodata } from '../lib/biodata-import';
 interface BiodataImportProps {
   busy?: boolean;
   onBusy?: (busy: boolean) => void;
-  onImported: (fields: Record<string, string>, documentUrl: string) => Promise<void> | void;
+  onImported: (fields: Record<string, string>, documentUrl: string, key: string) => Promise<void> | void;
+}
+
+function contentTypeFor(file: File): string {
+  if (file.type) return file.type;
+  if (/\.pdf$/i.test(file.name)) return 'application/pdf';
+  if (/\.docx$/i.test(file.name)) return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  if (/\.xlsx$/i.test(file.name)) return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  if (/\.xls$/i.test(file.name)) return 'application/vnd.ms-excel';
+  if (/\.csv$/i.test(file.name)) return 'text/csv';
+  if (/\.png$/i.test(file.name)) return 'image/png';
+  return 'image/jpeg';
 }
 
 export default function BiodataImport({ busy = false, onBusy, onImported }: BiodataImportProps) {
@@ -22,12 +33,11 @@ export default function BiodataImport({ busy = false, onBusy, onImported }: Biod
 
     try {
       const fields = await readBiodata(file);
-      const contentType = file.type || (/\.pdf$/i.test(file.name) ? 'application/pdf'
-        : /\.png$/i.test(file.name) ? 'image/png' : 'image/jpeg');
+      const contentType = contentTypeFor(file);
 
       // 2. Upload file to media storage to obtain biodataDocumentUrl
       setStatus('Uploading document...');
-      const { data: presign } = await api.post('/media/attachment/presign', {
+      const { data: presign } = await api.post('/media/biodata/presign', {
         filename: file.name,
         size: file.size,
         contentType,
@@ -50,7 +60,7 @@ export default function BiodataImport({ busy = false, onBusy, onImported }: Biod
 
       const docUrl = completed.ref;
       setStatus('Preparing extracted fields for review...');
-      await onImported(fields, docUrl);
+      await onImported(fields, docUrl, presign.key);
       setStatus('');
     } catch (err) {
       setError(err instanceof Error && !('response' in err)
@@ -63,19 +73,19 @@ export default function BiodataImport({ busy = false, onBusy, onImported }: Biod
   }
 
   return (
-    <div className="rounded-lg border border-dashed border-gray-300 p-4 bg-gray-50/50">
+    <div className="card border-dashed bg-amber-50/30 p-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-gray-900">Upload Biodata Document (PDF or Image)</h3>
+          <h3 className="text-sm font-semibold text-gray-900">Import a biodata document</h3>
           <p className="text-xs text-gray-500">
-            Extract the biodata into the review form. You can correct or complete every value before saving creates the client.
+            Choose a PDF, Word or Excel file (or a clear image). We fill recognised values into the existing steps and flag the rest for review.
           </p>
         </div>
         <div className="shrink-0">
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pdf,image/png,image/jpeg,image/jpg"
+            accept=".pdf,.docx,.xlsx,.xls,.csv,image/png,image/jpeg,image/jpg"
             className="hidden"
             onChange={handleFile}
             disabled={busy}

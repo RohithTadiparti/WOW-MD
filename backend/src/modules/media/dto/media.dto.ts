@@ -136,21 +136,20 @@ export class PresignAttachmentDto extends UploadDetailsDto {
 }
 
 /**
- * The formats the biodata reader can actually look at.
- *
- * Narrower than a profile photograph on purpose: the extractor hands the file
- * to a vision model, which reads JPEG, PNG and WebP and nothing else. A PDF or
- * a HEIC would upload, be sent off, and come back as nothing, so it is refused
- * here where the person can still do something about it.
+ * The document types the browser-side biodata importer supports. Image files
+ * remain available to the separate vision-reader endpoint; PDF, Word and
+ * spreadsheet files are extracted locally in the form and are stored only as
+ * the biodata source document.
  */
 export const BIODATA_IMAGE_EXTENSIONS = 'jpg|jpeg|png|webp';
+export const BIODATA_DOCUMENT_EXTENSIONS = `${BIODATA_IMAGE_EXTENSIONS}|pdf|docx|xlsx|xls|csv`;
 
 export class PresignBiodataDto extends UploadDetailsDto {
   @ApiProperty({ example: 'my biodata.jpg', maxLength: 200 })
   @IsString()
   @MaxLength(200)
-  @Matches(new RegExp(`^${NAME_PART}\\.(${BIODATA_IMAGE_EXTENSIONS})$`, 'i'), {
-    message: 'Choose a photo of your biodata: a JPEG, PNG or WebP image.',
+  @Matches(new RegExp(`^${NAME_PART}\\.(${BIODATA_DOCUMENT_EXTENSIONS})$`, 'i'), {
+    message: 'Choose a biodata PDF, Word or Excel file, or a JPEG, PNG or WebP image.',
   })
   filename: string;
 }
