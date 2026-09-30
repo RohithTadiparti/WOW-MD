@@ -9,7 +9,7 @@ import { Textarea } from '@/components/form';
 import { Offerings } from '@/components/business/offerings';
 import { PromptSheet } from '@/components/prompt';
 import type { VendorService } from '@/components/business/service-types';
-import { Body, Button, Caption, Card, Field, SectionTitle } from '@/components/ui';
+import { Alert, Body, Button, Caption, Card, Field, SectionTitle } from '@/components/ui';
 import { space } from '@/theme';
 
 /**
@@ -54,9 +54,22 @@ export function ServiceCard({
 
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2), alignItems: 'center' }}>
         <Badge tone={service.bookable ? 'positive' : 'caution'}>
-          {service.bookable ? 'Bookable' : service.active ? 'No price published' : 'Switched off'}
+          {service.bookable
+            ? 'Bookable'
+            : !service.active
+              ? 'Switched off'
+              : service.outsideSelectedCategories
+                ? 'Outside your categories'
+                : 'No price published'}
         </Badge>
       </View>
+
+      {service.outsideSelectedCategories ? (
+        <Alert tone="caution">
+          This service is under a category your business no longer lists, so clients cannot book
+          it. Add the category back to your business, or switch the service off.
+        </Alert>
+      ) : null}
 
       {service.description ? <Body tone="muted">{service.description}</Body> : null}
 

@@ -51,6 +51,8 @@ interface VendorService {
   attributes: Answers;
   active: boolean;
   bookable: boolean;
+  /** Its category is no longer one the business lists, so it is off sale. */
+  outsideSelectedCategories?: boolean;
   definition: Definition | null;
   category: Category | null;
   serviceForm: FieldSpec[];
@@ -131,11 +133,13 @@ export default function VendorServices({
     }
   }
 
-  const visibleServices = useMemo(
-    () => services.filter((service) => service.category?.slug && selectedCategories.includes(service.category.slug)),
-    [services, selectedCategories],
-  );
-  const takenDefinitionIds = useMemo(() => visibleServices.map((s) => s.definitionId), [visibleServices]);
+  /*
+   * Every service is listed, including one whose category the business no
+   * longer lists. The server takes those off sale; the vendor still has to see
+   * them to switch them off or remove them.
+   */
+  const visibleServices = services;
+  const takenDefinitionIds = useMemo(() => services.map((s) => s.definitionId), [services]);
 
   return (
     <div className="space-y-4">
@@ -199,9 +203,11 @@ export default function VendorServices({
               >
                 {service.bookable
                   ? 'Bookable'
-                  : service.active
-                    ? 'No price published'
-                    : 'Switched off'}
+                  : !service.active
+                    ? 'Switched off'
+                    : service.outsideSelectedCategories
+                      ? 'Outside your categories'
+                      : 'No price published'}
               </span>
               <button
                 className="btn-outline"
@@ -245,6 +251,12 @@ export default function VendorServices({
             </div>
           </div>
 
+          {service.outsideSelectedCategories && (
+            <p className="rounded-sm bg-amber-50 p-2 text-xs text-amber-800">
+              This service is under a category your business no longer lists, so clients cannot
+              book it. Add the category back to your business, or switch the service off.
+            </p>
+          )}
           {service.description && <p className="text-sm text-gray-700">{service.description}</p>}
 
           {/* The vendor's own answers, read back. */}
@@ -355,7 +367,12 @@ function AddService({
   });
 
   const availableCategories = useMemo(
-    () => categories.filter((category) => selectedCategories.includes(category.slug)),
+    // A business with no categories yet (moved over from the single legacy
+    // category) has not narrowed anything down, and the server agrees.
+    () =>
+      selectedCategories.length === 0
+        ? categories
+        : categories.filter((category) => selectedCategories.includes(category.slug)),
     [categories, selectedCategories],
   );
 
