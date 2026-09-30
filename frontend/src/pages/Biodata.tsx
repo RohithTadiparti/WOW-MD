@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useEffect, useRef, useState } from 'react';
+import { FormEvent, ReactNode, useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { api, apiMessage } from '../lib/api';
@@ -106,23 +106,10 @@ export default function Biodata() {
   const [profileId, setProfileId] = useState(params.get('profileId') ?? '');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [step, setStep] = useState<StepName>('personal');
+  const [step, setStep] = useState<StepName>('photos');
   const [direction, setDirection] = useState<'next' | 'prev'>('next');
   const [savedOpen, setSavedOpen] = useState(false);
-  // Which profile the wizard has already been placed on, so it opens at the
-  // first unfinished section once and is left alone after that.
-  const placedFor = useRef('');
-
-  /** Swap the card, sliding forward or back depending on where it lands. */
-  function goTo(next: StepName) {
-    setDirection(stepIndex(next) >= stepIndex(step) ? 'next' : 'prev');
-    setStep(next);
-    requestAnimationFrame(() => {
-      document
-        .getElementById('biodata-steps')
-        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-  }
+  const [identityOpen, setIdentityOpen] = useState(false);
 
   // Individuals edit their own profile and never pick one.
   const { data: me } = useQuery({
@@ -150,30 +137,59 @@ export default function Biodata() {
   const siblings: Sibling[] = data?.siblings ?? [];
   const assets: Asset[] = data?.assets ?? [];
 
-  useEffect(() => {
-    if (!completion || placedFor.current === targetId) return;
-    placedFor.current = targetId;
-    const first = completion.sections.find((sec) => !sec.complete)?.section;
-    if (first && isStep(first)) {
-      setDirection('next');
-      setStep(first);
-    }
-  }, [completion, targetId]);
+  // The same steps as the mobile app: marital history is only asked for once
+  // somebody has said they have been married.
+  const steps = stepsFor(details.maritalStatus);
+  // A step that has dropped out (marital, after changing back to never
+  // married) falls back to the one before it.
+  const current: StepName = steps.includes(step)
+    ? step
+    : steps[Math.max(0, ALL_STEPS.indexOf(step) - 1)] ?? steps[0];
 
-  /** Resolves true once the server has accepted the section, false otherwise. */
-  async function save(section: string, body: unknown): Promise<boolean> {
+  /** Swap the card, sliding forward or back depending on where it lands. */
+  function goTo(next: StepName, list: StepName[] = steps) {
+    setDirection(list.indexOf(next) >= list.indexOf(current) ? 'next' : 'prev');
+    setStep(next);
+    requestAnimationFrame(() => {
+      document
+        .getElementById('biodata-steps')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }
+
+  /** The step a biodata section is filled in on. */
+  function stepForSection(section: string): StepName | null {
+    if (section === 'personal' || section === 'religion') return 'basic';
+    if (section === 'marital') return steps.includes('marital') ? 'marital' : 'basic';
+    return (steps as string[]).includes(section) ? (section as StepName) : null;
+  }
+
+  /**
+   * Saves one or more sections in order, then moves to the next card.
+   * Resolves true once the server has accepted all of them, false otherwise.
+   */
+  async function save(
+    from: StepName,
+    sections: [section: string, body: unknown][],
+  ): Promise<boolean> {
     setError('');
     setNotice('');
     try {
-      await api.put(`/profiles/${targetId}/details/${section}`, body);
+      for (const [section, body] of sections) {
+        await api.put(`/profiles/${targetId}/details/${section}`, body);
+      }
       await qc.invalidateQueries({ queryKey: ['biodata', targetId] });
 
-      // Straight on to the next card. Leaving the page where it was meant
-      // looking for the next thing, which is where people stopped.
-      const next = nextSection(section);
+      // Straight on to the next card. The steps are worked out from what was
+      // just saved, since a new marital status can add or remove one.
+      const saved = sections.find(([section]) => section === 'marital')?.[1] as
+        | Draft
+        | undefined;
+      const list = stepsFor(saved?.maritalStatus ?? details.maritalStatus);
+      const next = list[list.indexOf(from) + 1];
       if (next) {
-        goTo(next);
-        setNotice(`Saved. Next: ${SECTION_LABEL[next] ?? next}.`);
+        goTo(next, list);
+        setNotice(`Saved. Next: ${STEP_TITLE[next]}.`);
       } else {
         setNotice('Saved. That is the last section.');
       }
@@ -252,7 +268,11 @@ export default function Biodata() {
             {completion.sections.map((s) => (
               <button
                 key={s.section}
-                onClick={() => isStep(s.section) && goTo(s.section)}
+                onClick={() => {
+                  if (s.section === 'identity') return setIdentityOpen(true);
+                  const target = stepForSection(s.section);
+                  if (target) goTo(target);
+                }}
                 className={`rounded-sm px-3 py-1 text-xs font-medium ${
                   s.complete ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'
                 }`}
@@ -279,7 +299,7 @@ export default function Biodata() {
           details={details}
           complete={completion?.complete ?? false}
           percent={completion?.percent ?? 0}
-          onEdit={() => goTo('personal')}
+          onEdit={() => goTo('basic')}
           onPhotos={() => goTo('photos')}
           onView={() => setSavedOpen(true)}
           gender={me?.gender ?? data?.gender}
@@ -296,20 +316,27 @@ export default function Biodata() {
       </Accordion>
 
       {/*
-        One section at a time. Nine forms stacked on one page read as one very
-        long form, and people stopped partway down it. A single card with a
-        visible "3 of 9" and a way back is a much shorter-looking task.
+        One section at a time, in the same steps as the mobile app. Forms
+        stacked on one page read as one very long form, and people stopped
+        partway down it. A single card with "Step 3 of 7" and a way back is a
+        much shorter-looking task.
       */}
-      <StepCard current={step} direction={direction} onGo={goTo} completion={completion}>
-        {step === 'photos' &&
+      <StepCard
+        current={current}
+        steps={steps}
+        direction={direction}
+        onGo={goTo}
+        completion={completion}
+      >
+        {current === 'photos' &&
           (targetId ? (
             <ProfilePhotos profileId={targetId} gender={me?.gender ?? data?.gender} />
           ) : (
             <p className="text-sm text-gray-400">Pick a profile first.</p>
           ))}
 
-        {step === 'personal' && (
-          <PersonalForm
+        {current === 'basic' && (
+          <BasicInfoForm
             // The bride/groom's date of birth belongs to this managed profile and
             // must never be inherited from the logged-in family member's own
             // account DOB (EZ1-I182). `me.dateOfBirth` is the account holder's, so
@@ -323,8 +350,8 @@ export default function Biodata() {
               dateOfBirth: data?.dateOfBirth ?? '',
             }}
             contact={contact}
-            onSave={(b) => save('personal', b)}
-            storageKey={`biodata:${targetId}:personal`}
+            onSave={(sections) => save('basic', sections)}
+            storageKey={`biodata:${targetId}`}
             /*
             Whose date of birth this field is for.
 
@@ -346,36 +373,28 @@ export default function Biodata() {
           />
         )}
 
-        {step === 'religion' && (
-          <ReligionForm
-            initial={details}
-            onSave={(b) => save('religion', b)}
-            storageKey={`biodata:${targetId}:religion`}
-          />
-        )}
-
-        {step === 'horoscope' && (
-          <HoroscopeForm
-            initial={details}
-            onSave={(b) => save('horoscope', b)}
-            storageKey={`biodata:${targetId}:horoscope`}
-          />
-        )}
-
-        {step === 'marital' && (
+        {current === 'marital' && (
           <MaritalForm
             initial={details}
-            onSave={(b) => save('marital', b)}
+            onSave={(b) => save('marital', [['marital', b]])}
             storageKey={`biodata:${targetId}:marital`}
           />
         )}
 
-        {step === 'family' && (
+        {current === 'education' && (
+          <EducationForm
+            initial={details}
+            onSave={(b) => save('education', [['education', b]])}
+            storageKey={`biodata:${targetId}:education`}
+          />
+        )}
+
+        {current === 'family' && (
           <FamilyForm
             initial={details}
             siblings={siblings}
             assets={assets}
-            onSave={(b) => save('family', b)}
+            onSave={(b) => save('family', [['family', b]])}
             storageKey={`biodata:${targetId}:family`}
             onAddSibling={(b) =>
               mutate(() => api.post(`/profiles/${targetId}/details/siblings`, b))
@@ -390,75 +409,66 @@ export default function Biodata() {
           />
         )}
 
-        {step === 'education' && (
-          <EducationForm
+        {current === 'horoscope' && (
+          <HoroscopeForm
             initial={details}
-            onSave={(b) => save('education', b)}
-            storageKey={`biodata:${targetId}:education`}
+            onSave={(b) => save('horoscope', [['horoscope', b]])}
+            storageKey={`biodata:${targetId}:horoscope`}
           />
         )}
 
-        {step === 'preferences' && (
+        {current === 'preferences' && (
           <PreferencesForm
             initial={details}
-            onSave={(b) => save('preferences', b)}
+            onSave={(b) => save('preferences', [['preferences', b]])}
             storageKey={`biodata:${targetId}:preferences`}
           />
         )}
-
-        {step === 'identity' && <AadhaarPanel profileId={targetId} />}
       </StepCard>
+
+      {/* Its own screen on mobile, so not one of the steps here either. */}
+      <Accordion title="Identity verification" open={identityOpen} setOpen={setIdentityOpen}>
+        <AadhaarPanel profileId={targetId} />
+      </Accordion>
     </div>
   );
 }
 
 /**
- * The order the form is filled in.
+ * The order the form is filled in, matching the mobile app's steps.
  *
  * Saving a section moves to the next one rather than leaving somebody scrolling
  * back up to find where they were — which is the reported complaint, and the
- * reason people stopped halfway. Photographs come first because the details
- * cannot be saved without three of them.
+ * reason people stopped halfway. Photographs come first here (last on mobile)
+ * because the server will not save the personal details without three of them.
  */
-/** What each section is called, for the "next" line after a save. */
-const SECTION_LABEL: Record<string, string> = {
-  photos: 'Photographs',
-  personal: 'Personal details',
-  religion: 'Religion and community',
-  horoscope: 'Horoscope',
-  marital: 'Marital status',
-  family: 'Family',
-  education: 'Education and occupation',
-  preferences: 'Partner preferences',
-  identity: 'Identity verification',
-};
-
-const SECTION_ORDER = [
+const ALL_STEPS = [
   'photos',
-  'personal',
-  'religion',
-  'horoscope',
+  'basic',
   'marital',
-  'family',
   'education',
+  'family',
+  'horoscope',
   'preferences',
-  'identity',
 ] as const;
 
-type StepName = (typeof SECTION_ORDER)[number];
+type StepName = (typeof ALL_STEPS)[number];
 
-function isStep(name: string): name is StepName {
-  return (SECTION_ORDER as readonly string[]).includes(name);
-}
+/** What each step is called, in the header and the "next" line after a save. */
+const STEP_TITLE: Record<StepName, string> = {
+  photos: 'Photographs',
+  basic: 'Basic Information',
+  marital: 'Marital History',
+  education: 'Education & Career',
+  family: 'Family Background',
+  horoscope: 'Horoscope',
+  preferences: 'Partner Preferences',
+};
 
-function stepIndex(name: StepName): number {
-  return SECTION_ORDER.indexOf(name);
-}
-
-function nextSection(current: string): StepName | null {
-  if (!isStep(current)) return null;
-  const i = stepIndex(current);
-  return i === SECTION_ORDER.length - 1 ? null : SECTION_ORDER[i + 1];
+/** Marital history is a step only for somebody who has been married. */
+function stepsFor(maritalStatus: unknown): StepName[] {
+  const married = Boolean(maritalStatus) && maritalStatus !== 'never_married';
+  return ALL_STEPS.filter((s) => s !== 'marital' || married);
 }
 
 function Accordion({
@@ -487,55 +497,48 @@ function Accordion({
 }
 
 /**
- * The biodata as a deck of cards, one section showing at a time.
+ * The biodata as a deck of cards, one step showing at a time, as on mobile.
  *
- * Saving a form swaps in the next card on its own; Back and Continue are here
- * for the sections with nothing to save (photographs, identity) and for
- * somebody who wants to come back to one later. The rail across the top is
- * both the progress and a way to jump straight to any section.
+ * Saving a form swaps in the next card on its own; Back and Skip are here for
+ * the photographs (nothing to save) and for somebody who wants to come back
+ * to a step later.
  */
 function StepCard({
   current,
+  steps,
   direction,
   onGo,
   completion,
   children,
 }: {
   current: StepName;
+  steps: StepName[];
   direction: 'next' | 'prev';
   onGo: (step: StepName) => void;
   completion?: Completion;
   children: ReactNode;
 }) {
-  const index = stepIndex(current);
-  const prev = index > 0 ? SECTION_ORDER[index - 1] : null;
-  const next = nextSection(current);
+  const index = steps.indexOf(current);
+  const prev = index > 0 ? steps[index - 1] : null;
+  const next = index < steps.length - 1 ? steps[index + 1] : null;
+  // Basic information is two server sections; it is done when both are.
+  const sectionsOf: Record<StepName, string[]> = {
+    photos: [],
+    basic: ['personal', 'religion'],
+    marital: ['marital'],
+    education: ['education'],
+    family: ['family'],
+    horoscope: ['horoscope'],
+    preferences: ['preferences'],
+  };
   const done = (name: StepName) =>
-    completion?.sections.find((sec) => sec.section === name)?.complete ?? false;
+    sectionsOf[name].length > 0 &&
+    sectionsOf[name].every(
+      (s) => completion?.sections.find((sec) => sec.section === s)?.complete ?? false,
+    );
 
   return (
-    <section id="biodata-steps" className="scroll-mt-4 space-y-3" aria-label="Biodata sections">
-      <ol className="grid grid-cols-9 gap-1">
-        {SECTION_ORDER.map((name, i) => (
-          <li key={name}>
-            <button
-              type="button"
-              onClick={() => onGo(name)}
-              aria-label={`${i + 1}. ${SECTION_LABEL[name]}`}
-              aria-current={name === current ? 'step' : undefined}
-              title={SECTION_LABEL[name]}
-              className="block w-full py-2"
-            >
-              <span
-                className={`block h-1 w-full transition-colors ${
-                  name === current ? 'bg-brand' : done(name) ? 'bg-gold' : 'bg-gray-200'
-                }`}
-              />
-            </button>
-          </li>
-        ))}
-      </ol>
-
+    <section id="biodata-steps" className="scroll-mt-4" aria-label="Biodata steps">
       <div className="overflow-hidden">
         <div
           // A new key per section remounts the card, which is what plays the
@@ -544,17 +547,17 @@ function StepCard({
           className={`card ${direction === 'next' ? 'card-swap-next' : 'card-swap-prev'}`}
         >
           <header className="mb-4 flex items-baseline justify-between gap-3 border-b pb-3">
-            <h2 className="flex items-baseline font-serif text-[1.375rem] font-normal text-brand">
-              <span className="mr-3 font-sans text-[0.6875rem] uppercase tracking-[0.22em] text-gold-deep">
-                {index + 1} of {SECTION_ORDER.length}
-              </span>
-              {SECTION_LABEL[current]}
+            <h2 className="font-serif text-[1.375rem] font-normal text-brand">
+              {STEP_TITLE[current]}
+              {done(current) && (
+                <span className="ml-3 whitespace-nowrap font-sans text-[0.6875rem] uppercase tracking-[0.18em] text-emerald-700">
+                  ✓ Saved
+                </span>
+              )}
             </h2>
-            {done(current) && (
-              <span className="whitespace-nowrap text-[0.6875rem] uppercase tracking-[0.18em] text-emerald-700">
-                ✓ Saved
-              </span>
-            )}
+            <span className="whitespace-nowrap font-sans text-[0.6875rem] uppercase tracking-[0.22em] text-gold-deep">
+              Step {index + 1} of {steps.length}
+            </span>
           </header>
 
           {children}
@@ -570,10 +573,10 @@ function StepCard({
             </button>
             {next ? (
               <button type="button" className="btn-outline btn-sm" onClick={() => onGo(next)}>
-                {current === 'photos' || done(current) ? 'Continue' : 'Skip for now'} →
+                {current === 'photos' || done(current) ? 'Continue' : 'Skip'} →
               </button>
             ) : (
-              <span className="text-xs text-gray-500">Last section</span>
+              <span className="text-xs text-gray-500">Last step</span>
             )}
           </footer>
         </div>
@@ -630,7 +633,11 @@ function useDraft(initial: Draft, keys: string[], storageKey?: string) {
   return { draft, setDraft: edit, set, put, clear };
 }
 
-function PersonalForm({
+/**
+ * Personal details, religion and marital status on one card, as the mobile
+ * app's "Basic Information" step asks them. Three server sections, one save.
+ */
+function BasicInfoForm({
   initial,
   contact,
   onSave,
@@ -639,7 +646,8 @@ function PersonalForm({
 }: {
   initial: Draft;
   contact?: ContactBlock;
-  onSave: (b: Draft) => Promise<boolean>;
+  onSave: (sections: [section: string, body: unknown][]) => Promise<boolean>;
+  /** Prefix for the local drafts; each section keeps its own. */
   storageKey?: string;
   /** Family login only: the bride/groom's date of birth is entered here. */
   showDob?: boolean;
@@ -653,25 +661,60 @@ function PersonalForm({
     'communicationAddress',
     'alternateMobile',
   ];
-  const { draft, set, clear } = useDraft(initial, keys, storageKey);
+  const personal = useDraft(initial, keys, storageKey && `${storageKey}:personal`);
+  const faith = useDraft(
+    initial,
+    ['religion', 'caste', 'subCaste', 'motherTongue'],
+    storageKey && `${storageKey}:religion`,
+  );
+  const marital = useDraft(initial, ['maritalStatus'], storageKey && `${storageKey}:status`);
+  const { draft, set } = personal;
+  const put = faith.put;
+  const status = String(marital.draft.maritalStatus ?? '');
+
+  const religion = String(faith.draft.religion ?? '');
+  /*
+   * Castes follow the religion, not one list for everybody.
+   *
+   * Offering a Hindu caste list to a Christian family is not a neutral
+   * mistake. Religions with no caste structure get an empty list, and the
+   * field then offers only the free-text box.
+   */
+  const casteOptions = CASTES_BY_RELIGION[religion] ?? [];
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    // The local copy goes only once the server has the draft: until then it is
-    // the only copy, and a refused save must not lose it (EZ1-I73).
-    void submitDraft(
-      onSave({
-        ...draft,
-        heightCm: Number(draft.heightCm) || undefined,
-        // null, not undefined: an absent field is left alone by the server,
-        // so emptying the box has to be said explicitly.
-        alternateMobile: draft.alternateMobile || null,
-        // Only meaningful for a family login; blank otherwise, and the server
-        // ignores it for a self-registered individual (EZ1-I158).
-        dateOfBirth: draft.dateOfBirth || undefined,
-      }),
-      clear,
-    );
+    const sections: [string, unknown][] = [
+      [
+        'personal',
+        {
+          ...draft,
+          heightCm: Number(draft.heightCm) || undefined,
+          // null, not undefined: an absent field is left alone by the server,
+          // so emptying the box has to be said explicitly.
+          alternateMobile: draft.alternateMobile || null,
+          // Only meaningful for a family login; blank otherwise, and the server
+          // ignores it for a self-registered individual (EZ1-I158).
+          dateOfBirth: draft.dateOfBirth || undefined,
+        },
+      ],
+      // Denomination is deliberately not sent: the field is gone, and the
+      // server treats it as optional, so an old value simply stops being
+      // rewritten. Nothing is deleted from rows that already have one.
+      ['religion', faith.draft],
+    ];
+    // Only when it has changed: saving the status alone replaces the marital
+    // history, so re-saving this card must not wipe what the next step holds.
+    if (status && status !== initial?.maritalStatus) {
+      sections.push(['marital', { maritalStatus: status }]);
+    }
+    // The local copies go only once the server has everything: until then
+    // they are the only copy, and a refused save must not lose them (EZ1-I73).
+    void submitDraft(onSave(sections), () => {
+      personal.clear();
+      faith.clear();
+      marital.clear();
+    });
   }
 
   return (
@@ -780,47 +823,6 @@ function PersonalForm({
           required
         />
       </Field>
-      <button className="btn">Save personal details</button>
-    </form>
-  );
-}
-
-function ReligionForm({
-  initial,
-  onSave,
-  storageKey,
-}: {
-  initial: Draft;
-  onSave: (b: Draft) => Promise<boolean>;
-  storageKey?: string;
-}) {
-  const { draft, put, clear } = useDraft(
-    initial,
-    ['religion', 'caste', 'subCaste', 'motherTongue'],
-    storageKey,
-  );
-
-  const religion = String(draft.religion ?? '');
-  /*
-   * Castes follow the religion, not one list for everybody.
-   *
-   * Offering a Hindu caste list to a Christian family is not a neutral
-   * mistake. Religions with no caste structure get an empty list, and the
-   * field then offers only the free-text box.
-   */
-  const casteOptions = CASTES_BY_RELIGION[religion] ?? [];
-
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        // Denomination is deliberately not sent: the field is gone, and the
-        // server treats it as optional, so an old value simply stops being
-        // rewritten. Nothing is deleted from rows that already have one.
-        void submitDraft(onSave(draft), clear);
-      }}
-      className="space-y-3"
-    >
       <div className="grid gap-3 sm:grid-cols-2">
         <ChoiceField
           label="Religion"
@@ -831,7 +833,7 @@ function ReligionForm({
         />
         <ChoiceField
           label="Caste"
-          value={String(draft.caste ?? '')}
+          value={String(faith.draft.caste ?? '')}
           onChange={put('caste')}
           options={casteOptions}
           hint={religion ? undefined : 'Pick a religion first, or type the caste.'}
@@ -844,20 +846,39 @@ function ReligionForm({
         */}
         <ChoiceField
           label="Sub-caste"
-          value={String(draft.subCaste ?? '')}
+          value={String(faith.draft.subCaste ?? '')}
           onChange={put('subCaste')}
           options={[]}
           required
         />
         <ChoiceField
           label="Mother tongue"
-          value={String(draft.motherTongue ?? '')}
+          value={String(faith.draft.motherTongue ?? '')}
           onChange={put('motherTongue')}
           options={MOTHER_TONGUES}
           required
         />
+        {/*
+          Asked here, as on mobile, so the marital history step can appear
+          only for somebody who has been married.
+        */}
+        <Field label="Marital status">
+          <select
+            className="input mt-1"
+            value={status}
+            onChange={(e) => marital.put('maritalStatus')(e.target.value)}
+            required
+          >
+            <option value="">Select…</option>
+            {SELF_MARITAL_STATUSES.map((value) => (
+              <option key={value} value={value}>
+                {MARITAL_LABEL[value]}
+              </option>
+            ))}
+          </select>
+        </Field>
       </div>
-      <button className="btn">Save religion details</button>
+      <button className="btn">Save and continue</button>
     </form>
   );
 }
