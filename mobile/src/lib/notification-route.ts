@@ -21,12 +21,15 @@ import type { Notification } from '@/shared/notification-copy';
 type RouteOptions = { canVerify?: boolean; canReadIncoming?: boolean };
 
 /**
- * The booking card lives on the seller's queue. A customer has no bookings
- * screen in this app yet, and the queue would answer them 403 and show nothing,
- * so for them the row marks itself read and leads nowhere.
+ * A seller reads the booking on their queue; a customer on Plan → Bookings,
+ * which the seller queue would answer 403.
  */
 function bookingRoute(bookingId: string | null, opts: RouteOptions): Href | null {
-  if (!opts.canReadIncoming) return null;
+  if (!opts.canReadIncoming) {
+    return bookingId
+      ? { pathname: '/plan/bookings', params: { highlight: bookingId } }
+      : '/plan/bookings';
+  }
   return bookingId ? { pathname: '/bookings', params: { booking: bookingId } } : '/bookings';
 }
 
@@ -66,6 +69,12 @@ export function routeFor(n: Notification, opts: RouteOptions = {}): Href | null 
         }
         // Declined by the other family's agency: it sits under Declined.
         if (n.type === 'match_declined_by_agency') return '/interests';
+        // An interest to answer is answered on the board; an accepted one
+        // opens the other profile, where the conversation starts.
+        if (n.type === 'match_interest') return '/interests';
+        if (n.type === 'match_accepted' && n.targetId) {
+          return { pathname: '/match/[id]', params: { id: n.targetId } };
+        }
         return '/matches';
       // A new message targets the person who sent it, which is the thread's own
       // address in this app.

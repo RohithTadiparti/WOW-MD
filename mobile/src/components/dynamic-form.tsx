@@ -1,7 +1,8 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import type { Answers, FieldSpec } from '@/shared/dynamic-form';
-import { CheckRow, DateField, SelectField, Textarea, TimeField } from '@/components/form';
+import { CheckRow, SelectField, Textarea, TimeField } from '@/components/form';
+import { WowCalendar } from '@/components/common/WowCalendar';
 import { DocumentList, PhotoPicker } from '@/components/uploader';
 import { Body, Caption, Field } from '@/components/ui';
 import { rgb, space, useTheme, radius } from '@/theme';
@@ -171,7 +172,7 @@ function Control({
 
     case 'date':
       return (
-        <DateField label={label} hint={hint} error={error} value={asText} onChange={set} />
+        <WowCalendar label={label} hint={hint} error={error} value={asText} onChange={set} />
       );
 
     case 'time':
@@ -190,7 +191,7 @@ function Control({
       };
       return (
         <View style={{ gap: space(2) }}>
-          <DateField
+          <WowCalendar
             label={label}
             hint={hint}
             error={error}

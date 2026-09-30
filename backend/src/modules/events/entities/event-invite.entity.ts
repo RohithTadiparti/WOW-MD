@@ -58,6 +58,14 @@ export class EventInvite {
   declineReason: string | null;
 
   /**
+   * Answered for this event on its own: through the event's own link, the
+   * open invitation link, or the host recording it. A wedding-level reply then
+   * leaves this invite alone instead of overwriting the answer given for it.
+   */
+  @Column({ type: 'boolean', default: false })
+  answeredIndividually: boolean;
+
+  /**
    * When somebody last chased them.
    *
    * The whole value of a "not responded" list is knowing who has already been

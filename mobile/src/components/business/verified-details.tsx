@@ -5,6 +5,7 @@ import type { VendorListing } from '@/lib/vendor-listing';
 import { DetailGrid, DetailRow, Divider } from '@/components/chrome';
 import { RequestChange } from '@/components/business/request-change';
 import { MediaStrip } from '@/components/uploader';
+import { SocialLinksList } from '@/components/social-links';
 import {
   Alert,
   Body,
@@ -58,6 +59,7 @@ export function VerifiedDetails({
         <DetailGrid>
           <DetailRow label="Contact number">{listing.contactPhone ?? 'Not provided'}</DetailRow>
         </DetailGrid>
+        <SocialLinksList links={listing} />
       </Card>
 
       <Card>

@@ -25,8 +25,10 @@ import {
   useActingClient,
 } from "@/components/matches/acting-client";
 import { ProfileSilhouette } from "@/components/profile-silhouette";
+import { ProfileCompletionCard } from "@/components/profile-completion-card";
 import {
   Alert,
+  Button,
   Caption,
   EmptyState,
   Loading,
@@ -80,10 +82,11 @@ export default function Matches() {
   const [sort, setSort] = useState<"score" | "recent" | "age">("score");
   const [filterOpen, setFilterOpen] = useState(false);
   const [error, setError] = useState("");
-  const { status, gate, settled } = useMatchmakingGate(
+  const { status, biodata, gate, settled } = useMatchmakingGate(
     acting.profileId,
     acting.ready,
   );
+  const isProfileComplete = status?.profileCompleted && biodata?.complete;
   const clientParam = acting.profileId ? { profileId: acting.profileId } : {};
   // These map onto the existing suggestions endpoint: its active view is the
   // closest available proximity/activity signal, and New is server-sorted by creation date.
@@ -126,8 +129,8 @@ export default function Matches() {
     placeholderData: (previous) => previous,
     retry: false,
   });
-  const suggestions: Suggestion[] = data?.data ?? [];
-  const total = data?.meta?.total ?? data?.total ?? suggestions.length;
+  const suggestions: Suggestion[] = gate ? [] : (data?.data ?? []);
+  const total = gate ? 0 : (data?.meta?.total ?? data?.total ?? suggestions.length);
   const shortlist = useMutation({
     mutationFn: ({ id, selected }: { id: string; selected: boolean }) =>
       selected
@@ -139,15 +142,6 @@ export default function Matches() {
     },
     onError: (e) =>
       setError(apiMessage(e, "That shortlist could not be updated.")),
-  });
-  const interest = useMutation({
-    mutationFn: (id: string) =>
-      api.post("/matches/interest", { toProfileId: id, ...clientParam }),
-    onSuccess: () => {
-      setError("");
-      void qc.invalidateQueries({ queryKey: ["suggestions"] });
-    },
-    onError: (e) => setError(apiMessage(e, "That interest could not be sent.")),
   });
   if (isLoading || (acting.ready && !settled))
     return (
@@ -206,24 +200,26 @@ export default function Matches() {
                     paddingHorizontal: space(2),
                   })}
                 />
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Show match filters"
-                  onPress={() => setFilterOpen((v) => !v)}
-                  style={{
-                    width: 40,
-                    height: 40,
-                    marginRight: space(1),
-                    borderRadius: radius.md,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    backgroundColor: rgb(theme.brand),
-                  }}
-                >
-                  <SlidersHorizontal size={18} color={rgb(theme.brandFg)} />
-                </Pressable>
+                {tab === "for-you" ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Sort matches"
+                    onPress={() => setFilterOpen((v) => !v)}
+                    style={{
+                      width: 40,
+                      height: 40,
+                      marginRight: space(1),
+                      borderRadius: radius.md,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      backgroundColor: rgb(theme.brand),
+                    }}
+                  >
+                    <SlidersHorizontal size={18} color={rgb(theme.brandFg)} />
+                  </Pressable>
+                ) : null}
               </View>
-              {filterOpen ? (
+              {filterOpen && tab === "for-you" ? (
                 <View
                   style={{
                     flexDirection: "row",
@@ -305,24 +301,26 @@ export default function Matches() {
               <Caption>
                 {total} profile{total === 1 ? "" : "s"} found
               </Caption>
-              <Pressable
-                onPress={() => setFilterOpen(true)}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: space(1),
-                }}
-              >
-                <Caption style={{ fontWeight: "600" }}>Sort by</Caption>
-                <Caption tone="brand">
-                  {sort === "score"
-                    ? "Relevance"
-                    : sort === "recent"
-                      ? "Newest"
-                      : "Age"}
-                </Caption>
-                <CaretDown size={13} color={rgb(theme.brandStrong)} />
-              </Pressable>
+              {tab === "for-you" ? (
+                <Pressable
+                  onPress={() => setFilterOpen(true)}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: space(1),
+                  }}
+                >
+                  <Caption style={{ fontWeight: "600" }}>Sort by</Caption>
+                  <Caption tone="brand">
+                    {sort === "score"
+                      ? "Relevance"
+                      : sort === "recent"
+                        ? "Newest"
+                        : "Age"}
+                  </Caption>
+                  <CaretDown size={13} color={rgb(theme.brandStrong)} />
+                </Pressable>
+              ) : null}
             </View>
             <ActingClientPicker acting={acting} />
             {error ? <Alert tone="critical">{error}</Alert> : null}
@@ -339,13 +337,7 @@ export default function Matches() {
               Pick a client to browse their matches.
             </EmptyState>
           ) : gate ? (
-            <EmptyState
-              title={
-                status?.profileCompleted
-                  ? "Matchmaking is closed"
-                  : "Finish the profile first"
-              }
-            >
+            <EmptyState title="Matchmaking is closed">
               {gate}
             </EmptyState>
           ) : (
@@ -378,7 +370,6 @@ export default function Matches() {
             shortlistBusy={
               shortlist.isPending && shortlist.variables?.id === item.profile.id
             }
-            onInterest={() => interest.mutate(item.profile.id)}
           />
         )}
       />
@@ -446,13 +437,11 @@ function MatchCard({
   onOpen,
   onShortlist,
   shortlistBusy,
-  onInterest,
 }: {
   suggestion: Suggestion;
   onOpen: () => void;
   onShortlist: () => void;
   shortlistBusy: boolean;
-  onInterest: () => void;
 }) {
   const theme = useTheme();
   const { width } = useWindowDimensions();
@@ -533,11 +522,7 @@ function MatchCard({
             {profile.card.profession}
           </Caption>
         ) : null}
-        <Pressable
-          onPress={(e) => {
-            e.stopPropagation();
-            onInterest();
-          }}
+        <View
           style={{
             marginTop: "auto",
             flexDirection: "row",
@@ -549,7 +534,7 @@ function MatchCard({
           <Caption tone="brand" style={{ fontSize: 11, fontWeight: "700" }}>
             {Math.round(score)}% Match
           </Caption>
-        </Pressable>
+        </View>
       </View>
     </Pressable>
   );

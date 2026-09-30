@@ -4,8 +4,11 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api, apiMessage } from '@/lib/api';
 import { SelectField } from '@/components/form';
-import { Alert, Body, Button, Card, Field } from '@/components/ui';
+import { Alert, Body, Button, Card, Field, Caption } from '@/components/ui';
+import { CITIES, QUALIFICATIONS } from '@/shared/reference';
 import { space } from '@/theme';
+import { ChoiceField, canonical } from './choice-field';
+import { capitalizeWords } from '@/lib/format';
 import {
   OCCUPATION_STATUS,
   OTHER_INCOME_LIMIT,
@@ -45,15 +48,18 @@ export function EducationCareerForm({
   onSaved,
   onBack,
   onSkip,
+  autofilledKeys,
 }: {
   profileId: string;
   details: Record<string, unknown>;
   onSaved: () => void;
   onBack?: () => void;
   onSkip?: () => void;
+  autofilledKeys?: Set<string>;
 }) {
   const qc = useQueryClient();
   const [error, setError] = useState('');
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const emp = (details.employment as Record<string, unknown>) ?? {};
   const bus = (details.business as Record<string, unknown>) ?? {};
@@ -64,18 +70,18 @@ export function EducationCareerForm({
   // The web form's keys. This form used to write `location`, `name` and
   // `income` instead, so those are still read for anything saved from here.
   const [form, setForm] = useState<Form>({
-    highestQualification: String(details.highestQualification ?? ''),
-    course: String(details.course ?? ''),
-    institution: String(details.institution ?? ''),
-    collegePlace: String(details.collegePlace ?? ''),
+    highestQualification: canonical(String(details.highestQualification ?? ''), QUALIFICATIONS),
+    course: capitalizeWords(String(details.course ?? '')),
+    institution: capitalizeWords(String(details.institution ?? '')),
+    collegePlace: capitalizeWords(String(details.collegePlace ?? '')),
     occupationStatus: String(details.occupationStatus ?? ''),
-    company: String(emp.company ?? ''),
-    designation: String(emp.designation ?? ''),
-    workLocation: String(emp.workLocation ?? emp.location ?? ''),
+    company: capitalizeWords(String(emp.company ?? '')),
+    designation: capitalizeWords(String(emp.designation ?? '')),
+    workLocation: capitalizeWords(String(emp.workLocation ?? emp.location ?? '')),
     salary: stored(emp.salary),
-    businessName: String(bus.businessName ?? bus.name ?? ''),
+    businessName: capitalizeWords(String(bus.businessName ?? bus.name ?? '')),
     businessIncome: stored(bus.businessIncome ?? bus.income),
-    businessLocation: String(bus.businessLocation ?? bus.location ?? ''),
+    businessLocation: capitalizeWords(String(bus.businessLocation ?? bus.location ?? '')),
     otherIncome: other.map((row) => ({
       source: String(row.source ?? ''),
       details: String(row.details ?? ''),
@@ -87,8 +93,8 @@ export function EducationCareerForm({
   const save = useMutation({
     mutationFn: async () => {
       const payload = {
-        highestQualification: form.highestQualification.trim() || undefined,
-        course: form.course.trim() || undefined,
+        highestQualification: form.highestQualification.trim(),
+        course: form.course.trim(),
         institution: form.institution.trim() || undefined,
         collegePlace: form.collegePlace.trim() || undefined,
         occupationStatus: form.occupationStatus || undefined,
@@ -132,22 +138,55 @@ export function EducationCareerForm({
     onError: (err) => setError(apiMessage(err, 'Education & career could not be saved.')),
   });
 
-  const set = (key: keyof Form) => (value: string) => setForm({ ...form, [key]: value });
+  const set = (key: keyof Form, capitalize?: boolean) => (value: string) => {
+    setErrors((e) => ({ ...e, [key]: '' }));
+    setForm({ ...form, [key]: capitalize ? capitalizeWords(value) : value });
+  };
+  const numeric = (key: keyof Form) => (value: string) => {
+    setErrors((e) => ({ ...e, [key]: '' }));
+    setForm({ ...form, [key]: digits(value) });
+  };
   const setIncome = (i: number, key: keyof OtherIncome) => (value: string) =>
     setForm({
       ...form,
       otherIncome: form.otherIncome.map((row, j) => (j === i ? { ...row, [key]: value } : row)),
     });
 
+  function submit() {
+    const newErrors: Record<string, string> = {};
+    if (!form.highestQualification.trim()) newErrors.highestQualification = 'Highest qualification is required.';
+    if (!form.course.trim()) newErrors.course = 'Course is required.';
+    if (!form.occupationStatus) newErrors.occupationStatus = 'Occupation status is required.';
+
+    if (form.occupationStatus === 'employed') {
+      if (!form.company.trim()) newErrors.company = 'Company is required.';
+      if (!form.designation.trim()) newErrors.designation = 'Designation is required.';
+    }
+    if (form.occupationStatus === 'self_employed' && !form.businessName.trim()) {
+      newErrors.businessName = 'Business name is required.';
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      setError('Please fix the errors below.');
+      return;
+    }
+
+    setErrors({});
+    setError('');
+    save.mutate();
+  }
+
   return (
     <View style={{ gap: space(4) }}>
       {error ? <Alert tone="critical">{error}</Alert> : null}
 
       <Card>
-        <Field label="Highest Qualification" value={form.highestQualification} onChangeText={set('highestQualification')} />
-        <Field label="Course" value={form.course} onChangeText={set('course')} />
-        <Field label="Institution / College" value={form.institution} onChangeText={set('institution')} />
-        <Field label="College Place" value={form.collegePlace} onChangeText={set('collegePlace')} />
+        <ChoiceField label="Highest Qualification" value={form.highestQualification} options={QUALIFICATIONS} onChange={set('highestQualification')} required autoFilled={autofilledKeys?.has('highestQualification')} />
+        {errors.highestQualification ? <Caption tone="critical">{errors.highestQualification}</Caption> : null}
+        <Field label="Course" value={form.course} onChangeText={set('course', true)} required autoFilled={autofilledKeys?.has('course')} autoCapitalize="words" error={errors.course} />
+        <Field label="Institution / College" value={form.institution} onChangeText={set('institution', true)} autoFilled={autofilledKeys?.has('institution')} autoCapitalize="words" />
+        <Field label="College Place" value={form.collegePlace} onChangeText={set('collegePlace', true)} autoFilled={autofilledKeys?.has('collegePlace')} autoCapitalize="words" />
       </Card>
 
       <Card>
@@ -156,22 +195,25 @@ export function EducationCareerForm({
           value={form.occupationStatus}
           options={OCCUPATION_STATUS}
           onChange={set('occupationStatus')}
+          required
+          autoFilled={autofilledKeys?.has('occupationStatus')}
+          error={errors.occupationStatus}
         />
 
         {form.occupationStatus === 'employed' && (
           <View style={{ gap: space(2), marginTop: space(2) }}>
-            <Field label="Company" value={form.company} onChangeText={set('company')} />
-            <Field label="Designation" value={form.designation} onChangeText={set('designation')} />
-            <Field label="Work Location" value={form.workLocation} onChangeText={set('workLocation')} />
-            <Field label="Salary (Annual)" value={form.salary} onChangeText={set('salary')} keyboardType="number-pad" />
+            <Field label="Company" value={form.company} onChangeText={set('company', true)} required autoFilled={autofilledKeys?.has('employment.company') || autofilledKeys?.has('company')} autoCapitalize="words" error={errors.company} />
+            <Field label="Designation" value={form.designation} onChangeText={set('designation', true)} required autoFilled={autofilledKeys?.has('employment.designation') || autofilledKeys?.has('designation')} autoCapitalize="words" error={errors.designation} />
+            <ChoiceField label="Work Location" value={form.workLocation} options={CITIES} onChange={set('workLocation', true)} autoFilled={autofilledKeys?.has('employment.workLocation') || autofilledKeys?.has('employment.location') || autofilledKeys?.has('workLocation')} />
+            <Field label="Salary (Annual)" value={form.salary} onChangeText={numeric('salary')} keyboardType="number-pad" autoFilled={autofilledKeys?.has('employment.salary') || autofilledKeys?.has('salary')} />
           </View>
         )}
 
         {form.occupationStatus === 'self_employed' && (
           <View style={{ gap: space(2), marginTop: space(2) }}>
-            <Field label="Business Name" value={form.businessName} onChangeText={set('businessName')} />
-            <Field label="Business Location" value={form.businessLocation} onChangeText={set('businessLocation')} />
-            <Field label="Business Income (Annual)" value={form.businessIncome} onChangeText={set('businessIncome')} keyboardType="number-pad" />
+            <Field label="Business Name" value={form.businessName} onChangeText={set('businessName', true)} required autoFilled={autofilledKeys?.has('business.businessName') || autofilledKeys?.has('business.name') || autofilledKeys?.has('businessName')} autoCapitalize="words" error={errors.businessName} />
+            <Field label="Business Location" value={form.businessLocation} onChangeText={set('businessLocation', true)} autoFilled={autofilledKeys?.has('business.businessLocation') || autofilledKeys?.has('business.location') || autofilledKeys?.has('businessLocation')} autoCapitalize="words" />
+            <Field label="Business Income (Annual)" value={form.businessIncome} onChangeText={numeric('businessIncome')} keyboardType="number-pad" autoFilled={autofilledKeys?.has('business.businessIncome') || autofilledKeys?.has('business.income') || autofilledKeys?.has('businessIncome')} />
           </View>
         )}
       </Card>
@@ -239,7 +281,7 @@ export function EducationCareerForm({
           {onBack && (
             <Button label="Back" variant="outline" onPress={onBack} disabled={save.isPending} />
           )}
-          <Button style={{ flex: 1 }} label="Save & Continue →" busy={save.isPending} onPress={() => save.mutate()} />
+          <Button style={{ flex: 1 }} label="Save & Continue →" busy={save.isPending} onPress={submit} />
         </View>
         {onSkip && (
           <Button label="Skip this step" variant="ghost" onPress={onSkip} disabled={save.isPending} />

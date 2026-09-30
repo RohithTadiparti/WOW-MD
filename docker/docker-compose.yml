@@ -53,7 +53,7 @@ services:
       API_PREFIX: api
       # The frontend is served same-origin through nginx, so the browser calls
       # /api and never crosses an origin. Keep both entries for direct dev use.
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://localhost:5173}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://localhost:5173,http://localhost:8081}
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: ${DB_USER:-wow_user}
@@ -127,6 +127,13 @@ services:
       WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
       WHATSAPP_TOKEN: ${WHATSAPP_TOKEN:-}
       WHATSAPP_LANGUAGE: ${WHATSAPP_LANGUAGE:-en}
+      # Payout bank details. This stack runs as production, where a blank
+      # PAYOUT_DETAILS_KEY means bank details are refused, so set one (32+
+      # characters) in docker/.env. Keep it: accounts saved under a key cannot
+      # be read without it.
+      PAYOUT_DETAILS_KEY: ${PAYOUT_DETAILS_KEY:-}
+      SUPPORTED_PAYOUT_BANKS: ${SUPPORTED_PAYOUT_BANKS:-}
+      IFSC_LOOKUP_BASE_URL: ${IFSC_LOOKUP_BASE_URL:-https://ifsc.razorpay.com}
       # Where the mock storage keeps uploaded files, and the origin a browser
       # reaches them on. The app's own origin, so the upload is same-origin and
       # the URL works from a phone on the network rather than only from the

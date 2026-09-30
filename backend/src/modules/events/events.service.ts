@@ -43,6 +43,7 @@ import { AppConfigService } from '../../config/app-config.service';
 import { MailService } from '../../platform/mail/mail.service';
 import { ModerationService } from '../../platform/moderation/moderation.service';
 import { expiresIn, generateToken, hashToken } from '../../common/util/tokens';
+import { MatchmakingService } from '../matchmaking/matchmaking.service';
 
 /** What a guest sees on the public RSVP page. */
 export interface GuestRsvpView {
@@ -58,6 +59,26 @@ export interface GuestRsvpView {
   declineReason: string | null;
   /** How many the invitation covers, which is what the head-count box defaults to. */
   invitedPartySize: number | null;
+}
+
+/**
+ * The wedding invitation. A superset of the per-event view — `eventName`,
+ * `eventDate` and `venue` summarise the first event — so a page written for
+ * the per-event link still reads it.
+ */
+export interface WeddingRsvpView extends GuestRsvpView {
+  kind: 'wedding';
+  coupleNames: string | null;
+  events: {
+    name: string;
+    category: string | null;
+    eventDate: string | null;
+    startTime: string | null;
+    endTime: string | null;
+    venue: string | null;
+    venueAddress: string | null;
+    city: string | null;
+  }[];
 }
 
 @Injectable()
@@ -81,6 +102,7 @@ export class EventsService {
     private readonly mail: MailService,
     private readonly moderation: ModerationService,
     private readonly notifications: NotificationsService,
+    private readonly matchmaking: MatchmakingService,
   ) {}
 
   async createEvent(actor: AuthUser, dto: CreateEventDto) {
@@ -490,8 +512,8 @@ export class EventsService {
     };
   }
 
-  addGuest(userId: string, dto: CreateGuestDto) {
-    return this.guests.save(this.guests.create({ userId, ...dto }));
+  async addGuest(userId: string, dto: CreateGuestDto) {
+    return this.withoutToken(await this.guests.save(this.guests.create({ userId, ...dto })));
   }
 
   /**
@@ -504,11 +526,22 @@ export class EventsService {
   async updateGuest(userId: string, guestId: string, dto: UpdateGuestDto) {
     const guest = await this.ownedGuest(userId, guestId);
     Object.assign(guest, dto);
-    return this.guests.save(guest);
+    return this.withoutToken(await this.guests.save(guest));
   }
 
-  listGuests(userId: string) {
-    return this.guests.find({ where: { userId }, order: { createdAt: 'DESC' } });
+  /**
+   * The guest list, each guest with the events they are invited to, so the
+   * host can see (and choose) what a wedding invitation will cover.
+   */
+  async listGuests(userId: string) {
+    const guests = await this.guests.find({ where: { userId }, order: { createdAt: 'DESC' } });
+    if (guests.length === 0) return [];
+    const invites = await this.invites.find({ where: { guestId: In(guests.map((g) => g.id)) } });
+    const byGuest = new Map<string, string[]>();
+    for (const invite of invites) {
+      byGuest.set(invite.guestId, [...(byGuest.get(invite.guestId) ?? []), invite.eventId]);
+    }
+    return guests.map((guest) => ({ ...guest, invitedEventIds: byGuest.get(guest.id) ?? [] }));
   }
 
   /** Loads an event only if the caller is the host. */
@@ -625,6 +658,203 @@ export class EventsService {
   }
 
   /**
+   * Invites a guest to the wedding with one personal link.
+   *
+   * The token lives on the guest row and resolves to the events this guest is
+   * invited to, so there is one link and one answer rather than one per
+   * function. Which events those are is the host's choice (`eventIds`), or,
+   * without one, the per-event invites the guest already has: a reception-only
+   * guest is never shown the address of a private family function, nor counted
+   * on its guest list. Sending again rotates the token — the old link stops
+   * working — and keeps any answer already given.
+   */
+  async inviteToWedding(userId: string, guestId: string, eventIds?: string[]) {
+    const guest = await this.ownedGuest(userId, guestId);
+    if (eventIds && eventIds.length > 0) {
+      const wanted = new Set(eventIds);
+      const chosen = (await this.weddingEvents(userId)).filter((e) => wanted.has(e.id));
+      if (chosen.length !== wanted.size) {
+        throw new BadRequestException('Choose events from your own wedding that are not cancelled');
+      }
+      await this.ensureEventInvites(guest, chosen);
+    }
+    const events = await this.invitedEvents(guest);
+    if (events.length === 0) {
+      throw new BadRequestException('Choose the events this invitation covers');
+    }
+
+    const { token, tokenHash } = generateToken();
+    guest.rsvpTokenHash = tokenHash;
+    guest.rsvpTokenExpiresAt = expiresIn(this.cfg.auth.rsvpTokenTtlDays * 86_400);
+    guest.rsvpStatus = guest.rsvpStatus ?? RsvpStatus.INVITED;
+    await this.guests.save(guest);
+    await this.syncEventInvites(guest, events);
+
+    if (guest.contact && guest.contact.includes('@')) {
+      const couple = await this.coupleNames(userId);
+      await this.mail.sendRsvpInvitation({
+        to: guest.contact,
+        guestName: guest.name,
+        eventName: couple ? `the wedding of ${couple}` : 'our wedding',
+        hostName: couple ?? 'Your hosts',
+        token,
+      });
+    }
+
+    return { guest: this.withoutToken(guest), rsvpToken: token, rsvpUrl: `/rsvp/${token}` };
+  }
+
+  /** Host records the guest's wedding reply for them — they answered by phone. */
+  async respondForGuest(userId: string, guestId: string, dto: GuestRsvpDto) {
+    const guest = await this.ownedGuest(userId, guestId);
+    await this.applyWeddingRsvp(guest, dto);
+    return this.withoutToken(guest);
+  }
+
+  /** A save reloads every column, the token hash included; it never goes back out. */
+  private withoutToken(guest: Guest) {
+    const { rsvpTokenHash, ...rest } = guest;
+    void rsvpTokenHash;
+    return rest;
+  }
+
+  /** The host's events that are still going ahead, in date order. */
+  private weddingEvents(hostId: string): Promise<WeddingEvent[]> {
+    return this.events.find({
+      where: { userId: hostId, status: Not(EventStatus.CANCELLED) },
+      order: { eventDate: 'ASC', startTime: 'ASC' },
+    });
+  }
+
+  /**
+   * The events a guest's wedding invitation covers: the host's events, not
+   * cancelled, that this guest has a per-event invite for. Nothing else is
+   * ever shown on their RSVP page or answered by their reply.
+   */
+  private async invitedEvents(guest: Guest): Promise<WeddingEvent[]> {
+    const invites = await this.invites.find({ where: { guestId: guest.id } });
+    if (invites.length === 0) return [];
+    return this.events.find({
+      where: {
+        id: In(invites.map((i) => i.eventId)),
+        userId: guest.userId,
+        status: Not(EventStatus.CANCELLED),
+      },
+      order: { eventDate: 'ASC', startTime: 'ASC' },
+    });
+  }
+
+  /** A per-event invite on each chosen event, leaving any that exist as they are. */
+  private async ensureEventInvites(guest: Guest, events: WeddingEvent[]): Promise<void> {
+    const existing = await this.invites.find({
+      where: { guestId: guest.id, eventId: In(events.map((e) => e.id)) },
+    });
+    const have = new Set(existing.map((i) => i.eventId));
+    const missing = events
+      .filter((e) => !have.has(e.id))
+      .map((e) => this.invites.create({ eventId: e.id, guestId: guest.id, status: RsvpStatus.INVITED }));
+    if (missing.length > 0) await this.invites.save(missing);
+  }
+
+  /** "Priya & Arjun": the host and their match-fixed partner, where known. */
+  private async coupleNames(hostId: string): Promise<string | null> {
+    const partnerId = await this.matchmaking.fixedPartnerUserId(hostId);
+    const ids = partnerId ? [hostId, partnerId] : [hostId];
+    const rows = await this.profiles.find({ where: { userId: In(ids) } });
+    const names = ids
+      .map((id) => rows.find((p) => p.userId === id)?.displayName)
+      .filter((n): n is string => !!n);
+    return names.length ? names.join(' & ') : null;
+  }
+
+  /**
+   * Carries the wedding answer onto the guest's per-event invites.
+   *
+   * Only onto invites that were never answered on their own. A guest who said
+   * "attending" to the wedding and later declined the Haldi through its own
+   * link, or whose Haldi reply the host recorded by hand, keeps that answer:
+   * the wedding reply is the default for each event, not an override of one
+   * given for that event specifically.
+   */
+  private async syncEventInvites(guest: Guest, events: WeddingEvent[]): Promise<void> {
+    if (!guest.rsvpStatus || guest.rsvpStatus === RsvpStatus.INVITED || events.length === 0) return;
+    const rows = await this.invites.find({
+      where: { guestId: guest.id, eventId: In(events.map((e) => e.id)) },
+    });
+    const followers = rows.filter((row) => !row.answeredIndividually);
+    for (const row of followers) {
+      row.status = guest.rsvpStatus;
+      row.respondedAt = guest.respondedAt;
+      row.attendingCount = guest.attendingCount;
+      row.declineReason = guest.declineReason;
+    }
+    if (followers.length > 0) await this.invites.save(followers);
+  }
+
+  private async applyWeddingRsvp(guest: Guest, dto: GuestRsvpDto): Promise<void> {
+    const answer = {
+      status: guest.rsvpStatus ?? RsvpStatus.INVITED,
+      respondedAt: guest.respondedAt,
+      attendingCount: guest.attendingCount,
+      declineReason: guest.declineReason,
+    } as EventInvite;
+    this.applyRsvp(answer, dto.status, dto.attendingCount, dto.declineReason);
+    guest.rsvpStatus = answer.status;
+    guest.respondedAt = answer.respondedAt;
+    guest.attendingCount = answer.attendingCount;
+    guest.declineReason = answer.declineReason;
+    await this.guests.save(guest);
+    await this.syncEventInvites(guest, await this.invitedEvents(guest));
+  }
+
+  /** The guest a wedding token belongs to, or null when it is not one. */
+  private async guestByToken(token: string): Promise<Guest | null> {
+    const guest = await this.guests.findOne({ where: { rsvpTokenHash: hashToken(token) } });
+    if (!guest) return null;
+    if (guest.rsvpTokenExpiresAt && guest.rsvpTokenExpiresAt.getTime() <= Date.now()) {
+      throw new BadRequestException('That invitation link has expired');
+    }
+    return guest;
+  }
+
+  /**
+   * Public: the wedding invitation. Only what an invitation carries — who,
+   * which of the events they are invited to, when and where — never the
+   * budget, other guests, replies, or any event they were not asked to.
+   */
+  private async weddingView(guest: Guest): Promise<WeddingRsvpView> {
+    const [events, coupleNames] = await Promise.all([
+      this.invitedEvents(guest),
+      this.coupleNames(guest.userId),
+    ]);
+    const first = events[0];
+    return {
+      kind: 'wedding',
+      coupleNames,
+      guestName: guest.name,
+      eventName: coupleNames ? `The wedding of ${coupleNames}` : 'Our wedding',
+      eventDate: first?.eventDate ?? null,
+      venue: first?.venue ?? null,
+      status: guest.rsvpStatus ?? RsvpStatus.INVITED,
+      seat: null,
+      respondedAt: guest.respondedAt,
+      attendingCount: guest.attendingCount,
+      declineReason: guest.declineReason,
+      invitedPartySize: guest.partySize,
+      events: events.map((e) => ({
+        name: e.name,
+        category: e.category ?? null,
+        eventDate: e.eventDate ?? null,
+        startTime: e.startTime ?? null,
+        endTime: e.endTime ?? null,
+        venue: e.venue ?? null,
+        venueAddress: e.venueAddress ?? null,
+        city: e.city ?? null,
+      })),
+    };
+  }
+
+  /**
    * Host-side RSVP override, for when a guest replies by phone. The guest-facing
    * path is `respondByToken` below.
    */
@@ -634,6 +864,8 @@ export class EventsService {
     await this.ownedEvent(userId, invite.eventId);
 
     this.applyRsvp(invite, dto.status, dto.attendingCount, dto.declineReason);
+    // An answer for this event specifically: a later wedding-level reply leaves it alone.
+    invite.answeredIndividually = true;
     if (dto.seat !== undefined) invite.seat = dto.seat;
     return this.invites.save(invite);
   }
@@ -745,6 +977,7 @@ export class EventsService {
     invite.status = dto.attending ? RsvpStatus.ATTENDING : RsvpStatus.DECLINED;
     invite.attendingCount = dto.attending ? (dto.partySize ?? 1) : 0;
     invite.respondedAt = new Date();
+    invite.answeredIndividually = true;
     await this.invites.save(invite);
 
     return { recorded: true, attending: dto.attending, name: guest.name };
@@ -760,7 +993,10 @@ export class EventsService {
   }
 
   /** Public: what the guest sees before answering. */
-  async previewByToken(token: string): Promise<GuestRsvpView> {
+  async previewByToken(token: string): Promise<GuestRsvpView | WeddingRsvpView> {
+    const invited = await this.guestByToken(token);
+    if (invited) return this.weddingView(invited);
+
     const invite = await this.inviteByToken(token);
     const [event, guest] = await Promise.all([
       this.events.findOne({ where: { id: invite.eventId } }),
@@ -789,9 +1025,19 @@ export class EventsService {
    * but it only ever addresses their own invite — it carries no authority over
    * the event or any other guest.
    */
-  async respondByToken(token: string, dto: GuestRsvpDto): Promise<GuestRsvpView> {
+  async respondByToken(
+    token: string,
+    dto: GuestRsvpDto,
+  ): Promise<GuestRsvpView | WeddingRsvpView> {
+    const guest = await this.guestByToken(token);
+    if (guest) {
+      await this.applyWeddingRsvp(guest, dto);
+      return this.weddingView(guest);
+    }
+
     const invite = await this.inviteByToken(token);
     this.applyRsvp(invite, dto.status, dto.attendingCount, dto.declineReason);
+    invite.answeredIndividually = true;
     await this.invites.save(invite);
     return this.previewByToken(token);
   }

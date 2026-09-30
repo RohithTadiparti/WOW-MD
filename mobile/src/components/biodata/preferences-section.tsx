@@ -7,8 +7,21 @@ import { cmToFeetInches, feetInchesToCm, formatHeight } from '@/shared/height';
 import { DetailGrid, DetailRow } from '@/components/chrome';
 import { SelectField } from '@/components/form';
 import { Alert, Button, Caption, Card, Field, SectionTitle } from '@/components/ui';
+import { CASTES_BY_RELIGION, CITIES, PADAMS, PROFESSIONS, QUALIFICATIONS, RASHIS, RELIGIONS } from '@/shared/reference';
 import { space } from '@/theme';
-import { NRI_OPTIONS, NRI_LABEL, stored } from './constants';
+import { ChoiceField, canonical } from './choice-field';
+import { capitalizeWords } from '@/lib/format';
+import {
+  COMPLEXIONS,
+  HOROSCOPE_EXPECTATIONS,
+  KUJA_PREFERENCES,
+  NRI_OPTIONS,
+  NRI_LABEL,
+  stored,
+} from './constants';
+
+const labelOf = (options: { value: string; label: string }[], value: unknown) =>
+  options.find((o) => o.value === value)?.label ?? (value ? String(value) : '—');
 
 export function PreferencesSection({
   profileId,
@@ -36,17 +49,18 @@ export function PreferencesSection({
     preferredAgeMax: stored(details.preferredAgeMax),
     preferredHeightMinCm: stored(details.preferredHeightMinCm),
     preferredHeightMaxCm: stored(details.preferredHeightMaxCm),
-    religion: String(bag.religion ?? ''),
+    religion: canonical(String(bag.religion ?? ''), RELIGIONS),
     caste: String(bag.caste ?? ''),
-    education: String(bag.education ?? ''),
-    profession: String(bag.profession ?? ''),
-    locations: String(bag.locations ?? ''),
-    complexion: String(bag.complexion ?? ''),
-    preferredRashis: String(bag.preferredRashis ?? ''),
-    preferredStars: String(bag.preferredStars ?? ''),
+    education: canonical(String(bag.education ?? ''), QUALIFICATIONS),
+    profession: canonical(String(bag.profession ?? ''), PROFESSIONS),
+    locations: canonical(String(bag.locations ?? ''), CITIES),
+    complexion: String(bag.complexion ?? '').toLowerCase(),
+    horoscopeExpectation: String(bag.horoscopeExpectation ?? ''),
+    kujaDosham: String(bag.kujaDosham ?? ''),
+    preferredRashi: canonical(String(bag.preferredRashi ?? bag.preferredRashis ?? ''), RASHIS),
     nriPreference: String(bag.nriPreference ?? ''),
-    preferredNriCountry: String(bag.preferredNriCountry ?? ''),
-    anythingElse: String(bag.anythingElse ?? ''),
+    preferredNriCountry: capitalizeWords(String(bag.preferredNriCountry ?? '')),
+    other: String(bag.other ?? bag.anythingElse ?? ''),
   });
 
   const save = useMutation({
@@ -62,11 +76,12 @@ export function PreferencesSection({
           ...(form.education.trim() ? { education: form.education.trim() } : {}),
           ...(form.profession.trim() ? { profession: form.profession.trim() } : {}),
           ...(form.locations.trim() ? { locations: form.locations.trim() } : {}),
-          ...(form.complexion.trim() ? { complexion: form.complexion.trim() } : {}),
-          ...(form.preferredRashis.trim() ? { preferredRashis: form.preferredRashis.trim() } : {}),
-          ...(form.preferredStars.trim() ? { preferredStars: form.preferredStars.trim() } : {}),
-          ...(form.anythingElse.trim() ? { anythingElse: form.anythingElse.trim() } : {}),
+          ...(form.complexion ? { complexion: form.complexion } : {}),
+          ...(form.other.trim() ? { other: form.other.trim() } : {}),
         },
+        ...(form.horoscopeExpectation ? { horoscopeExpectation: form.horoscopeExpectation } : {}),
+        ...(form.kujaDosham ? { kujaDosham: form.kujaDosham } : {}),
+        ...(form.preferredRashi ? { preferredRashi: form.preferredRashi } : {}),
         ...(form.nriPreference ? { nriPreference: form.nriPreference } : {}),
         ...(form.nriPreference === 'yes' && form.preferredNriCountry.trim()
           ? { preferredNriCountry: form.preferredNriCountry.trim() }
@@ -82,8 +97,8 @@ export function PreferencesSection({
     onError: (err) => setError(apiMessage(err, 'Those preferences could not be saved.')),
   });
 
-  const set = (key: keyof typeof form) => (value: string) =>
-    setForm((current) => ({ ...current, [key]: value }));
+  const set = (key: keyof typeof form, capitalize?: boolean) => (value: string) =>
+    setForm((current) => ({ ...current, [key]: capitalize ? capitalizeWords(value) : value }));
 
   function submit() {
     const ranges = [
@@ -156,33 +171,87 @@ export function PreferencesSection({
             </View>
           ))}
 
-            <Field label="Religion" value={form.religion} onChangeText={set('religion')} />
-            <Field label="Caste" value={form.caste} onChangeText={set('caste')} />
-            <Field label="Education" value={form.education} onChangeText={set('education')} />
-            <Field label="Profession" value={form.profession} onChangeText={set('profession')} />
-            <Field label="Preferred Location" value={form.locations} onChangeText={set('locations')} hint="One or more towns, separated by commas." />
-            <Field label="Complexion" value={form.complexion} onChangeText={set('complexion')} />
-            <Field label="Preferred Rashis" value={form.preferredRashis} onChangeText={set('preferredRashis')} />
-            <Field label="Preferred Stars" value={form.preferredStars} onChangeText={set('preferredStars')} />
+            <View style={{ flexDirection: 'row', gap: space(2) }}>
+              <View style={{ flex: 1 }}>
+                <ChoiceField
+                  label="Religion"
+                  value={form.religion}
+                  options={RELIGIONS}
+                  placeholder="No preference"
+                  onChange={(religion) => setForm((current) => ({ ...current, religion, caste: '' }))}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <ChoiceField
+                  key={`caste-${form.religion}`}
+                  label="Caste"
+                  value={form.caste}
+                  options={CASTES_BY_RELIGION[form.religion] ?? []}
+                  placeholder="No preference"
+                  onChange={set('caste')}
+                />
+              </View>
+            </View>
+            
+            <ChoiceField label="Education" value={form.education} options={QUALIFICATIONS} placeholder="No preference" onChange={set('education')} />
+            <ChoiceField label="Profession" value={form.profession} options={PROFESSIONS} placeholder="No preference" onChange={set('profession')} />
+            <ChoiceField label="Preferred Location" value={form.locations} options={CITIES} placeholder="No preference" onChange={set('locations')} />
 
             <SelectField
-              label="Is the partner an NRI?"
-              value={form.nriPreference}
-              options={NRI_OPTIONS}
-              onChange={set('nriPreference')}
+              label="Complexion"
+              value={form.complexion}
+              options={[{ value: '', label: 'No preference' }, ...COMPLEXIONS]}
               placeholder="No preference"
+              onChange={set('complexion')}
             />
+
+            <View style={{ flexDirection: 'row', gap: space(2) }}>
+              <View style={{ flex: 1 }}>
+                <SelectField
+                  label="Horoscope"
+                  value={form.horoscopeExpectation}
+                  options={[{ value: '', label: 'No preference' }, ...HOROSCOPE_EXPECTATIONS]}
+                  placeholder="No preference"
+                  onChange={set('horoscopeExpectation')}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <SelectField
+                  label="Kuja dosham"
+                  value={form.kujaDosham}
+                  options={[{ value: '', label: 'No preference' }, ...KUJA_PREFERENCES]}
+                  placeholder="No preference"
+                  onChange={set('kujaDosham')}
+                />
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: space(2) }}>
+              <View style={{ flex: 1 }}>
+                <ChoiceField label="Preferred Rashi" value={form.preferredRashi} options={RASHIS} placeholder="No preference" allowOther={false} onChange={set('preferredRashi')} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <SelectField
+                  label="Is NRI?"
+                  value={form.nriPreference}
+                  options={NRI_OPTIONS}
+                  onChange={set('nriPreference')}
+                  placeholder="No preference"
+                />
+              </View>
+            </View>
             {form.nriPreference === 'yes' ? (
               <Field
                 label="Preferred NRI country"
                 value={form.preferredNriCountry}
-                onChangeText={set('preferredNriCountry')}
+                onChangeText={set('preferredNriCountry', true)}
                 placeholder="USA, UK, Canada, Australia…"
                 maxLength={120}
+                autoCapitalize="words"
               />
             ) : null}
 
-            <Field label="Anything Else" value={form.anythingElse} onChangeText={set('anythingElse')} />
+            <Field label="Looking for Anything Else" value={form.other} onChangeText={set('other')} />
 
             {!isWizard && (
               <View style={{ gap: space(2) }}>
@@ -209,9 +278,10 @@ export function PreferencesSection({
               <DetailRow label="Education">{String(bag.education ?? '—')}</DetailRow>
               <DetailRow label="Profession">{String(bag.profession ?? '—')}</DetailRow>
               <DetailRow label="Location">{String(bag.locations ?? '—')}</DetailRow>
-              <DetailRow label="Complexion">{String(bag.complexion ?? '—')}</DetailRow>
-              <DetailRow label="Rashis">{String(bag.preferredRashis ?? '—')}</DetailRow>
-              <DetailRow label="Stars">{String(bag.preferredStars ?? '—')}</DetailRow>
+              <DetailRow label="Complexion">{labelOf(COMPLEXIONS, bag.complexion)}</DetailRow>
+              <DetailRow label="Horoscope">{labelOf(HOROSCOPE_EXPECTATIONS, bag.horoscopeExpectation)}</DetailRow>
+              <DetailRow label="Kuja dosham">{labelOf(KUJA_PREFERENCES, bag.kujaDosham)}</DetailRow>
+              <DetailRow label="Rashi">{String(bag.preferredRashi ?? bag.preferredRashis ?? '—')}</DetailRow>
               <DetailRow label="NRI">{NRI_LABEL[String(bag.nriPreference ?? '')] ?? 'Not said'}</DetailRow>
               {bag.nriPreference === 'yes' ? <DetailRow label="Country">{String(bag.preferredNriCountry ?? '—')}</DetailRow> : null}
             </DetailGrid>
@@ -222,7 +292,7 @@ export function PreferencesSection({
           </>
         )}
       </Card>
-      
+
       {isWizard && (
         <View style={{ gap: space(2) }}>
           <View style={{ flexDirection: 'row', gap: space(2) }}>

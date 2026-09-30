@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import {
-  Alert as NativeAlert,
   Image,
   Pressable,
   ScrollView,
@@ -9,13 +8,16 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Heart, MapPin, SealCheck, ShareNetwork, Star } from 'phosphor-react-native';
 
 import { api, apiMessage } from '@/lib/api';
-import { rupees } from '@/lib/format';
+import { hhmm, money, rupees } from '@/lib/format';
 import { loadVendorShortlist, toggleVendorShortlist } from '@/lib/plan-shortlist';
-import { DateField } from '@/components/form';
+import { cleanAnswers, validateAnswers, type Answers, type FieldSpec } from '@/shared/dynamic-form';
+import { WowCalendar } from '@/components/common/WowCalendar';
+import { DynamicForm } from '@/components/dynamic-form';
+import { SOCIAL_KEYS, SocialLinksList, type SocialLinks } from '@/components/social-links';
 import {
   Alert,
   Body,
@@ -43,14 +45,34 @@ type Vendor = {
   portfolio: string[];
   startingPrice: number | null;
   verifiedAt: string | null;
-};
+} & SocialLinks;
 
 type Service = {
   id: string;
-  name: string;
+  displayName?: string | null;
   description?: string | null;
-  offerings?: { id: string; name: string; price: string | null }[];
+  definition?: { name: string; description?: string | null } | null;
+  active?: boolean;
+  bookable?: boolean;
+  bookingForm?: FieldSpec[];
+  offerings?: { id: string; name: string; price: string | null; currency?: string; active?: boolean }[];
 };
+
+const serviceName = (s: Service) => s.displayName || s.definition?.name || 'Service';
+
+/** What `/vendors/search` shows as "From ₹X": the cheapest live offering. */
+function cheapestOffering(services: Service[]): number | null {
+  const prices = services
+    .filter((s) => s.active !== false)
+    .flatMap((s) => s.offerings ?? [])
+    .filter((o) => o.active !== false && o.price != null)
+    .map((o) => Number(o.price));
+  return prices.length ? Math.min(...prices) : null;
+}
+
+type MyBooking = { id: string; providerId?: string; status: string; createdAt?: string };
+
+type Slot = { id: string; startTime: string; endTime: string; remaining: number };
 
 type Review = {
   id: string;
@@ -61,14 +83,19 @@ type Review = {
 export default function VendorDetail() {
   const theme = useTheme();
   const router = useRouter();
+  const qc = useQueryClient();
   const { width } = useWindowDimensions();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, eventId } = useLocalSearchParams<{ id: string; eventId?: string }>();
   const [tab, setTab] = useState<Tab>('overview');
   const [shortlist, setShortlist] = useState<Set<string>>(new Set());
   const [requesting, setRequesting] = useState(false);
   const [eventDate, setEventDate] = useState('');
   const [budget, setBudget] = useState('');
   const [requirements, setRequirements] = useState('');
+  const [vendorServiceId, setVendorServiceId] = useState('');
+  const [slotId, setSlotId] = useState('');
+  const [answers, setAnswers] = useState<Answers>({});
+  const [answerErrors, setAnswerErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
@@ -86,7 +113,18 @@ export default function VendorDetail() {
   const services = useQuery({
     queryKey: ['vendor-services', id],
     queryFn: async () => (await api.get(`/vendors/${id}/services`)).data as Service[],
-    enabled: Boolean(id) && (tab === 'packages' || requesting),
+    enabled: Boolean(id),
+    retry: false,
+  });
+
+  // The same list the Bookings screen reads: a chat with a vendor lives on a booking.
+  const myBookings = useQuery({
+    queryKey: ['my-bookings'],
+    queryFn: async () =>
+      (await api.get('/bookings', { params: { limit: 100 } })).data as
+        | { data?: MyBooking[] }
+        | MyBooking[],
+    enabled: Boolean(id),
     retry: false,
   });
 
@@ -98,23 +136,77 @@ export default function VendorDetail() {
     retry: false,
   });
 
+  const serviceRows = Array.isArray(services.data) ? services.data : [];
+  const bookableServices = serviceRows.filter((s) => s.bookable !== false);
+  const selectedService = serviceRows.find((s) => s.id === vendorServiceId);
+  // The server answers the form's event date from the slot or chosen date.
+  const formFields = (selectedService?.bookingForm ?? []).filter(
+    (f) => !(eventDate && f.key === 'event_date'),
+  );
+
+  useEffect(() => {
+    if (bookableServices.length === 1 && !vendorServiceId) {
+      setVendorServiceId(bookableServices[0].id);
+    }
+  }, [bookableServices, vendorServiceId]);
+
+  const availability = useQuery({
+    queryKey: ['vendor-availability', id, eventDate, vendorServiceId],
+    queryFn: async () =>
+      (
+        await api.get(`/vendors/${id}/availability`, {
+          params: { from: eventDate, to: eventDate, vendorServiceId: vendorServiceId || undefined },
+        })
+      ).data as Slot[],
+    enabled: Boolean(id && eventDate && requesting),
+    retry: false,
+  });
+
   const request = useMutation({
     mutationFn: async () => {
-      await api.post('/bookings', {
+      const serviceAnswers = cleanAnswers(formFields, answers);
+      const response = await api.post('/bookings', {
         providerType: 'vendor',
         providerId: id,
         ...(eventDate ? { eventDate } : {}),
+        ...(eventId ? { eventId } : {}),
+        ...(vendorServiceId ? { vendorServiceId } : {}),
+        ...(slotId ? { slotId } : {}),
+        ...(Object.keys(serviceAnswers).length ? { serviceAnswers } : {}),
         ...(budget ? { expectedBudget: Number(budget) } : {}),
         ...(requirements.trim() ? { requirements: requirements.trim() } : {}),
       });
+      return response.data as { id: string };
     },
-    onSuccess: () => {
+    onSuccess: async (data) => {
       setRequesting(false);
-      setNotice('Booking request sent.');
+      setNotice('');
       setError('');
+      await qc.invalidateQueries({ queryKey: ['my-bookings'] });
+      await qc.invalidateQueries({ queryKey: ['wedding-dashboard'] });
+      await qc.invalidateQueries({ queryKey: ['event-workspace'] });
+      router.push({ pathname: '/plan/bookings', params: { highlight: data.id } });
     },
-    onError: (err) => setError(apiMessage(err, 'That request could not be sent.')),
+    onError: (err) => {
+      const body = (err as { response?: { status?: number; data?: Record<string, any> } }).response;
+      const existingId = body?.data?.bookingId ?? body?.data?.error?.bookingId;
+      if (body?.status === 409 && existingId) {
+        router.push({ pathname: '/plan/bookings', params: { highlight: existingId } });
+        return;
+      }
+      if (slotId) {
+        setSlotId('');
+        void qc.invalidateQueries({ queryKey: ['vendor-availability', id] });
+      }
+      setError(apiMessage(err, 'That request could not be sent.'));
+    },
   });
+
+  const submit = () => {
+    const found = validateAnswers(formFields, answers);
+    setAnswerErrors(found);
+    if (Object.keys(found).length === 0) request.mutate();
+  };
 
   if (query.isPending) {
     return (
@@ -135,12 +227,17 @@ export default function VendorDetail() {
   }
 
   const vendor = query.data;
+  const startingPrice = vendor.startingPrice ?? cheapestOffering(serviceRows);
+  const bookingRows: MyBooking[] = Array.isArray(myBookings.data)
+    ? myBookings.data
+    : (myBookings.data?.data ?? []);
+  const withVendor = bookingRows.filter((b) => b.providerId === vendor.id);
+  const existing = withVendor.find((b) => b.status !== 'cancelled') ?? withVendor[0];
   const photos = vendor.portfolio ?? [];
   const saved = shortlist.has(vendor.id);
   const reviewRows: Review[] = Array.isArray(reviews.data)
     ? reviews.data
     : (reviews.data?.data ?? []);
-  const serviceRows = Array.isArray(services.data) ? services.data : [];
 
   return (
     <View style={{ flex: 1, backgroundColor: rgb(theme.canvas) }}>
@@ -221,7 +318,8 @@ export default function VendorDetail() {
             </View>
             <Caption>
               <Star size={13} color={rgb(theme.brand)} weight="fill" />{' '}
-              {vendor.ratingAvg.toFixed(1)} · {vendor.ratingCount} reviews
+              {Number(vendor.ratingAvg).toFixed(1)} · {vendor.ratingCount}{' '}
+              {vendor.ratingCount === 1 ? 'review' : 'reviews'}
             </Caption>
             <Caption>
               <MapPin size={13} color={rgb(theme.ink[400])} />{' '}
@@ -245,6 +343,8 @@ export default function VendorDetail() {
               return (
                 <Pressable
                   key={key}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: active }}
                   onPress={() => setTab(key)}
                   style={{
                     paddingHorizontal: space(3),
@@ -268,16 +368,17 @@ export default function VendorDetail() {
 
           {tab === 'overview' ? (
             <>
-              {vendor.description ? (
+              {vendor.description || SOCIAL_KEYS.some((k) => vendor[k]) ? (
                 <Card>
                   <SectionTitle>About</SectionTitle>
-                  <Caption>{vendor.description}</Caption>
+                  {vendor.description ? <Caption>{vendor.description}</Caption> : null}
+                  <SocialLinksList links={vendor} />
                 </Card>
               ) : null}
-              {vendor.startingPrice !== null ? (
+              {startingPrice !== null ? (
                 <Card>
                   <Caption>Starting Price</Caption>
-                  <SectionTitle>{rupees(vendor.startingPrice)}</SectionTitle>
+                  <SectionTitle>{rupees(startingPrice)}</SectionTitle>
                   <Pressable onPress={() => setTab('packages')}>
                     <Caption tone="brand" style={{ fontWeight: '600', marginTop: space(1) }}>
                       View Packages
@@ -335,8 +436,10 @@ export default function VendorDetail() {
             ) : (
               serviceRows.map((service) => (
                 <Card key={service.id} style={{ gap: space(2) }}>
-                  <Body style={{ fontWeight: '700' }}>{service.name}</Body>
-                  {service.description ? <Caption>{service.description}</Caption> : null}
+                  <Body style={{ fontWeight: '700' }}>{serviceName(service)}</Body>
+                  {service.description || service.definition?.description ? (
+                    <Caption>{service.description || service.definition?.description}</Caption>
+                  ) : null}
                   {(service.offerings ?? []).map((offering) => (
                     <View
                       key={offering.id}
@@ -348,7 +451,7 @@ export default function VendorDetail() {
                     >
                       <Caption style={{ flex: 1 }}>{offering.name}</Caption>
                       <Caption tone="brand">
-                        {offering.price ? rupees(offering.price) : 'On request'}
+                        {offering.price ? money(offering.price, offering.currency) : 'On request'}
                       </Caption>
                     </View>
                   ))}
@@ -360,11 +463,105 @@ export default function VendorDetail() {
           {requesting ? (
             <Card style={{ gap: space(3) }}>
               <SectionTitle>Request Booking</SectionTitle>
-              <DateField
+              {services.isPending ? (
+                <Loading rows={1} />
+              ) : services.error ? (
+                <Caption tone="critical">
+                  {apiMessage(services.error, 'Services could not be loaded.')}
+                </Caption>
+              ) : serviceRows.length > 0 && bookableServices.length === 0 ? (
+                <Caption tone="muted">
+                  None of this vendor&apos;s services can be booked right now.
+                </Caption>
+              ) : bookableServices.length > 0 ? (
+                <View style={{ gap: space(1) }}>
+                  <Caption style={{ fontWeight: '600' }}>Service</Caption>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2) }}>
+                    {bookableServices.map((s) => {
+                      const active = vendorServiceId === s.id;
+                      return (
+                        <Pressable
+                          key={s.id}
+                          onPress={() => {
+                            setVendorServiceId(s.id);
+                            setSlotId('');
+                            setAnswers({});
+                            setAnswerErrors({});
+                          }}
+                          style={{
+                            paddingHorizontal: space(3),
+                            paddingVertical: space(1.5),
+                            borderRadius: radius.md,
+                            backgroundColor: active ? rgb(theme.brand) : rgb(theme.surfaceSunken),
+                          }}
+                        >
+                          <Caption
+                            style={{
+                              color: active ? rgb(theme.brandFg) : rgb(theme.ink[700]),
+                            }}
+                          >
+                            {serviceName(s)}
+                          </Caption>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              ) : null}
+              <WowCalendar
                 label="Event date"
                 value={eventDate}
-                onChange={setEventDate}
-                from={new Date().toISOString().slice(0, 10)}
+                onChange={(date) => {
+                  setEventDate(date);
+                  setSlotId('');
+                }}
+                minimumDate={new Date().toISOString().slice(0, 10)}
+              />
+              {eventDate && availability.isFetching ? (
+                <Loading rows={1} />
+              ) : eventDate && availability.error ? (
+                <Caption tone="critical">
+                  {apiMessage(availability.error, 'Availability could not be loaded.')}
+                </Caption>
+              ) : eventDate && availability.data && availability.data.length > 0 ? (
+                <View style={{ gap: space(1) }}>
+                  <Caption style={{ fontWeight: '600' }}>Available slots</Caption>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space(2) }}>
+                    {availability.data.map((slot) => {
+                      const active = slotId === slot.id;
+                      return (
+                        <Pressable
+                          key={slot.id}
+                          onPress={() => setSlotId(slot.id)}
+                          style={{
+                            paddingHorizontal: space(3),
+                            paddingVertical: space(1.5),
+                            borderRadius: radius.md,
+                            backgroundColor: active ? rgb(theme.brand) : rgb(theme.surfaceSunken),
+                          }}
+                        >
+                          <Caption
+                            style={{
+                              color: active ? rgb(theme.brandFg) : rgb(theme.ink[700]),
+                            }}
+                          >
+                            {hhmm(slot.startTime)} – {hhmm(slot.endTime)} · {slot.remaining} left
+                          </Caption>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              ) : eventDate && availability.data && availability.data.length === 0 ? (
+                <Caption tone="muted">
+                  No slots published for this date. You can still send a request.
+                </Caption>
+              ) : null}
+              <DynamicForm
+                fields={formFields}
+                answers={answers}
+                errors={answerErrors}
+                onChange={(key, value) => setAnswers((current) => ({ ...current, [key]: value }))}
               />
               <Field
                 label="Budget (optional)"
@@ -381,7 +578,14 @@ export default function VendorDetail() {
               <Button
                 label="Send request"
                 busy={request.isPending}
-                onPress={() => request.mutate()}
+                disabled={
+                  request.isPending ||
+                  services.isPending ||
+                  (bookableServices.length > 0 && !vendorServiceId) ||
+                  (Boolean(eventDate) && availability.isFetching) ||
+                  (Boolean(availability.data?.length) && !slotId)
+                }
+                onPress={submit}
               />
               <Button label="Cancel" variant="outline" onPress={() => setRequesting(false)} />
             </Card>
@@ -405,16 +609,16 @@ export default function VendorDetail() {
           <Button
             label="Chat"
             variant="outline"
-            onPress={() =>
-              NativeAlert.alert(
-                'Chat with this vendor',
-                'Vendor inquiries open from Chat once a conversation exists. Browse your conversations from the Chat tab.',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Open Chat', onPress: () => router.push('/chat') },
-                ],
-              )
-            }
+            onPress={() => {
+              if (existing) {
+                router.push({ pathname: '/plan/bookings', params: { highlight: existing.id } });
+                return;
+              }
+              setError('');
+              setNotice(
+                'Messages with a vendor open on your booking. Send a booking request and you can chat with them from Bookings.',
+              );
+            }}
             style={{ flex: 1 }}
           />
           <Button

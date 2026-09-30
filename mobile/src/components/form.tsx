@@ -1,11 +1,12 @@
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import { CalendarBlank, CaretDown, Check } from 'phosphor-react-native';
+import { useState, useMemo, useEffect } from 'react';
+import { Modal, Pressable, ScrollView, StyleSheet, View, TextInput } from 'react-native';
+import { CalendarBlank, CaretDown, Check, MagnifyingGlass } from 'phosphor-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MonthCalendar, formatLongDate } from '@/components/calendar';
 import { Sheet } from '@/components/sheet';
-import { Body, Button, Caption, Field } from '@/components/ui';
-import { radius, rgb, space, useTheme } from '@/theme';
+import { Body, Button, Caption, Field, SectionTitle } from '@/components/ui';
+import { radius, rgb, rgba, space, useTheme } from '@/theme';
 import { Txt, typeface } from '@/theme/fonts';
 
 /**
@@ -25,10 +26,20 @@ import { Txt, typeface } from '@/theme/fonts';
 
 // ------------------------------------------------------------------ label --
 
-function Label({ children }: { children: string }) {
+function Label({ children, required, autoFilled }: { children: string; required?: boolean; autoFilled?: boolean }) {
   const theme = useTheme();
   return (
-    <Txt style={{ fontSize: 13, fontWeight: '500', color: rgb(theme.ink[600]) }}>{children}</Txt>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(1) }}>
+      <Txt style={{ fontSize: 13, fontWeight: '500', color: rgb(theme.ink[600]) }}>
+        {children}
+        {required ? <Txt style={{ color: rgb(theme.criticalFg) }}> *</Txt> : null}
+      </Txt>
+      {autoFilled && (
+        <View style={{ backgroundColor: rgb(theme.positiveBg), paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, flexDirection: 'row', alignItems: 'center' }}>
+          <Txt style={{ color: rgb(theme.positiveFg), fontSize: 10, fontWeight: '700' }}>AUTO-FILLED</Txt>
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -38,7 +49,7 @@ function Label({ children }: { children: string }) {
  * Shared by the select, the date and the time so the three read as one family;
  * a date field that did not match the field above it would look like a bug.
  */
-function Trigger({
+export function Trigger({
   value,
   placeholder,
   invalid,
@@ -68,7 +79,8 @@ function Trigger({
           backgroundColor: rgb(theme.surface),
           borderRadius: radius.sm,
           paddingHorizontal: space(3),
-          minHeight: 46,
+          paddingVertical: 10,
+          minHeight: 48,
         },
         pressed && { backgroundColor: rgb(theme.surfaceSunken) },
         disabled && { opacity: 0.5 },
@@ -89,20 +101,24 @@ function Trigger({
   );
 }
 
-function Wrapper({
+export function Wrapper({
   label,
   hint,
   error,
+  required,
+  autoFilled,
   children,
 }: {
   label: string;
   hint?: string;
   error?: string;
+  required?: boolean;
+  autoFilled?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <View style={{ gap: space(1.5) }}>
-      <Label>{label}</Label>
+    <View style={{ gap: 4 }}>
+      <Label required={required} autoFilled={autoFilled}>{label}</Label>
       {children}
       {error ? <Caption tone="critical">{error}</Caption> : null}
       {hint && !error ? <Caption tone="faint">{hint}</Caption> : null}
@@ -131,6 +147,8 @@ export function SelectField({
   hint,
   error,
   disabled,
+  required,
+  autoFilled,
 }: {
   label: string;
   value: string;
@@ -140,13 +158,29 @@ export function SelectField({
   hint?: string;
   error?: string;
   disabled?: boolean;
+  required?: boolean;
+  autoFilled?: boolean;
 }) {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
   const current = options.find((o) => o.value === value);
 
+  useEffect(() => {
+    if (open) {
+      setSearch('');
+    }
+  }, [open]);
+
+  const filteredOptions = useMemo(() => {
+    if (!search) return options;
+    const q = search.toLowerCase();
+    return options.filter((o) => o.label.toLowerCase().includes(q));
+  }, [options, search]);
+
   return (
-    <Wrapper label={label} hint={hint} error={error}>
+    <Wrapper label={label} hint={hint} error={error} required={required} autoFilled={autoFilled}>
       <Trigger
         value={current?.label}
         placeholder={placeholder}
@@ -154,9 +188,22 @@ export function SelectField({
         disabled={disabled}
         onPress={() => setOpen(true)}
       />
-      <Sheet visible={open} title={label} onClose={() => setOpen(false)}>
-        <ScrollView style={{ maxHeight: 380 }}>
-          {options.map((option, i) => {
+      <Sheet
+        visible={open}
+        title={`Select ${label}`}
+        subtitle={`Choose your ${label.toLowerCase()} from the list.`}
+        onClose={() => setOpen(false)}
+      >
+        {options.length >= 10 && (
+          <View style={{ paddingHorizontal: space(4), marginBottom: space(2) }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: rgb(theme.surfaceRaised), borderRadius: radius.sm, borderWidth: 1, borderColor: rgb(theme.border), paddingHorizontal: space(3), height: 44 }}>
+              <MagnifyingGlass size={18} color={rgb(theme.ink[400])} style={{ marginRight: space(2) }} />
+              <TextInput style={{ flex: 1, fontSize: 16, color: rgb(theme.ink[900]) }} placeholder="Search..." placeholderTextColor={rgb(theme.ink[400])} value={search} onChangeText={setSearch} />
+            </View>
+          </View>
+        )}
+        <ScrollView style={{ paddingHorizontal: space(4), flexShrink: 1, marginBottom: insets.bottom + space(4) }}>
+          {filteredOptions.map((option, i) => {
             const active = option.value === value;
             return (
               <Pressable
@@ -169,28 +216,25 @@ export function SelectField({
                   setOpen(false);
                 }}
                 style={({ pressed }) => [
-                  {
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: space(3),
-                    paddingVertical: space(3.5),
-                    borderTopWidth: i === 0 ? 0 : StyleSheet.hairlineWidth,
-                    borderTopColor: rgb(theme.border),
-                    minHeight: 48,
-                  },
-                  pressed && { backgroundColor: rgb(theme.surfaceSunken) },
+                  { flexDirection: 'row', alignItems: 'center', paddingVertical: space(3), paddingHorizontal: space(2), borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: rgb(theme.border), minHeight: 48, borderRadius: radius.sm },
+                  active && { backgroundColor: rgba(theme.brand, 0.08) },
+                  pressed && !active && { backgroundColor: rgb(theme.surfaceSunken) },
                   option.disabled && { opacity: 0.45 },
                 ]}
               >
                 <View style={{ flex: 1, gap: space(0.5) }}>
-                  <Body>{option.label}</Body>
+                  <Body style={{ color: active ? rgb(theme.brandStrong) : rgb(theme.ink[900]) }}>{option.label}</Body>
                   {option.note ? <Caption tone="faint">{option.note}</Caption> : null}
                 </View>
                 {active ? <Check size={18} weight="bold" color={rgb(theme.brandStrong)} /> : null}
               </Pressable>
             );
           })}
-          {options.length === 0 && <Caption tone="faint">Nothing to choose from yet.</Caption>}
+          {filteredOptions.length === 0 && (
+            <View style={{ paddingVertical: space(4), alignItems: 'center' }}>
+              <Caption tone="faint">No options found.</Caption>
+            </View>
+          )}
         </ScrollView>
       </Sheet>
     </Wrapper>

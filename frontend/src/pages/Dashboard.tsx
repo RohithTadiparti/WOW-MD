@@ -16,6 +16,7 @@ import ClaimRequests from '../components/ClaimRequests';
 import GetStarted from '../components/GetStarted';
 import VendorDashboard from '../components/VendorDashboard';
 import IndividualDashboard from '../components/IndividualDashboard';
+import { AppDownloadCard } from '../components/AppDownload';
 import { ArrowRight } from '@phosphor-icons/react';
 import { AnimatedCard, AnimatedCounter } from '../components/ui/Motion';
 import {
@@ -823,6 +824,7 @@ export default function Dashboard({
         </section>
       )}
 
+      <AppDownloadCard />
     </div>
   );
 }

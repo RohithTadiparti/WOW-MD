@@ -8,14 +8,16 @@ import { todayIso } from '@/components/calendar';
 import { useActiveListing } from '@/lib/vendor-listing';
 import { isPlannerAccount } from '@/lib/planner-listing';
 import { PlannerListingForm } from '@/components/business/planner-listing';
-import { useAuth } from '@/store/auth';
+import { selectPermissions, useAuth } from '@/store/auth';
 import { GSTIN_PATTERN, PAN_PATTERN } from '@/shared/permissions';
 import { Divider, InfoNote } from '@/components/chrome';
-import { DateField, Textarea } from '@/components/form';
+import { Textarea } from '@/components/form';
+import { WowCalendar } from '@/components/common/WowCalendar';
 import { useCompletion, useRefreshBusiness } from '@/components/business/completion';
 import { VerifiedDetails } from '@/components/business/verified-details';
 import { CategoryPicker } from '@/components/business/category-picker';
 import { DocumentList, MediaStrip, PhotoPicker } from '@/components/uploader';
+import { SOCIAL_KEYS, SocialLinkFields, socialLinkErrors } from '@/components/social-links';
 import {
   Alert,
   Body,
@@ -59,6 +61,9 @@ const EMPTY = {
   tradingSince: '',
   registeredAddress: '',
   contactPhone: '',
+  website: '',
+  instagramUrl: '',
+  youtubeUrl: '',
 };
 
 type Form = typeof EMPTY;
@@ -81,7 +86,7 @@ function validateBusinessDescription(description: string): string | undefined {
  * writes `/vendors`, which a planner cannot hold, and was all this route did.
  */
 export default function BusinessDetailsRoute() {
-  const permissions = useAuth((s) => s.user?.permissions ?? []);
+  const permissions = useAuth(selectPermissions);
   return isPlannerAccount(permissions) ? <PlannerListingForm /> : <BusinessDetails />;
 }
 
@@ -129,6 +134,9 @@ function BusinessDetails() {
       tradingSince: listing.tradingSince ? listing.tradingSince.slice(0, 10) : '',
       registeredAddress: listing.registeredAddress ?? '',
       contactPhone: listing.contactPhone ?? '',
+      website: listing.website ?? '',
+      instagramUrl: listing.instagramUrl ?? '',
+      youtubeUrl: listing.youtubeUrl ?? '',
     });
     setCategories(listing.categories ?? []);
     setPortfolio(listing.portfolio ?? []);
@@ -189,7 +197,7 @@ function BusinessDetails() {
     } else if (!MOBILE.test(form.contactPhone.replace(/\s|-/g, ''))) {
       found.contactPhone = 'Enter a 10-digit Indian mobile number';
     }
-    return found;
+    return { ...found, ...socialLinkErrors(form) };
   }
 
   /** The lighter check for a verified/live listing: only what is on screen. */
@@ -203,7 +211,7 @@ function BusinessDetails() {
     } else if (!MOBILE.test(form.contactPhone.replace(/\s|-/g, ''))) {
       found.contactPhone = 'Enter a 10-digit Indian mobile number';
     }
-    return found;
+    return { ...found, ...socialLinkErrors(form) };
   }
 
   async function save() {
@@ -244,16 +252,19 @@ function BusinessDetails() {
           'contactPhone',
         ] as const) {
           // An empty string is not "not provided" — sending one fails the
-          // format checks on GST and PAN, so blanks are dropped instead.
-          if (form[key]) payload[key] = form[key];
+          // format checks on GST and PAN, so we send null to clear it instead of dropping it.
+          payload[key] = form[key] ? form[key] : null;
         }
       }
+      // Always sent: a blank social link is how one is removed.
+      for (const key of SOCIAL_KEYS) payload[key] = form[key].trim();
 
       const created = !listing;
       if (listing) await api.put(`/vendors/${listing.id}`, payload);
       else await api.post('/vendors', payload);
 
       refresh();
+      if (listing) void qc.invalidateQueries({ queryKey: ['vendor', listing.id] });
       // Wait for the saved listing, so the details shown next are the saved ones.
       await qc.refetchQueries({ queryKey: ['my-listing'] });
 
@@ -314,7 +325,7 @@ function BusinessDetails() {
             listing or an edit is said by the subtitle and by the save button. */}
         {presentationalOnly ? (
           <PageSubtitle>
-            Your listing is verified. About, contact number and photos are yours to change and go
+            Your listing is verified. About, contact number, social links and photos are yours to change and go
             live straight away. The verified details — name, category, PAN, GST, registration and
             address — are locked; use “Request a change” for those.
           </PageSubtitle>
@@ -394,6 +405,8 @@ function BusinessDetails() {
         />
       </Card>
 
+      <SocialLinkFields values={form} onChange={(key, value) => set(key)(value)} errors={errors} />
+
       {!presentationalOnly && (
         <>
           {/* The papers the officer asks to see. */}
@@ -452,11 +465,11 @@ function BusinessDetails() {
                 so families can see how long the business has run. Today or
                 earlier only; a future trading-since date is not a real one, and
                 the API enforces this too. */}
-            <DateField
+            <WowCalendar
               label="Trading since"
               value={form.tradingSince}
               onChange={set('tradingSince')}
-              to={todayIso()}
+              maximumDate={todayIso()}
               hint="Today or earlier."
             />
             <Textarea

@@ -78,6 +78,9 @@ export interface PublicVendor {
    * (null) on the single-listing view where the full catalogue is shown.
    */
   startingPrice: number | null;
+  website: string | null;
+  instagramUrl: string | null;
+  youtubeUrl: string | null;
 }
 
 export function publicVendor(v: Vendor, startingPrice: number | null = null): PublicVendor {
@@ -99,6 +102,9 @@ export function publicVendor(v: Vendor, startingPrice: number | null = null): Pu
     verifiedAt: v.verifiedAt,
     createdAt: v.createdAt,
     startingPrice,
+    website: v.website ?? null,
+    instagramUrl: v.instagramUrl ?? null,
+    youtubeUrl: v.youtubeUrl ?? null,
   };
 }
 

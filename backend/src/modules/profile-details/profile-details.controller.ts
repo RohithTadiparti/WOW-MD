@@ -1,10 +1,12 @@
 import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Put } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { ProfileDetailsService } from './profile-details.service';
 import {
   AssetDto,
   EducationDetailsDto,
   OccupationDetailsDto,
+  ExtractBiodataDto,
   FamilyDetailsDto,
   HoroscopeDetailsDto,
   MaritalDetailsDto,
@@ -148,6 +150,25 @@ export class ProfileDetailsController {
   @Delete('details')
   clearBiodata(@CurrentUser() actor: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.details.clearBiodata(actor, id);
+  }
+
+  @ApiOperation({
+    summary: 'Read an uploaded biodata photo into biodata fields',
+    description:
+      'Takes the storage key of a file the caller uploaded through /media/biodata/presign. ' +
+      'Each call is a paid model request, so it is limited per account. Answers 422 when ' +
+      'nothing could be read.',
+  })
+  // Per account (AccountThrottlerGuard keys on the signed-in user): a handful
+  // of retries is plenty for one person with one document.
+  @Throttle({ default: { limit: 5, ttl: 10 * 60 * 1000 } })
+  @Post('details/extract')
+  async extractBiodata(
+    @CurrentUser() actor: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ExtractBiodataDto,
+  ) {
+    return this.details.extractBiodata(actor, id, dto.key);
   }
 
   // -------------------------------------------------------------- photographs

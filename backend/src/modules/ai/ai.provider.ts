@@ -3,12 +3,30 @@ import { AppConfigService } from '../../config/app-config.service';
 import { GENIE_FALLBACK, answerFor } from './genie-knowledge';
 
 /**
+ * How one completion should be made.
+ *
+ * Per call rather than per provider, because the two callers want different
+ * things: the assistant is a conversation and reads better with some variety,
+ * while extraction is transcription and wants the same answer every time.
+ */
+export interface CompleteOptions {
+  /** An image for the model to read alongside the prompt. */
+  imageUrl?: string;
+  /** Defaults to DEFAULT_TEMPERATURE, the assistant's conversational setting. */
+  temperature?: number;
+  /** Ask for a JSON object back rather than prose. */
+  json?: boolean;
+}
+
+export const DEFAULT_TEMPERATURE = 0.7;
+
+/**
  * LLM abstraction. 'mock' returns deterministic, rule-based text so the WOW
  * Genie works offline and in tests; 'openai' calls a real chat completion API.
  * Both implement the same interface (selected via AI_PROVIDER).
  */
 export interface AiProvider {
-  complete(prompt: string): Promise<string>;
+  complete(prompt: string, options?: CompleteOptions): Promise<string>;
 }
 
 /**
@@ -38,12 +56,20 @@ export class OpenAiProvider implements AiProvider {
 
   constructor(private readonly cfg: AppConfigService) {}
 
-  async complete(prompt: string): Promise<string> {
+  async complete(prompt: string, options: CompleteOptions = {}): Promise<string> {
     const { apiKey, model, baseUrl } = this.cfg.ai;
     // Configured for a model and missing the key: answer from what is known
     // rather than telling the person about a configuration problem they cannot
     // do anything about.
     if (!apiKey) return answerFor(prompt) ?? GENIE_FALLBACK;
+
+    const userContent = options.imageUrl
+      ? [
+          { type: 'text', text: prompt },
+          { type: 'image_url', image_url: { url: options.imageUrl } },
+        ]
+      : prompt;
+
     const res = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
@@ -51,9 +77,10 @@ export class OpenAiProvider implements AiProvider {
         model,
         messages: [
           { role: 'system', content: 'You are WOW Genie, a concise Indian wedding planning assistant.' },
-          { role: 'user', content: prompt },
+          { role: 'user', content: userContent },
         ],
-        temperature: 0.7,
+        temperature: options.temperature ?? DEFAULT_TEMPERATURE,
+        ...(options.json ? { response_format: { type: 'json_object' } } : {}),
       }),
     });
     if (!res.ok) {

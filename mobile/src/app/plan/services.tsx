@@ -12,7 +12,7 @@ import {
 } from 'phosphor-react-native';
 import type { ComponentType } from 'react';
 
-import { Body, Caption, Card, Screen, SectionTitle } from '@/components/ui';
+import { Body, Caption, Card, Screen } from '@/components/ui';
 import { rgb, space, useTheme, radius } from '@/theme';
 
 const SERVICES: {
@@ -71,7 +71,6 @@ export default function PlanServices() {
 
   return (
     <Screen>
-      <SectionTitle>Additional Services</SectionTitle>
       <Caption tone="muted">Browse vendors for the extras around your ceremony days.</Caption>
 
       <Card style={{ padding: 0, overflow: 'hidden' }}>

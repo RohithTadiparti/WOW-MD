@@ -31,7 +31,7 @@ import {
   Screen,
   SectionTitle,
 } from '@/components/ui';
-import { useAuth } from '@/store/auth';
+import { selectPermissions, useAuth } from '@/store/auth';
 import { rgb, space, useTheme } from '@/theme';
 
 /**
@@ -52,7 +52,7 @@ export default function Visit() {
   const theme = useTheme();
   const qc = useQueryClient();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const permissions = useAuth((s) => s.user?.permissions ?? []);
+  const permissions = useAuth(selectPermissions);
 
   const canAllocate = can(permissions, Permission.VERIFICATION_ALLOCATE);
   const canDecide = can(permissions, Permission.VERIFICATION_DECIDE);

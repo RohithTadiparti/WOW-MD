@@ -209,8 +209,8 @@ export function Card({ children, style }: { children: ReactNode; style?: StylePr
           borderColor: rgb(theme.border),
           borderWidth: StyleSheet.hairlineWidth,
           borderRadius: radius.lg,
-          padding: space(4),
-          gap: space(2),
+          padding: space(3),
+          gap: space(3),
         },
         style,
       ]}
@@ -319,12 +319,16 @@ interface FieldProps extends TextInputProps {
    * they cannot see.
    */
   error?: string;
+  required?: boolean;
+  autoFilled?: boolean;
 }
 
 export function Field({
   label,
   hint,
   error,
+  required,
+  autoFilled,
   style,
   showPasswordToggle = false,
   ...props
@@ -334,7 +338,17 @@ export function Field({
   const secureTextEntry = Boolean(props.secureTextEntry) && !passwordVisible;
   return (
     <View style={{ gap: space(1.5) }}>
-      <Txt style={{ fontSize: 13, fontWeight: '500', color: rgb(theme.ink[600]) }}>{label}</Txt>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(1) }}>
+        <Txt style={{ fontSize: 13, fontWeight: '500', color: rgb(theme.ink[600]) }}>
+          {label}
+          {required ? <Txt style={{ color: rgb(theme.criticalFg) }}> *</Txt> : null}
+        </Txt>
+        {autoFilled && (
+          <View style={{ backgroundColor: rgb(theme.positiveBg), paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, flexDirection: 'row', alignItems: 'center' }}>
+            <Txt style={{ color: rgb(theme.positiveFg), fontSize: 10, fontWeight: '700' }}>AUTO-FILLED</Txt>
+          </View>
+        )}
+      </View>
       <View style={{ position: 'relative', justifyContent: 'center' }}>
         <TextInput
           placeholderTextColor={rgb(theme.ink[400])}

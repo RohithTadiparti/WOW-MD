@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, UnprocessableEntityException, forwardRef } from '@nestjs/common';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { MatchmakingService } from '../matchmaking/matchmaking.service';
 import { VendorsService } from '../vendors/vendors.service';
@@ -17,8 +17,8 @@ import { BUDGET_ALLOCATION } from './genie-knowledge';
 @Injectable()
 export class AiService {
   constructor(
-    private readonly matchmaking: MatchmakingService,
-    private readonly vendors: VendorsService,
+    @Inject(forwardRef(() => MatchmakingService)) private readonly matchmaking: MatchmakingService,
+    @Inject(forwardRef(() => VendorsService)) private readonly vendors: VendorsService,
     @Inject(AI_PROVIDER) private readonly ai: AiProvider,
   ) {}
 
@@ -92,4 +92,68 @@ export class AiService {
     const answer = await this.ai.complete(question);
     return { question, answer };
   }
+
+  async extractBiodata(documentUrl: string) {
+    const prompt = `You are a biodata extraction assistant. Please extract all the available biodata fields from this image and return them as a JSON object matching this exact structure:
+{
+  "firstName": "string (required if found)",
+  "lastName": "string",
+  "dateOfBirth": "YYYY-MM-DD",
+  "heightCm": "number (in cm)",
+  "complexion": "string (Fair, Wheatish, Dark)",
+  "communicationAddress": "string",
+  "alternateMobile": "string",
+  "religion": "string",
+  "caste": "string",
+  "subCaste": "string",
+  "motherTongue": "string",
+  "maritalStatus": "string (never_married, divorced, widowed, awaiting_divorce)",
+  "education": { "highestQualification": "string", "course": "string", "institution": "string", "occupationStatus": "string (employed, self_employed, not_working)" },
+  "family": { "father": { "name": "string", "profession": "string" }, "mother": { "name": "string", "profession": "string" } }
+}
+Do not invent values. If a field is not present in the document, omit it or set it to null. Return ONLY raw JSON, without markdown formatting or code blocks.`;
+    const responseText = await this.ai.complete(prompt, {
+      imageUrl: documentUrl,
+      temperature: EXTRACTION_TEMPERATURE,
+      json: true,
+    });
+    const extracted = parseExtraction(responseText);
+    // Nothing read is a failure, not an empty success: the app would otherwise
+    // announce that the details were filled in and show a blank form.
+    if (!extracted) {
+      throw new UnprocessableEntityException(
+        'We could not read that document. Try a clearer photo of it, or enter the details yourself.',
+      );
+    }
+    return extracted;
+  }
+}
+
+/** Extraction is transcription: the same document should read the same way twice. */
+export const EXTRACTION_TEMPERATURE = 0.1;
+
+/**
+ * The fields a model reply actually carries, or null when it carries none.
+ *
+ * The reply is untrusted text: it may be prose, a fenced block, or JSON whose
+ * every value is null. Only an object with at least one real value counts.
+ */
+export function parseExtraction(text: string): Record<string, unknown> | null {
+  const body = text.replace(/^\s*```(?:json)?/i, '').replace(/```\s*$/, '').trim();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  return hasValue(parsed) ? (parsed as Record<string, unknown>) : null;
+}
+
+function hasValue(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (Array.isArray(value)) return value.some(hasValue);
+  if (typeof value === 'object') return Object.values(value as object).some(hasValue);
+  return true;
 }

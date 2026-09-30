@@ -68,6 +68,12 @@ export class PlannerProfile {
   @Column({ type: 'varchar', length: 200, nullable: true })
   website: string | null;
 
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  instagramUrl: string | null;
+
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  youtubeUrl: string | null;
+
   @Column({ type: 'jsonb', default: [] })
   portfolio: string[];
 

@@ -59,6 +59,7 @@ describe.each(Object.values(ProfileVisibility))('profile visibility %s', visibil
         {} as never, {} as never, {} as never,
         { findOne: async ({ where }: { where: Record<string, unknown>[] }) =>
           state !== 'none' && where.some(w => matches(interest, w)) ? interest : null } as never,
+        {} as never, {} as never,
       );
       const actor = { userId: viewer.userId, role: UserRole.BRIDE } as AuthUser;
       const view = new ProfileDetailsController(service).view(actor, target.id);
@@ -149,6 +150,8 @@ describe.each(Object.values(ProfileVisibility))('profile visibility %s', visibil
       {
         findOne: async () => null,
       } as never,
+      {} as never,
+      {} as never,
     );
     const response = await new ProfileDetailsController(service).view(agent, clientB.id);
     if (visibility === ProfileVisibility.PUBLIC) {

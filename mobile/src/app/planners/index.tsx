@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Image, Pressable, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
-import { Heart, MagnifyingGlass, MapPin, SealCheck, SlidersHorizontal, Star } from 'phosphor-react-native';
+import { Heart, MagnifyingGlass, MapPin, SlidersHorizontal, Star } from 'phosphor-react-native';
 
 import { api, apiMessage } from '@/lib/api';
 import { loadPlannerShortlist, togglePlannerShortlist } from '@/lib/plan-shortlist';
@@ -14,7 +14,6 @@ import {
   EmptyState,
   Loading,
   PageSubtitle,
-  PageTitle,
   Screen,
 } from '@/components/ui';
 import { rgb, space, useTheme, radius } from '@/theme';
@@ -50,7 +49,8 @@ export default function HirePlanner() {
         await api.get('/wedding-planners/search', {
           params: {
             city: city || undefined,
-            limit: 30,
+            // The API has no name search, so the box below filters this page: take the most it gives.
+            limit: 100,
           },
         })
       ).data as { data?: Planner[] } | Planner[],
@@ -69,10 +69,7 @@ export default function HirePlanner() {
 
   return (
     <Screen>
-      <View>
-        <PageTitle>Hire a Planner</PageTitle>
-        <PageSubtitle>Find an expert to run the wedding day by day.</PageSubtitle>
-      </View>
+      <PageSubtitle>Find an expert to run the wedding day by day.</PageSubtitle>
 
       <View
         style={{
@@ -94,6 +91,8 @@ export default function HirePlanner() {
           style={{ flex: 1, padding: space(3), color: rgb(theme.ink[900]) }}
         />
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={filters ? 'Hide filters' : 'Show filters'}
           onPress={() => setFilters((open) => !open)}
           style={{
             marginRight: space(1),
@@ -157,11 +156,10 @@ export default function HirePlanner() {
                 <Pressable onPress={openPlanner} style={{ flex: 1, gap: 3 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                     <Body style={{ fontWeight: '700' }}>{planner.agencyName}</Body>
-                    <SealCheck size={14} color={rgb(theme.positiveFg)} weight="fill" />
                   </View>
                   <Caption>
                     <Star size={12} color={rgb(theme.brand)} weight="fill" />{' '}
-                    {planner.ratingAvg.toFixed(1)} ({planner.ratingCount}) · Wedding Planner
+                    {Number(planner.ratingAvg).toFixed(1)} ({planner.ratingCount}) · Wedding Planner
                   </Caption>
                   <Caption tone="faint">
                     <MapPin size={12} color={rgb(theme.ink[400])} />{' '}

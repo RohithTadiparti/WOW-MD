@@ -1,4 +1,5 @@
 import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
+import { RsvpStatus } from '../../../common/enums';
 
 @Entity('guests')
 export class Guest {
@@ -42,6 +43,34 @@ export class Guest {
 
   @Column({ type: 'varchar', length: 60, nullable: true })
   relation: string | null;
+
+  /** The host's own notes; never shown to the guest. */
+  @Column({ type: 'text', nullable: true })
+  notes: string | null;
+
+  /**
+   * The guest's one invitation to the whole wedding — every event the host
+   * has — answered once. Null status means not invited yet. Per-event invites
+   * are kept in step so event-level counts agree.
+   */
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  rsvpStatus: RsvpStatus | null;
+
+  @Index('IDX_guests_rsvp_token_hash', { unique: true, where: '"rsvpTokenHash" IS NOT NULL' })
+  @Column({ type: 'varchar', nullable: true, select: false })
+  rsvpTokenHash: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  rsvpTokenExpiresAt: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  respondedAt: Date | null;
+
+  @Column({ type: 'int', nullable: true })
+  attendingCount: number | null;
+
+  @Column({ type: 'text', nullable: true })
+  declineReason: string | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;

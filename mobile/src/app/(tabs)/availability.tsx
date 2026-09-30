@@ -23,7 +23,7 @@ import {
   Screen,
   SectionTitle,
 } from '@/components/ui';
-import { useAuth } from '@/store/auth';
+import { selectPermissions, useAuth } from '@/store/auth';
 import { useBusinesses } from '@/store/business';
 import { space } from '@/theme';
 
@@ -97,7 +97,7 @@ const DAY_TONE: Record<string, DayTone> = {
  */
 export default function Availability() {
   const qc = useQueryClient();
-  const permissions = useAuth((s) => s.user?.permissions ?? []);
+  const permissions = useAuth(selectPermissions);
   const isPlanner =
     can(permissions, Permission.PLANNER_LISTING_MANAGE) &&
     !can(permissions, Permission.VENDOR_LISTING_MANAGE);

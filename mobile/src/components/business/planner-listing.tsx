@@ -10,6 +10,7 @@ import { EMAIL_PATTERN } from '@/shared/permissions';
 import { Badge, Divider } from '@/components/chrome';
 import { Textarea } from '@/components/form';
 import { MediaStrip, PhotoPicker } from '@/components/uploader';
+import { SOCIAL_KEYS, SocialLinkFields, socialLinkErrors } from '@/components/social-links';
 import {
   Alert,
   Body,
@@ -48,6 +49,8 @@ const EMPTY = {
   contactEmail: '',
   address: '',
   website: '',
+  instagramUrl: '',
+  youtubeUrl: '',
 };
 
 type Form = typeof EMPTY;
@@ -88,6 +91,8 @@ export function PlannerListingForm() {
       contactEmail: listing.contactEmail ?? '',
       address: listing.address ?? '',
       website: listing.website ?? '',
+      instagramUrl: listing.instagramUrl ?? '',
+      youtubeUrl: listing.youtubeUrl ?? '',
     });
     setPackages(listing.packages ?? []);
     setPortfolio(listing.portfolio ?? []);
@@ -133,7 +138,7 @@ export function PlannerListingForm() {
     if (years && !(/^\d{1,2}$/.test(years) && Number(years) <= 80)) {
       found.yearsExperience = 'Years of experience, from 0 to 80';
     }
-    return found;
+    return { ...found, ...socialLinkErrors(form) };
   }
 
   async function save() {
@@ -156,14 +161,16 @@ export function PlannerListingForm() {
         portfolio,
       };
       // A blank is dropped rather than sent: an empty phone or email fails the
-      // server's format checks, and a field left out keeps what was saved.
-      for (const key of ['city', 'contactPerson', 'contactPhone', 'contactEmail', 'address', 'website'] as const) {
-        if (form[key].trim()) payload[key] = form[key].trim();
+      // server's format checks, so we send null to clear it instead of dropping it.
+      for (const key of ['city', 'contactPerson', 'contactPhone', 'contactEmail', 'address'] as const) {
+        payload[key] = form[key].trim() ? form[key].trim() : null;
       }
-      if (form.yearsExperience.trim()) payload.yearsExperience = Number(form.yearsExperience);
+      // Always sent: a blank social link is how one is removed.
+      for (const key of SOCIAL_KEYS) payload[key] = form[key].trim();
+      payload.yearsExperience = form.yearsExperience.trim() ? Number(form.yearsExperience) : null;
 
       await api.put('/wedding-planners/me', payload);
-      for (const key of ['planner-me', 'payout-account']) {
+      for (const key of ['planner-me', 'payout-account', 'planner']) {
         void qc.invalidateQueries({ queryKey: [key] });
       }
       setNotice(
@@ -259,15 +266,9 @@ export function PlannerListingForm() {
           autoCorrect={false}
         />
         <Textarea label="Address" value={form.address} onChange={set('address')} rows={3} maxLength={500} />
-        <Field
-          label="Website"
-          value={form.website}
-          onChangeText={set('website')}
-          autoCapitalize="none"
-          autoCorrect={false}
-          maxLength={200}
-        />
       </Card>
+
+      <SocialLinkFields values={form} onChange={(key, value) => set(key)(value)} errors={errors} />
 
       <Card>
         <SectionTitle>Packages</SectionTitle>

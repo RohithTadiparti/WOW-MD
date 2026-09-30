@@ -6,7 +6,7 @@ import { api, apiMessage } from '@/lib/api';
 import { Permission, can } from '@/shared/permissions';
 import { FilterChips } from '@/components/chrome';
 import { Caption } from '@/components/ui';
-import { useAuth } from '@/store/auth';
+import { selectPermissions, useAuth } from '@/store/auth';
 import { space } from '@/theme';
 
 /**
@@ -30,7 +30,7 @@ interface ActableProfile {
 }
 
 export function useActingClient() {
-  const permissions = useAuth((s) => s.user?.permissions ?? []);
+  const permissions = useAuth(selectPermissions);
   const isAgent = can(permissions, Permission.AGENCY_MANAGE);
   const chosen = useActingClientStore((s) => s.profileId);
   const setProfileId = useActingClientStore((s) => s.set);

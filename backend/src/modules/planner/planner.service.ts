@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { WeddingPlan } from './entities/wedding-plan.entity';
 import { PlanTask } from './entities/plan-task.entity';
 import { User } from '../auth/entities/user.entity';
@@ -78,8 +78,24 @@ export class PlannerService {
       );
     }
 
+    // A plan made before the date was known (a budget, or an engaged planner)
+    // gets the date rather than a second plan beside it.
+    const [undated, latest] = await Promise.all([
+      this.plans.findOne({
+        where: { userId: hostUserId, weddingDate: IsNull() },
+        order: { createdAt: 'DESC' },
+      }),
+      this.plans.findOne({ where: { userId: hostUserId }, order: { createdAt: 'DESC' } }),
+    ]);
+    // The overall budget belongs to the couple, not to one plan. `setBudget`
+    // writes it to the newest plan and the dashboard reads the newest plan, so
+    // a new plan (a changed date, say) carries it forward rather than quietly
+    // dropping it.
+    const budget = latest?.budget ?? undated?.budget ?? null;
     const plan = await this.plans.save(
-      this.plans.create({ userId: hostUserId, weddingDate: dto.weddingDate }),
+      undated
+        ? Object.assign(undated, { weddingDate: dto.weddingDate, budget })
+        : this.plans.create({ userId: hostUserId, weddingDate: dto.weddingDate, budget }),
     );
 
     const tasks = DEFAULT_TIMELINE_TEMPLATE.map((item) => {
@@ -103,6 +119,19 @@ export class PlannerService {
     await this.tasks.save(tasks);
 
     return this.getTimeline(actor, plan.id);
+  }
+
+  /**
+   * Sets the couple's overall wedding budget on their current plan — the one
+   * the dashboard reads — creating an undated plan when there is none yet.
+   */
+  async setBudget(actor: AuthUser, budget: number | null): Promise<{ budget: string | null }> {
+    const plan =
+      (await this.plans.findOne({ where: { userId: actor.userId }, order: { createdAt: 'DESC' } })) ??
+      this.plans.create({ userId: actor.userId, weddingDate: null });
+    plan.budget = budget === null ? null : budget.toFixed(2);
+    const saved = await this.plans.save(plan);
+    return { budget: saved.budget };
   }
 
   async getTimeline(actor: AuthUser, planId: string): Promise<WeddingPlan> {

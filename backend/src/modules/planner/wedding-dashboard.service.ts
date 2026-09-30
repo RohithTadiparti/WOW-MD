@@ -220,7 +220,7 @@ export class WeddingDashboardService {
 
     return {
       countdown: this.countdown(plan, events),
-      budget: await this.budget(userId, events),
+      budget: await this.budget(userId, events, plan),
       guests: this.guestSummary(guests, invites),
       journey: this.journey(tasks),
       upcoming: this.upcoming(events),
@@ -266,7 +266,7 @@ export class WeddingDashboardService {
    * zero: a request nobody has priced is not a commitment, and counting it at
    * the buyer's hoped-for budget would make the total a wish.
    */
-  private async budget(userId: string, events: WeddingEvent[]) {
+  private async budget(userId: string, events: WeddingEvent[], plan: WeddingPlan | null = null) {
     // Whichever of a match-fixed couple booked a vendor, it is the wedding's
     // commitment (EZ1-I160).
     const partner = await this.matchmaking.fixedPartnerUserId(userId);
@@ -312,10 +312,14 @@ export class WeddingDashboardService {
       }))
       .sort((a, b) => Number(b.committed) - Number(a.committed));
 
-    const budgeted = categories.reduce((t, c) => t + Number(c.budgeted), 0);
+    // The couple's overall budget, when they have set one, is the wedding's
+    // budget; the sum of event budgets only stands in until then.
+    const total = plan?.budget != null ? Number(plan.budget) : null;
+    const budgeted = total ?? categories.reduce((t, c) => t + Number(c.budgeted), 0);
     const committed = categories.reduce((t, c) => t + Number(c.committed), 0);
 
     return {
+      total: total === null ? null : total.toFixed(2),
       budgeted: budgeted.toFixed(2),
       committed: committed.toFixed(2),
       remaining: (budgeted - committed).toFixed(2),

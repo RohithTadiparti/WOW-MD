@@ -58,14 +58,14 @@ interface Escrow {
   records: EscrowRecord[];
 }
 
-const BUYER_PAYMENT_STATUS_LABEL: Record<string, string> = {
-  initiated: 'Processing',
-  held_in_escrow: 'Held in escrow',
-  disputed: 'Frozen: case open',
-  pending_payout: 'Released, payout to the provider pending',
-  released: 'Released to provider',
-  refunded: 'Refunded to you',
-  partially_settled: 'Part settled',
+export const BUYER_PAYMENT_STATUS_LABEL: Record<string, string> = {
+  initiated: 'Payment required',
+  held_in_escrow: 'Funds secured',
+  disputed: 'Dispute under review',
+  pending_payout: 'Awaiting payout/release',
+  released: 'Funds released',
+  refunded: 'Funds refunded',
+  partially_settled: 'Partially released',
   failed: 'Payment failed',
 };
 
@@ -295,6 +295,9 @@ export default function EscrowScreen() {
                                 </Badge>
                               </View>
                               <Caption tone="muted">{paymentWhenLabel(p)}</Caption>
+                              <Caption tone="muted" style={{ fontFamily: 'monospace', fontSize: 11 }}>
+                                Booking {r.bookingId}
+                              </Caption>
                               <Caption tone="muted" style={{ fontFamily: 'monospace', fontSize: 11 }}>
                                 Payment {p.paymentId}
                               </Caption>
