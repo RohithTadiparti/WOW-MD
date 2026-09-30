@@ -1424,7 +1424,10 @@ export function CaseRow({
 
       {businessChange && item.requestedFields?.length ? (
         <p className="rounded-sm bg-sky-50 p-2 text-sm text-sky-900">
-          Requested fields: {item.requestedFields.join(', ')}
+          Requested fields:{' '}
+          {item.requestedFields
+            .map((field) => CORRECTION_FIELD_LABELS[field === 'categories' ? 'category' : field] ?? field)
+            .join(', ')}
         </p>
       ) : null}
 

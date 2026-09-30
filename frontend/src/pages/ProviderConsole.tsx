@@ -13,6 +13,7 @@ import CategoryPicker, { useCategoryNames } from '../components/CategoryPicker';
 import VendorServices, { priceLabel } from '../components/VendorServices';
 import PhotoUploader from '../components/PhotoUploader';
 import {
+  CORRECTABLE_FIELD_KEYS,
   CORRECTION_FIELD_LABELS,
   GSTIN_PATTERN,
   PAN_PATTERN,
@@ -522,7 +523,19 @@ function ReviewSummary({ current }: { current: VendorListing }) {
   );
 }
 
-function validateBusinessDescription(description: string): string | undefined {
+/**
+ * The description rules for a new or rewritten description.
+ *
+ * Not applied to a description the vendor left as it was: a live listing
+ * saved before these rules existed may have a shorter one, and changing its
+ * contact number or photos must not wait on rewriting it. The server does
+ * not enforce the minimum either, so this is guidance on new text only.
+ */
+function validateBusinessDescription(
+  description: string,
+  saved?: string | null,
+): string | undefined {
+  if (saved !== undefined && description.trim() === (saved ?? '').trim()) return undefined;
   if (!description.trim()) return 'Description is required.';
   if (description.length > 1000) return 'Description cannot exceed 1,000 characters.';
   if (description.trim().length < 50) return 'Description must contain at least 50 characters.';
@@ -614,7 +627,7 @@ function VendorListingForm({
   /** Field-level, and specific about what is wrong rather than "invalid". */
   function validate(): Record<string, string> {
     const errors: Record<string, string> = {};
-    const descriptionError = validateBusinessDescription(form.description);
+    const descriptionError = validateBusinessDescription(form.description, current?.description);
     if (descriptionError) errors.description = descriptionError;
     const businessName = form.name.trim();
     if (!businessName) errors.name = 'Business name is required.';
@@ -671,7 +684,7 @@ function VendorListingForm({
    */
   function validatePresentational(): Record<string, string> {
     const errors: Record<string, string> = {};
-    const descriptionError = validateBusinessDescription(form.description);
+    const descriptionError = validateBusinessDescription(form.description, current?.description);
     if (descriptionError) errors.description = descriptionError;
     if (portfolio.length === 0) errors.portfolio = 'Add at least one portfolio photo';
     if (!form.contactPhone.trim()) {
@@ -1171,6 +1184,9 @@ function RequestChange({ vendorId }: { vendorId: string }) {
         subjectId: vendorId,
         title: 'Change request: verified business details',
         description: reason.trim(),
+        // Said explicitly: an ordinary "My business listing" case is also about
+        // a vendor, and must not be treated as a request for edit access.
+        category: 'business_change',
         requestedFields: fields,
       });
       setMsg('Sent. An administrator will review your request and grant edit access if it is approved.');
@@ -1202,15 +1218,8 @@ function RequestChange({ vendorId }: { vendorId: string }) {
           <fieldset>
             <legend className="label">Details to change</legend>
             <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-gray-700">
-              {[
-                ['name', 'Business name'],
-                ['categories', 'Categories'],
-                ['registeredAddress', 'Business address'],
-                ['contactPhone', 'Contact details'],
-                ['description', 'Business description'],
-                ['portfolio', 'Photos'],
-                ['complianceDocuments', 'Supporting documents'],
-              ].map(([value, label]) => (
+              {/* The server's correction keys, so a granted request opens exactly these. */}
+              {CORRECTABLE_FIELD_KEYS.map((value) => [value, CORRECTION_FIELD_LABELS[value]]).map(([value, label]) => (
                 <label key={value} className="flex items-center gap-1.5">
                   <input
                     type="checkbox"

@@ -6,16 +6,17 @@ import { Textarea } from '@/components/form';
 import { Alert, Body, Button, Caption, Card, SectionTitle } from '@/components/ui';
 import { radius, rgb, space, useTheme } from '@/theme';
 import { Check } from 'phosphor-react-native';
+import { CORRECTABLE_FIELD_KEYS, CORRECTION_FIELD_LABELS } from '@/shared/permissions';
 
-const CHANGE_OPTIONS = [
-  { value: 'name', label: 'Business name' },
-  { value: 'categories', label: 'Categories' },
-  { value: 'registeredAddress', label: 'Business address' },
-  { value: 'contactPhone', label: 'Contact details' },
-  { value: 'description', label: 'Business description' },
-  { value: 'portfolio', label: 'Photos' },
-  { value: 'complianceDocuments', label: 'Supporting documents' },
-] as const;
+/**
+ * The server's own correction keys, so a granted request opens exactly the
+ * fields that were ticked. Shared with the web client and checked against the
+ * backend list there, so the three cannot drift apart.
+ */
+const CHANGE_OPTIONS = CORRECTABLE_FIELD_KEYS.map((value) => ({
+  value,
+  label: CORRECTION_FIELD_LABELS[value],
+}));
 
 /**
  * A verified listing's legal details are locked, so a genuine change to one
@@ -44,6 +45,9 @@ export function RequestChange({ vendorId }: { vendorId: string }) {
         subjectId: vendorId,
         title: 'Change request: verified business details',
         description: detail.trim(),
+        // Said explicitly: an ordinary "My business listing" case is also about
+        // a vendor, and must not be treated as a request for edit access.
+        category: 'business_change',
         requestedFields: fields,
       });
       setNotice('Sent. An administrator will review the request and grant temporary edit access if approved.');
