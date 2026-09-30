@@ -1,21 +1,19 @@
-# Daily mobile builds: an Android test APK and an iOS build for TestFlight.
+# Daily Android test build.
 #
 # Runs once a day, and builds only when main has changed the app since the last
-# successful run — no change, no build, so EAS build credits go on real changes.
-# "Run workflow" on the Actions tab builds on demand; tick "force" to build even
-# when nothing changed.
+# successful run — no change, no build. "Run workflow" on the Actions tab builds
+# on demand; tick "force" to build even when nothing changed.
 #
 # What counts as a change: anything under mobile/, and frontend/src/lib/, which
 # the app reads a handful of modules out of (see mobile/metro.config.js).
 #
-# Android is built here, on GitHub's runner, and published as the release
-# "android-latest" (wow.apk), replaced on every build. iOS is handed to EAS:
-# it builds on Expo's macOS machines and submits to TestFlight itself, so this
-# job only starts it. Build numbers are kept by EAS (appVersionSource: remote),
-# so nothing is committed back to the repository.
+# The APK is built here, on GitHub's runner, and published as the release
+# "android-latest" (wow.apk), replaced on every build, so its download link
+# never changes. Nothing is committed back to the repository and no secrets are
+# needed.
 #
-# Secrets: EXPO_TOKEN (an Expo access token). Without it the iOS job is skipped
-# and Android still builds.
+# iOS is left out for now; it goes through EAS (see docs/MOBILE-BUILDS.md) and
+# gets its own job once the Apple account is set up.
 
 name: Mobile builds
 
@@ -29,11 +27,6 @@ on:
         description: Build even if nothing changed since the last build
         type: boolean
         default: false
-      platforms:
-        description: Which platforms to build
-        type: choice
-        options: [both, android, ios]
-        default: both
 
 permissions:
   contents: write # the android-latest release
@@ -81,7 +74,7 @@ jobs:
 
   android:
     needs: changes
-    if: needs.changes.outputs.build == 'true' && inputs.platforms != 'ios'
+    if: needs.changes.outputs.build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     defaults:
@@ -137,46 +130,3 @@ jobs:
           gh release create android-latest wow.apk --prerelease \
             --title "Android test build" --notes "$notes" --target "$GITHUB_SHA"
           echo "APK: https://github.com/${GITHUB_REPOSITORY}/releases/download/android-latest/wow.apk" >> "$GITHUB_STEP_SUMMARY"
-
-  ios:
-    needs: changes
-    if: needs.changes.outputs.build == 'true' && inputs.platforms != 'android'
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: mobile
-    env:
-      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-    steps:
-      - name: Check for the Expo token
-        id: token
-        run: |
-          if [ -z "$EXPO_TOKEN" ]; then
-            echo "EXPO_TOKEN is not set; skipping the iOS build." >> "$GITHUB_STEP_SUMMARY"
-            echo "present=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          fi
-      - uses: actions/checkout@v4
-        if: steps.token.outputs.present == 'true'
-      - uses: actions/setup-node@v4
-        if: steps.token.outputs.present == 'true'
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: mobile/package-lock.json
-      - uses: expo/expo-github-action@v8
-        if: steps.token.outputs.present == 'true'
-        with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
-      - run: npm ci
-        if: steps.token.outputs.present == 'true'
-      # --no-wait: EAS builds and submits on its own machines; this runner
-      # would otherwise sit idle for the whole build.
-      - name: Start the iOS build and TestFlight submission
-        if: steps.token.outputs.present == 'true'
-        run: |
-          eas build --platform ios --profile production --non-interactive --no-wait --auto-submit \
-            --message "Daily build of ${GITHUB_SHA:0:7}" | tee /tmp/eas.log
-          grep -Eo 'https://expo.dev/[^ ]+' /tmp/eas.log | head -1 | sed 's/^/EAS build: /' >> "$GITHUB_STEP_SUMMARY" || true
