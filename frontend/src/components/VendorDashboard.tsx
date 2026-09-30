@@ -18,6 +18,7 @@ import { formatShortDate, daysAway } from '../lib/dates';
 import { Loading } from './ui/Feedback';
 import GetStarted from './GetStarted';
 import BookingsOverviewChart from './BookingsOverviewChart';
+import { AppDownloadCard } from './AppDownload';
 import {
   BUSINESS_STATUS_LABEL,
   BookingList,
@@ -389,6 +390,8 @@ export default function VendorDashboard() {
           <QuickAction to="/support" icon={Lifebuoy} label="Contact support" />
         </div>
       </section>
+
+      <AppDownloadCard />
     </div>
   );
 }
