@@ -530,7 +530,15 @@ export class SharingService {
 
     return shares.flatMap((share) => {
       const profile = byId.get(share.profileId);
-      if (!profile) return [];
+      // A profile archived, suspended or made private since it was shared
+      // drops off the list rather than taking the whole list down with it.
+      if (
+        !profile ||
+        profile.lifecycle !== ProfileLifecycle.ACTIVE ||
+        profile.visibility === ProfileVisibility.PRIVATE
+      ) {
+        return [];
+      }
 
       const agency = agencyByUser.get(share.sharedByUserId);
       const user = userById.get(share.sharedByUserId);

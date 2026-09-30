@@ -238,8 +238,11 @@ export interface BiodataView {
 export function toBiodata(
   profile: Profile,
   basic?: BiodataView['basic'],
+  opts: { recipient?: boolean } = {},
 ): BiodataView {
-  if (profile.visibility !== ProfileVisibility.PUBLIC) {
+  // A named recipient of a deliberate share gets the full sheet whatever the
+  // visibility; the anonymous link and the pool see it only for PUBLIC profiles.
+  if (!opts.recipient && profile.visibility !== ProfileVisibility.PUBLIC) {
     return { id: profile.id, displayName: profile.displayName, photos: [],
       ageRange: ageBand(profile.dateOfBirth), dateOfBirth: null,
       basic: basic ? { religion: basic.religion, caste: basic.caste, motherTongue: basic.motherTongue,
@@ -304,7 +307,12 @@ export function toPublicProfile(
   profile: Profile,
   opts: ProfileAccessRelationship & { matched?: boolean; card?: ProfileCardFacts; sourceAgency?: string | null } = {},
 ): PublicProfileView {
-  const full = hasFullProfileAccess(profile.visibility, opts);
+  // `matched` is the older spelling of an accepted interest; both unlock.
+  const related = Boolean(opts.owner || opts.fixed || opts.accepted || opts.matched);
+  const full = hasFullProfileAccess(profile.visibility, {
+    ...opts,
+    accepted: Boolean(opts.accepted || opts.matched),
+  });
   const matched = Boolean(opts.matched ?? (opts.owner ? true : full));
   const allPhotos = profile.photos ?? [];
   if (!full) {
@@ -345,7 +353,9 @@ export function toPublicProfile(
     };
   }
 
-  const photos = allPhotos;
+  // Even a PUBLIC profile shows only its lead photo until there is a
+  // relationship: the full set opens once both sides have agreed.
+  const photos = related ? allPhotos : allPhotos.slice(0, 1);
 
   return {
     sourceAgency: opts.sourceAgency ?? null,

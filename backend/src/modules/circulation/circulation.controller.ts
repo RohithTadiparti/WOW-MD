@@ -188,7 +188,8 @@ export class CirculationController {
   @Get('shared-with-me')
   async sharedWithMe(@CurrentUser() actor: AuthUser) {
     const rows = await this.sharing.sharedWithMe(actor);
-    return Promise.all(rows.map(async ({ share, profile, sharedBy }) => ({
+    const cards = await this.details.basicCards(rows.map(({ profile }) => profile.id));
+    return rows.map(({ share, profile, sharedBy }) => ({
       shareId: share.id,
       sharedAt: share.createdAt,
       message: share.message,
@@ -198,9 +199,8 @@ export class CirculationController {
       sharedBy,
       // A recipient gets the full biodata: the point of circulating is that they
       // can assess the match. They still cannot edit it or act as it.
-      profile: { ...(await this.details.findViewable(actor, profile.id)).profile,
-        basic: await this.details.basicCard(profile.id) },
-    })));
+      profile: toBiodata(profile, cards.get(profile.id), { recipient: true }),
+    }));
   }
 
   @ApiOperation({

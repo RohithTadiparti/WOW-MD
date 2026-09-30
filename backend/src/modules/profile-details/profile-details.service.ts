@@ -787,11 +787,38 @@ export class ProfileDetailsService {
       profile.managedByUserId === actor.userId ||
       actor.role === UserRole.ADMIN;
 
-    const basicOnly = !(await this.canSeeFull(actor, profile));
     if (!controlsIt && profile.lifecycle !== ProfileLifecycle.ACTIVE) {
       throw new NotFoundException('That profile is not available');
     }
+    const basicOnly = !(await this.canSeeFull(actor, profile));
+    // Explicitly PRIVATE stays fully shut to anyone who does not control it,
+    // until a match with it has been confirmed as fixed.
+    if (basicOnly && !controlsIt && profile.visibility === ProfileVisibility.PRIVATE) {
+      throw new ForbiddenException('That profile is private');
+    }
     if (basicOnly) {
+      const detail = await this.details.findOne({ where: { profileId } });
+      // The horoscope headline (rashi, star, padam, gothram, kuja dosham) is on
+      // the match card already and is what many families compare on before they
+      // decide (EZ1-I48), so the basic profile view carries it too.
+      const chart = detail?.horoscopeAvailable ? (detail.horoscope ?? {}) : {};
+      const basicDetails = detail
+        ? {
+            ...this.cardFor(detail),
+            horoscopeAvailable: detail.horoscopeAvailable,
+            rashi: (chart.rashi as string | undefined) ?? null,
+            star: (chart.star as string | undefined) ?? null,
+            padam: (chart.padam as string | undefined) ?? null,
+            gothram: (chart.gothram as string | undefined) ?? null,
+            kujaDosham: (chart.kujaDosham as string | undefined) ?? null,
+            // The chart itself travels before the mutual accept (EZ1-I231): in
+            // this market it is what families compare before sending interest,
+            // and everything computed from it is already shown above. Family,
+            // contact, marital history and the rest of the gallery stay behind
+            // the accept.
+            horoscopeDocumentUrl: detail.horoscopeDocumentUrl ?? null,
+          }
+        : null;
       return {
         profileId,
         accessLevel: 'basic' as const,
@@ -800,18 +827,23 @@ export class ProfileDetailsService {
             ? ('fixed_match' as const)
             : ('accepted_interest' as const),
         limited: true as const,
+        // Empty, not absent: the profile view renders these lists, and the basic
+        // card deliberately carries none of the private biodata behind them.
         siblings: [],
         assets: [],
         contact: null,
-        details: await this.basicCard(profileId),
+        details: basicDetails,
         profile: {
           id: profile.id,
           profileCode: profile.profileCode,
           displayName: profile.displayName,
           city: profile.city,
           gender: profile.gender,
+          // An age band, not the exact date of birth: enough to judge a match,
+          // not the full record, which is what the mutual accept unlocks.
           ageRange: ageBand(profile.dateOfBirth),
-          photos: [],
+          // One lead photo, so the family can decide whether to send interest.
+          photos: (profile.photos ?? []).slice(0, 1),
           identityVerified: Boolean(profile.idVerifiedAt),
           managingFor: profile.managingFor,
           stewardship: await this.stewardshipOf(profile),
