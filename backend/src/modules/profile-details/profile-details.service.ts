@@ -310,6 +310,16 @@ export class ProfileDetailsService {
       occupationStatus: dto.occupationStatus,
       employment: dto.employment ?? {},
       business: dto.business ?? {},
+      // Absent leaves the list alone, so an older client cannot wipe it.
+      ...(dto.otherIncome !== undefined
+        ? {
+            otherIncome: dto.otherIncome.map(({ source, details, annualIncome }) => ({
+              source,
+              ...(details?.trim() ? { details: details.trim() } : {}),
+              ...(annualIncome ? { annualIncome } : {}),
+            })),
+          }
+        : {}),
       incomeVisible: dto.incomeVisible ?? false,
     });
     return this.persist(profileId, row);
@@ -668,6 +678,8 @@ export class ProfileDetailsService {
       dateOfBirth: profile.dateOfBirth,
       // The profile's own gender, for the silhouette shown until it has a photo.
       gender: profile.gender,
+      // To start the first and last name from before the biodata has its own.
+      displayName: profile.displayName,
     };
   }
 
@@ -919,13 +931,14 @@ export class ProfileDetailsService {
       alternateMobile,
       employment,
       business,
+      otherIncome,
       incomeVisible,
       ...rest
     } = details;
 
     const strip = (block: Record<string, unknown>) => {
       if (incomeVisible) return block;
-      const { salary, income, businessIncome, ...safe } = block;
+      const { salary, income, businessIncome, annualIncome, ...safe } = block;
       return safe;
     };
 
@@ -935,6 +948,7 @@ export class ProfileDetailsService {
         ...rest,
         employment: strip(employment ?? {}),
         business: strip(business ?? {}),
+        otherIncome: (otherIncome ?? []).map(strip),
       },
       siblings,
       assets,

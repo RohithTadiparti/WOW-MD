@@ -55,11 +55,27 @@ export const FAMILY_TYPES = [
 ];
 
 export const OCCUPATION_STATUS = [
+  // The server's values: 'business' and 'not_working' were refused outright.
   { value: 'employed', label: 'Employed' },
-  { value: 'business', label: 'Business' },
-  { value: 'not_working', label: 'Not working' },
+  { value: 'self_employed', label: 'Self-employed / business' },
+  { value: 'not_employed', label: 'Not currently employed' },
   { value: 'student', label: 'Student' },
+  { value: 'homemaker', label: 'Homemaker' },
+  { value: 'retired', label: 'Retired' },
 ];
+
+/** Income besides the main occupation; the same list as the web form. */
+export const OTHER_INCOME_SOURCES = [
+  { value: 'business', label: 'Business on the side' },
+  { value: 'rental', label: 'Rental income' },
+  { value: 'agriculture', label: 'Agriculture' },
+  { value: 'investments', label: 'Investments' },
+  { value: 'freelance', label: 'Freelance / consulting' },
+  { value: 'other', label: 'Other' },
+];
+
+/** The server takes up to five. */
+export const OTHER_INCOME_LIMIT = 5;
 
 export const stored = (value: unknown): string =>
   typeof value === 'number' || (typeof value === 'string' && value.trim()) ? String(value) : '';

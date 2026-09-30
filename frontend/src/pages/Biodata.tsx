@@ -11,6 +11,7 @@ import {
   SELF_MARITAL_STATUSES,
   MaritalStatus,
   OCCUPATION_LABEL,
+  OTHER_INCOME_LABEL,
   OccupationStatus,
   Permission,
   COMPLEXION_LABEL,
@@ -347,6 +348,7 @@ export default function Biodata() {
             // deliberately rather than carrying the parent's over.
             initial={{
               ...details,
+              ...namesFrom(data?.displayName, details),
               dateOfBirth: data?.dateOfBirth ?? '',
             }}
             contact={contact}
@@ -1783,6 +1785,27 @@ function FamilyForm({
   );
 }
 
+/**
+ * First and last name to start the form with: the biodata's own when it has
+ * them, otherwise the profile's display name split at the first space.
+ */
+function namesFrom(displayName: unknown, details: Draft): { firstName: string; lastName: string } {
+  const first = String(details.firstName ?? '').trim();
+  const last = String(details.lastName ?? details.surname ?? '').trim();
+  if (first || last) return { firstName: first, lastName: last };
+  const [head = '', ...rest] = String(displayName ?? '').trim().split(/\s+/);
+  return { firstName: head, lastName: rest.join(' ') };
+}
+
+interface OtherIncome {
+  source: string;
+  details?: string;
+  annualIncome?: string;
+}
+
+/** The server takes up to five. */
+const OTHER_INCOME_LIMIT = 5;
+
 function EducationForm({
   initial,
   onSave,
@@ -1825,6 +1848,7 @@ function EducationForm({
       businessName: business.businessName ?? '',
       businessIncome: business.businessIncome ?? '',
       businessLocation: business.businessLocation ?? '',
+      otherIncome: Array.isArray(initial?.otherIncome) ? initial.otherIncome : [],
       incomeVisible: initial?.incomeVisible ?? false,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1841,6 +1865,15 @@ function EducationForm({
     setValues((v) => ({ ...v, [k]: e.target.value }));
   const put = (k: string) => (value: string) => setValues((v) => ({ ...v, [k]: value }));
 
+  const otherIncome = (Array.isArray(values.otherIncome) ? values.otherIncome : []) as OtherIncome[];
+  const setOtherIncome = (fn: (rows: OtherIncome[]) => OtherIncome[]) =>
+    setValues((v) => ({
+      ...v,
+      otherIncome: fn((Array.isArray(v.otherIncome) ? v.otherIncome : []) as OtherIncome[]),
+    }));
+  const editIncome = (i: number, patch: Partial<OtherIncome>) =>
+    setOtherIncome((rows) => rows.map((row, j) => (j === i ? { ...row, ...patch } : row)));
+
   return (
     <form
       onSubmit={(e) => {
@@ -1852,6 +1885,14 @@ function EducationForm({
           institution: values.institution || null,
           collegePlace: values.collegePlace || null,
           occupationStatus: status,
+          // Rows left without a source are ones somebody added and abandoned.
+          otherIncome: otherIncome
+            .filter((row) => row.source)
+            .map((row) => ({
+              source: row.source,
+              details: row.details?.trim() || undefined,
+              annualIncome: row.annualIncome || undefined,
+            })),
           incomeVisible: Boolean(values.incomeVisible),
         };
         if (status === 'employed') {
@@ -1970,6 +2011,71 @@ function EducationForm({
           </Field>
         </div>
       )}
+
+      {/*
+        Optional, whatever the occupation: plenty of people have a job and a
+        business on the side, or rent from a property, and the occupation has
+        room for only one answer.
+      */}
+      <fieldset className="space-y-3 border-t pt-3">
+        <legend className="text-sm text-gray-700">
+          Other sources of income <span className="text-gray-500">(optional)</span>
+        </legend>
+        {otherIncome.map((row, i) => (
+          <div key={i} className="grid items-end gap-3 sm:grid-cols-[1fr_2fr_1fr_auto]">
+            <Field label="Source">
+              <select
+                className="input mt-1"
+                value={row.source}
+                onChange={(e) => editIncome(i, { source: e.target.value })}
+                required
+              >
+                <option value="">Select…</option>
+                {Object.entries(OTHER_INCOME_LABEL).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Details">
+              <input
+                className="input mt-1"
+                maxLength={160}
+                placeholder="e.g. Family textile shop"
+                value={row.details ?? ''}
+                onChange={(e) => editIncome(i, { details: e.target.value })}
+              />
+            </Field>
+            <Field label="Annual income">
+              {/* Digits only, same as Salary (EZ1-I59). */}
+              <input
+                className="input mt-1"
+                inputMode="numeric"
+                placeholder="e.g. 600000"
+                value={row.annualIncome ?? ''}
+                onChange={(e) => editIncome(i, { annualIncome: e.target.value.replace(/\D/g, '') })}
+              />
+            </Field>
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => setOtherIncome((rows) => rows.filter((_, j) => j !== i))}
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+        {otherIncome.length < OTHER_INCOME_LIMIT && (
+          <button
+            type="button"
+            className="btn-outline btn-sm"
+            onClick={() => setOtherIncome((rows) => [...rows, { source: '' }])}
+          >
+            + Add {otherIncome.length ? 'another' : 'a'} source of income
+          </button>
+        )}
+      </fieldset>
 
       <label className="flex items-center gap-2 text-sm">
         <input
