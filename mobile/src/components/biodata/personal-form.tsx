@@ -100,42 +100,42 @@ export function PersonalForm({
 
       if (!profileId) return;
       const names = form.fullName.trim().split(/\s+/);
-      try {
-        await api.put(`/profiles/${profileId}/details/personal`, {
-          firstName: names[0] || form.fullName.trim(),
-          lastName: names.slice(1).join(' ') || undefined,
-          heightCm: form.heightCm ? Number(form.heightCm) : undefined,
-          city: form.location.trim() || undefined,
-          complexion: form.complexion.trim() || undefined,
-          nativePlace: form.nativePlace.trim() || undefined,
-          nativeDistrict: form.nativeDistrict.trim() || undefined,
-          nativeState: form.nativeState.trim() || undefined,
-          nativeCountry: form.nativeCountry.trim() || undefined,
-          isNri: form.isNri === 'yes' ? true : form.isNri === 'no' ? false : undefined,
-          nriCity: form.nriCity.trim() || undefined,
-          nriCountry: form.nriCountry.trim() || undefined,
-          placeOfBirth: form.placeOfBirth.trim() || undefined,
-          communicationAddress: form.communicationAddress.trim() || undefined,
-          alternateMobile: form.alternateMobile.trim() || undefined,
+      // Each of these used to swallow its own error, so a refused save (most
+      // often "Add 3 photographs first") still moved on as if it had worked.
+      // A failure now stops here and is shown on the form.
+      await api.put(`/profiles/${profileId}/details/personal`, {
+        firstName: names[0] || form.fullName.trim(),
+        lastName: names.slice(1).join(' ') || undefined,
+        heightCm: form.heightCm ? Number(form.heightCm) : undefined,
+        city: form.location.trim() || undefined,
+        complexion: form.complexion.trim() || undefined,
+        nativePlace: form.nativePlace.trim() || undefined,
+        nativeDistrict: form.nativeDistrict.trim() || undefined,
+        nativeState: form.nativeState.trim() || undefined,
+        nativeCountry: form.nativeCountry.trim() || undefined,
+        isNri: form.isNri === 'yes' ? true : form.isNri === 'no' ? false : undefined,
+        nriCity: form.nriCity.trim() || undefined,
+        nriCountry: form.nriCountry.trim() || undefined,
+        placeOfBirth: form.placeOfBirth.trim() || undefined,
+        communicationAddress: form.communicationAddress.trim() || undefined,
+        alternateMobile: form.alternateMobile.trim() || undefined,
+      });
+
+      await api.put(`/profiles/${profileId}/details/religion`, {
+        religion: form.religion.trim() || undefined,
+        caste: form.caste.trim() || undefined,
+        subCaste: form.subCaste.trim() || undefined,
+        motherTongue: form.motherTongue.trim() || undefined,
+        denomination: form.denomination.trim() || undefined,
+      });
+
+      // Only when it has changed: saving the status alone replaces the marital
+      // history, so re-saving this step must not wipe what the next one holds.
+      const savedStatus = String(full?.details?.maritalStatus ?? '');
+      if (form.maritalStatus && form.maritalStatus !== savedStatus) {
+        await api.put(`/profiles/${profileId}/details/marital`, {
+          maritalStatus: form.maritalStatus,
         });
-      } catch {}
-      
-      try {
-        await api.put(`/profiles/${profileId}/details/religion`, {
-          religion: form.religion.trim() || undefined,
-          caste: form.caste.trim() || undefined,
-          subCaste: form.subCaste.trim() || undefined,
-          motherTongue: form.motherTongue.trim() || undefined,
-          denomination: form.denomination.trim() || undefined,
-        });
-      } catch {}
-      
-      if (form.maritalStatus) {
-        try {
-          await api.put(`/profiles/${profileId}/details/marital`, {
-            maritalStatus: form.maritalStatus,
-          });
-        } catch {}
       }
     },
     onSuccess: async () => {
