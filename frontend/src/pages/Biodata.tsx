@@ -6,7 +6,7 @@ import { FormEvent, ReactNode, useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { api, apiMessage } from '../lib/api';
-import { Draft, createDraftGuard, loadDraft, saveDraft, submitDraft } from '../lib/biodata-draft';
+import { Draft, createDraftGuard, loadDraft, submitDraft } from '../lib/biodata-draft';
 import { useAuth } from '../store/auth';
 import {
   ASSET_TYPE_LABEL,
@@ -45,7 +45,6 @@ import {
 } from '../lib/reference';
 import SavedBiodata from '../components/SavedBiodata';
 import ProfileCard from '../components/ProfileCard';
-import BiodataImport from '../components/BiodataImport';
 import { formatDate } from '../lib/dates';
 
 interface Section {
@@ -126,8 +125,6 @@ export default function Biodata() {
   const [direction, setDirection] = useState<'next' | 'prev'>('next');
   const [savedOpen, setSavedOpen] = useState(false);
   const [identityOpen, setIdentityOpen] = useState(false);
-  const [importedFields, setImportedFields] = useState<Record<string, string> | null>(null);
-  const [importRevision, setImportRevision] = useState(0);
 
   // Individuals edit their own profile and never pick one.
   const { data: me } = useQuery({
@@ -181,18 +178,6 @@ export default function Biodata() {
     if (section === 'occupation') return 'education';
     if (section === 'marital') return steps.includes('marital') ? 'marital' : 'basic';
     return (steps as string[]).includes(section) ? (section as StepName) : null;
-  }
-
-  async function importDocument(fields: Record<string, string>, _documentUrl: string, key: string) {
-    // Keep the source alongside the profile. The values themselves deliberately
-    // remain drafts until the person has reviewed them in the normal forms.
-    await api.put(`/profiles/${targetId}/details/source-document`, { key });
-    seedImportedDrafts(targetId, fields);
-    setImportedFields(fields);
-    setImportRevision((revision) => revision + 1);
-    goTo('basic');
-    setNotice('Recognised details are ready to review. Items in red still need your input.');
-    await qc.invalidateQueries({ queryKey: ['biodata', targetId] });
   }
 
   /**
@@ -325,10 +310,6 @@ export default function Biodata() {
       {error && <p className="alert-critical">{error}</p>}
       {notice && <p className="alert-positive">{notice}</p>}
 
-      {targetId && (
-        <BiodataImport onImported={importDocument} />
-      )}
-
       {/* The biodata document an agent created this profile from, if any. */}
       {typeof details.biodataDocumentUrl === 'string' && details.biodataDocumentUrl && (
         <p className="text-sm text-gray-600">
@@ -379,7 +360,6 @@ export default function Biodata() {
         direction={direction}
         onGo={goTo}
         completion={completion}
-        missingFields={importedFields ? importedMissing(current, importedFields, details) : []}
       >
         {current === 'photos' &&
           (targetId ? (
@@ -409,7 +389,6 @@ export default function Biodata() {
 
         {current === 'basic' && (
           <BasicInfoForm
-            key={`basic:${targetId}:${importRevision}`}
             // The bride/groom's date of birth belongs to this managed profile and
             // must never be inherited from the logged-in family member's own
             // account DOB (EZ1-I182). `me.dateOfBirth` is the account holder's, so
@@ -539,75 +518,6 @@ const STEP_TITLE: Record<StepName, string> = {
   preferences: 'Partner Preferences',
 };
 
-const IMPORT_REQUIRED: Record<StepName, { key: string; label: string }[]> = {
-  photos: [{ key: 'photos', label: 'Three profile photographs' }],
-  basic: [
-    { key: 'firstName', label: 'First name' }, { key: 'lastName', label: 'Last name' },
-    { key: 'heightCm', label: 'Height' }, { key: 'complexion', label: 'Complexion' },
-    { key: 'communicationAddress', label: 'Communication address' }, { key: 'religion', label: 'Religion' },
-    { key: 'caste', label: 'Caste' }, { key: 'subCaste', label: 'Sub-caste' },
-    { key: 'motherTongue', label: 'Mother tongue' }, { key: 'maritalStatus', label: 'Marital status' },
-  ],
-  marital: [],
-  education: [
-    { key: 'highestQualification', label: 'Highest qualification' },
-    { key: 'occupationStatus', label: 'Occupation status' },
-  ],
-  family: [
-    { key: 'fatherName', label: "Father's name" }, { key: 'motherName', label: "Mother's name" },
-    { key: 'familyType', label: 'Family type' },
-  ],
-  horoscope: [{ key: 'horoscopeAvailable', label: 'Whether a horoscope is available' }],
-  preferences: [{ key: 'preferences', label: 'Partner preferences' }],
-};
-
-function valueAt(source: Draft, key: string): unknown {
-  if (key === 'horoscopeAvailable') return source.horoscopeAvailable;
-  return source[key];
-}
-
-function importedMissing(step: StepName, fields: Record<string, string>, details: Draft): string[] {
-  return IMPORT_REQUIRED[step]
-    .filter(({ key }) => !String(fields[key] ?? valueAt(details, key) ?? '').trim())
-    .map(({ label }) => label);
-}
-
-function occupationFromImport(fields: Record<string, string>): OccupationStatus {
-  const source = `${fields.occupationStatus ?? ''} ${fields.profession ?? ''}`.toLowerCase();
-  if (/self|business|entrepreneur/.test(source)) return 'self_employed';
-  if (/student/.test(source)) return 'student';
-  if (/home.?maker/.test(source)) return 'homemaker';
-  if (/retired/.test(source)) return 'retired';
-  if (/unemployed|not employed/.test(source)) return 'not_employed';
-  return 'employed';
-}
-
-function seedImportedDrafts(profileId: string, fields: Record<string, string>) {
-  const prefix = `biodata:${profileId}`;
-  const take = (...keys: string[]) => Object.fromEntries(
-    keys.filter((key) => fields[key]).map((key) => [key, fields[key]]),
-  );
-  saveDraft(`${prefix}:personal`, take(
-    'firstName', 'lastName', 'dateOfBirth', 'heightCm', 'complexion', 'communicationAddress', 'alternateMobile',
-  ));
-  saveDraft(`${prefix}:religion`, take('religion', 'caste', 'subCaste', 'motherTongue'));
-  saveDraft(`${prefix}:status`, take('maritalStatus'));
-  saveDraft(`${prefix}:education`, {
-    status: occupationFromImport(fields),
-    values: {
-      ...take('highestQualification', 'course', 'institution', 'collegePlace', 'company', 'designation', 'workLocation', 'salary'),
-      businessEntries: [{}], otherIncome: [], incomeVisible: false,
-    },
-  });
-  saveDraft(`${prefix}:family`, take(
-    'fatherName', 'fatherProfession', 'motherName', 'motherProfession', 'familyType', 'familyStatus',
-    'nativePlace', 'nativeState', 'nativeCountry', 'nativeDistrict', 'brothers', 'sisters',
-  ));
-  const horoscope = take('rashi', 'star', 'padam', 'gothram', 'kujaDosham', 'timeOfBirth');
-  if (fields.placeOfBirth) horoscope.birthCity = fields.placeOfBirth;
-  saveDraft(`${prefix}:horoscope`, { available: Boolean(Object.keys(horoscope).length), values: horoscope });
-}
-
 /** Marital history is a step only for somebody who has been married. */
 function stepsFor(maritalStatus: unknown): StepName[] {
   const married = Boolean(maritalStatus) && maritalStatus !== 'never_married';
@@ -654,7 +564,6 @@ function StepCard({
   direction,
   onGo,
   completion,
-  missingFields = [],
   children,
 }: {
   current: StepName;
@@ -662,7 +571,6 @@ function StepCard({
   direction: 'next' | 'prev';
   onGo: (step: StepName) => void;
   completion?: Completion;
-  missingFields?: string[];
   children: ReactNode;
 }) {
   const index = steps.indexOf(current);
@@ -706,13 +614,6 @@ function StepCard({
               Step {index + 1} of {steps.length}
             </span>
           </header>
-
-          {missingFields.length > 0 && (
-            <div className="mb-4 border-l-4 border-red-500 bg-red-50 px-4 py-3 text-sm text-red-900" role="status">
-              <span className="font-semibold">Needs your input:</span>{' '}
-              {missingFields.join(', ')}.
-            </div>
-          )}
 
           {children}
 
