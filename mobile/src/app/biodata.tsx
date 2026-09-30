@@ -13,7 +13,6 @@ import {
   PreferencesSection,
   UploadFlow,
 } from '@/components/biodata';
-import { ProfileSilhouette } from '@/components/profile-silhouette';
 import { ProfileCompletionCard } from '@/components/profile-completion-card';
 import { DetailGrid, DetailRow } from '@/components/chrome';
 import {
@@ -61,7 +60,10 @@ export default function BiodataWizard() {
     queryKey: ['biodata-photos', profileId],
     enabled: Boolean(profileId),
     queryFn: async () =>
-      (await api.get(`/profiles/${profileId}/details/photos`)).data as { photos: string[] },
+      (await api.get(`/profiles/${profileId}/details/photos`)).data as {
+        photos: string[];
+        primaryPhotoUrl?: string | null;
+      },
     retry: false,
   });
 
@@ -107,6 +109,9 @@ export default function BiodataWizard() {
   const d = (full?.details ?? {}) as Record<string, unknown>;
   const showMarital = d.maritalStatus && d.maritalStatus !== 'never_married';
 
+  // Photographs are on the first step: the server will not save the basic
+  // information until the profile has three of them, so asking for them later
+  // meant step one could never be saved by somebody new.
   const steps = [
     { id: 'personal', title: 'Basic Information & Photos' },
     ...(showMarital ? [{ id: 'marital', title: 'Marital History' }] : []),
@@ -225,6 +230,12 @@ export default function BiodataWizard() {
             void api.delete(`/profiles/${profileId}/details/photos`, { data: { url } }).then(refresh).catch((err) => {
               console.error('Failed to remove photo:', err);
               NativeAlert.alert('Remove Failed', 'Your photo could not be removed. Please try again.');
+            });
+          }}
+          primaryPhotoUrl={photos?.primaryPhotoUrl ?? null}
+          onMakePrimary={(url) => {
+            void api.put(`/profiles/${profileId}/details/primary-photo`, { url }).then(refresh).catch(() => {
+              NativeAlert.alert('Not Changed', 'That photo could not be set as your profile photo. Please try again.');
             });
           }}
           onSaved={nextStep}

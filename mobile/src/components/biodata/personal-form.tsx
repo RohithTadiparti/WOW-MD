@@ -7,12 +7,13 @@ import { SelectField } from '@/components/form';
 import { Alert, Button, Card, Field, Caption, Body } from '@/components/ui';
 import { CASTES_BY_RELIGION, MOTHER_TONGUES, RELIGIONS } from '@/shared/reference';
 import { STATES_BY_COUNTRY, districtsForState, DISTRICTS_BY_STATE } from '@/shared/locations';
-import { space } from '@/theme';
+import { radius, space } from '@/theme';
+import { ProfileSilhouette } from '@/components/profile-silhouette';
 import { ChoiceField, canonical } from './choice-field';
 import { WowCalendar } from '@/components/common/WowCalendar';
 import { MediaStrip, PhotoPicker } from '@/components/uploader';
 import { capitalizeWords } from '@/lib/format';
-import { GENDERS, MARITAL, COMPLEXIONS, stored } from './constants';
+import { GENDERS, MARITAL, COMPLEXIONS, displayNameOf, namesFrom, stored } from './constants';
 
 interface Form {
   firstName: string;
@@ -47,10 +48,10 @@ function formFrom(
     }
   }
 
-  const names = String(me.displayName ?? '').trim().split(/\s+/);
+  const names = namesFrom(me.displayName, d);
   return {
-    firstName: capitalizeWords(String(d.firstName ?? names[0] ?? '')),
-    lastName: capitalizeWords(String(d.lastName ?? names.slice(1).join(' ') ?? '')),
+    firstName: capitalizeWords(names.firstName),
+    lastName: capitalizeWords(names.lastName),
     dateOfBirth: String(me.dateOfBirth ?? full?.dateOfBirth ?? '').slice(0, 10),
     gender: String(me.gender ?? '').toLowerCase(),
     heightCm: stored(d.heightCm),
@@ -74,6 +75,8 @@ export function PersonalForm({
   photos,
   onPhotoAdded,
   onPhotoRemoved,
+  primaryPhotoUrl,
+  onMakePrimary,
   onSaved,
   onBack,
   autofilledKeys,
@@ -84,6 +87,9 @@ export function PersonalForm({
   photos?: string[];
   onPhotoAdded?: (url: string) => void;
   onPhotoRemoved?: (url: string) => void;
+  /** The photo shown first; when given with onMakePrimary, the person can choose it. */
+  primaryPhotoUrl?: string | null;
+  onMakePrimary?: (url: string) => void;
   onSaved: () => void;
   onBack?: () => void;
   autofilledKeys?: Set<string>;
@@ -109,9 +115,8 @@ export function PersonalForm({
   const save = useMutation({
     mutationFn: async () => {
       const payload: Record<string, string> = {};
-      if (form.firstName.trim() || form.lastName.trim()) {
-        payload.displayName = `${form.firstName.trim()} ${form.lastName.trim()}`.trim();
-      }
+      const displayName = displayNameOf(form.firstName, form.lastName);
+      if (displayName) payload.displayName = displayName;
       if (form.gender) payload.gender = form.gender;
       if (form.dateOfBirth) payload.dateOfBirth = form.dateOfBirth;
       if (form.location.trim()) payload.city = form.location.trim();
@@ -136,7 +141,10 @@ export function PersonalForm({
         });
       }
 
-      if (form.maritalStatus) {
+      // Only when it has changed: saving the status alone replaces the marital
+      // history, so re-saving this step must not wipe what the next one holds.
+      const savedStatus = String(full?.details?.maritalStatus ?? '');
+      if (form.maritalStatus && form.maritalStatus !== savedStatus) {
         await api.put(`/profiles/${profileId}/details/marital`, {
           maritalStatus: form.maritalStatus,
         });
@@ -201,10 +209,20 @@ export function PersonalForm({
           Add at least 3 photographs — basic information cannot be saved without them.
         </Body>
         {(photos ?? []).length === 0 ? (
-          <View style={{ width: 116, height: 84, borderRadius: 8, backgroundColor: '#f0f0f0' }} />
+          <ProfileSilhouette
+            gender={typeof me.gender === 'string' ? me.gender : null}
+            style={{ width: 116, height: 84, borderRadius: radius.sm }}
+          />
+        ) : null}
+        {(photos ?? []).length > 1 && onMakePrimary ? (
+          <Caption tone="muted">
+            Tap “Set as profile photo” under the one you want families to see first.
+          </Caption>
         ) : null}
         <MediaStrip
           urls={photos ?? []}
+          primary={primaryPhotoUrl ?? photos?.[0] ?? null}
+          onMakePrimary={onMakePrimary}
           onRemove={onPhotoRemoved}
         />
         <PhotoPicker

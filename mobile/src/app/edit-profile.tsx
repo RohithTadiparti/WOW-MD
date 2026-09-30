@@ -15,13 +15,14 @@ import {
   SectionTitle,
 } from '@/components/ui';
 import { ChoiceField, canonical } from '@/components/biodata/choice-field';
-import { GENDERS, MARITAL } from '@/components/biodata/constants';
+import { GENDERS, MARITAL, displayNameOf, namesFrom } from '@/components/biodata/constants';
 import { CASTES_BY_RELIGION, RELIGIONS } from '@/shared/reference';
 import { STATES_BY_COUNTRY, districtsForState, DISTRICTS_BY_STATE } from '@/shared/locations';
 import { space } from '@/theme';
 
 interface Form {
-  fullName: string;
+  firstName: string;
+  lastName: string;
   dateOfBirth: string;
   gender: string;
   heightCm: string;
@@ -48,7 +49,7 @@ function formFrom(
   }
 
   return {
-    fullName: String(me.displayName ?? ''),
+    ...namesFrom(me.displayName, d),
     dateOfBirth: String(me.dateOfBirth ?? full?.dateOfBirth ?? '').slice(0, 10),
     gender: String(me.gender ?? '').toLowerCase(),
     heightCm: d.heightCm != null ? String(d.heightCm) : '',
@@ -90,7 +91,8 @@ export default function EditProfile() {
   const save = useMutation({
     mutationFn: async () => {
       const payload: Record<string, string> = {};
-      if (form.fullName.trim()) payload.displayName = form.fullName.trim();
+      const displayName = displayNameOf(form.firstName, form.lastName);
+      if (displayName) payload.displayName = displayName;
       if (form.gender) payload.gender = form.gender;
       if (form.dateOfBirth) payload.dateOfBirth = form.dateOfBirth;
       if (form.location.trim()) payload.city = form.location.trim();
@@ -98,11 +100,10 @@ export default function EditProfile() {
 
       if (!profileId) return;
       const d = (full?.details ?? {}) as Record<string, unknown>;
-      const names = form.fullName.trim().split(/\s+/);
       if (form.heightCm && d.complexion && d.communicationAddress) {
         await api.put(`/profiles/${profileId}/details/personal`, {
-          firstName: names[0] || form.fullName.trim(),
-          lastName: names.slice(1).join(' ') || undefined,
+          firstName: form.firstName.trim(),
+          lastName: form.lastName.trim(),
           heightCm: Number(form.heightCm),
           complexion: d.complexion,
           communicationAddress: d.communicationAddress,
@@ -153,7 +154,13 @@ export default function EditProfile() {
       {notice ? <Alert tone="positive">{notice}</Alert> : null}
       {error ? <Alert tone="critical">{error}</Alert> : null}
 
-      <Field label="Full Name" value={form.fullName} onChangeText={set('fullName')} />
+      <Field label="First Name" value={form.firstName} onChangeText={set('firstName')} />
+      <Field
+        label="Last Name"
+        value={form.lastName}
+        onChangeText={set('lastName')}
+        hint="Family name, as on your documents"
+      />
       <WowCalendar title="Select Date of Birth" label="Date of Birth" value={form.dateOfBirth} onChange={set('dateOfBirth')} />
       <SelectField label="Gender" value={form.gender} options={GENDERS} onChange={set('gender')} />
       <Field label="Height (cm)" value={form.heightCm} onChangeText={set('heightCm')} keyboardType="number-pad" maxLength={3} />
@@ -194,7 +201,7 @@ export default function EditProfile() {
         <Button
           label="Save Changes"
           busy={save.isPending}
-          disabled={!form.fullName.trim()}
+          disabled={!form.firstName.trim() || !form.lastName.trim()}
           onPress={() => {
             const h = Number(form.heightCm);
             if (form.heightCm && (Number.isNaN(h) || h < 120 || h > 230)) {

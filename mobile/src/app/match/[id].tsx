@@ -27,7 +27,7 @@ import { api, apiMessage } from '@/lib/api';
 import { ageFrom, GENDER_LABEL, labelFor, stewardshipLine, type Stewardship } from '@/lib/labels';
 import { isChartImage } from '@/shared/horoscope';
 import { formatDate } from '@/shared/dates';
-import { FAMILY_TYPE_LABEL, MARITAL_LABEL, OCCUPATION_LABEL } from '@/shared/permissions';
+import { FAMILY_TYPE_LABEL, MARITAL_LABEL, OCCUPATION_LABEL, OTHER_INCOME_LABEL } from '@/shared/permissions';
 import { NRI_LABEL } from '@/components/biodata/constants';
 import { DetailGrid, DetailRow } from '@/components/chrome';
 import { Sheet } from '@/components/sheet';
@@ -349,6 +349,23 @@ export default function MatchProfile() {
             ) : null}
             {text('businessName', business) ? (
               <Fact icon={Briefcase} label="Business" value={text('businessName', business)} />
+            ) : null}
+            {Array.isArray(d.otherIncome) && d.otherIncome.length > 0 ? (
+              // Amounts arrive only when the profile has chosen to show income.
+              <Fact
+                icon={Briefcase}
+                label="Other Income"
+                value={(d.otherIncome as { source?: string; annualIncome?: string }[])
+                  .map((row) =>
+                    [
+                      labelFor(OTHER_INCOME_LABEL, row.source) ?? row.source,
+                      row.annualIncome ? `₹${row.annualIncome} a year` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(', '),
+                  )
+                  .join(' · ')}
+              />
             ) : null}
           </View>
         </Card>

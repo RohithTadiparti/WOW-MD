@@ -319,6 +319,16 @@ export class ProfileDetailsService {
       occupationStatus: dto.occupationStatus,
       employment: dto.employment ?? {},
       business: dto.business ?? {},
+      // Absent leaves the list alone, so an older client cannot wipe it.
+      ...(dto.otherIncome !== undefined
+        ? {
+            otherIncome: dto.otherIncome.map(({ source, details, annualIncome }) => ({
+              source,
+              ...(details?.trim() ? { details: details.trim() } : {}),
+              ...(annualIncome ? { annualIncome } : {}),
+            })),
+          }
+        : {}),
       incomeVisible: dto.incomeVisible ?? false,
     });
     return this.persist(profileId, row);
@@ -574,23 +584,42 @@ export class ProfileDetailsService {
   }
 
   private async photoState(profile: Profile) {
-    const row = await this.details.findOne({ where: { profileId: profile.id } });
+    // The first photo is the profile photo: `setPrimaryPhoto` keeps the chosen
+    // one at the front, so the order of the list is the source of truth.
     return {
       photos: profile.photos ?? [],
-      primaryPhotoUrl: row?.primaryPhotoUrl ?? profile.photos?.[0] ?? null,
+      primaryPhotoUrl: profile.photos?.[0] ?? null,
       max: ProfileDetailsService.MAX_PHOTOS,
     };
   }
 
-  /** The photo shown first. Must be one the profile already has. */
+  /**
+   * The profile photo: the one shown first. Must be one the profile already has.
+   *
+   * It moves to the front of `profiles.photos` as well as being recorded on the
+   * biodata. Match cards, chat, interests and circulation all show `photos[0]`,
+   * so reordering the list is what makes the choice show up everywhere rather
+   * than only on the screens that know to look for the pointer.
+   */
   async setPrimaryPhoto(actor: AuthUser, profileId: string, dto: SetPrimaryPhotoDto) {
     const row = await this.editable(actor, profileId);
-    const profile = await this.profiles.findOne({ where: { id: profileId } });
-    if (!profile?.photos?.includes(dto.url)) {
+    const profile = await this.load(profileId);
+    const photos = profile.photos ?? [];
+    if (!photos.includes(dto.url)) {
       throw new BadRequestException('That photo is not on this profile');
     }
-    row.primaryPhotoUrl = dto.url;
-    return this.persist(profileId, row);
+    profile.photos = [dto.url, ...photos.filter((p) => p !== dto.url)];
+    const saved = await this.profiles.save(profile);
+
+    // Photographs are the first biodata step, so there may be no biodata row
+    // yet. The order above is enough on its own; the pointer is kept in step
+    // only when the row already exists.
+    if (row.id) {
+      row.primaryPhotoUrl = dto.url;
+      await this.details.save(row);
+    }
+    await this.invalidateSuggestions(profileId);
+    return this.photoState(saved);
   }
 
   /**
@@ -689,6 +718,8 @@ export class ProfileDetailsService {
       dateOfBirth: profile.dateOfBirth,
       // The profile's own gender, for the silhouette shown until it has a photo.
       gender: profile.gender,
+      // To start the first and last name from before the biodata has its own.
+      displayName: profile.displayName,
     };
   }
 
@@ -940,13 +971,14 @@ export class ProfileDetailsService {
       alternateMobile,
       employment,
       business,
+      otherIncome,
       incomeVisible,
       ...rest
     } = details;
 
     const strip = (block: Record<string, unknown>) => {
       if (incomeVisible) return block;
-      const { salary, income, businessIncome, ...safe } = block;
+      const { salary, income, businessIncome, annualIncome, ...safe } = block;
       return safe;
     };
 
@@ -956,6 +988,7 @@ export class ProfileDetailsService {
         ...rest,
         employment: strip(employment ?? {}),
         business: strip(business ?? {}),
+        otherIncome: (otherIncome ?? []).map(strip),
       },
       siblings,
       assets,
@@ -1102,6 +1135,13 @@ export class ProfileDetailsService {
    * scanning, so the key pattern covers it.
    */
   private async persist(profileId: string, row: ProfileDetails): Promise<ProfileDetails> {
+    // Photographs come before the first biodata section, so the row is usually
+    // created after they were uploaded and nothing recorded the profile photo.
+    // Default it to the first photo — the one shown until somebody chooses.
+    if (!row.primaryPhotoUrl) {
+      const profile = await this.profiles.findOne({ where: { id: profileId }, select: ['id', 'photos'] });
+      row.primaryPhotoUrl = profile?.photos?.[0] ?? null;
+    }
     const saved = await this.details.save(row);
     await this.invalidateSuggestions(profileId);
     return saved;

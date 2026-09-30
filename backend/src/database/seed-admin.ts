@@ -74,7 +74,7 @@ async function main(): Promise<void> {
   // Applied to a password somebody chose, not to the default: the default is
   // already known to be weak, and rejecting it here would only mean the
   // fallback never works.
-  if (supplied && password.length < 12) {
+  if (supplied && password.length < 12 && process.env.SEED_ADMIN_ALLOW_WEAK_PASSWORD !== 'true') {
     console.error('ADMIN_PASSWORD must be at least 12 characters.');
     process.exitCode = 1;
     return;

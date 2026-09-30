@@ -411,10 +411,16 @@ function ProgressBar({ fraction }: { fraction: number }) {
 export function MediaStrip({
   urls,
   onRemove,
+  primary,
+  onMakePrimary,
 }: {
   urls: string[];
   /** Absent makes the strip read-only, which is what a review screen wants. */
   onRemove?: (url: string) => void;
+  /** The profile photo, marked in the strip. */
+  primary?: string | null;
+  /** Present offers "Set as profile photo" under every other photo. */
+  onMakePrimary?: (url: string) => void;
 }) {
   const theme = useTheme();
   if (urls.length === 0) return null;
@@ -422,13 +428,37 @@ export function MediaStrip({
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space(2) }}>
       {urls.map((url) => (
-        <View key={url}>
+        <View key={url} style={{ width: 116 }}>
           <Image
             source={{ uri: reachable(url) }}
-            style={{ width: 116, height: 84, borderRadius: radius.sm, backgroundColor: rgb(theme.surfaceSunken) }}
+            style={{
+              width: 116,
+              height: 84,
+              borderRadius: radius.sm,
+              backgroundColor: rgb(theme.surfaceSunken),
+              borderWidth: url === primary ? 2 : 0,
+              borderColor: rgb(theme.brand),
+            }}
             contentFit="cover"
             transition={150}
           />
+          {url === primary ? (
+            <Caption tone="brand" style={{ marginTop: space(1), textAlign: 'center' }}>
+              Profile photo
+            </Caption>
+          ) : onMakePrimary ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Set as profile photo"
+              onPress={() => onMakePrimary(url)}
+              hitSlop={8}
+              style={({ pressed }) => [{ marginTop: space(1) }, pressed && { opacity: 0.6 }]}
+            >
+              <Caption style={{ textAlign: 'center', textDecorationLine: 'underline' }}>
+                Set as profile photo
+              </Caption>
+            </Pressable>
+          ) : null}
           {onRemove && (
             <Pressable
               accessibilityRole="button"
