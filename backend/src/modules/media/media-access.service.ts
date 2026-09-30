@@ -3,9 +3,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '../../common/enums';
-import { parseKey } from '../../platform/storage/storage-keys';
+import { parseKey, toRef } from '../../platform/storage/storage-keys';
 import { BookingsService } from '../bookings/bookings.service';
 import { Vendor } from '../vendors/entities/vendor.entity';
+import { ProfileDetails } from '../profile-details/entities/profile-details.entity';
+import { Profile } from '../users/entities/profile.entity';
 
 /** Answers already worked out during one request, so a list of forty photographs is one lookup. */
 export type AccessMemo = Map<string, Promise<boolean>>;
@@ -18,7 +20,9 @@ export type AccessMemo = Map<string, Promise<boolean>>;
  *
  *   users/{u}/profile       anyone signed in: it is shown on profiles and biodata
  *   users/{u}/albums        u
- *   users/{u}/attachments   u (evidence, receipts, chat attachments)
+ *   users/{u}/attachments   u (evidence, receipts, chat attachments), plus the
+ *                           owner and steward of a profile whose intake
+ *                           biodata document it is
  *   vendors/{v}/portfolio   anyone signed in: it is the listing's shop window
  *   bookings/{b}/…          the booking's customer, their match-fixed partner,
  *                           and the provider it was booked with
@@ -31,6 +35,7 @@ export class MediaAccessService {
   constructor(
     private readonly bookings: BookingsService,
     @InjectRepository(Vendor) private readonly vendors: Repository<Vendor>,
+    @InjectRepository(ProfileDetails) private readonly details: Repository<ProfileDetails>,
   ) {}
 
   /**
@@ -48,12 +53,31 @@ export class MediaAccessService {
 
     switch (scope.owner) {
       case 'users':
-        return Promise.resolve(scope.area === 'profile' || scope.id === viewer.userId);
+        if (scope.area === 'profile' || scope.id === viewer.userId) return Promise.resolve(true);
+        // An agent uploads a client's biodata document into their own
+        // attachments; the client who later claims the profile may open it too.
+        if (scope.area !== 'attachments') return Promise.resolve(false);
+        return this.memoised(memo, `intake:${key}`, () => this.intakeDocumentOf(viewer, key));
       case 'vendors':
         return Promise.resolve(true);
       case 'bookings':
         return this.memoised(memo, `participant:${scope.id}`, () => this.participant(viewer, scope.id));
     }
+  }
+
+  /** Whether `key` is the intake document of a profile the viewer owns or stewards. */
+  private async intakeDocumentOf(viewer: AuthUser, key: string): Promise<boolean> {
+    const suffix = `%/${key.replace(/[\\%_]/g, '\\$&')}`;
+    const count = await this.details
+      .createQueryBuilder('d')
+      .innerJoin(Profile, 'p', 'p.id = d.profileId')
+      .where('(d.biodataDocumentUrl = :ref OR d.biodataDocumentUrl LIKE :suffix)', {
+        ref: toRef(key),
+        suffix,
+      })
+      .andWhere('(p.userId = :viewer OR p.managedByUserId = :viewer)', { viewer: viewer.userId })
+      .getCount();
+    return count > 0;
   }
 
   /**

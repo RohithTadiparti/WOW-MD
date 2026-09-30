@@ -9,10 +9,11 @@ import { MockStorageController } from './mock-storage.controller';
 import { MediaAccessService } from './media-access.service';
 import { MediaUrlInterceptor } from './media-url.interceptor';
 import { Vendor } from '../vendors/entities/vendor.entity';
+import { ProfileDetails } from '../profile-details/entities/profile-details.entity';
 import { BookingsModule } from '../bookings/bookings.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Album, MediaItem, Vendor]), BookingsModule],
+  imports: [TypeOrmModule.forFeature([Album, MediaItem, Vendor, ProfileDetails]), BookingsModule],
   providers: [
     MediaService,
     MediaAccessService,
