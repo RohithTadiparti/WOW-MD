@@ -274,7 +274,13 @@ export default function RequestDialog({ vendor, onClose }: { vendor: RequestVend
                 offerings={offerings}
                 offeringId={offeringId}
                 quantity={quantity}
-                onPick={setOfferingId}
+                onPick={(id) => {
+                  setOfferingId(id);
+                  // A quantity belongs to one particular price. Leaving it in
+                  // state when the price changes (or is cleared) could submit
+                  // a stale count with a quote-only request.
+                  setQuantity('');
+                }}
                 onQuantity={setQuantity}
               />
             )}
@@ -389,6 +395,10 @@ export default function RequestDialog({ vendor, onClose }: { vendor: RequestVend
                 min={0}
                 value={budget}
                 onChange={(e) => setBudget(e.target.value)}
+                // Browsers increment focused number fields on the wheel. A
+                // booking budget must not change while somebody is simply
+                // scrolling through the request.
+                onWheel={(e) => e.currentTarget.blur()}
               />
               <span className="mt-1 block text-xs text-gray-500">
                 Optional. Leave it blank if you would rather hear their number first.
@@ -431,8 +441,7 @@ export default function RequestDialog({ vendor, onClose }: { vendor: RequestVend
                   (!slotId && !eventDate) ||
                   busy ||
                   (engagedClients.length > 0 && !forClient) ||
-                  (bookable.length > 0 && !serviceId) ||
-                  (offerings.length > 0 && !offeringId)
+                  (bookable.length > 0 && !serviceId)
                 }
               >
                 {busy ? 'Sending…' : 'Send request'}

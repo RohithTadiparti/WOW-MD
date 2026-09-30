@@ -27,6 +27,11 @@ export function totalLabel(offering: Offering, quantity: string): string | null 
   return total === null ? null : `${offering.currency} ${total.toLocaleString()}`;
 }
 
+/** A price card is a toggle: choose it once, choose it again to ask for a quote. */
+export function nextOfferingId(currentId: string, clickedId: string): string {
+  return currentId === clickedId ? '' : clickedId;
+}
+
 /**
  * The service's prices, "How many" where the price counts something, and the
  * total that follows from both.
@@ -56,7 +61,11 @@ export function OfferingPicker({
             <button
               key={o.id}
               type="button"
-              onClick={() => onPick(o.id)}
+              // A listed price is a helpful starting point, not a commitment.
+              // Clicking the current choice again deliberately returns to a
+              // quote-only request.
+              onClick={() => onPick(nextOfferingId(offeringId, o.id))}
+              aria-pressed={offeringId === o.id}
               className={`block w-full rounded-sm border px-3 py-2 text-left text-sm ${
                 offeringId === o.id ? 'border-brand bg-brand-light' : 'border-gray-200 hover:bg-gray-50'
               }`}
@@ -76,6 +85,11 @@ export function OfferingPicker({
               {o.inclusions.length > 0 && (
                 <span className="mt-0.5 block text-xs text-gray-500">
                   Includes: {o.inclusions.join(', ')}
+                </span>
+              )}
+              {offeringId === o.id && (
+                <span className="mt-1 block text-xs font-medium text-brand">
+                  Selected — select again to request a quote instead.
                 </span>
               )}
             </button>
@@ -115,6 +129,11 @@ export function OfferingPicker({
             {takesQuantity(offering) && quantity ? ` (${offeringPrice(offering)} × ${quantity})` : ''}
           </span>
           <span className="font-medium text-gray-900">{total}</span>
+        </p>
+      )}
+      {!offering && offerings.length > 0 && (
+        <p className="text-xs leading-relaxed text-gray-500">
+          Pick a listed price, or leave all options clear to ask this vendor for a quote.
         </p>
       )}
     </>
