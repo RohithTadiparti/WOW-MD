@@ -36,7 +36,12 @@ import {
 } from '../../common/enums';
 import { AppConfigService } from '../../config/app-config.service';
 import { OutboxService } from '../../platform/events/outbox.service';
-import { PAYMENT_PROVIDER, PaymentProvider, PayoutDestination } from './payment.provider';
+import {
+  PAYMENT_PROVIDER,
+  PaymentProvider,
+  PayoutDestination,
+  PayoutResult,
+} from './payment.provider';
 import { PAYMENT_STATUS_RANK, collectedByBooking, isCollected } from './payment-totals';
 import { escrowSummary, summariseQuotations } from './booking-summary';
 import { WeddingFacts, bookingContextOf } from './booking-venue';
@@ -1123,12 +1128,18 @@ export class BookingsService {
     return booking;
   }
 
-  /** Transfer every pending payout on one eligible booking in full. */
+  /**
+   * Transfer every owed payout on one booking in full, at the provider's asking.
+   *
+   * Refused outright when there is nowhere to send it: attempting a transfer
+   * to no account would change nothing and only leave a trail of releases
+   * that never happened. Safe to call twice at once; see releaseOnePending.
+   */
   async releasePayout(
     actor: AuthUser,
     bookingId: string,
     milestone?: PaymentMilestone,
-  ): Promise<Booking> {
+  ): Promise<{ bookingId: string; released: number; notReleased: string[] }> {
     const booking = await this.loadOrFail(bookingId);
     await this.assertSellerSide(actor, booking);
 
@@ -1136,19 +1147,53 @@ export class BookingsService {
       throw new BadRequestException('An open case is holding this booking.');
     }
 
-    const pending = await this.payments.count({
+    const pending = await this.payments.find({
       where: {
         bookingId,
         status: PaymentStatus.PENDING_PAYOUT,
         ...(milestone ? { milestone } : {}),
       },
     });
-    if (pending === 0) {
+    if (pending.length === 0) {
       throw new BadRequestException('No eligible payout remains for this booking');
     }
 
-    await this.releasePending(actor, bookingId, milestone);
-    return booking;
+    const destination = await this.payoutDestination(booking);
+    if (!destination.accountId) {
+      throw new BadRequestException(
+        'There is no active payout account to send this to yet. It is released once your ' +
+          'payout account is set up and verified.',
+      );
+    }
+
+    let released = 0;
+    const notReleased: string[] = [];
+    for (const row of pending) {
+      const outcome = await this.releaseOnePending(row.id, destination);
+      // Claimed by a concurrent release, or already released: nothing to do.
+      if (!outcome) continue;
+      const { payment, result } = outcome;
+      if (!result.transferred) {
+        notReleased.push(result.reason ?? 'The transfer was not made');
+        continue;
+      }
+      released += 1;
+      await this.audit.record({
+        action: AuditAction.BOOKING_ESCROW_RELEASED,
+        actor,
+        resourceType: 'booking',
+        resourceId: bookingId,
+        metadata: {
+          gross: payment.amount,
+          milestone: payment.milestone,
+          payout: payment.payoutAmount,
+          commission: payment.commissionAmount,
+          transferred: true,
+          reason: null,
+        },
+      });
+    }
+    return { bookingId, released, notReleased };
   }
 
   /**
@@ -1224,55 +1269,43 @@ export class BookingsService {
     return moved;
   }
 
-  /** Retry transfers for money already earned but waiting for payout setup. */
-  private async releasePending(
-    actor: AuthUser,
-    bookingId: string,
-    milestone?: PaymentMilestone,
-  ): Promise<number> {
-    const pending = await this.payments.find({
-      where: {
-        bookingId,
-        status: PaymentStatus.PENDING_PAYOUT,
-        ...(milestone ? { milestone } : {}),
-      },
-    });
-    const booking = await this.bookings.findOne({ where: { id: bookingId } });
-    const destination = booking
-      ? await this.payoutDestination(booking)
-      : { accountId: null, label: 'unknown provider' };
-    let moved = 0;
+  /**
+   * Transfers one owed payment, if nobody else is already doing so.
+   *
+   * The row is claimed with a row lock that skips rather than waits, inside a
+   * transaction that also covers the write-back. Two releases racing for the
+   * same payment (a double click, or a click landing while the nightly retry
+   * runs) therefore never both reach the gateway: the loser finds the row
+   * locked, or no longer owed, and returns null. The status is only ever
+   * written back on a row that is still PENDING_PAYOUT, so a failed attempt
+   * cannot overwrite a payment somebody else has already released.
+   */
+  private async releaseOnePending(
+    paymentId: string,
+    destination: PayoutDestination,
+  ): Promise<{ payment: Payment; result: PayoutResult } | null> {
+    return this.dataSource.transaction(async (manager) => {
+      const repo = manager.getRepository(Payment);
+      const payment = await repo.findOne({
+        where: { id: paymentId, status: PaymentStatus.PENDING_PAYOUT },
+        lock: { mode: 'pessimistic_write', onLocked: 'skip_locked' },
+      });
+      if (!payment?.providerRef) return null;
 
-    for (const payment of pending) {
-      if (!payment.providerRef) continue;
       const result = await this.gateway.release(
         payment.providerRef,
         payment.payoutAmount,
         payment.currency,
         destination,
       );
-      await this.payments.update(payment.id, {
-        status: result.transferred ? PaymentStatus.RELEASED : PaymentStatus.PENDING_PAYOUT,
-        payoutRef: result.transferRef,
-        payoutNote: result.reason,
-      });
-      if (result.transferred) moved += 1;
-      await this.audit.record({
-        action: AuditAction.BOOKING_ESCROW_RELEASED,
-        actor,
-        resourceType: 'booking',
-        resourceId: bookingId,
-        metadata: {
-          gross: payment.amount,
-          milestone: payment.milestone,
-          payout: payment.payoutAmount,
-          commission: payment.commissionAmount,
-          transferred: result.transferred,
-          reason: result.reason,
-        },
-      });
-    }
-    return moved;
+      await repo.update(
+        { id: payment.id, status: PaymentStatus.PENDING_PAYOUT },
+        result.transferred
+          ? { status: PaymentStatus.RELEASED, payoutRef: result.transferRef, payoutNote: null }
+          : { payoutNote: result.reason },
+      );
+      return { payment, result };
+    });
   }
 
   /**
@@ -1458,20 +1491,10 @@ export class BookingsService {
       const destination = await this.payoutDestination(booking);
       if (!destination.accountId) continue;
 
-      const result = await this.gateway.release(
-        payment.providerRef,
-        payment.payoutAmount,
-        payment.currency,
-        destination,
-      );
-      if (!result.transferred) continue;
-
-      await this.payments.update(payment.id, {
-        status: PaymentStatus.RELEASED,
-        payoutRef: result.transferRef,
-        payoutNote: null,
-      });
-      released += 1;
+      // Claimed row by row, so a provider releasing by hand at the same moment
+      // cannot be paid twice or have a finished release written back as owed.
+      const outcome = await this.releaseOnePending(payment.id, destination);
+      if (outcome?.result.transferred) released += 1;
     }
     return { attempted: pending.length, released };
   }

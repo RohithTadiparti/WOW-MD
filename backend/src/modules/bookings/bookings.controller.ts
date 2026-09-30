@@ -4,6 +4,7 @@ import {
   Get,
   Headers,
   Param,
+  ParseEnumPipe,
   ParseUUIDPipe,
   Post,
   Put,
@@ -474,7 +475,8 @@ export class BookingsController {
   releasePayout(
     @CurrentUser() actor: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
-    @Query('milestone') milestone?: PaymentMilestone,
+    @Query('milestone', new ParseEnumPipe(PaymentMilestone, { optional: true }))
+    milestone?: PaymentMilestone,
   ) {
     return this.bookings.releasePayout(actor, id, milestone);
   }
