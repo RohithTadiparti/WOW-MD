@@ -177,11 +177,26 @@ async function refreshAccessToken(): Promise<string | null> {
 }
 
 /**
+ * The refresh in flight, shared. Start-up and every 401 go through here, so a
+ * request that fails while the session is still being restored waits for that
+ * refresh instead of sending the same token a second time, which the server
+ * reads as a stolen token and answers by ending the login.
+ */
+function refreshOnce(): Promise<string | null> {
+  refreshing =
+    refreshing ??
+    refreshAccessToken().finally(() => {
+      refreshing = null;
+    });
+  return refreshing;
+}
+
+/**
  * Called once at start-up. A stored refresh token means the person stays signed
  * in across launches, which on a phone is not a convenience but the expectation.
  */
 export async function bootstrapSession(): Promise<void> {
-  const token = await refreshAccessToken();
+  const token = await refreshOnce();
   if (!token) useAuth.getState().setReady(true);
 }
 
@@ -200,12 +215,7 @@ api.interceptors.response.use(
 
     if (error.response?.status === 401 && original && !original._retried && !isAuthRoute) {
       original._retried = true;
-      refreshing =
-        refreshing ??
-        refreshAccessToken().finally(() => {
-          refreshing = null;
-        });
-      const token = await refreshing;
+      const token = await refreshOnce();
       if (token) {
         original.headers.Authorization = `Bearer ${token}`;
         return api(original);

@@ -85,7 +85,10 @@ describe('Family Photo and centimeter height end to end', () => {
     expect((await db.getRepository(ProfileDetails).findOneByOrFail({ profileId: actor.profile.id })).familyPhotoUrl).toBe(second);
 
     // Personal details retain the existing three-photograph prerequisite.
-    await db.getRepository(Profile).update(actor.profile.id, { photos: [first, second, first] });
+    // Three distinct photographs: a repeated one would be listed twice on the
+    // photographs step, which React rejects as a duplicate key.
+    const third = await upload(actor.token);
+    await db.getRepository(Profile).update(actor.profile.id, { photos: [first, second, third] });
     for (const heightCm of [168, 170, 178, 180]) {
       await http().put(`${route}/personal`).set('Authorization', `Bearer ${actor.token}`).send({ ...personal, heightCm }).expect(200);
       expect((await read().expect(200)).body.details.heightCm).toBe(heightCm);
