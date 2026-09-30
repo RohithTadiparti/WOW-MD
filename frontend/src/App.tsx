@@ -905,6 +905,22 @@ export default function App() {
   }, []);
 
   /*
+   * A wheel over a focused native number field changes its value in browsers.
+   * Forms use number fields for money, guest counts and planner budgets, where
+   * an accidental increment is worse than losing focus. Capture it once at the
+   * document edge so every current and future form behaves the same way while
+   * the wheel still scrolls the page normally.
+   */
+  useEffect(() => {
+    const blurNumberInput = (event: WheelEvent) => {
+      const input = event.target instanceof HTMLInputElement ? event.target : null;
+      if (input?.type === 'number' && document.activeElement === input) input.blur();
+    };
+    document.addEventListener('wheel', blurNumberInput, { capture: true, passive: true });
+    return () => document.removeEventListener('wheel', blurNumberInput, true);
+  }, []);
+
+  /*
    * Wipe every cached query when the signed-in user changes (EZ1-I122).
    *
    * This is a single-page app: logging out and back in as somebody else never

@@ -395,10 +395,6 @@ export default function RequestDialog({ vendor, onClose }: { vendor: RequestVend
                 min={0}
                 value={budget}
                 onChange={(e) => setBudget(e.target.value)}
-                // Browsers increment focused number fields on the wheel. A
-                // booking budget must not change while somebody is simply
-                // scrolling through the request.
-                onWheel={(e) => e.currentTarget.blur()}
               />
               <span className="mt-1 block text-xs text-gray-500">
                 Optional. Leave it blank if you would rather hear their number first.
