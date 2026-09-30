@@ -94,13 +94,18 @@ export class AdminConsoleService {
       : [];
     const definitionById = new Map(definitions.map((definition) => [definition.id, definition]));
     const categoryById = new Map(categories.map((category) => [category.id, category]));
-    const selectedCategories = new Set(vendor.categories ?? []);
-    const selectedServices = services.filter((service) => {
-      const definition = definitionById.get(service.definitionId);
-      const category = definition ? categoryById.get(definition.categoryId) : null;
-      return Boolean(category && selectedCategories.has(category.slug));
-    });
-    const serviceIds = selectedServices.map((service) => service.id);
+    // Every service is shown, including one whose category the business no
+    // longer lists: an administrator has to see everything the business could
+    // still be holding bookings against. Those are flagged instead.
+    const selectedCategories = vendor.categories ?? [];
+    const categoryOf = (service: VendorService) =>
+      categoryById.get(definitionById.get(service.definitionId)?.categoryId ?? '') ?? null;
+    const outsideSelected = (service: VendorService) => {
+      if (selectedCategories.length === 0) return false;
+      const category = categoryOf(service);
+      return !category || !selectedCategories.includes(category.slug);
+    };
+    const serviceIds = allServiceIds;
     const offerings = serviceIds.length
       ? await this.offerings.find({
           where: { vendorServiceId: In(serviceIds) },
@@ -155,11 +160,12 @@ export class AdminConsoleService {
       },
       owner,
       /** Services & catalogue, each with its priced offerings and category. */
-      services: selectedServices.map((s) => ({
+      services: services.map((s) => ({
         id: s.id,
         displayName: s.displayName,
         name: serviceNames.get(s.id) ?? null,
-        category: categoryById.get(definitionById.get(s.definitionId)?.categoryId ?? '') ?? null,
+        category: categoryOf(s),
+        outsideSelectedCategories: outsideSelected(s),
         description: s.description,
         active: s.active,
         offerings: (offeringsByService.get(s.id) ?? []).map((o) => ({
