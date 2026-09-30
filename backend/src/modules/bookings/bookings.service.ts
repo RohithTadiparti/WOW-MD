@@ -932,6 +932,43 @@ export class BookingsService {
   }
 
   /**
+   * The customer chose a published, fixed price and the provider accepts that
+   * request as-is. Unlike a budget, `estimatedAmount` is the immutable total
+   * the customer was shown for the selected offering and quantity, so it can
+   * become the agreed amount without asking either side to re-enter a quote.
+   */
+  async acceptListedPrice(actor: AuthUser, bookingId: string): Promise<Booking> {
+    const booking = await this.loadOrFail(bookingId);
+    await this.assertSellerSide(actor, booking);
+
+    if (booking.status !== BookingStatus.REQUESTED) {
+      throw new BadRequestException('Only a new fixed-price request can be accepted at its listed price');
+    }
+    if (!booking.offeringId || !booking.estimatedAmount || parseFloat(booking.estimatedAmount) <= 0) {
+      throw new BadRequestException('This request has no selected fixed price. Send a quotation instead.');
+    }
+
+    return this.dataSource.transaction(async (manager) => {
+      if (booking.slotId) await this.availability.confirm(manager, booking.slotId);
+
+      this.assertTransition(booking.status, BookingStatus.PAYMENT_PENDING);
+      booking.amount = booking.estimatedAmount as string;
+      booking.status = BookingStatus.PAYMENT_PENDING;
+      const saved = await manager.getRepository(Booking).save(booking);
+
+      await this.outbox.record(
+        {
+          eventType: 'booking.listed_price_accepted',
+          aggregateType: 'booking',
+          payload: { bookingId, providerId: booking.providerId, amount: booking.amount },
+        },
+        manager,
+      );
+      return saved;
+    });
+  }
+
+  /**
    * The provider says they have started. Refused until the advance is actually
    * held — that is the entire purpose of taking one.
    */
