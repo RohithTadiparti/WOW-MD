@@ -332,6 +332,18 @@ export const FAMILY_TYPE_LABEL: Record<FamilyType, string> = {
   single_parent: 'Single parent',
 };
 
+export type LifeStatus = 'alive' | 'deceased';
+
+/**
+ * A parent's living status. "Late", not "Deceased": it is how a biodata names
+ * a parent who has passed ("Late Sri Ramesh Rao"), and the word families use.
+ * The stored value stays `deceased`.
+ */
+export const LIFE_STATUS_LABEL: Record<LifeStatus, string> = {
+  alive: 'Alive',
+  deceased: 'Late',
+};
+
 export type OccupationStatus =
   | 'employed'
   | 'self_employed'

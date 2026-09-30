@@ -2,7 +2,18 @@ import { formatHeight } from '../lib/height';
 import { readBusinessEntries } from '../lib/business-entries';
 import { ReactNode } from 'react';
 import { formatDate } from '../lib/dates';
-import { OTHER_INCOME_LABEL } from '../lib/permissions';
+import { LIFE_STATUS_LABEL, OTHER_INCOME_LABEL } from '../lib/permissions';
+
+/**
+ * "Late Ramesh Rao · Teacher" for a parent who has passed, the way a biodata
+ * writes it, rather than the stored value ("deceased") tacked on the end.
+ */
+function parentLine(parent: Record<string, unknown>): string | null {
+  const name = parent.name ? String(parent.name) : '';
+  const late = parent.lifeStatus === 'deceased';
+  const who = late ? [LIFE_STATUS_LABEL.deceased, name].filter(Boolean).join(' ') : name;
+  return [who, parent.profession ? String(parent.profession) : ''].filter(Boolean).join(' · ') || null;
+}
 
 interface Sibling {
   id: string;
@@ -155,12 +166,8 @@ export default function SavedBiodata({
       </Group>
 
       <Group title="Family">
-        <Row label="Father">
-          {[father.name, father.profession, father.lifeStatus].filter(Boolean).join(' · ') || null}
-        </Row>
-        <Row label="Mother">
-          {[mother.name, mother.profession, mother.lifeStatus].filter(Boolean).join(' · ') || null}
-        </Row>
+        <Row label="Father">{parentLine(father)}</Row>
+        <Row label="Mother">{parentLine(mother)}</Row>
         <Row label="Native place">{str('nativePlace')}</Row>
         <Row label="Family type">{str('familyType')}</Row>
         <Row label="Family status">{str('familyStatus')}</Row>

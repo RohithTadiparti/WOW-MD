@@ -76,7 +76,7 @@ export const FAMILY_STATUSES = options(FAMILY_STATUS_LABEL);
 
 export const LIFE_STATUSES = [
   { value: 'alive', label: 'Alive' },
-  { value: 'deceased', label: 'Deceased' },
+  { value: 'deceased', label: 'Late' },
 ];
 
 export const KUJA_DOSHAM_OPTIONS = [
