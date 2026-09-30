@@ -1,7 +1,8 @@
 {
   "expo": {
     "name": "WOW",
-    "slug": "wow-world-of-weddings",
+    "slug": "wow",
+    "owner": "rohtisvr-wow",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -83,7 +84,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "13c357aa-79b5-4775-8da6-e094b08c7923"
+        "projectId": "10ed36de-7b79-4f59-90b5-efd92ab9cf58"
       }
     }
   }
