@@ -143,6 +143,11 @@ export const configValidationSchema = Joi.object({
   PAYMENT_WEBHOOK_SECRET: Joi.string().allow('').optional(),
   RAZORPAY_KEY_ID: Joi.string().allow('').optional(),
   RAZORPAY_KEY_SECRET: Joi.string().allow('').optional(),
+  // Encrypts payout bank account numbers at rest. Without it a production
+  // server refuses to store bank details rather than store them weakly.
+  PAYOUT_DETAILS_KEY: Joi.string().min(32).allow('').optional(),
+  SUPPORTED_PAYOUT_BANKS: Joi.string().allow('').optional(),
+  IFSC_LOOKUP_BASE_URL: Joi.string().uri().allow('').optional(),
 
   // Which methods a buyer may choose. Validated as a set rather than a free
   // string so a typo — "netbank" — fails at boot instead of silently removing

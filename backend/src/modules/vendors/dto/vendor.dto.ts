@@ -2,7 +2,7 @@ import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { CATEGORY_SLUG, MAX_CATEGORIES } from '../vendor-categories';
 import { Type } from 'class-transformer';
 import { IsNotFutureDate } from '../../../common/decorators/not-future.decorator';
-import { ArrayMaxSize, IsArray, IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsDateString, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
 import { IsUploadedUrl } from '../../../common/decorators/uploaded-url.decorator';
 import { Transform } from 'class-transformer';
 import { ReviewStatus } from '../../../common/enums';
@@ -305,6 +305,46 @@ export class CreateReviewDto {
 }
 
 /**
+ * The bank account a provider wants to be paid into.
+ *
+ * The account number is sealed before it is stored and never comes back in a
+ * response; the IFSC is resolved again on the server rather than trusting the
+ * client's lookup.
+ */
+export class PayoutBankAccountDto {
+  @ApiProperty({ maxLength: 120 })
+  @IsString()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @MinLength(2)
+  @MaxLength(120)
+  accountHolderName: string;
+
+  @ApiProperty({ maxLength: 120 })
+  @IsString()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @MinLength(2)
+  @MaxLength(120)
+  bankName: string;
+
+  @ApiProperty({ enum: ['savings', 'current'] })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toLowerCase() : value))
+  @IsIn(['savings', 'current'], { message: 'Choose a savings or current account' })
+  accountType: 'savings' | 'current';
+
+  @ApiProperty({ example: '123456789012', description: '9 to 18 digits.' })
+  @IsString()
+  @Transform(({ value }) => (typeof value === 'string' ? value.replace(/\s+/g, '') : value))
+  @Matches(/^\d{9,18}$/, { message: 'Enter a valid account number' })
+  accountNumber: string;
+
+  @ApiProperty({ example: 'HDFC0001234' })
+  @IsString()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toUpperCase() : value))
+  @Matches(/^[A-Z]{4}0[A-Z0-9]{6}$/, { message: 'Enter a valid IFSC code' })
+  ifsc: string;
+}
+
+/**
  * The gateway's linked account for a provider, so escrow has somewhere to go.
  *
  * Set by the provider themselves once they have completed payout onboarding.
@@ -313,14 +353,26 @@ export class CreateReviewDto {
  * among the portfolio URLs is how it gets changed by accident.
  */
 export class PayoutAccountDto {
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: 'acc_JDQrLYlYnCTZKp',
-    description: "Razorpay Route linked account id. Empty string clears it.",
+    description:
+      'Razorpay Route linked account id. An empty string with no bank account clears the ' +
+      'payout account entirely.',
   })
+  @IsOptional()
   @IsString()
   @MaxLength(64)
   @Matches(/^(acc_[A-Za-z0-9]+)?$/, {
     message: 'That is not a linked account id — they look like acc_XXXXXXXX',
   })
-  payoutAccountId: string;
+  payoutAccountId?: string;
+
+  @ApiPropertyOptional({
+    type: () => PayoutBankAccountDto,
+    description: 'Bank details for onboarding when there is no linked account id yet.',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PayoutBankAccountDto)
+  bankAccount?: PayoutBankAccountDto;
 }

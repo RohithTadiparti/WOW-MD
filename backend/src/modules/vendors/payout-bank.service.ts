@@ -53,8 +53,16 @@ export class PayoutBankService {
       throw new BadRequestException('Invalid IFSC code.');
     }
 
-    const value = (await response.json()) as RazorpayIfscResponse;
-    if (!value.BANK || value.IFSC?.toUpperCase() !== ifsc) {
+    // A 200 with a body that is not JSON (a captive portal, a proxy error page)
+    // says nothing about the code, so it is the lookup being unavailable, not
+    // a server fault.
+    let value: RazorpayIfscResponse;
+    try {
+      value = (await response.json()) as RazorpayIfscResponse;
+    } catch {
+      throw new ServiceUnavailableException('IFSC verification is temporarily unavailable.');
+    }
+    if (!value || typeof value !== 'object' || !value.BANK || value.IFSC?.toUpperCase() !== ifsc) {
       throw new BadRequestException('Invalid IFSC code.');
     }
 
