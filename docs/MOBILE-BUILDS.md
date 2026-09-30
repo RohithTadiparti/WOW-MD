@@ -58,12 +58,56 @@ encryption.
 ## Android
 
 `npx eas-cli build --platform android --profile preview` produces an `.apk`
-the same way. Local Docker builds (no Expo account) are also possible with the
-`reactnativecommunity/react-native-android` image: copy `mobile/` and
-`frontend/` side by side, then `npm ci`, `npx expo prebuild --platform android
---no-install`, and `./gradlew assembleRelease` in `android/` with
-`EXPO_PUBLIC_API_URL` set. Test APKs are served to testers from
-`docker/downloads` (see `frontend/nginx.conf`).
+the same way. No Expo account is needed to build one locally in Docker:
+
+```bash
+BUILD_COMMIT=$(git rev-parse --short HEAD) \
+  docker compose -f docker/docker-compose.yml --profile mobile run --rm build-android
+```
+
+The `build-android` service (`docker/android-build/build-apk.sh`, on the
+`reactnativecommunity/react-native-android` image) copies `mobile/` and
+`frontend/` side by side, runs `npm ci`, `expo prebuild` and
+`gradlew assembleRelease`, and publishes `wow.apk` and `version.json` into
+`docker/downloads`. Both are replaced atomically, so the running site switches
+to the new build without a restart. The first build takes a while; the Gradle
+and npm caches live in the `android_gradle` and `android_npm` volumes, so later
+ones are much quicker.
+
+| Setting (`docker/.env`) | Default | Meaning |
+|---|---|---|
+| `MOBILE_API_URL` | the test API | The API baked into the APK |
+| `ANDROID_ARCHS` | `arm64-v8a` | Add `,armeabi-v7a` for old 32-bit phones |
+| `ANDROID_OUT_DIR` | `./downloads` | Where the build is published |
+| `ANDROID_KEY_ALIAS`, `ANDROID_KEYSTORE_PASSWORD` | | Only with a signing key, below |
+
+**Signing.** Without a key the APK keeps the release build's default
+signature, as every earlier test build did, so testers update in place. To sign
+with a key of your own, put it at `docker/android-keys/release.jks`
+(git-ignored) and set the alias and password in `docker/.env`. Android refuses
+an update signed with a different key, so testers uninstall once when you
+switch. Choose one key and keep it, backed up outside the repository.
+
+## Handing builds to testers
+
+`/app` on the website (for example `https://test.worldofweddingz.com/app`) is
+the page to send people. It is public and reads what is in `docker/downloads`:
+
+- **Android:** a QR code for `wow.apk` when opened on a computer, a Download
+  button on the phone, and the version, build time, commit and checksum from
+  `version.json`.
+- **iPhone:** iPhones cannot install an app from a web page, so this half shows
+  a TestFlight QR code and button once `docker/downloads/ios.json` exists:
+
+  ```json
+  { "testflightUrl": "https://testflight.apple.com/join/XXXXXXXX", "note": "Optional line shown under the button" }
+  ```
+
+  Use the TestFlight public link from App Store Connect. Until the file exists
+  the page says the iPhone app is on its way.
+
+The home page and the dashboard card link to `/app` as well as straight to the
+APK.
 
 ## Automated builds (GitHub Actions)
 
