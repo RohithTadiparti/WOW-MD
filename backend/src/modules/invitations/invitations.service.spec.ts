@@ -21,7 +21,7 @@ describe('InvitationsService OTP verification', () => {
     const invitations = { findOne: jest.fn() };
     const profiles = { findOne: jest.fn() };
     const users = { findOne: jest.fn() };
-    const sms = { sendPhoneVerification: jest.fn() };
+    const sms = { sendPhoneVerification: jest.fn().mockResolvedValue(true) };
     const audit = { record: jest.fn() };
     const service = new InvitationsService(
       invitations as any,
@@ -59,6 +59,21 @@ describe('InvitationsService OTP verification', () => {
     expect(sms.sendPhoneVerification).toHaveBeenCalledWith(
       expect.objectContaining({ to: '+919876543210', code: expect.any(String) }),
     );
+  });
+
+  it('reports an SMS gateway failure instead of claiming the code was sent', async () => {
+    const transaction = {
+      set: jest.fn().mockReturnThis(),
+      del: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue([]),
+    };
+    const del = jest.fn().mockResolvedValue(1);
+    const { service, invitations, sms } = makeService({ multi: jest.fn(() => transaction), del });
+    invitations.findOne.mockResolvedValue(pendingSmsInvitation());
+    sms.sendPhoneVerification.mockResolvedValueOnce(false);
+
+    await expect(service.sendOtp('token')).rejects.toBeInstanceOf(ServiceUnavailableException);
+    expect(del).toHaveBeenCalledWith('invitation:otp:invite-1');
   });
 
   it('uses Redis atomically, allows an early success, and locks after five failures', async () => {

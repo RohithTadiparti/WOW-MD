@@ -270,7 +270,16 @@ export class InvitationsService {
     const attemptsKey = `invitation:otp:attempts:${invitation.id}`;
     await redis.multi().set(otpKey, hashToken(code), 'EX', INVITATION_OTP_TTL_SECONDS)
       .del(attemptsKey).exec();
-    await this.sms.sendPhoneVerification({ to: invitation.phone, code });
+    // SmsService reports a gateway failure as `false` rather than throwing.
+    // Saying "sent" then would leave the invitee waiting for a code that never
+    // comes, with no way to claim the profile without it.
+    const sent = await this.sms.sendPhoneVerification({ to: invitation.phone, code });
+    if (!sent) {
+      await redis.del(otpKey);
+      throw new ServiceUnavailableException(
+        'We could not send the verification code just now. Please try again in a few minutes.',
+      );
+    }
     return { sent: true };
   }
 

@@ -244,7 +244,14 @@ export default function AcceptInvite() {
           />
         </div>
 
-        <button className="btn w-full" disabled={loading}>
+        {/*
+          An SMS-only invitation cannot be accepted without the code, so the
+          button waits for one to be requested rather than failing on the server.
+        */}
+        <button
+          className="btn w-full"
+          disabled={loading || (!data.email && (!otpSent || otpCode.length !== 6))}
+        >
           {loading ? 'Setting up your account…' : 'Accept and create my account'}
         </button>
 
