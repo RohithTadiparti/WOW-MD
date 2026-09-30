@@ -25,6 +25,9 @@ import {
 } from '@/components/ui';
 import { radius, rgb, space, useTheme } from '@/theme';
 
+/** The server's minimum before the basic information can be saved. */
+const REQUIRED_PHOTOS = 3;
+
 interface BiodataResponse {
   profileId: string;
   details: Record<string, unknown> | null;
@@ -58,7 +61,10 @@ export default function BiodataWizard() {
     queryKey: ['biodata-photos', profileId],
     enabled: Boolean(profileId),
     queryFn: async () =>
-      (await api.get(`/profiles/${profileId}/details/photos`)).data as { photos: string[] },
+      (await api.get(`/profiles/${profileId}/details/photos`)).data as {
+        photos: string[];
+        primaryPhotoUrl?: string | null;
+      },
     retry: false,
   });
 
@@ -86,15 +92,20 @@ export default function BiodataWizard() {
   const d = (full?.details ?? {}) as Record<string, unknown>;
   const showMarital = d.maritalStatus && d.maritalStatus !== 'never_married';
 
+  // Photographs first: the server will not save the basic information until
+  // the profile has three of them, so asking for them last meant step one
+  // could never be saved by somebody new.
   const steps = [
+    { id: 'photos', title: 'Photographs' },
     { id: 'personal', title: 'Basic Information' },
     ...(showMarital ? [{ id: 'marital', title: 'Marital History' }] : []),
     { id: 'education', title: 'Education & Career' },
     { id: 'family', title: 'Family Background' },
     { id: 'horoscope', title: 'Horoscope' },
     { id: 'preferences', title: 'Partner Preferences' },
-    { id: 'photos', title: 'Photographs' }
   ];
+
+  const photoCount = (photos?.photos ?? []).length;
 
   const totalSteps = steps.length;
   // Make sure step doesn't exceed totalSteps if marital status changes back to never_married
@@ -136,6 +147,7 @@ export default function BiodataWizard() {
           me={me as Record<string, unknown>}
           full={full}
           onSaved={nextStep}
+          onBack={prevStep}
         />
       )}
 
@@ -197,14 +209,30 @@ export default function BiodataWizard() {
             <Body tone="muted">
               A profile with photographs is asked about several times more often than one without.
             </Body>
+            <Caption tone={photoCount >= REQUIRED_PHOTOS ? 'muted' : 'critical'}>
+              {photoCount >= REQUIRED_PHOTOS
+                ? `${photoCount} added.`
+                : `Add at least ${REQUIRED_PHOTOS} to continue — ${photoCount} so far.`}
+            </Caption>
             {photos && (photos.photos ?? []).length === 0 ? (
               <ProfileSilhouette
                 gender={me?.gender}
                 style={{ width: 116, height: 84, borderRadius: radius.sm }}
               />
             ) : null}
+            {photoCount > 1 ? (
+              <Caption tone="muted">
+                Tap “Set as profile photo” under the one you want families to see first.
+              </Caption>
+            ) : null}
             <MediaStrip
               urls={photos?.photos ?? []}
+              primary={photos?.primaryPhotoUrl ?? photos?.photos?.[0] ?? null}
+              onMakePrimary={(url) => {
+                void api
+                  .put(`/profiles/${profileId}/details/primary-photo`, { url })
+                  .then(refresh);
+              }}
               onRemove={(url) => {
                 void api
                   .delete(`/profiles/${profileId}/details/photos`, { data: { url } })
@@ -218,14 +246,11 @@ export default function BiodataWizard() {
               }}
             />
           </Card>
-          <View style={{ flexDirection: 'row', gap: space(2) }}>
-            <Button
-              label="Back"
-              variant="outline"
-              onPress={prevStep}
-            />
-            <Button style={{ flex: 1 }} label="Finish" onPress={nextStep} />
-          </View>
+          <Button
+            label="Continue →"
+            onPress={nextStep}
+            disabled={photoCount < REQUIRED_PHOTOS}
+          />
         </View>
       )}
     </Screen>

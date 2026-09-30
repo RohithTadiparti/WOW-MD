@@ -165,6 +165,8 @@ services:
       # Read only by the one-shot admin seeder, never by the running API.
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      # Test-only opt-in for the shared local test login; leave false elsewhere.
+      SEED_ADMIN_ALLOW_WEAK_PASSWORD: ${SEED_ADMIN_ALLOW_WEAK_PASSWORD:-false}
       # Optional integrations. Off by default; start them with `--profile full`
       # and set the ENABLED flags to true to activate.
       NEO4J_ENABLED: ${NEO4J_ENABLED:-false}
@@ -202,6 +204,7 @@ services:
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change-me-refresh-in-production-min-32-chars}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      SEED_ADMIN_ALLOW_WEAK_PASSWORD: ${SEED_ADMIN_ALLOW_WEAK_PASSWORD:-false}
     depends_on:
       postgres:
         condition: service_healthy

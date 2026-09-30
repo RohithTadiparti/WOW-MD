@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import { formatDate } from '../lib/dates';
+import { OTHER_INCOME_LABEL } from '../lib/permissions';
 
 interface Sibling {
   id: string;
@@ -86,6 +87,12 @@ export default function SavedBiodata({
     const v = bag(key)[field];
     return v === null || v === undefined || v === '' ? null : String(v);
   };
+
+  const otherIncome = (Array.isArray(details.otherIncome) ? details.otherIncome : []) as {
+    source: string;
+    details?: string;
+    annualIncome?: string;
+  }[];
 
   const height = num('heightCm');
   const father = bag('father');
@@ -209,6 +216,21 @@ export default function SavedBiodata({
         ) : (
           <Row label="Income">
             <span className="text-gray-400">Kept private</span>
+          </Row>
+        )}
+        {otherIncome.length > 0 && (
+          <Row label="Other income">
+            {otherIncome
+              .map((row) =>
+                [
+                  OTHER_INCOME_LABEL[row.source] ?? row.source,
+                  row.details,
+                  details.incomeVisible && row.annualIncome ? `₹${row.annualIncome} a year` : null,
+                ]
+                  .filter(Boolean)
+                  .join(', '),
+              )
+              .join(' · ')}
           </Row>
         )}
       </Group>

@@ -70,7 +70,8 @@ export default function ProfileCard({
     profile?.displayName ||
     'Your profile';
 
-  const photo = details.primaryPhotoUrl ?? profile?.photos?.[0] ?? null;
+  // The first photo is the profile photo; the server keeps the chosen one first.
+  const photo = profile?.photos?.[0] ?? details.primaryPhotoUrl ?? null;
 
   const age = (() => {
     if (!profile?.dateOfBirth) return null;

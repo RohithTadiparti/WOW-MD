@@ -82,7 +82,8 @@ interface AgencyStatus {
 const STEWARD_RELATIONS = ['Self', 'Parent', 'Sibling', 'Relative', 'Friend', 'Other'];
 
 const emptyDraft = {
-  displayName: '',
+  firstName: '',
+  lastName: '',
   stewardRelation: '',
   contactPhone: '',
   contactEmail: '',
@@ -138,7 +139,7 @@ export default function ManagedProfiles({ embedded = false }: { embedded?: boole
   const create = useMutation({
     mutationFn: async (inviteNow: boolean) => {
       const payload: Record<string, unknown> = {
-        displayName: draft.displayName,
+        displayName: [draft.firstName.trim(), draft.lastName.trim()].filter(Boolean).join(' '),
         contactPhone: draft.contactPhone,
         gender: draft.gender,
         consent: consentPayload(consent),
@@ -306,9 +307,14 @@ export default function ManagedProfiles({ embedded = false }: { embedded?: boole
       <form onSubmit={submit} className="card space-y-4">
         <h2 className="section-title">New profile</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {/* Asked separately, as the biodata asks them. */}
           <div>
-            <label className="label">Full name</label>
-            <input className="input" value={draft.displayName} onChange={set('displayName')} required />
+            <label className="label">First name</label>
+            <input className="input" value={draft.firstName} onChange={set('firstName')} required />
+          </div>
+          <div>
+            <label className="label">Last name</label>
+            <input className="input" value={draft.lastName} onChange={set('lastName')} required />
           </div>
           {/*
             Only asked of a family member. An agency's relationship to a client

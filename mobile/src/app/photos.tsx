@@ -26,7 +26,10 @@ export default function Photos() {
     queryKey: ['biodata-photos', profileId],
     enabled: Boolean(profileId),
     queryFn: async () =>
-      (await api.get(`/profiles/${profileId}/details/photos`)).data as { photos: string[] },
+      (await api.get(`/profiles/${profileId}/details/photos`)).data as {
+        photos: string[];
+        primaryPhotoUrl?: string | null;
+      },
     retry: false,
   });
 
@@ -77,8 +80,20 @@ export default function Photos() {
             style={{ width: 116, height: 84, borderRadius: radius.sm }}
           />
         ) : null}
+        {urls.length > 1 ? (
+          <Caption tone="muted">
+            The profile photo is the one shown on your match cards. Tap “Set as profile photo” to
+            change it.
+          </Caption>
+        ) : null}
         <MediaStrip
           urls={urls}
+          primary={photos?.primaryPhotoUrl ?? urls[0] ?? null}
+          onMakePrimary={(url) => {
+            void api
+              .put(`/profiles/${profileId}/details/primary-photo`, { url })
+              .then(refresh);
+          }}
           onRemove={(url) => {
             void api
               .delete(`/profiles/${profileId}/details/photos`, { data: { url } })
