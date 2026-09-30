@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useEffect, useState } from 'react';
+import { FormEvent, ReactNode, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { api, apiMessage } from '../lib/api';
@@ -106,7 +106,23 @@ export default function Biodata() {
   const [profileId, setProfileId] = useState(params.get('profileId') ?? '');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [open, setOpen] = useState('personal');
+  const [step, setStep] = useState<StepName>('personal');
+  const [direction, setDirection] = useState<'next' | 'prev'>('next');
+  const [savedOpen, setSavedOpen] = useState(false);
+  // Which profile the wizard has already been placed on, so it opens at the
+  // first unfinished section once and is left alone after that.
+  const placedFor = useRef('');
+
+  /** Swap the card, sliding forward or back depending on where it lands. */
+  function goTo(next: StepName) {
+    setDirection(stepIndex(next) >= stepIndex(step) ? 'next' : 'prev');
+    setStep(next);
+    requestAnimationFrame(() => {
+      document
+        .getElementById('biodata-steps')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }
 
   // Individuals edit their own profile and never pick one.
   const { data: me } = useQuery({
@@ -134,6 +150,16 @@ export default function Biodata() {
   const siblings: Sibling[] = data?.siblings ?? [];
   const assets: Asset[] = data?.assets ?? [];
 
+  useEffect(() => {
+    if (!completion || placedFor.current === targetId) return;
+    placedFor.current = targetId;
+    const first = completion.sections.find((sec) => !sec.complete)?.section;
+    if (first && isStep(first)) {
+      setDirection('next');
+      setStep(first);
+    }
+  }, [completion, targetId]);
+
   /** Resolves true once the server has accepted the section, false otherwise. */
   async function save(section: string, body: unknown): Promise<boolean> {
     setError('');
@@ -142,28 +168,12 @@ export default function Biodata() {
       await api.put(`/profiles/${targetId}/details/${section}`, body);
       await qc.invalidateQueries({ queryKey: ['biodata', targetId] });
 
-      // Straight on to the next section. Leaving the page where it was meant
-      // scrolling back up to find the next thing, which is where people
-      // stopped.
+      // Straight on to the next card. Leaving the page where it was meant
+      // looking for the next thing, which is where people stopped.
       const next = nextSection(section);
       if (next) {
-        setOpen(next);
+        goTo(next);
         setNotice(`Saved. Next: ${SECTION_LABEL[next] ?? next}.`);
-        /*
-         * To the next section, not to the top of the page.
-         *
-         * This scrolled to the top, on the reasoning that the next section
-         * would otherwise open below the fold on a phone. It does solve that
-         * and it is the reported complaint: somebody who has just finished
-         * section three is put back at the beginning and has to scroll down
-         * past everything they have already done. Bringing the section itself
-         * into view solves the fold problem without the journey back.
-         */
-        requestAnimationFrame(() => {
-          document
-            .getElementById(`section-${next}`)
-            ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        });
       } else {
         setNotice('Saved. That is the last section.');
       }
@@ -242,7 +252,7 @@ export default function Biodata() {
             {completion.sections.map((s) => (
               <button
                 key={s.section}
-                onClick={() => setOpen(s.section)}
+                onClick={() => isStep(s.section) && goTo(s.section)}
                 className={`rounded-sm px-3 py-1 text-xs font-medium ${
                   s.complete ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'
                 }`}
@@ -269,9 +279,9 @@ export default function Biodata() {
           details={details}
           complete={completion?.complete ?? false}
           percent={completion?.percent ?? 0}
-          onEdit={() => setOpen('personal')}
-          onPhotos={() => setOpen('photos')}
-          onView={() => setOpen('saved')}
+          onEdit={() => goTo('personal')}
+          onPhotos={() => goTo('photos')}
+          onView={() => setSavedOpen(true)}
           gender={me?.gender ?? data?.gender}
         />
       )}
@@ -281,36 +291,41 @@ export default function Biodata() {
         exactly like a form you have not filled in yet, which is why people
         saved, saw the same boxes and concluded nothing had been stored.
       */}
-      <Accordion title="Saved details" name="saved" open={open} setOpen={setOpen}>
+      <Accordion title="Saved details" open={savedOpen} setOpen={setSavedOpen}>
         <SavedBiodata details={details} siblings={siblings} assets={assets} />
       </Accordion>
 
-      <Accordion title="Photographs" name="photos" open={open} setOpen={setOpen}>
-        {targetId ? (
-          <ProfilePhotos profileId={targetId} gender={me?.gender ?? data?.gender} />
-        ) : (
-          <p className="text-sm text-gray-400">Pick a profile first.</p>
-        )}
-      </Accordion>
+      {/*
+        One section at a time. Nine forms stacked on one page read as one very
+        long form, and people stopped partway down it. A single card with a
+        visible "3 of 9" and a way back is a much shorter-looking task.
+      */}
+      <StepCard current={step} direction={direction} onGo={goTo} completion={completion}>
+        {step === 'photos' &&
+          (targetId ? (
+            <ProfilePhotos profileId={targetId} gender={me?.gender ?? data?.gender} />
+          ) : (
+            <p className="text-sm text-gray-400">Pick a profile first.</p>
+          ))}
 
-      <Accordion title="Personal details" name="personal" open={open} setOpen={setOpen}>
-        <PersonalForm
-          // The bride/groom's date of birth belongs to this managed profile and
-          // must never be inherited from the logged-in family member's own
-          // account DOB (EZ1-I182). `me.dateOfBirth` is the account holder's, so
-          // it is not used here. Seed from the managed profile's own saved DOB —
-          // the value `savePersonal` writes from this very form — but only once
-          // the personal section has been filled in; before that the field
-          // starts empty so the family enters the bride/groom's date
-          // deliberately rather than carrying the parent's over.
-          initial={{
-            ...details,
-            dateOfBirth: data?.dateOfBirth ?? '',
-          }}
-          contact={contact}
-          onSave={(b) => save('personal', b)}
-          storageKey={`biodata:${targetId}:personal`}
-          /*
+        {step === 'personal' && (
+          <PersonalForm
+            // The bride/groom's date of birth belongs to this managed profile and
+            // must never be inherited from the logged-in family member's own
+            // account DOB (EZ1-I182). `me.dateOfBirth` is the account holder's, so
+            // it is not used here. Seed from the managed profile's own saved DOB —
+            // the value `savePersonal` writes from this very form — but only once
+            // the personal section has been filled in; before that the field
+            // starts empty so the family enters the bride/groom's date
+            // deliberately rather than carrying the parent's over.
+            initial={{
+              ...details,
+              dateOfBirth: data?.dateOfBirth ?? '',
+            }}
+            contact={contact}
+            onSave={(b) => save('personal', b)}
+            storageKey={`biodata:${targetId}:personal`}
+            /*
             Whose date of birth this field is for.
 
             Shown whenever the biodata being edited is not the viewer's own,
@@ -327,71 +342,72 @@ export default function Biodata() {
             above seeds from `data`, the *managed* profile's own record, so the
             parent's date is never carried across either.
           */
-          showDob={Boolean(targetId) && targetId !== me?.id}
-        />
-      </Accordion>
+            showDob={Boolean(targetId) && targetId !== me?.id}
+          />
+        )}
 
-      <Accordion title="Religion and community" name="religion" open={open} setOpen={setOpen}>
-        <ReligionForm
-          initial={details}
-          onSave={(b) => save('religion', b)}
-          storageKey={`biodata:${targetId}:religion`}
-        />
-      </Accordion>
+        {step === 'religion' && (
+          <ReligionForm
+            initial={details}
+            onSave={(b) => save('religion', b)}
+            storageKey={`biodata:${targetId}:religion`}
+          />
+        )}
 
-      <Accordion title="Horoscope" name="horoscope" open={open} setOpen={setOpen}>
-        <HoroscopeForm
-          initial={details}
-          onSave={(b) => save('horoscope', b)}
-          storageKey={`biodata:${targetId}:horoscope`}
-        />
-      </Accordion>
+        {step === 'horoscope' && (
+          <HoroscopeForm
+            initial={details}
+            onSave={(b) => save('horoscope', b)}
+            storageKey={`biodata:${targetId}:horoscope`}
+          />
+        )}
 
-      <Accordion title="Marital status" name="marital" open={open} setOpen={setOpen}>
-        <MaritalForm
-          initial={details}
-          onSave={(b) => save('marital', b)}
-          storageKey={`biodata:${targetId}:marital`}
-        />
-      </Accordion>
+        {step === 'marital' && (
+          <MaritalForm
+            initial={details}
+            onSave={(b) => save('marital', b)}
+            storageKey={`biodata:${targetId}:marital`}
+          />
+        )}
 
-      <Accordion title="Family" name="family" open={open} setOpen={setOpen}>
-        <FamilyForm
-          initial={details}
-          siblings={siblings}
-          assets={assets}
-          onSave={(b) => save('family', b)}
-          storageKey={`biodata:${targetId}:family`}
-          onAddSibling={(b) => mutate(() => api.post(`/profiles/${targetId}/details/siblings`, b))}
-          onRemoveSibling={(id) =>
-            mutate(() => api.delete(`/profiles/${targetId}/details/siblings/${id}`))
-          }
-          onAddAsset={(b) => mutate(() => api.post(`/profiles/${targetId}/details/assets`, b))}
-          onRemoveAsset={(id) =>
-            mutate(() => api.delete(`/profiles/${targetId}/details/assets/${id}`))
-          }
-        />
-      </Accordion>
+        {step === 'family' && (
+          <FamilyForm
+            initial={details}
+            siblings={siblings}
+            assets={assets}
+            onSave={(b) => save('family', b)}
+            storageKey={`biodata:${targetId}:family`}
+            onAddSibling={(b) =>
+              mutate(() => api.post(`/profiles/${targetId}/details/siblings`, b))
+            }
+            onRemoveSibling={(id) =>
+              mutate(() => api.delete(`/profiles/${targetId}/details/siblings/${id}`))
+            }
+            onAddAsset={(b) => mutate(() => api.post(`/profiles/${targetId}/details/assets`, b))}
+            onRemoveAsset={(id) =>
+              mutate(() => api.delete(`/profiles/${targetId}/details/assets/${id}`))
+            }
+          />
+        )}
 
-      <Accordion title="Education and occupation" name="education" open={open} setOpen={setOpen}>
-        <EducationForm
-          initial={details}
-          onSave={(b) => save('education', b)}
-          storageKey={`biodata:${targetId}:education`}
-        />
-      </Accordion>
+        {step === 'education' && (
+          <EducationForm
+            initial={details}
+            onSave={(b) => save('education', b)}
+            storageKey={`biodata:${targetId}:education`}
+          />
+        )}
 
-      <Accordion title="Partner preferences" name="preferences" open={open} setOpen={setOpen}>
-        <PreferencesForm
-          initial={details}
-          onSave={(b) => save('preferences', b)}
-          storageKey={`biodata:${targetId}:preferences`}
-        />
-      </Accordion>
+        {step === 'preferences' && (
+          <PreferencesForm
+            initial={details}
+            onSave={(b) => save('preferences', b)}
+            storageKey={`biodata:${targetId}:preferences`}
+          />
+        )}
 
-      <Accordion title="Identity verification" name="identity" open={open} setOpen={setOpen}>
-        <AadhaarPanel profileId={targetId} />
-      </Accordion>
+        {step === 'identity' && <AadhaarPanel profileId={targetId} />}
+      </StepCard>
     </div>
   );
 }
@@ -429,48 +445,140 @@ const SECTION_ORDER = [
   'identity',
 ] as const;
 
-function nextSection(current: string): string | null {
-  const i = SECTION_ORDER.indexOf(current as (typeof SECTION_ORDER)[number]);
-  if (i === -1 || i === SECTION_ORDER.length - 1) return null;
-  return SECTION_ORDER[i + 1];
+type StepName = (typeof SECTION_ORDER)[number];
+
+function isStep(name: string): name is StepName {
+  return (SECTION_ORDER as readonly string[]).includes(name);
+}
+
+function stepIndex(name: StepName): number {
+  return SECTION_ORDER.indexOf(name);
+}
+
+function nextSection(current: string): StepName | null {
+  if (!isStep(current)) return null;
+  const i = stepIndex(current);
+  return i === SECTION_ORDER.length - 1 ? null : SECTION_ORDER[i + 1];
 }
 
 function Accordion({
   title,
-  name,
   open,
   setOpen,
   children,
 }: {
   title: string;
-  name: string;
-  open: string;
-  setOpen: (n: string) => void;
+  open: boolean;
+  setOpen: (open: boolean) => void;
   children: ReactNode;
 }) {
-  const isOpen = open === name;
-  const step = SECTION_ORDER.indexOf(name as (typeof SECTION_ORDER)[number]);
   return (
-    // Addressable so that saving one section can bring the next into view
-    // rather than throwing the page back to the top.
-    <div className="card" id={`section-${name}`}>
+    <div className="card">
       <button
         className="flex w-full items-center justify-between text-left"
-        onClick={() => setOpen(isOpen ? '' : name)}
+        onClick={() => setOpen(!open)}
       >
-        <span className="flex items-baseline font-serif text-[1.375rem] font-normal text-brand">
-          {/* Which of how many, so the form has a visible end. */}
-          {step >= 0 && (
-            <span className="mr-3 font-sans text-[0.6875rem] uppercase tracking-[0.22em] text-gold-deep">
-              {step + 1} of {SECTION_ORDER.length}
-            </span>
-          )}
-          {title}
-        </span>
-        <span className="text-gray-400">{isOpen ? '−' : '+'}</span>
+        <span className="font-serif text-[1.375rem] font-normal text-brand">{title}</span>
+        <span className="text-gray-400">{open ? '−' : '+'}</span>
       </button>
-      {isOpen && <div className="mt-4">{children}</div>}
+      {open && <div className="mt-4">{children}</div>}
     </div>
+  );
+}
+
+/**
+ * The biodata as a deck of cards, one section showing at a time.
+ *
+ * Saving a form swaps in the next card on its own; Back and Continue are here
+ * for the sections with nothing to save (photographs, identity) and for
+ * somebody who wants to come back to one later. The rail across the top is
+ * both the progress and a way to jump straight to any section.
+ */
+function StepCard({
+  current,
+  direction,
+  onGo,
+  completion,
+  children,
+}: {
+  current: StepName;
+  direction: 'next' | 'prev';
+  onGo: (step: StepName) => void;
+  completion?: Completion;
+  children: ReactNode;
+}) {
+  const index = stepIndex(current);
+  const prev = index > 0 ? SECTION_ORDER[index - 1] : null;
+  const next = nextSection(current);
+  const done = (name: StepName) =>
+    completion?.sections.find((sec) => sec.section === name)?.complete ?? false;
+
+  return (
+    <section id="biodata-steps" className="scroll-mt-4 space-y-3" aria-label="Biodata sections">
+      <ol className="grid grid-cols-9 gap-1">
+        {SECTION_ORDER.map((name, i) => (
+          <li key={name}>
+            <button
+              type="button"
+              onClick={() => onGo(name)}
+              aria-label={`${i + 1}. ${SECTION_LABEL[name]}`}
+              aria-current={name === current ? 'step' : undefined}
+              title={SECTION_LABEL[name]}
+              className="block w-full py-2"
+            >
+              <span
+                className={`block h-1 w-full transition-colors ${
+                  name === current ? 'bg-brand' : done(name) ? 'bg-gold' : 'bg-gray-200'
+                }`}
+              />
+            </button>
+          </li>
+        ))}
+      </ol>
+
+      <div className="overflow-hidden">
+        <div
+          // A new key per section remounts the card, which is what plays the
+          // swap; the direction decides which side it comes in from.
+          key={current}
+          className={`card ${direction === 'next' ? 'card-swap-next' : 'card-swap-prev'}`}
+        >
+          <header className="mb-4 flex items-baseline justify-between gap-3 border-b pb-3">
+            <h2 className="flex items-baseline font-serif text-[1.375rem] font-normal text-brand">
+              <span className="mr-3 font-sans text-[0.6875rem] uppercase tracking-[0.22em] text-gold-deep">
+                {index + 1} of {SECTION_ORDER.length}
+              </span>
+              {SECTION_LABEL[current]}
+            </h2>
+            {done(current) && (
+              <span className="whitespace-nowrap text-[0.6875rem] uppercase tracking-[0.18em] text-emerald-700">
+                ✓ Saved
+              </span>
+            )}
+          </header>
+
+          {children}
+
+          <footer className="mt-6 flex items-center justify-between gap-3 border-t pt-4">
+            <button
+              type="button"
+              className="btn-ghost"
+              disabled={!prev}
+              onClick={() => prev && onGo(prev)}
+            >
+              ← Back
+            </button>
+            {next ? (
+              <button type="button" className="btn-outline btn-sm" onClick={() => onGo(next)}>
+                {current === 'photos' || done(current) ? 'Continue' : 'Skip for now'} →
+              </button>
+            ) : (
+              <span className="text-xs text-gray-500">Last section</span>
+            )}
+          </footer>
+        </div>
+      </div>
+    </section>
   );
 }
 

@@ -487,6 +487,28 @@
     }
   }
 
+  /* One card sliding in over the last, for step-by-step forms. The direction
+   * follows the step: forward comes in from the right, back from the left. */
+  .card-swap-next {
+    animation: card-swap-next 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .card-swap-prev {
+    animation: card-swap-prev 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  @keyframes card-swap-next {
+    from {
+      opacity: 0;
+      transform: translateX(2.5rem);
+    }
+  }
+  @keyframes card-swap-prev {
+    from {
+      opacity: 0;
+      transform: translateX(-2.5rem);
+    }
+  }
+
   /* A hairline that fades at both ends. Used to separate sections without the
    * hard ruled-paper look of a full-bleed border. */
   .rule {
