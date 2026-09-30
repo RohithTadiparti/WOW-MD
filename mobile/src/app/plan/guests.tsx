@@ -40,11 +40,22 @@ interface Guest {
   respondedAt?: string | null;
   attendingCount?: number | null;
   declineReason?: string | null;
+  /** The events this guest is invited to: what their wedding invitation covers. */
+  invitedEventIds?: string[];
+}
+
+/** A row of `GET /events`, as much as choosing what an invitation covers needs. */
+interface WeddingEventRow {
+  id: string;
+  name: string;
+  eventDate?: string | null;
+  status?: string | null;
 }
 
 type Mode =
   | { kind: 'list' }
   | { kind: 'form'; guest?: Guest }
+  | { kind: 'choose'; guest: Guest }
   | { kind: 'sent'; guest: Guest; link: string };
 
 const RELATION_CHIPS: { key: RelationFilter; label: string }[] = [
@@ -104,14 +115,21 @@ export default function PlanGuests() {
     refetchInterval: 20_000,
     retry: false,
   });
-  // One invitation covers every event; there must be at least one to invite to.
+  // One invitation covers the events the host picks for that guest; there must
+  // be at least one to pick.
   const events = useQuery({
     queryKey: ['events'],
     queryFn: async () => (await api.get('/events')).data,
     retry: false,
   });
-  const eventCount = (Array.isArray(events.data) ? events.data : (events.data?.data ?? [])).length;
-  const hasEvents = eventCount > 0;
+  const eventRows = useMemo(
+    () =>
+      ((Array.isArray(events.data) ? events.data : (events.data?.data ?? [])) as WeddingEventRow[]).filter(
+        (e) => e.status !== 'cancelled',
+      ),
+    [events.data],
+  );
+  const hasEvents = eventRows.length > 0;
 
   const refreshGuests = useCallback(
     () =>
@@ -131,9 +149,9 @@ export default function PlanGuests() {
   );
 
   const invite = useMutation({
-    mutationFn: async (guest: Guest) =>
-      (await api.post(`/events/guests/${guest.id}/invite`)).data as { rsvpUrl: string },
-    onSuccess: async (data, guest) => {
+    mutationFn: async ({ guest, eventIds }: { guest: Guest; eventIds: string[] }) =>
+      (await api.post(`/events/guests/${guest.id}/invite`, { eventIds })).data as { rsvpUrl: string },
+    onSuccess: async (data, { guest }) => {
       setError('');
       setMode({ kind: 'sent', guest, link: rsvpLink(data.rsvpUrl) });
       await refreshGuests();
@@ -176,12 +194,24 @@ export default function PlanGuests() {
         onCancel={() => setMode({ kind: 'list' })}
         onSaved={async (guest, send) => {
           await refreshGuests();
-          if (send) invite.mutate(guest);
+          if (send) setMode({ kind: 'choose', guest: { ...mode.guest, ...guest } });
           else {
             setNotice(mode.guest ? 'Guest updated.' : 'Guest added.');
             setMode({ kind: 'list' });
           }
         }}
+      />
+    );
+  }
+
+  if (mode.kind === 'choose') {
+    return (
+      <ChooseEvents
+        guest={mode.guest}
+        events={eventRows}
+        busy={invite.isPending}
+        onCancel={() => setMode({ kind: 'list' })}
+        onSend={(eventIds) => invite.mutate({ guest: mode.guest, eventIds })}
       />
     );
   }
@@ -199,7 +229,7 @@ export default function PlanGuests() {
   return (
     <Screen onRefresh={() => void refreshGuests()} refreshing={guests.isRefetching}>
       <Caption tone="muted">
-        Manage your wedding guests. Each guest gets one invitation covering all your wedding events.
+        Manage your wedding guests. Each guest gets one invitation covering the events you choose for them.
       </Caption>
       {notice ? <Alert tone="positive">{notice}</Alert> : null}
       {error ? <Alert tone="critical">{error}</Alert> : null}
@@ -207,7 +237,9 @@ export default function PlanGuests() {
       {!events.isPending && !hasEvents ? (
         <Card style={{ gap: space(2) }}>
           <Body style={{ fontWeight: '600' }}>Add your wedding events to send invitations</Body>
-          <Caption tone="muted">The invitation lists every event with its date, time and venue.</Caption>
+          <Caption tone="muted">
+            The invitation lists the events you invite each guest to, with their date, time and venue.
+          </Caption>
           <Button small variant="outline" label="Go to Events" onPress={() => router.push('/events')} />
         </Card>
       ) : null}
@@ -271,7 +303,7 @@ export default function PlanGuests() {
       ) : (
         rows.map((guest) => {
           const status = rsvpBadge(guest.rsvpStatus ?? undefined);
-          const sending = invite.isPending && invite.variables?.id === guest.id;
+          const sending = invite.isPending && invite.variables?.guest.id === guest.id;
           return (
             <Card key={guest.id} style={{ gap: space(3) }}>
               <View style={{ flexDirection: 'row', gap: space(3) }}>
@@ -342,7 +374,10 @@ export default function PlanGuests() {
                     }
                     busy={sending}
                     disabled={invite.isPending && !sending}
-                    onPress={() => invite.mutate(guest)}
+                    onPress={() => {
+                      setNotice('');
+                      setMode({ kind: 'choose', guest });
+                    }}
                   />
                 ) : null}
               </View>
@@ -484,7 +519,7 @@ function GuestForm({
         <Card style={{ backgroundColor: rgb(theme.brandSoft) }}>
           <CheckRow
             label="Send RSVP link to this guest"
-            hint="One personal link for the whole wedding, covering all your events."
+            hint="One personal link for the wedding. You choose which events it covers next."
             checked={send}
             onChange={setSend}
           />
@@ -497,6 +532,68 @@ function GuestForm({
         onPress={() => save.mutate()}
       />
       <Button label="Cancel" variant="outline" disabled={save.isPending} onPress={onCancel} />
+    </Screen>
+  );
+}
+
+/**
+ * Which events this guest's invitation covers.
+ *
+ * Chosen per guest rather than every event by default: a reception-only guest
+ * must not be shown the time and address of a private family function. Starts
+ * from the events the guest is already invited to.
+ */
+function ChooseEvents({
+  guest,
+  events,
+  busy,
+  onCancel,
+  onSend,
+}: {
+  guest: Guest;
+  events: WeddingEventRow[];
+  busy: boolean;
+  onCancel: () => void;
+  onSend: (eventIds: string[]) => void;
+}) {
+  const theme = useTheme();
+  const [chosen, setChosen] = useState<Set<string>>(
+    () => new Set((guest.invitedEventIds ?? []).filter((id) => events.some((e) => e.id === id))),
+  );
+  const toggle = (id: string, on: boolean) =>
+    setChosen((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+
+  return (
+    <Screen>
+      <Body style={{ fontSize: 20, fontWeight: '700', color: rgb(theme.brandStrong) }}>
+        {`Invite ${guest.name} to`}
+      </Body>
+      <Caption tone="muted">
+        Their invitation shows only the events you tick here, with the date, time and venue of each.
+      </Caption>
+      <Card style={{ gap: space(2) }}>
+        {events.map((event) => (
+          <CheckRow
+            key={event.id}
+            label={event.name}
+            hint={event.eventDate ? shortDate(event.eventDate) : 'Date to be announced'}
+            checked={chosen.has(event.id)}
+            onChange={(on) => toggle(event.id, on)}
+          />
+        ))}
+      </Card>
+      <Button
+        label={chosen.size === 0 ? 'Choose at least one event' : 'Send Invitation'}
+        busy={busy}
+        disabled={chosen.size === 0}
+        onPress={() => onSend([...chosen])}
+      />
+      <Button label="Cancel" variant="outline" disabled={busy} onPress={onCancel} />
     </Screen>
   );
 }
@@ -529,7 +626,7 @@ function Stepper({ icon, disabled, onPress }: { icon: 'minus' | 'plus'; disabled
 function InvitationSent({ guest, link, onDone }: { guest: Guest; link: string; onDone: () => void }) {
   const theme = useTheme();
   const [copied, setCopied] = useState(false);
-  const message = `${guest.name}, you are invited to our wedding. See all the events and let us know if you can join us: ${link}`;
+  const message = `${guest.name}, you are invited to our wedding. See the events you are invited to and let us know if you can join us: ${link}`;
 
   return (
     <Screen>
@@ -547,7 +644,7 @@ function InvitationSent({ guest, link, onDone }: { guest: Guest; link: string; o
         </View>
         <Body style={{ fontSize: 20, fontWeight: '700' }}>Invitation link created</Body>
         <Caption tone="muted" style={{ textAlign: 'center' }}>
-          {`A unique RSVP link for the wedding — covering all your events — has been created for ${guest.name}.`}
+          {`A unique RSVP link for the wedding, covering the events you chose, has been created for ${guest.name}.`}
           {guest.contact?.includes('@') ? ` It has also been emailed to ${guest.contact}.` : ''}
         </Caption>
       </Card>

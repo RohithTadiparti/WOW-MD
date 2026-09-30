@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsDateString,
   IsEnum,
   IsIn,
@@ -238,6 +240,19 @@ export class InviteDto {
   @ApiProperty({ format: 'uuid' })
   @IsUUID('4')
   guestId: string;
+}
+
+/**
+ * Which events a wedding invitation covers.
+ *
+ * Chosen by the host, because not every guest is asked to every function: a
+ * reception-only guest must not be shown the address of a private family one.
+ * Left out, the invitation covers the events the guest is already invited to.
+ */
+export class InviteToWeddingDto {
+  @ApiPropertyOptional({ type: [String], format: 'uuid', maxItems: 50 })
+  @IsOptional() @IsArray() @ArrayMaxSize(50) @IsUUID('4', { each: true })
+  eventIds?: string[];
 }
 
 /** What a guest may set through their signed link: their attendance, nothing else. */

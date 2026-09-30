@@ -22,7 +22,7 @@ interface WeddingEvent {
 }
 
 interface RsvpView {
-  /** 'wedding' for the one invitation to every event; absent on an older per-event link. */
+  /** 'wedding' for the one invitation to the events this guest is asked to; absent on an older per-event link. */
   kind?: 'wedding';
   coupleNames?: string | null;
   events?: WeddingEvent[];

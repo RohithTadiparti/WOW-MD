@@ -19,6 +19,7 @@ import {
   SharedRsvpDto,
   EventQueryDto,
   InviteDto,
+  InviteToWeddingDto,
   UpdateEventDto,
   UpdateGuestDto,
   UpdateRsvpDto,
@@ -159,13 +160,18 @@ export class EventsController {
   @ApiOperation({
     summary: 'Invite a guest to the whole wedding',
     description:
-      'One personal RSVP link covering every event the host has. Sending again rotates the ' +
-      'link (the old one stops working) and keeps any answer already given.',
+      'One personal RSVP link covering the events the host chooses (`eventIds`), or, when none ' +
+      'are given, the events the guest is already invited to. Sending again rotates the link ' +
+      '(the old one stops working) and keeps any answer already given.',
   })
   @HttpCode(200)
   @Post('guests/:id/invite')
-  inviteToWedding(@CurrentUser('userId') userId: string, @Param('id', ParseUUIDPipe) id: string) {
-    return this.events.inviteToWedding(userId, id);
+  inviteToWedding(
+    @CurrentUser('userId') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: InviteToWeddingDto,
+  ) {
+    return this.events.inviteToWedding(userId, id, dto.eventIds);
   }
 
   @ApiOperation({ summary: 'Record a guest’s wedding reply on their behalf (e.g. by phone)' })
