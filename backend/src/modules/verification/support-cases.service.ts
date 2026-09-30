@@ -32,6 +32,7 @@ import {
   AllocateCaseDto,
   CaseQueryDto,
   GrantBusinessChangeAccessDto,
+  BUSINESS_CHANGE_CATEGORY,
   RaiseCaseDto,
   RecordFindingsDto,
   ReviewCaseDto,
@@ -63,7 +64,6 @@ import {
  * settle path and the side-effect in applyDecision have to agree on the string.
  */
 const UNLOCK_LISTING = 'unlock_listing';
-const BUSINESS_CHANGE_CATEGORY = 'business_change';
 
 /**
  * Issues and disputes, and the investigation that settles them.
@@ -418,7 +418,17 @@ export class SupportCasesService {
   }
 
   async raise(actor: AuthUser, dto: RaiseCaseDto): Promise<SupportCase> {
-    if (dto.subjectType === CaseSubject.VENDOR) {
+    /*
+     * A business change request is only ever one the client asked for by name.
+     * Any other case about a vendor -- the "My business listing" option on the
+     * Support page, which names no business and no fields -- stays an ordinary
+     * case: triaged, allocated and investigated like the rest.
+     */
+    const businessChange = dto.category === BUSINESS_CHANGE_CATEGORY;
+    if (businessChange) {
+      if (dto.subjectType !== CaseSubject.VENDOR) {
+        throw new BadRequestException('A business change request must be about a business');
+      }
       if (!dto.subjectId) throw new BadRequestException('Choose the business whose details need changing');
       const business = await this.vendors.findOne({ where: { id: dto.subjectId } });
       if (!business) throw new NotFoundException('Business not found');
@@ -428,6 +438,8 @@ export class SupportCasesService {
       if (!dto.requestedFields?.length) {
         throw new BadRequestException('Choose at least one business detail to change');
       }
+    } else if (dto.requestedFields?.length) {
+      throw new BadRequestException('Requested fields only apply to a business change request');
     }
     // Read where the booking stands before freezing it, so the settlement can
     // put it back rather than guess.
@@ -449,8 +461,8 @@ export class SupportCasesService {
         description: dto.description,
         milestone: dto.milestone ?? null,
         evidence: dto.evidence ?? [],
-        category: dto.subjectType === CaseSubject.VENDOR ? BUSINESS_CHANGE_CATEGORY : null,
-        requestedFields: dto.subjectType === CaseSubject.VENDOR ? dto.requestedFields ?? null : null,
+        category: businessChange ? BUSINESS_CHANGE_CATEGORY : null,
+        requestedFields: businessChange ? (dto.requestedFields ?? null) : null,
         status: CaseStatus.OPEN,
         bookingPreviousStatus: frozen?.status ?? null,
         history: [

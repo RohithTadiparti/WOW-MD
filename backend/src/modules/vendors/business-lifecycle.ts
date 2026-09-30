@@ -192,6 +192,26 @@ export const CORRECTABLE_BUSINESS_FIELDS = [
 export type CorrectableBusinessField = (typeof CORRECTABLE_BUSINESS_FIELDS)[number];
 
 /**
+ * Other names clients have used for a correctable field.
+ *
+ * The listing edits a list of categories now, and the vendor change request
+ * shipped asking for 'categories'. The correction key is still 'category',
+ * because that is what the edit lock checks, so the plural is read as it.
+ */
+const CORRECTABLE_FIELD_ALIASES: Record<string, CorrectableBusinessField> = {
+  categories: 'category',
+};
+
+/** Maps field names to their correction keys, dropping repeats. */
+export function normaliseCorrectionFields(fields: unknown): unknown {
+  if (!Array.isArray(fields)) return fields;
+  const mapped = fields.map((field) =>
+    typeof field === 'string' ? (CORRECTABLE_FIELD_ALIASES[field] ?? field) : field,
+  );
+  return [...new Set(mapped)];
+}
+
+/**
  * The identity fields a vendor may still change once the listing is verified or
  * live (EZ1-I207).
  *
