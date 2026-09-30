@@ -28,6 +28,64 @@ import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
 import { ProfileClaimStatus, UserRole } from '../../common/enums';
 
+/*
+ * The words a biodata document uses for the three fixed-choice intake fields,
+ * folded to lower case with runs of spaces, hyphens and slashes as `_`. The
+ * enum values themselves are always accepted too.
+ */
+const MARITAL_WORDS: Record<string, MaritalStatus> = {
+  never_married: MaritalStatus.NEVER_MARRIED,
+  unmarried: MaritalStatus.NEVER_MARRIED,
+  single: MaritalStatus.NEVER_MARRIED,
+  divorced: MaritalStatus.DIVORCED,
+  divorce: MaritalStatus.DIVORCED,
+  widowed: MaritalStatus.WIDOWED,
+  widow: MaritalStatus.WIDOWED,
+  widower: MaritalStatus.WIDOWED,
+  separated: MaritalStatus.SEPARATED,
+  annulled: MaritalStatus.ANNULLED,
+};
+
+const FAMILY_TYPE_WORDS: Record<string, FamilyType> = {
+  joint: FamilyType.JOINT,
+  joint_family: FamilyType.JOINT,
+  nuclear: FamilyType.NUCLEAR,
+  nuclear_family: FamilyType.NUCLEAR,
+  extended: FamilyType.EXTENDED,
+  extended_family: FamilyType.EXTENDED,
+  single_parent: FamilyType.SINGLE_PARENT,
+};
+
+const OCCUPATION_WORDS: Record<string, OccupationStatus> = {
+  employed: OccupationStatus.EMPLOYED,
+  self_employed: OccupationStatus.SELF_EMPLOYED,
+  business: OccupationStatus.SELF_EMPLOYED,
+  student: OccupationStatus.STUDENT,
+  homemaker: OccupationStatus.HOMEMAKER,
+  housewife: OccupationStatus.HOMEMAKER,
+  not_employed: OccupationStatus.NOT_EMPLOYED,
+  unemployed: OccupationStatus.NOT_EMPLOYED,
+  retired: OccupationStatus.RETIRED,
+};
+
+/** One fixed-choice intake value, or a 400 naming the field when it matches none. */
+export function intakeChoice<T extends string>(
+  field: string,
+  raw: string | undefined,
+  words: Record<string, T>,
+): T | undefined {
+  if (!raw || !raw.trim()) return undefined;
+  const folded = raw.trim().toLowerCase().replace(/[\s/-]+/g, '_');
+  const value = words[folded];
+  if (!value) {
+    const choices = [...new Set(Object.values(words))].join(', ');
+    throw new BadRequestException(
+      `biodata.${field}: "${raw}" is not a recognised value. Use one of: ${choices}.`,
+    );
+  }
+  return value;
+}
+
 /**
  * Profiles built and maintained on somebody else's behalf.
  *
@@ -110,6 +168,15 @@ export class ManagedProfilesService {
     await this.assertNotDuplicate(actor, dto.contactPhone, dto.contactEmail);
 
     const { inviteNow, consent, biodata, biodataDocumentUrl, ...fields } = dto;
+    // Resolved before anything is written: a value the agent confirmed that
+    // matches none of the choices is refused, never silently dropped.
+    const maritalStatus = intakeChoice('maritalStatus', biodata?.maritalStatus, MARITAL_WORDS);
+    const familyType = intakeChoice('familyType', biodata?.familyType, FAMILY_TYPE_WORDS);
+    const occupationStatus = intakeChoice(
+      'occupationStatus',
+      biodata?.occupationStatus,
+      OCCUPATION_WORDS,
+    );
     const profile = await this.profiles.manager.transaction(async (manager) => {
       const profiles = manager.getRepository(Profile);
       const profile = await profiles.save(
@@ -169,14 +236,7 @@ export class ManagedProfilesService {
           }
 
           // Marital Status
-          if (biodata.maritalStatus) {
-            const ms = biodata.maritalStatus.toLowerCase();
-            if (['divorced', 'divorce'].includes(ms)) row.maritalStatus = MaritalStatus.DIVORCED;
-            else if (['widowed', 'widow', 'widower'].includes(ms)) row.maritalStatus = MaritalStatus.WIDOWED;
-            else if (ms === 'separated') row.maritalStatus = MaritalStatus.SEPARATED;
-            else if (ms === 'annulled') row.maritalStatus = MaritalStatus.ANNULLED;
-            else if (['never_married', 'never married', 'unmarried', 'single'].includes(ms)) row.maritalStatus = MaritalStatus.NEVER_MARRIED;
-          }
+          if (maritalStatus) row.maritalStatus = maritalStatus;
 
           // Family details
           const fatherData: Record<string, unknown> = {
@@ -193,13 +253,7 @@ export class ManagedProfilesService {
           };
           if (Object.keys(motherData).length > 0) row.mother = motherData;
 
-          if (biodata.familyType) {
-            const ft = biodata.familyType.toLowerCase();
-            if (['joint', 'joint family'].includes(ft)) row.familyType = FamilyType.JOINT;
-            else if (['nuclear', 'nuclear family'].includes(ft)) row.familyType = FamilyType.NUCLEAR;
-            else if (ft === 'extended') row.familyType = FamilyType.EXTENDED;
-            else if (['single parent', 'single_parent'].includes(ft)) row.familyType = FamilyType.SINGLE_PARENT;
-          }
+          if (familyType) row.familyType = familyType;
           if (biodata.familyStatus) row.familyStatus = biodata.familyStatus;
           if (biodata.brothers !== undefined) row.brothers = Number(biodata.brothers) || 0;
           if (biodata.sisters !== undefined) row.sisters = Number(biodata.sisters) || 0;
@@ -210,15 +264,7 @@ export class ManagedProfilesService {
           if (biodata.institution) row.institution = biodata.institution;
           if (biodata.collegePlace) row.collegePlace = biodata.collegePlace;
 
-          if (biodata.occupationStatus) {
-            const os = biodata.occupationStatus.toLowerCase();
-            if (['business', 'self employed', 'self-employed', 'self_employed'].includes(os)) row.occupationStatus = OccupationStatus.SELF_EMPLOYED;
-            else if (os === 'student') row.occupationStatus = OccupationStatus.STUDENT;
-            else if (['homemaker', 'housewife'].includes(os)) row.occupationStatus = OccupationStatus.HOMEMAKER;
-            else if (['not employed', 'not_employed', 'unemployed'].includes(os)) row.occupationStatus = OccupationStatus.NOT_EMPLOYED;
-            else if (os === 'retired') row.occupationStatus = OccupationStatus.RETIRED;
-            else if (os === 'employed') row.occupationStatus = OccupationStatus.EMPLOYED;
-          }
+          if (occupationStatus) row.occupationStatus = occupationStatus;
 
           const empData: Record<string, unknown> = {
             ...(biodata.employment ?? {}),

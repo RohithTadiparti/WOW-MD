@@ -44,25 +44,52 @@ describe('IntakeBiodataDto validation', () => {
     },
   );
 
-  it('uses the established text limits and date format', async () => {
+  it('uses the established text limits', async () => {
     const result = await validate({
       communicationAddress: 'a'.repeat(500),
       bio: 'a'.repeat(2000),
-      city: 'a'.repeat(80),
-      dateOfBirth: '2000-01-01',
     });
     const biodata = (result as CreateManagedProfileDto).biodata!;
     expect(biodata.communicationAddress).toHaveLength(500);
     expect(biodata.bio).toHaveLength(2000);
-    expect(biodata.city).toHaveLength(80);
-    expect(biodata.dateOfBirth).toBe('2000-01-01');
     await expect(validate({ communicationAddress: 'a'.repeat(501) })).rejects.toBeInstanceOf(
       BadRequestException,
     );
     await expect(validate({ bio: 'a'.repeat(2001) })).rejects.toBeInstanceOf(BadRequestException);
-    await expect(validate({ city: 'a'.repeat(81) })).rejects.toBeInstanceOf(BadRequestException);
-    await expect(validate({ dateOfBirth: 'not-a-date' })).rejects.toBeInstanceOf(
+  });
+
+  it.each([
+    ['alternateMobile', 21],
+    ['maritalStatus', 41],
+    ['familyType', 41],
+    ['occupationStatus', 41],
+    ['profession', 121],
+    ['designation', 121],
+    ['company', 161],
+    ['workLocation', 121],
+    ['annualIncome', 41],
+    ['salary', 41],
+  ])('bounds the length of %s', async (field, length) => {
+    await expect(validate({ [field]: 'a'.repeat(length) })).rejects.toBeInstanceOf(
       BadRequestException,
     );
   });
+
+  it.each([
+    ['employment', 'company', 161],
+    ['employment', 'salary', 41],
+    ['business', 'businessName', 161],
+    ['business', 'businessIncome', 41],
+  ])('bounds the length of %s.%s', async (block, field, length) => {
+    await expect(validate({ [block]: { [field]: 'a'.repeat(length) } })).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it.each(['contactPhone', 'contactEmail', 'dateOfBirth', 'gender', 'city', 'displayName'])(
+    'refuses the top-level field %s inside biodata',
+    async (field) => {
+      await expect(validate({ [field]: 'x' })).rejects.toBeInstanceOf(BadRequestException);
+    },
+  );
 });

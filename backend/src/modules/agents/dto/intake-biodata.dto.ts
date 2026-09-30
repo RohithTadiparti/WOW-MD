@@ -2,7 +2,6 @@ import { PartialType } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
-  IsDateString,
   IsInt,
   IsObject,
   IsOptional,
@@ -47,23 +46,23 @@ class IntakeHoroscopeDto {
 
 /** The fields used by the existing biodata education section for an employee. */
 class IntakeEmploymentDto {
-  @IsOptional() @IsString() role?: string;
-  @IsOptional() @IsString() designation?: string;
-  @IsOptional() @IsString() company?: string;
-  @IsOptional() @IsString() workLocation?: string;
-  @IsOptional() @IsString() salary?: string;
+  @IsOptional() @IsString() @MaxLength(120) role?: string;
+  @IsOptional() @IsString() @MaxLength(120) designation?: string;
+  @IsOptional() @IsString() @MaxLength(160) company?: string;
+  @IsOptional() @IsString() @MaxLength(120) workLocation?: string;
+  @IsOptional() @IsString() @MaxLength(40) salary?: string;
 }
 
 /** The fields used by the existing biodata education section for a business. */
 class IntakeBusinessDto {
-  @IsOptional() @IsString() businessName?: string;
-  @IsOptional() @IsString() businessIncome?: string;
-  @IsOptional() @IsString() businessLocation?: string;
+  @IsOptional() @IsString() @MaxLength(160) businessName?: string;
+  @IsOptional() @IsString() @MaxLength(40) businessIncome?: string;
+  @IsOptional() @IsString() @MaxLength(120) businessLocation?: string;
   // Older readers use these aliases; retaining them avoids changing an
   // already accepted intake payload while keeping the JSON shape bounded.
-  @IsOptional() @IsString() name?: string;
-  @IsOptional() @IsString() income?: string;
-  @IsOptional() @IsString() location?: string;
+  @IsOptional() @IsString() @MaxLength(160) name?: string;
+  @IsOptional() @IsString() @MaxLength(40) income?: string;
+  @IsOptional() @IsString() @MaxLength(120) location?: string;
 }
 
 /** Intake values from uploaded biodata document, stored in the existing profile_details row. */
@@ -71,7 +70,6 @@ export class IntakeBiodataDto {
   @IsOptional() @IsString() @trimAndTruncate(80) @MaxLength(80) firstName?: string;
   @IsOptional() @IsString() @trimAndTruncate(80) @MaxLength(80) lastName?: string;
   @IsOptional() @IsString() @trimAndTruncate(80) @MaxLength(80) surname?: string;
-  @IsOptional() @IsString() @trimAndTruncate(120) @MaxLength(120) displayName?: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(50) @Max(250) heightCm?: number;
   @IsOptional() @IsString() @trimAndTruncate(40) @MaxLength(40) complexion?: string;
   @IsOptional() @IsString() @trimAndTruncate(120) @MaxLength(120) nativePlace?: string;
@@ -81,12 +79,9 @@ export class IntakeBiodataDto {
   @IsOptional() @IsString() @trimAndTruncate(120) @MaxLength(120) placeOfBirth?: string;
   @IsOptional() @IsString() @trimAndTruncate(500) @MaxLength(500) communicationAddress?: string;
   @IsOptional() @IsString() @trimAndTruncate(500) @MaxLength(500) address?: string;
-  @IsOptional() @IsString() contactPhone?: string;
-  @IsOptional() @IsString() alternateMobile?: string;
-  @IsOptional() @IsString() @MaxLength(254) contactEmail?: string;
-  @IsOptional() @IsDateString() dateOfBirth?: string;
-  @IsOptional() @IsString() @trimAndTruncate(30) @MaxLength(30) gender?: string;
-  @IsOptional() @IsString() @trimAndTruncate(80) @MaxLength(80) city?: string;
+  // The profile's own name, mobile, email, date of birth, gender and city are
+  // top-level fields of CreateManagedProfileDto, not part of the biodata.
+  @IsOptional() @IsString() @trimAndTruncate(20) @MaxLength(20) alternateMobile?: string;
 
   @IsOptional() @IsString() @trimAndTruncate(60) @MaxLength(60) religion?: string;
   @IsOptional() @IsString() @trimAndTruncate(60) @MaxLength(60) caste?: string;
@@ -106,13 +101,13 @@ export class IntakeBiodataDto {
   timeOfBirth?: string;
   @IsOptional() @IsBoolean() horoscopeAvailable?: boolean;
 
-  @IsOptional() @IsString() maritalStatus?: string;
+  @IsOptional() @IsString() @trimAndTruncate(40) @MaxLength(40) maritalStatus?: string;
 
   @IsOptional() @IsString() @trimAndTruncate(120) @MaxLength(120) fatherName?: string;
   @IsOptional() @IsString() @trimAndTruncate(120) @MaxLength(120) fatherProfession?: string;
   @IsOptional() @IsString() @trimAndTruncate(120) @MaxLength(120) motherName?: string;
   @IsOptional() @IsString() @trimAndTruncate(120) @MaxLength(120) motherProfession?: string;
-  @IsOptional() @IsString() familyType?: string;
+  @IsOptional() @IsString() @trimAndTruncate(40) @MaxLength(40) familyType?: string;
   @IsOptional() @IsString() @trimAndTruncate(60) @MaxLength(60) familyStatus?: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(99) brothers?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(99) sisters?: number;
@@ -121,13 +116,13 @@ export class IntakeBiodataDto {
   @IsOptional() @IsString() @trimAndTruncate(160) @MaxLength(160) course?: string;
   @IsOptional() @IsString() @trimAndTruncate(160) @MaxLength(160) institution?: string;
   @IsOptional() @IsString() @trimAndTruncate(120) @MaxLength(120) collegePlace?: string;
-  @IsOptional() @IsString() occupationStatus?: string;
-  @IsOptional() @IsString() profession?: string;
-  @IsOptional() @IsString() designation?: string;
-  @IsOptional() @IsString() company?: string;
-  @IsOptional() @IsString() workLocation?: string;
-  @IsOptional() @IsString() annualIncome?: string;
-  @IsOptional() @IsString() salary?: string;
+  @IsOptional() @IsString() @trimAndTruncate(40) @MaxLength(40) occupationStatus?: string;
+  @IsOptional() @IsString() @trimAndTruncate(120) @MaxLength(120) profession?: string;
+  @IsOptional() @IsString() @trimAndTruncate(120) @MaxLength(120) designation?: string;
+  @IsOptional() @IsString() @trimAndTruncate(160) @MaxLength(160) company?: string;
+  @IsOptional() @IsString() @trimAndTruncate(120) @MaxLength(120) workLocation?: string;
+  @IsOptional() @IsString() @trimAndTruncate(40) @MaxLength(40) annualIncome?: string;
+  @IsOptional() @IsString() @trimAndTruncate(40) @MaxLength(40) salary?: string;
 
   @IsOptional() @IsObject() @ValidateNested() @Type(() => IntakeParentDto) father?: IntakeParentDto;
   @IsOptional() @IsObject() @ValidateNested() @Type(() => IntakeParentDto) mother?: IntakeParentDto;

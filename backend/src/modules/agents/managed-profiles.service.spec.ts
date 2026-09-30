@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ManagedProfilesService } from './managed-profiles.service';
@@ -75,6 +76,27 @@ describe('managed profile biodata intake', () => {
     const { service, detailsRepo } = await setup();
     await service.create(actor, { ...dto, contactPhone: '9876543211', biodata: { firstName: 'Rahul' } });
     expect(detailsRepo.save).toHaveBeenCalledWith({ profileId: 'profile-1', biodataDocumentUrl: null, firstName: 'Rahul' });
+  });
+
+  it('maps the words a biodata uses for fixed choices', async () => {
+    const { service, detailsRepo } = await setup();
+    await service.create(actor, { ...dto, biodata: {
+      maritalStatus: 'Never Married', occupationStatus: 'Self-Employed', familyType: 'Joint Family' } });
+    expect(detailsRepo.save).toHaveBeenCalledWith(expect.objectContaining({
+      maritalStatus: 'never_married', occupationStatus: 'self_employed', familyType: 'joint' }));
+  });
+
+  it.each([
+    ['occupationStatus', 'Private Job'],
+    ['maritalStatus', 'Unmarried - never married'],
+    ['familyType', 'Big'],
+  ])('refuses an unrecognised %s with a 400 naming the field', async (field, value) => {
+    const { service, transaction } = await setup();
+    await expect(service.create(actor, { ...dto, biodata: { [field]: value } }))
+      .rejects.toThrow(new RegExp(`biodata\\.${field}`));
+    await expect(service.create(actor, { ...dto, biodata: { [field]: value } }))
+      .rejects.toBeInstanceOf(BadRequestException);
+    expect(transaction).not.toHaveBeenCalled();
   });
 
   it('propagates Biodata persistence failure without reporting success or inviting', async () => {
