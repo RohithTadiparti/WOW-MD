@@ -1,4 +1,4 @@
-  import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { View, ScrollView, Alert as NativeAlert, Pressable } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
@@ -24,7 +24,7 @@ import {
   Screen,
   SectionTitle,
 } from '@/components/ui';
-import { radius, rgb, space, useTheme } from '@/theme';
+import { radius, space } from '@/theme';
 
 interface BiodataResponse {
   profileId: string;
@@ -33,7 +33,6 @@ interface BiodataResponse {
 }
 
 export default function BiodataWizard() {
-  const theme = useTheme();
   const qc = useQueryClient();
   const router = useRouter();
 

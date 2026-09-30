@@ -193,11 +193,16 @@ export interface SeriesPoint {
 }
 
 export interface ActivityRow {
+  id: string;
   at: string;
   kind: string;
   summary: string;
   resourceType: string;
   resourceId: string;
+  actorUserId: string | null;
+  actorName: string | null;
+  actorRole: string | null;
+  metadata: Record<string, unknown>;
 }
 
 // ---------------------------------------------------------------- words and numbers

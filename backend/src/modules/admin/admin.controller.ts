@@ -16,6 +16,7 @@ import { AdminActivityService } from './admin-activity.service';
 import { AdminAccountsService } from './admin-accounts.service';
 import { AdminBookingsService } from './admin-bookings.service';
 import { AdminReportsService } from './admin-reports.service';
+import { AdminPendingCountsService } from './admin-pending-counts.service';
 import { AgencyService } from '../agents/agency.service';
 import { AuditService } from '../../platform/audit/audit.service';
 import { RejectAgencyDto } from '../agents/dto/agency.dto';
@@ -55,6 +56,7 @@ export class AdminController {
     private readonly accounts: AdminAccountsService,
     private readonly consoleBookings: AdminBookingsService,
     private readonly consoleReports: AdminReportsService,
+    private readonly adminPendingCounts: AdminPendingCountsService,
     private readonly vendorServices: VendorServicesService,
   ) {}
 
@@ -76,6 +78,13 @@ export class AdminController {
   @Get('activity')
   activity(@Query() q: ActivityQueryDto) {
     return this.feed.activity(q);
+  }
+
+  @RequirePermissions(Permission.ADMIN_ANALYTICS_READ)
+  @ApiOperation({ summary: 'Action-required counts for the Admin Portal navigation' })
+  @Get('pending-counts')
+  pendingCounts(@CurrentUser() actor: AuthUser) {
+    return this.adminPendingCounts.getCounts(actor.userId);
   }
 
   @RequirePermissions(Permission.ADMIN_USERS_READ)

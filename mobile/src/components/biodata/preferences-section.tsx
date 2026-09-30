@@ -3,6 +3,7 @@ import { View } from 'react-native';
 import { useMutation } from '@tanstack/react-query';
 
 import { api, apiMessage } from '@/lib/api';
+import { cmToFeetInches, feetInchesToCm, formatHeight } from '@/shared/height';
 import { DetailGrid, DetailRow } from '@/components/chrome';
 import { SelectField } from '@/components/form';
 import { Alert, Button, Caption, Card, Field, SectionTitle } from '@/components/ui';
@@ -110,6 +111,11 @@ export function PreferencesSection({
       setError('Give both ends of the age range and the height range before saving.');
       return;
     }
+    if ([form.preferredHeightMinCm, form.preferredHeightMaxCm].some((value) =>
+      cmToFeetInches(value) === null)) {
+      setError('Enter valid heights in feet and inches.');
+      return;
+    }
     if (Number(form.preferredAgeMin) > Number(form.preferredAgeMax)) {
       setError('The minimum age cannot be above the maximum.');
       return;
@@ -121,6 +127,18 @@ export function PreferencesSection({
     setError('');
     save.mutate();
   }
+
+  const heightFields = [
+    { key: 'preferredHeightMinCm' as const, label: 'Height from', height: cmToFeetInches(form.preferredHeightMinCm) },
+    { key: 'preferredHeightMaxCm' as const, label: 'Height to', height: cmToFeetInches(form.preferredHeightMaxCm) },
+  ];
+  const updateHeight = (key: typeof heightFields[number]['key'], unit: 'feet' | 'inches', value: string) => {
+    const current = cmToFeetInches(form[key]);
+    const feet = unit === 'feet' ? value : String(current?.feet ?? 0);
+    const inches = unit === 'inches' ? value : String(current?.inches ?? 0);
+    const cm = feetInchesToCm(feet, inches);
+    set(key)(value === '' || cm === null ? '' : String(cm));
+  };
 
   return (
     <View style={{ gap: space(4) }}>
@@ -140,14 +158,18 @@ export function PreferencesSection({
               </View>
             </View>
 
-            <View style={{ flexDirection: 'row', gap: space(2) }}>
+          {heightFields.map(({ key, label, height }) => (
+            <View key={key} style={{ flexDirection: 'row', gap: space(2) }}>
               <View style={{ flex: 1 }}>
-                <Field label="Height from (cm)" value={form.preferredHeightMinCm} onChangeText={set('preferredHeightMinCm')} keyboardType="number-pad" maxLength={3} />
+                <Field label={`${label} (feet)`} value={String(height?.feet ?? '')}
+                  onChangeText={(value) => updateHeight(key, 'feet', value)} keyboardType="number-pad" maxLength={1} />
               </View>
               <View style={{ flex: 1 }}>
-                <Field label="Height to (cm)" value={form.preferredHeightMaxCm} onChangeText={set('preferredHeightMaxCm')} keyboardType="number-pad" maxLength={3} />
+                <Field label={`${label} (inches)`} value={String(height?.inches ?? '')}
+                  onChangeText={(value) => updateHeight(key, 'inches', value)} keyboardType="number-pad" maxLength={2} />
               </View>
             </View>
+          ))}
 
             <View style={{ flexDirection: 'row', gap: space(2) }}>
               <View style={{ flex: 1 }}>

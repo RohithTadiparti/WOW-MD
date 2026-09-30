@@ -50,9 +50,8 @@ export class ProfileDetails {
   @Column({ type: 'varchar', length: 80, nullable: true })
   lastName: string | null;
 
-  /** Centimetres. A number, so "at least 165" is a comparison and not a parse. */
   @Index()
-  @Column({ type: 'int', nullable: true })
+  @Column({ type: 'integer', nullable: true })
   heightCm: number | null;
 
   @Column({ type: 'varchar', length: 40, nullable: true })
@@ -249,7 +248,7 @@ export class ProfileDetails {
   @Column({ type: 'jsonb', default: {} })
   employment: Record<string, unknown>;
 
-  /** Business name, income and location — when self-employed. */
+  /** Repeatable business entries; first-entry fields preserve the legacy API contract. */
   @Column({ type: 'jsonb', default: {} })
   business: Record<string, unknown>;
 
@@ -270,16 +269,24 @@ export class ProfileDetails {
 
   // --------------------------------------------------- partner preferences
 
+  /** Annual package in rupees; null means no bound. */
+  @Column({ type: 'double precision', nullable: true })
+  preferredPackageMin: number | null;
+
+  @Column({ type: 'double precision', nullable: true })
+  preferredPackageMax: number | null;
+
+
   @Column({ type: 'int', nullable: true })
   preferredAgeMin: number | null;
 
   @Column({ type: 'int', nullable: true })
   preferredAgeMax: number | null;
 
-  @Column({ type: 'int', nullable: true })
+  @Column({ type: 'integer', nullable: true })
   preferredHeightMinCm: number | null;
 
-  @Column({ type: 'int', nullable: true })
+  @Column({ type: 'integer', nullable: true })
   preferredHeightMaxCm: number | null;
 
   /**
@@ -294,6 +301,9 @@ export class ProfileDetails {
   /** The photo shown first. One of `profiles.photos`. */
   @Column({ type: 'varchar', nullable: true })
   primaryPhotoUrl: string | null;
+
+  @Column({ type: 'varchar', length: 2000, nullable: true })
+  familyPhotoUrl: string | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;

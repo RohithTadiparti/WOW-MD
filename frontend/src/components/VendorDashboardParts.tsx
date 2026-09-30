@@ -4,6 +4,7 @@ import { ArrowRight, Receipt } from '@phosphor-icons/react';
 import { SELLER_STATUS_LABEL, humanize } from '../lib/labels';
 import { formatShortDate } from '../lib/dates';
 import { EmptyState, Loading } from './ui/Feedback';
+import { AnimatedCard, AnimatedCounter } from './ui/Motion';
 
 /** The presentational pieces of the vendor dashboard (EZ1-I147), split out to
  *  keep the screen itself under the file-size limit. Nothing here fetches. */
@@ -43,6 +44,7 @@ export function StatCard({
   tone,
   hint,
   icon: Glyph,
+  gradient = 'from-brand-soft to-surface',
 }: {
   label: string;
   value: ReactNode;
@@ -50,21 +52,24 @@ export function StatCard({
   tone?: string;
   hint?: string;
   icon?: typeof Receipt;
+  gradient?: string;
 }) {
   return (
-    <Link
-      to={to}
-      className="group rounded-lg border border-gray-200 bg-surface p-4 transition-[border-color,box-shadow] duration-200 hover:border-gray-300 hover:shadow-card"
-    >
-      <div className="flex items-center gap-1.5">
-        {Glyph && <Glyph size={14} className="text-gray-400" aria-hidden />}
-        <p className="truncate text-[0.8125rem] text-gray-500">{label}</p>
-      </div>
-      <p className={`mt-1.5 font-mono text-[1.75rem] font-medium leading-none tracking-[-0.02em] ${tone ?? 'text-gray-900'}`}>
-        {value}
-      </p>
-      {hint && <p className="mt-1.5 text-xs text-gray-400">{hint}</p>}
-    </Link>
+    <AnimatedCard intensity="medium" className="h-full">
+      <Link
+        to={to}
+        className={`group block h-full rounded-lg border border-gray-200 bg-gradient-to-br ${gradient} p-4 transition-all duration-200 hover:border-gray-300 hover:shadow-card`}
+      >
+        <div className="flex items-center gap-1.5">
+          {Glyph && <Glyph size={14} className="text-gray-400" aria-hidden />}
+          <p className="truncate text-[0.8125rem] text-gray-500">{label}</p>
+        </div>
+        <p className={`mt-1.5 font-mono text-[1.75rem] font-medium leading-none tracking-[-0.02em] ${tone ?? 'text-gray-900'}`}>
+          {typeof value === 'number' ? <AnimatedCounter value={value} /> : value}
+        </p>
+        {hint && <p className="mt-1.5 text-xs text-gray-400">{hint}</p>}
+      </Link>
+    </AnimatedCard>
   );
 }
 

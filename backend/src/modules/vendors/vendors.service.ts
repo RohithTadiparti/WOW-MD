@@ -12,6 +12,7 @@ import { serviceNamesByIds } from '../catalog/service-names';
 import { Booking } from '../bookings/entities/booking.entity';
 import { User } from '../auth/entities/user.entity';
 import { Profile } from '../users/entities/profile.entity';
+import { SupportCase } from '../verification/entities/support-case.entity';
 import { displayNamesByUserIds } from '../users/display-names';
 import { screenText } from '../../common/util/text-moderation';
 import {
@@ -22,7 +23,7 @@ import {
   VendorSort,
 } from './dto/vendor.dto';
 import { RedisService } from '../../platform/redis/redis.service';
-import { BusinessStatus, ReviewStatus, UserRole } from '../../common/enums';
+import { BusinessStatus, CaseStatus, ReviewStatus, UserRole } from '../../common/enums';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
 import { likeEscape } from '../../common/util/like';
@@ -125,6 +126,7 @@ export class VendorsService {
     @InjectRepository(User) private readonly users: Repository<User>,
     // Read-only, for the reviewer's name on the administrator's review list.
     @InjectRepository(Profile) private readonly profiles: Repository<Profile>,
+    @InjectRepository(SupportCase) private readonly supportCases: Repository<SupportCase>,
     private readonly redis: RedisService,
     private readonly dataSource: DataSource,
     private readonly lifecycle: BusinessLifecycleService,
@@ -254,6 +256,24 @@ export class VendorsService {
 
   listOwn(ownerUserId: string): Promise<Vendor[]> {
     return this.vendors.find({ where: { ownerUserId }, order: { createdAt: 'DESC' } });
+  }
+
+  /** Dashboard issue buckets are derived from the same cases Support exposes. */
+  async dashboardIssues(ownerUserId: string) {
+    const rows = await this.supportCases.find({
+      where: { raisedByUserId: ownerUserId },
+      select: ['id', 'status'],
+    });
+    const solved = new Set([CaseStatus.RESOLVED, CaseStatus.REJECTED, CaseStatus.CLOSED]);
+    // Anything not yet solved is pending, open cases included, so every case
+    // lands in exactly one of the two buckets.
+    const pending = rows.filter((row) => !solved.has(row.status));
+    return {
+      raised: rows.length,
+      pending: pending.length,
+      solved: rows.filter((row) => solved.has(row.status)).length,
+      escalated: rows.filter((row) => row.status === CaseStatus.ESCALATED).length,
+    };
   }
 
   async search(q: VendorSearchDto): Promise<PaginatedResult<PublicVendor>> {

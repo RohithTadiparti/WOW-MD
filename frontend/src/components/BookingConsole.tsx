@@ -204,8 +204,12 @@ export default function BookingConsole({
       return counts?.request_on_date ?? all.filter(isRequestOnDate).length;
     }
     if (!counts) return undefined;
-    if (entry.key === 'all') return counts.all;
-    return entry.statuses.reduce((n, status) => n + (counts[status] ?? 0), 0);
+    if (entry.key === 'all') return counts.all ?? 0;
+    // One count per status from the server; a tab adds up its own statuses.
+    if (entry.statuses.length > 0) {
+      return entry.statuses.reduce((n, status) => n + (counts[status] ?? 0), 0);
+    }
+    return counts[entry.key];
   };
 
   return (

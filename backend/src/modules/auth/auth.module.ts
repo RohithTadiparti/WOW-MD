@@ -25,6 +25,6 @@ import { JwtStrategy } from './strategies/jwt.strategy';
   ],
   providers: [AuthService, SessionsService, JwtStrategy, PhoneVerificationService],
   controllers: [AuthController],
-  exports: [TypeOrmModule, AuthService, SessionsService, PhoneVerificationService],
+  exports: [TypeOrmModule, JwtModule, AuthService, SessionsService, PhoneVerificationService],
 })
 export class AuthModule {}

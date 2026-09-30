@@ -1,3 +1,4 @@
+import { formatHeight } from '../../lib/height';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { CaretLeft } from '@phosphor-icons/react';
@@ -160,7 +161,7 @@ export default function AdminProfileDetail() {
           <Row label="Date of birth">{p.dateOfBirth ? formatDate(p.dateOfBirth) : '—'}</Row>
           <Row label="Age">{age !== null ? `${age} yrs` : '—'}</Row>
           <Row label="Marital status">{label(d?.maritalStatus)}</Row>
-          <Row label="Height">{d?.heightCm ? `${d.heightCm} cm` : '—'}</Row>
+          <Row label="Height">{d?.heightCm ? formatHeight(d.heightCm) : '—'}</Row>
           <Row label="Education">{dash(d?.highestQualification)}</Row>
           <Row label="Occupation">{label(d?.occupationStatus)}</Row>
           <Row label="City">{dash(p.city)}</Row>

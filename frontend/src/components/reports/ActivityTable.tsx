@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { ClockCounterClockwise } from '@phosphor-icons/react';
 import { Panel } from './ReportParts';
 import type { ReportsData } from './reportData';
+import ActivityDetailDrawer from '../admin/ActivityDetailDrawer';
 
 /** What each kind of event is called, what it groups under, and its tone. */
 const KIND: Record<string, { label: string; group: string; tone: string }> = {
@@ -31,13 +31,6 @@ const GROUPS = [
   { key: 'accounts', label: 'Accounts' },
 ];
 
-/** Where an event can be opened. Only resources with a detail page keyed by that id. */
-function linkFor(resourceType: string, id: string): string | null {
-  if (resourceType === 'booking') return `/admin/bookings/${id}`;
-  if (resourceType === 'payment') return `/admin/payments/${id}`;
-  return null;
-}
-
 /**
  * What happened on the platform in the selected period, newest first (EZ1-I242).
  * Each event is placed by its own moment -- a cancellation by when it was
@@ -45,9 +38,15 @@ function linkFor(resourceType: string, id: string): string | null {
  */
 export default function ActivityTable({ d, limit }: { d: ReportsData; limit?: number }) {
   const [group, setGroup] = useState('all');
+  const [role, setRole] = useState('');
+  const [record, setRecord] = useState('');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const rows = (d.activity.data ?? [])
     .filter((a) => group === 'all' || KIND[a.kind]?.group === group)
+    .filter((a) => !role || a.actorRole === role)
+    .filter((a) => !record || a.resourceId.toLowerCase().includes(record.toLowerCase()) || a.resourceType.toLowerCase().includes(record.toLowerCase()))
     .slice(0, limit);
+  const roles = [...new Set((d.activity.data ?? []).map((a) => a.actorRole).filter((r): r is string => Boolean(r)))];
 
   return (
     <Panel
@@ -57,15 +56,7 @@ export default function ActivityTable({ d, limit }: { d: ReportsData; limit?: nu
       load={d.activity}
       empty={rows.length === 0}
       emptyText={group === 'all' ? 'No activity in this period.' : 'Nothing of that kind in this period.'}
-      action={
-        <select className="input py-1 text-sm" value={group} onChange={(e) => setGroup(e.target.value)} aria-label="Show activity of kind">
-          {GROUPS.map((g) => (
-            <option key={g.key} value={g.key}>
-              {g.label}
-            </option>
-          ))}
-        </select>
-      }
+      action={<div className="flex flex-wrap gap-2"><select className="input py-1 text-sm" value={group} onChange={(e) => setGroup(e.target.value)} aria-label="Show activity of kind">{GROUPS.map((g) => <option key={g.key} value={g.key}>{g.label}</option>)}</select><select className="input py-1 text-sm" value={role} onChange={(e) => setRole(e.target.value)} aria-label="Filter by performer role"><option value="">All roles</option>{roles.map((item) => <option key={item} value={item}>{item.replace(/_/g, ' ')}</option>)}</select><input className="input w-36 py-1 text-sm" value={record} onChange={(e) => setRecord(e.target.value)} placeholder="Record ID/type" aria-label="Filter by record" /></div>}
     >
       <div className="overflow-x-auto">
         <table className="w-full min-w-[560px] text-left text-sm">
@@ -79,9 +70,8 @@ export default function ActivityTable({ d, limit }: { d: ReportsData; limit?: nu
           <tbody className="divide-y">
             {rows.map((a) => {
               const kind = KIND[a.kind];
-              const to = linkFor(a.resourceType, a.resourceId);
               return (
-                <tr key={`${a.kind}-${a.resourceId}-${a.at}`}>
+                <tr key={a.id} className="cursor-pointer hover:bg-brand-soft/30" onClick={() => setSelectedId(a.id)}>
                   <td className="whitespace-nowrap py-2 pr-4 tabular-nums text-gray-500">
                     {new Date(a.at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
                   </td>
@@ -91,13 +81,7 @@ export default function ActivityTable({ d, limit }: { d: ReportsData; limit?: nu
                     </span>
                   </td>
                   <td className="py-2 text-gray-700">
-                    {to ? (
-                      <Link to={to} className="hover:text-brand-strong hover:underline">
-                        {a.summary}
-                      </Link>
-                    ) : (
-                      a.summary
-                    )}
+                    <span className="hover:text-brand-strong hover:underline">{a.summary}</span>
                   </td>
                 </tr>
               );
@@ -105,6 +89,10 @@ export default function ActivityTable({ d, limit }: { d: ReportsData; limit?: nu
           </tbody>
         </table>
       </div>
+      {selectedId && (() => {
+        const selected = (d.activity.data ?? []).find((item) => item.id === selectedId);
+        return selected ? <ActivityDetailDrawer activity={selected} onClose={() => setSelectedId(null)} /> : null;
+      })()}
     </Panel>
   );
 }

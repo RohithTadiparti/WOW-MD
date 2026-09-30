@@ -1,3 +1,4 @@
+import { formatHeight } from '../lib/height';
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, apiMessage } from '../lib/api';
@@ -89,7 +90,7 @@ export default function ProfileCard({
   // The four facts anybody asks first, in the order they ask them.
   const facts = [
     age ? `${age} years` : null,
-    details.heightCm ? `${details.heightCm} cm` : null,
+    details.heightCm ? formatHeight(details.heightCm) : null,
     profile?.city ?? null,
     [details.religion, details.caste].filter(Boolean).join(' · ') || null,
     details.highestQualification ?? null,

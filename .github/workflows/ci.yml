@@ -60,8 +60,20 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
+
+      - name: Set up Chrome
+        uses: browser-actions/setup-chrome@v2
+        id: setup-chrome
+        with:
+          install-dependencies: true
+
+      - name: Set Chrome binary
+        run: echo "CHROME_BIN=${{ steps.setup-chrome.outputs.chrome-path }}" >> "$GITHUB_ENV"
+
       - run: npm test -- --coverage
       - run: npm run migration:run
+      - run: npm ci --prefix ../frontend
+      - run: npm run build --prefix ../frontend
       - run: npm run test:e2e
 
   frontend:

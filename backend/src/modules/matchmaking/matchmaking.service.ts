@@ -18,6 +18,7 @@ import {
   InterestScreening,
   InterestStatus,
   MatchFixedState,
+  OccupationStatus,
   ProfileClaimStatus,
   ProfileLifecycle,
   ProfileVisibility,
@@ -92,6 +93,41 @@ export interface AcceptedMatchView extends InterestView {
   confirmedByYouAt: Date | null;
   confirmedByThemAt: Date | null;
   fixedAt: Date | null;
+}
+
+/** A whole, non-negative number of rupees stored as digits or a number, else null. */
+function rupeeAmount(value: unknown): number | null {
+  const amount =
+    typeof value === 'string' && /^\d+$/.test(value)
+      ? Number(value)
+      : typeof value === 'number'
+        ? value
+        : null;
+  return amount !== null && Number.isSafeInteger(amount) && amount >= 0 ? amount : null;
+}
+
+/**
+ * The annual package the package filter compares: the salary for somebody
+ * employed, the businesses' income added up for somebody self-employed, and
+ * null when there is no figure to compare.
+ */
+export function annualPackage(
+  d: Pick<ProfileDetails, 'occupationStatus' | 'employment' | 'business'>,
+): number | null {
+  const salary = rupeeAmount(d.employment?.salary);
+  if (d.occupationStatus !== OccupationStatus.SELF_EMPLOYED) return salary;
+  const business = d.business ?? {};
+  const entries = Array.isArray(business.entries)
+    ? (business.entries as Record<string, unknown>[])
+    : Object.keys(business).length
+      ? [business]
+      : [];
+  const incomes = entries
+    .map((entry) => rupeeAmount(entry?.businessIncome))
+    .filter((income): income is number => income !== null);
+  if (!incomes.length) return null;
+  const total = incomes.reduce((sum, income) => sum + income, 0);
+  return Number.isSafeInteger(total) ? total : null;
 }
 
 /**
@@ -274,6 +310,18 @@ export class MatchmakingService {
     actor: AuthUser,
     q: SuggestionsQueryDto,
   ): Promise<PaginatedResult<Suggestion> & { counts?: MatchViewCounts }> {
+    if (
+      q.heightMinCm !== undefined &&
+      q.heightMaxCm !== undefined &&
+      q.heightMinCm > q.heightMaxCm
+    ) {
+      throw new BadRequestException('heightMinCm must be less than or equal to heightMaxCm');
+    }
+
+    if (q.packageMin !== undefined && q.packageMax !== undefined && q.packageMin > q.packageMax) {
+      throw new BadRequestException('packageMin must be less than or equal to packageMax');
+    }
+
     const { page, limit } = q;
     // A client whose profile an agent built does not browse the directory
     // themselves — the agent runs their matchmaking. Once they log in with
@@ -755,6 +803,8 @@ export class MatchmakingService {
     add('ageMax', q.ageMax);
     add('hMin', q.heightMinCm);
     add('hMax', q.heightMaxCm);
+    add('pkgMin', q.packageMin);
+    add('pkgMax', q.packageMax);
     add('rel', q.religion);
     add('cst', q.caste);
     add('tng', q.motherTongue);
@@ -843,6 +893,8 @@ export class MatchmakingService {
     const wantsBiodata =
       q.heightMinCm !== undefined ||
       q.heightMaxCm !== undefined ||
+      q.packageMin !== undefined ||
+      q.packageMax !== undefined ||
       Boolean(q.religion) ||
       Boolean(q.caste) ||
       Boolean(q.motherTongue) ||
@@ -875,6 +927,13 @@ export class MatchmakingService {
       if (!d) return false;
       if (q.heightMinCm !== undefined && (d.heightCm ?? 0) < q.heightMinCm) return false;
       if (q.heightMaxCm !== undefined && (d.heightCm ?? 999) > q.heightMaxCm) return false;
+      if (q.packageMin !== undefined || q.packageMax !== undefined) {
+        if (!d.incomeVisible) return false;
+        const packageValue = annualPackage(d);
+        if (packageValue === null) return false;
+        if (q.packageMin !== undefined && packageValue < q.packageMin) return false;
+        if (q.packageMax !== undefined && packageValue > q.packageMax) return false;
+      }
       if (!same(d.religion, q.religion)) return false;
       if (!same(d.caste, q.caste)) return false;
       if (!same(d.motherTongue, q.motherTongue)) return false;

@@ -1,3 +1,4 @@
+import { businessEntries } from '../../profile-details/business-entries';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Profile, ProfilePreferences } from '../entities/profile.entity';
 import { hasFullProfileAccess, ProfileAccessRelationship } from '../profile-visibility';
@@ -172,7 +173,7 @@ export function toCardFacts(details: {
       text(details.employment?.role) ??
       text(details.employment?.designation) ??
       text(details.employment?.company) ??
-      text(details.business?.name) ??
+      text(businessEntries(details.business).map((entry) => entry.businessName ?? entry.name).filter(Boolean).join(', ')) ??
       null,
   };
 }
@@ -191,11 +192,16 @@ export function toCardFacts(details: {
  * `idVerifiedByUserId` names the officer who confirmed the document, which is
  * an internal audit fact rather than something the subject is owed.
  */
-export type OwnProfileView = Omit<Profile, 'governmentIdHash' | 'idVerifiedByUserId'>;
+export type OwnProfileView = Omit<Profile, 'governmentIdHash' | 'idVerifiedByUserId'> & {
+  accountName?: string | null;
+};
 
-export function toOwnProfile(profile: Profile): OwnProfileView {
+export function toOwnProfile(profile: Profile, accountName?: string | null): OwnProfileView {
   const { governmentIdHash: _hash, idVerifiedByUserId: _officer, ...rest } = profile;
-  return rest;
+  return {
+    ...rest,
+    accountName: accountName ?? null,
+  };
 }
 
 /**

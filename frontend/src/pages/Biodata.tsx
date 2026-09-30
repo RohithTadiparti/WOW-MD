@@ -1,3 +1,7 @@
+import BusinessEntriesFields from '../components/BusinessEntriesFields';
+import HeightInput from '../components/HeightInput';
+import PackageRangeFields from '../components/PackageRangeFields';
+import { BusinessEntry, readBusinessEntries } from '../lib/business-entries';
 import { FormEvent, ReactNode, useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
@@ -72,6 +76,13 @@ interface ContactBlock {
   email: string | null;
 }
 
+/** One caste in the reference catalogue, with the sub-castes filed under it. */
+interface CasteEntry {
+  casteName: string;
+  religions: string[];
+  subCastes: { subCasteName: string }[];
+}
+
 interface Sibling {
   id: string;
   name: string;
@@ -99,7 +110,9 @@ interface Asset {
  */
 export default function Biodata() {
   const qc = useQueryClient();
+  const userRole = useAuth((s) => s.user?.role);
   const permissions = useAuth((s) => s.user?.permissions ?? []);
+  const isFamily = userRole === 'family';
   const isSteward = can(permissions, Permission.ACT_ON_BEHALF);
   const isAgent = can(permissions, Permission.AGENCY_MANAGE);
 
@@ -161,6 +174,7 @@ export default function Biodata() {
   /** The step a biodata section is filled in on. */
   function stepForSection(section: string): StepName | null {
     if (section === 'personal' || section === 'religion') return 'basic';
+    if (section === 'occupation') return 'education';
     if (section === 'marital') return steps.includes('marital') ? 'marital' : 'basic';
     return (steps as string[]).includes(section) ? (section as StepName) : null;
   }
@@ -180,6 +194,13 @@ export default function Biodata() {
         await api.put(`/profiles/${targetId}/details/${section}`, body);
       }
       await qc.invalidateQueries({ queryKey: ['biodata', targetId] });
+      // Preferences and income feed the match suggestions.
+      if (sections.some(([section]) => section === 'preferences' || section === 'education')) {
+        await Promise.all([
+          qc.invalidateQueries({ queryKey: ['suggestions'] }),
+          qc.invalidateQueries({ queryKey: ['recommended'] }),
+        ]);
+      }
 
       // Straight on to the next card. The steps are worked out from what was
       // just saved, since a new marital status can add or remove one.
@@ -238,7 +259,7 @@ export default function Biodata() {
           filling in his daughter's biodata is not looking at a client, and
           being told he is reads as the platform having mistaken him for one.
         */}
-        {isSteward && (
+        {isSteward && !isFamily && (
           <ProfileSelector
             value={profileId}
             onChange={setProfileId}
@@ -322,7 +343,7 @@ export default function Biodata() {
         exactly like a form you have not filled in yet, which is why people
         saved, saw the same boxes and concluded nothing had been stored.
       */}
-      <Accordion title="Saved details" open={savedOpen} setOpen={setSavedOpen}>
+      <Accordion id="saved-details" title="Saved details" open={savedOpen} setOpen={setSavedOpen}>
         <SavedBiodata details={details} siblings={siblings} assets={assets} />
       </Accordion>
 
@@ -341,7 +362,26 @@ export default function Biodata() {
       >
         {current === 'photos' &&
           (targetId ? (
-            <ProfilePhotos profileId={targetId} gender={me?.gender ?? data?.gender} />
+            <div className="space-y-6">
+              <ProfilePhotos profileId={targetId} gender={me?.gender ?? data?.gender} />
+              {/* One group photograph of the family, kept apart from the profile photos. */}
+              <section id="family-photo" key={targetId} className="space-y-3 border-t pt-4">
+                <h3 className="font-semibold text-gray-800">Family photo</h3>
+                {details.familyPhotoUrl && (
+                  <img
+                    src={details.familyPhotoUrl}
+                    alt="Family photo"
+                    className="max-h-80 object-contain"
+                  />
+                )}
+                <PhotoUploader
+                  label={details.familyPhotoUrl ? 'Replace family photo' : 'Upload family photo'}
+                  onUploaded={(url) =>
+                    mutate(() => api.put(`/profiles/${targetId}/details/family-photo`, { url }))
+                  }
+                />
+              </section>
+            </div>
           ) : (
             <p className="text-sm text-gray-400">Pick a profile first.</p>
           ))}
@@ -484,18 +524,20 @@ function stepsFor(maritalStatus: unknown): StepName[] {
 }
 
 function Accordion({
+  id,
   title,
   open,
   setOpen,
   children,
 }: {
+  id?: string;
   title: string;
   open: boolean;
   setOpen: (open: boolean) => void;
   children: ReactNode;
 }) {
   return (
-    <div className="card">
+    <div id={id} className="card">
       <button
         className="flex w-full items-center justify-between text-left"
         onClick={() => setOpen(!open)}
@@ -538,7 +580,7 @@ function StepCard({
     photos: [],
     basic: ['personal', 'religion'],
     marital: ['marital'],
-    education: ['education'],
+    education: ['education', 'occupation'],
     family: ['family'],
     horoscope: ['horoscope'],
     preferences: ['preferences'],
@@ -690,9 +732,24 @@ function BasicInfoForm({
    *
    * Offering a Hindu caste list to a Christian family is not a neutral
    * mistake. Religions with no caste structure get an empty list, and the
-   * field then offers only the free-text box.
+   * field then offers only the free-text box. The sub-castes come from the
+   * same catalogue, under the caste they belong to.
    */
-  const casteOptions = CASTES_BY_RELIGION[religion] ?? [];
+  const { data: casteCatalog } = useQuery({
+    queryKey: ['reference', 'castes'],
+    queryFn: async () => (await api.get('/reference/castes')).data,
+    staleTime: 60 * 60 * 1000,
+  });
+  const casteEntries = ((casteCatalog?.castes ?? []) as CasteEntry[]).filter((entry) =>
+    entry.religions.includes(religion),
+  );
+  const casteOptions = casteEntries.length
+    ? casteEntries.map((entry) => entry.casteName)
+    : (CASTES_BY_RELIGION[religion] ?? []);
+  const caste = String(faith.draft.caste ?? '');
+  const subCasteOptions = (
+    casteEntries.find((entry) => entry.casteName === caste)?.subCastes ?? []
+  ).map((entry) => entry.subCasteName);
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -761,14 +818,10 @@ function BasicInfoForm({
             />
           </Field>
         )}
-        <Field label="Height (cm)">
-          <input
-            className="input mt-1"
-            type="number"
-            min={120}
-            max={230}
-            value={String(draft.heightCm ?? '')}
-            onChange={set('heightCm')}
+        <Field label="Height">
+          <HeightInput
+            value={draft.heightCm}
+            onChange={(value) => set('heightCm')({ target: { value } })}
             required
           />
         </Field>
@@ -839,28 +892,43 @@ function BasicInfoForm({
         <ChoiceField
           label="Religion"
           value={religion}
-          onChange={put('religion')}
+          onChange={(value) => {
+            put('religion')(value);
+            put('caste')('');
+            put('subCaste')('');
+          }}
           options={RELIGIONS}
           required
         />
         <ChoiceField
           label="Caste"
-          value={String(faith.draft.caste ?? '')}
-          onChange={put('caste')}
+          value={caste}
+          onChange={(value) => {
+            put('caste')(value);
+            put('subCaste')('');
+          }}
           options={casteOptions}
-          hint={religion ? undefined : 'Pick a religion first, or type the caste.'}
+          hint={
+            religion
+              ? 'Options are commonly reported labels and may vary by region.'
+              : 'Pick a religion first, or type the caste.'
+          }
           required
         />
         {/*
-          Sub-caste and gothram have no finite list — there are thousands, and
-          they vary by district. The control is a dropdown of nothing plus the
-          free-text escape, which is the honest shape for them.
+          The catalogue lists the common sub-castes under each caste; there
+          are thousands and they vary by district, so the free-text escape
+          stays for everything it does not name.
         */}
         <ChoiceField
+          key={caste}
           label="Sub-caste"
           value={String(faith.draft.subCaste ?? '')}
           onChange={put('subCaste')}
-          options={[]}
+          options={subCasteOptions}
+          otherOption="Other / Not Listed"
+          disabled={!caste}
+          hint={caste ? undefined : 'Select a caste first.'}
           required
         />
         <ChoiceField
@@ -1842,10 +1910,27 @@ function EducationForm({
     guard.seeded(Boolean(stored));
     if (stored) {
       seedStatus(stored.status as OccupationStatus);
-      seedValues((stored.values as Draft) ?? {});
+      const draft = (stored.values as Draft) ?? {};
+      // A draft saved before businesses became a list holds one business's
+      // fields at the top level; they become its first entry.
+      seedValues({
+        ...draft,
+        businessEntries: Array.isArray(draft.businessEntries)
+          ? draft.businessEntries
+          : [
+              {
+                id: crypto.randomUUID(),
+                businessName: draft.businessName ?? '',
+                businessType: draft.businessType ?? '',
+                businessLocation: draft.businessLocation ?? '',
+                businessIncome: draft.businessIncome ?? '',
+              },
+            ],
+      });
       return;
     }
     seedStatus((initial?.occupationStatus as OccupationStatus) ?? 'employed');
+    const entries = readBusinessEntries(business);
     seedValues({
       highestQualification: initial?.highestQualification ?? '',
       course: initial?.course ?? '',
@@ -1855,9 +1940,10 @@ function EducationForm({
       designation: employment.designation ?? '',
       workLocation: employment.workLocation ?? '',
       salary: employment.salary ?? '',
-      businessName: business.businessName ?? '',
-      businessIncome: business.businessIncome ?? '',
-      businessLocation: business.businessLocation ?? '',
+      businessEntries: (entries.length ? entries : [{}]).map((entry) => ({
+        ...entry,
+        id: entry.id ?? crypto.randomUUID(),
+      })),
       otherIncome: Array.isArray(initial?.otherIncome) ? initial.otherIncome : [],
       incomeVisible: initial?.incomeVisible ?? false,
     });
@@ -1888,6 +1974,9 @@ function EducationForm({
     <form
       onSubmit={(e) => {
         e.preventDefault();
+        const businessEntries = (values.businessEntries as BusinessEntry[] | undefined) ?? [];
+        // The fields say so already; there is nothing to send without one.
+        if (status === 'self_employed' && !businessEntries.length) return;
         const body: Draft = {
           highestQualification: values.highestQualification,
           course: values.course,
@@ -1915,9 +2004,16 @@ function EducationForm({
         }
         if (status === 'self_employed') {
           body.business = {
-            businessName: values.businessName,
-            businessIncome: values.businessIncome || undefined,
-            businessLocation: values.businessLocation || undefined,
+            entries: businessEntries.map((entry) => ({
+              id: entry.id,
+              businessName: String(entry.businessName ?? '').trim(),
+              businessType: String(entry.businessType ?? '').trim() || undefined,
+              businessLocation: String(entry.businessLocation ?? '').trim() || undefined,
+              businessIncome:
+                entry.businessIncome === '' || entry.businessIncome == null
+                  ? undefined
+                  : String(entry.businessIncome),
+            })),
           };
         }
         void submitDraft(onSave(body), () => guard.clear(storageKey));
@@ -2000,26 +2096,10 @@ function EducationForm({
       )}
 
       {status === 'self_employed' && (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Business name">
-            <input className="input mt-1" value={String(values.businessName ?? '')} onChange={set('businessName')} required />
-          </Field>
-          <Field label="Business income" hint="Numbers only, annual in rupees. Hidden unless you tick the box below">
-            {/* Digits only, same as Salary (EZ1-I59). */}
-            <input
-              className="input mt-1"
-              inputMode="numeric"
-              placeholder="e.g. 1500000"
-              value={String(values.businessIncome ?? '')}
-              onChange={(e) =>
-                setValues((v) => ({ ...v, businessIncome: e.target.value.replace(/\D/g, '') }))
-              }
-            />
-          </Field>
-          <Field label="Business location">
-            <input className="input mt-1" value={String(values.businessLocation ?? '')} onChange={set('businessLocation')} />
-          </Field>
-        </div>
+        <BusinessEntriesFields
+          entries={(values.businessEntries as BusinessEntry[]) ?? []}
+          onChange={(businessEntries) => setValues((v) => ({ ...v, businessEntries }))}
+        />
       )}
 
       {/*
@@ -2136,10 +2216,12 @@ function PreferencesForm({
       return;
     }
     seedValues({
+      preferredPackageMin: initial?.preferredPackageMin ?? '',
+      preferredPackageMax: initial?.preferredPackageMax ?? '',
       preferredAgeMin: initial?.preferredAgeMin ?? 24,
       preferredAgeMax: initial?.preferredAgeMax ?? 34,
       preferredHeightMinCm: initial?.preferredHeightMinCm ?? 150,
-      preferredHeightMaxCm: initial?.preferredHeightMaxCm ?? 190,
+      preferredHeightMaxCm: initial?.preferredHeightMaxCm ?? 189,
       religion: prefs.religion ?? '',
       caste: prefs.caste ?? '',
       education: prefs.education ?? '',
@@ -2172,7 +2254,11 @@ function PreferencesForm({
     <form
       onSubmit={(e) => {
         e.preventDefault();
+        // A blank bound is sent as null, which clears it.
+        const bound = (value: unknown) => (value === '' || value == null ? null : Number(value));
         const sent = onSave({
+          preferredPackageMin: bound(values.preferredPackageMin),
+          preferredPackageMax: bound(values.preferredPackageMax),
           preferredAgeMin: Number(values.preferredAgeMin),
           preferredAgeMax: Number(values.preferredAgeMax),
           preferredHeightMinCm: Number(values.preferredHeightMinCm),
@@ -2209,11 +2295,19 @@ function PreferencesForm({
         <Field label="Age to">
           <input className="input mt-1" type="number" min={18} max={100} value={String(values.preferredAgeMax ?? '')} onChange={set('preferredAgeMax')} required />
         </Field>
-        <Field label="Height from (cm)">
-          <input className="input mt-1" type="number" min={120} max={230} value={String(values.preferredHeightMinCm ?? '')} onChange={set('preferredHeightMinCm')} required />
+        <Field label="Height from">
+          <HeightInput
+            value={values.preferredHeightMinCm}
+            onChange={(value) => set('preferredHeightMinCm')({ target: { value } })}
+            required
+          />
         </Field>
-        <Field label="Height to (cm)">
-          <input className="input mt-1" type="number" min={120} max={230} value={String(values.preferredHeightMaxCm ?? '')} onChange={set('preferredHeightMaxCm')} required />
+        <Field label="Height to">
+          <HeightInput
+            value={values.preferredHeightMaxCm}
+            onChange={(value) => set('preferredHeightMaxCm')({ target: { value } })}
+            required
+          />
         </Field>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
@@ -2310,6 +2404,13 @@ function PreferencesForm({
           </Field>
         )}
       </div>
+
+      <PackageRangeFields
+        minimum={String(values.preferredPackageMin ?? '')}
+        maximum={String(values.preferredPackageMax ?? '')}
+        onMinimumChange={put('preferredPackageMin')}
+        onMaximumChange={put('preferredPackageMax')}
+      />
 
       {/*
         Horoscope expectations belong here rather than on the chart itself: the

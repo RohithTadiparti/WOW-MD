@@ -1,3 +1,5 @@
+import { ValidationPipe } from '@nestjs/common';
+import { SuggestionsQueryDto } from '../matchmaking/dto/matchmaking.dto';
 import { Repository } from 'typeorm';
 import { ProfileDetailsService } from './profile-details.service';
 import { ProfileDetails } from './entities/profile-details.entity';
@@ -20,6 +22,7 @@ import {
 } from '../../common/enums';
 import {
   EducationDetailsDto,
+  OccupationDetailsDto,
   FamilyDetailsDto,
   HoroscopeDetailsDto,
   MaritalDetailsDto,
@@ -65,7 +68,16 @@ describe('ProfileDetailsService section saves', () => {
     save: jest.fn(async (p: Profile) => p),
   } as unknown as Repository<Profile>;
 
-  const redis = { raw: { keys: jest.fn(async () => []) }, del: jest.fn() } as unknown as RedisService;
+  const cachedSuggestionKeys = ['match:suggestions:p1:1:20:', 'match:suggestions:unrelated:1:20:'];
+  const redis = {
+    raw: {
+      scan: jest.fn(async (_cursor: string, _match: string, pattern: string) => [
+        '0',
+        cachedSuggestionKeys.filter((key) => key.startsWith(pattern.replace('*', ''))),
+      ]),
+    },
+    del: jest.fn(),
+  } as unknown as RedisService;
 
   const service = new ProfileDetailsService(
     details,
@@ -84,7 +96,7 @@ describe('ProfileDetailsService section saves', () => {
     ({
       firstName: 'Bhavana',
       lastName: 'Rao',
-      heightCm: 160,
+      heightCm: 168,
       complexion: Complexion.WHEATISH,
       communicationAddress: '12 Test Road, Hyderabad',
       ...over,
@@ -93,7 +105,7 @@ describe('ProfileDetailsService section saves', () => {
   const PERSONAL = {
     firstName: 'Bhavana',
     lastName: 'Rao',
-    heightCm: 160,
+    heightCm: 168,
     complexion: Complexion.WHEATISH,
     communicationAddress: '12 Test Road, Hyderabad',
     alternateMobile: '+919876543210',
@@ -111,6 +123,68 @@ describe('ProfileDetailsService section saves', () => {
       photos: ['a.jpg', 'b.jpg', 'c.jpg'],
       preferences: {},
     } as unknown as Profile;
+  });
+
+  it.each([UserRole.BRIDE, UserRole.FAMILY])('persists package preferences for %s', async (role) => {
+    const actor = { ...owner, role };
+    if (role === UserRole.FAMILY) {
+      profile.userId = null;
+      profile.managedByUserId = actor.userId;
+    }
+    const result = await service.savePreferences(actor, 'p1', {
+      preferredAgeMin: 24, preferredAgeMax: 34,
+      preferredHeightMinCm: 150, preferredHeightMaxCm: 189,
+      preferredPackageMin: 1000000, preferredPackageMax: 2000000,
+    });
+    expect(result).toMatchObject({ preferredPackageMin: 1000000, preferredPackageMax: 2000000 });
+    expect(await details.findOne({ where: { profileId: 'p1' } })).toMatchObject({ preferredPackageMin: 1000000, preferredPackageMax: 2000000 });
+  });
+
+  it('validates package API bodies and converts query bounds', async () => {
+    const pipe = new ValidationPipe({ transform: true, whitelist: true });
+    const base = { preferredAgeMin: 24, preferredAgeMax: 34, preferredHeightMinCm: 150, preferredHeightMaxCm: 189 };
+    for (const value of [-1, 1.5, 'bad', Number.MAX_SAFE_INTEGER + 1]) {
+      await expect(pipe.transform({ ...base, preferredPackageMin: value }, { type: 'body', metatype: PartnerPreferencesDto })).rejects.toThrow();
+      await expect(pipe.transform({ packageMax: value }, { type: 'query', metatype: SuggestionsQueryDto })).rejects.toThrow();
+    }
+    expect(await pipe.transform({ ...base, preferredPackageMin: null, preferredPackageMax: 0 }, { type: 'body', metatype: PartnerPreferencesDto }))
+      .toMatchObject({ preferredPackageMin: null, preferredPackageMax: 0 });
+    expect(await pipe.transform({ packageMin: '0', packageMax: '2000000' }, { type: 'query', metatype: SuggestionsQueryDto }))
+      .toMatchObject({ packageMin: 0, packageMax: 2000000 });
+  });
+
+  it('filters matches on the same height range the biodata accepts', async () => {
+    const pipe = new ValidationPipe({ transform: true, whitelist: true });
+    const query = (q: Record<string, string>) => pipe.transform(q, { type: 'query', metatype: SuggestionsQueryDto });
+    const body = (min: number, max: number) =>
+      pipe.transform(
+        { preferredAgeMin: 24, preferredAgeMax: 34, preferredHeightMinCm: min, preferredHeightMaxCm: max },
+        { type: 'body', metatype: PartnerPreferencesDto },
+      );
+    // 3 ft 0 in and 8 ft 0 in, the ends of the range.
+    await expect(query({ heightMinCm: '91', heightMaxCm: '244' })).resolves.toMatchObject({ heightMinCm: 91, heightMaxCm: 244 });
+    await expect(body(91, 244)).resolves.toBeDefined();
+    for (const [min, max] of [['90', '200'], ['150', '245']]) {
+      await expect(query({ heightMinCm: min, heightMaxCm: max })).rejects.toThrow();
+      await expect(body(Number(min), Number(max))).rejects.toThrow();
+    }
+  });
+
+  it('saves, preserves, edits and clears package bounds without losing other sections', async () => {
+    stored = { profileId: 'p1', religion: 'Hindu' };
+    const base = { preferredAgeMin: 24, preferredAgeMax: 34, preferredHeightMinCm: 150, preferredHeightMaxCm: 189 };
+    await service.savePreferences(owner, 'p1', { ...base, preferredPackageMin: 0, preferredPackageMax: 1200000 });
+    expect(stored).toMatchObject({ preferredPackageMin: 0, preferredPackageMax: 1200000, religion: 'Hindu' });
+    await service.savePreferences(owner, 'p1', base);
+    expect(stored).toMatchObject({ preferredPackageMin: 0, preferredPackageMax: 1200000 });
+    await expect(service.savePreferences(owner, 'p1', { ...base, preferredPackageMin: 1200001 })).rejects.toThrow('minimum package');
+    await service.savePreferences(owner, 'p1', { ...base, preferredPackageMin: 500000 });
+    expect(stored).toMatchObject({ preferredPackageMin: 500000, preferredPackageMax: 1200000 });
+    await service.savePreferences(owner, 'p1', { ...base, preferredPackageMin: null, preferredPackageMax: null });
+    expect(stored).toMatchObject({ preferredPackageMin: null, preferredPackageMax: null, religion: 'Hindu' });
+    expect(redis.raw.scan).toHaveBeenCalledWith('0', 'MATCH', 'match:suggestions:p1:*', 'COUNT', 100);
+    expect(redis.del).toHaveBeenCalledWith('match:suggestions:p1:1:20:');
+    expect(redis.del).not.toHaveBeenCalledWith('match:suggestions:unrelated:1:20:');
   });
 
   it('keeps the personal section intact while every other section is saved', async () => {
@@ -149,8 +223,8 @@ describe('ProfileDetailsService section saves', () => {
     await service.savePreferences(owner, 'p1', {
       preferredAgeMin: 25,
       preferredAgeMax: 32,
-      preferredHeightMinCm: 165,
-      preferredHeightMaxCm: 190,
+      preferredHeightMinCm: 163,
+      preferredHeightMaxCm: 189,
     } as PartnerPreferencesDto);
 
     expect(stored).toMatchObject(PERSONAL);
@@ -161,10 +235,10 @@ describe('ProfileDetailsService section saves', () => {
     stored = { profileId: 'p1', ...PERSONAL };
 
     // What the web form sends: it has no residence field at all.
-    await service.savePersonal(owner, 'p1', personal({ heightCm: 162 }));
+    await service.savePersonal(owner, 'p1', personal({ heightCm: 165 }));
 
     expect(stored).toMatchObject({
-      heightCm: 162,
+      heightCm: 165,
       residence: PERSONAL.residence,
       alternateMobile: PERSONAL.alternateMobile,
     });
@@ -208,6 +282,99 @@ describe('ProfileDetailsService section saves', () => {
     } as EducationDetailsDto);
     expect(stored?.institution).toBeNull();
     expect(stored?.collegePlace).toBe('Delhi');
+  });
+
+  it('saves occupation details separately from education details', async () => {
+    stored = { profileId: 'p1', highestQualification: 'B.Tech', course: 'CSE' };
+
+    await service.saveOccupation(owner, 'p1', {
+      occupationStatus: OccupationStatus.EMPLOYED,
+      employment: { company: 'Google', designation: 'Software Engineer' },
+      incomeVisible: true,
+    } as OccupationDetailsDto);
+
+    expect(stored).toMatchObject({
+      highestQualification: 'B.Tech',
+      course: 'CSE',
+      occupationStatus: OccupationStatus.EMPLOYED,
+      incomeVisible: true,
+    });
+  });
+
+  it('keeps family net worth optional for a groom profile', async () => {
+    profile.gender = 'male';
+
+    await expect(service.saveFamily(owner, 'p1', {
+        father: { name: 'Ravi Rao' },
+        mother: { name: 'Lata Rao' },
+        familyType: FamilyType.NUCLEAR,
+        familyStatus: 'middle_class',
+        brothers: 0,
+        sisters: 1,
+        // familyNetWorth deliberately omitted
+      } as unknown as FamilyDetailsDto)).resolves.toBeDefined();
+    expect(stored).toMatchObject({ familyType: FamilyType.NUCLEAR });
+  });
+
+  it('accepts a family section save without net worth for a bride profile (female gender)', async () => {
+    profile.gender = 'female';
+
+    await expect(
+      service.saveFamily(owner, 'p1', {
+        father: { name: 'Ravi Rao' },
+        mother: { name: 'Lata Rao' },
+        familyType: FamilyType.NUCLEAR,
+        familyStatus: 'middle_class',
+        brothers: 2,
+        sisters: 0,
+        // familyNetWorth deliberately omitted — must not throw
+      } as unknown as FamilyDetailsDto),
+    ).resolves.toBeDefined();
+
+    expect(stored).toMatchObject({ familyType: FamilyType.NUCLEAR });
+  });
+
+  it('validates employment and business on an education save without an occupation', async () => {
+    const pipe = new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true });
+    const base = { highestQualification: 'Masters', course: 'M.Tech' };
+    for (const body of [
+      { employment: 'abc' },
+      { business: 'abc' },
+      { business: { entries: 'x' } },
+      { business: { entries: [{ businessName: 'A', businessIncome: 'lots' }] } },
+      { occupationStatus: OccupationStatus.EMPLOYED },
+    ]) {
+      await expect(
+        pipe.transform({ ...base, ...body }, { type: 'body', metatype: EducationDetailsDto }),
+      ).rejects.toThrow();
+    }
+    await expect(
+      pipe.transform(
+        { ...base, business: { entries: [{ businessName: 'A', businessIncome: '500000' }] } },
+        { type: 'body', metatype: EducationDetailsDto },
+      ),
+    ).resolves.toBeDefined();
+  });
+
+  it('changes only the occupation blocks that were sent', async () => {
+    stored = {
+      profileId: 'p1',
+      occupationStatus: OccupationStatus.SELF_EMPLOYED,
+      business: { businessName: 'Shop', entries: [{ id: 'b1', businessName: 'Shop' }] },
+    };
+
+    await service.saveEducation(owner, 'p1', {
+      highestQualification: 'Masters',
+      course: 'M.Tech',
+      occupationStatus: OccupationStatus.EMPLOYED,
+      employment: { company: 'Acme', designation: 'Engineer' },
+    } as EducationDetailsDto);
+
+    expect(stored).toMatchObject({
+      occupationStatus: OccupationStatus.EMPLOYED,
+      employment: { company: 'Acme', designation: 'Engineer' },
+      business: { businessName: 'Shop', entries: [{ id: 'b1', businessName: 'Shop' }] },
+    });
   });
 
   const EDUCATION = {

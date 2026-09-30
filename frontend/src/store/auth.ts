@@ -17,6 +17,7 @@ export interface AuthUser {
    */
   mustResetPassword?: boolean;
   onboardingStage?: OnboardingStage;
+  accountName?: string | null;
 }
 
 interface AuthState {

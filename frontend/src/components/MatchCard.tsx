@@ -1,7 +1,9 @@
+import { formatHeight } from '../lib/height';
 import { useState } from 'react';
 import { MARITAL_LABEL, MaritalStatus, OCCUPATION_LABEL, OccupationStatus } from '../lib/permissions';
-import { BookmarkSimple, CheckCircle } from '@phosphor-icons/react';
+import { CheckCircle } from '@phosphor-icons/react';
 import { ProfileSilhouette } from './ProfileSilhouette';
+import { AnimatedCard, AnimatedHeart } from './ui/Motion';
 
 /** Server-side privacy view: an age band, not a date of birth. */
 export interface PublicProfile {
@@ -187,7 +189,7 @@ export default function MatchCard({
       : [
           p.ageRange ? `${p.ageRange} yrs` : null,
           p.city,
-          card?.heightCm ? `${card.heightCm} cm` : null,
+          card?.heightCm ? formatHeight(card.heightCm) : null,
           card?.profession,
           card?.highestQualification,
           card?.maritalStatus
@@ -221,7 +223,7 @@ export default function MatchCard({
   const active = activity(p.lastActiveAt);
 
   return (
-    <article
+    <AnimatedCard
       className="group/card rounded-lg border border-gray-200 bg-surface p-4
         transition-[border-color,box-shadow] duration-200 hover:border-gray-300 hover:shadow-card"
     >
@@ -382,20 +384,14 @@ export default function MatchCard({
           </button>
         )}
         {onToggleShortlist && (
-          <button
-            className={`btn-ghost px-2.5 py-1.5 text-xs ${
-              suggestion.shortlisted ? 'text-brand-strong' : ''
-            }`}
-            onClick={onToggleShortlist}
-            aria-pressed={Boolean(suggestion.shortlisted)}
-          >
-            <BookmarkSimple
-              size={14}
-              weight={suggestion.shortlisted ? 'fill' : 'regular'}
-              aria-hidden
+          <span className="inline-flex items-center gap-1.5 text-xs text-gray-600">
+            <AnimatedHeart
+              pressed={Boolean(suggestion.shortlisted)}
+              onClick={onToggleShortlist}
+              label={suggestion.shortlisted ? 'Remove from shortlist' : 'Add to shortlist'}
             />
             {suggestion.shortlisted ? 'Shortlisted' : 'Shortlist'}
-          </button>
+          </span>
         )}
         {suggestion.note && (
           <span className="text-xs text-gray-500">&ldquo;{suggestion.note}&rdquo;</span>
@@ -406,6 +402,6 @@ export default function MatchCard({
           </span>
         )}
       </div>
-    </article>
+    </AnimatedCard>
   );
 }

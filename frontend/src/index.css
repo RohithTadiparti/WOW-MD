@@ -77,6 +77,10 @@
     --caution-bg: 250 240 222;
     --critical-fg: 176 42 28;
     --critical-bg: 253 232 228;
+    /* Neutral information: a note, a count, a state that is neither good nor
+     * bad. A muted slate blue, kept clear of the maroon accent. */
+    --info-fg: 36 72 122;
+    --info-bg: 230 238 248;
 
     /* ---------------------------------------------------------- tier 2 --
      * Semantic tokens. Components only ever read these.
@@ -174,6 +178,8 @@
     --caution-bg: 54 41 18;
     --critical-fg: 250 160 146;
     --critical-bg: 64 26 22;
+    --info-fg: 160 196 240;
+    --info-bg: 22 34 54;
 
     --canvas: 26 11 17;
     --surface: 36 16 23;

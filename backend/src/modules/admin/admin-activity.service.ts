@@ -17,6 +17,8 @@ import { bookingContextOf } from '../bookings/booking-venue';
 
 /** One line in the activity feed. Deliberately uniform across every source. */
 export interface ActivityItem {
+  /** Stable per event: the kind and the record it happened to. */
+  id: string;
   at: Date;
   /** What happened, in the platform's own vocabulary. */
   kind: string;
@@ -24,7 +26,15 @@ export interface ActivityItem {
   summary: string;
   resourceType: string;
   resourceId: string;
+  /** Who did it, when the record says; null for the platform itself. */
+  actorUserId: string | null;
+  actorName: string | null;
+  actorRole: string | null;
+  /** The facts behind the sentence, for the detail drawer. */
+  metadata: Record<string, unknown>;
 }
+
+type Draft = Omit<ActivityItem, 'id' | 'actorName' | 'actorRole'>;
 
 /**
  * The platform activity feed on the admin console.
@@ -61,17 +71,18 @@ export class AdminActivityService {
    * What has been happening, across the whole platform.
    *
    * Distinct from the audit trail, which records *privileged* actions — who
-   * approved what, who moved money. This is the ordinary life of the platform:
-   * people signing up, listings being submitted, bookings arriving, complaints
-   * being raised. An administrator opening the console wants to know whether
-   * anything is happening at all before they want to know who did what to whom.
+   * approved what, who moved money, every sign-in. This is the ordinary life of
+   * the platform: people signing up, listings being submitted, bookings
+   * arriving, complaints being raised. An administrator opening the console
+   * wants to know whether anything is happening at all before they want to know
+   * who did what to whom; the audit log has its own page.
    *
    * Assembled by taking the newest few rows from each source and merging them
    * rather than by a SQL UNION. The union would be one query and several
    * hundred lines of hand-written column aliasing across tables that share
-   * almost no shape; this is six small indexed reads on `createdAt` and a sort
-   * of at most a few dozen rows. When the feed grows a source, it grows by four
-   * lines here instead of by a rewrite.
+   * almost no shape; this is a handful of small indexed reads on `createdAt`
+   * and a sort of at most a few dozen rows. When the feed grows a source, it
+   * grows by a few lines here instead of by a rewrite.
    */
   async activity(q: ActivityQueryDto): Promise<ActivityItem[]> {
     const take = q.limit;
@@ -121,7 +132,7 @@ export class AdminActivityService {
         where: { managedByAgentId: Not(IsNull()), ...on('createdAt') },
         order: { createdAt: 'DESC' },
         take,
-        select: ['id', 'createdAt'],
+        select: ['id', 'managedByAgentId', 'createdAt'],
       }),
       this.planners.find({ where: on('createdAt'), order: { createdAt: 'DESC' }, take }),
       this.bookings.find({ where: happened('completedAt'), order: { completedAt: 'DESC' }, take }),
@@ -144,37 +155,35 @@ export class AdminActivityService {
     ]);
 
     // The day a booking is for, read the way the booking itself reads it: the
-    // linked function's date, else the booking's, else the form's. And who
-    // raised each dispute, because providers raise them too.
+    // linked function's date, else the booking's, else the form's.
     const eventIds = [...new Set(bookings.map((b) => b.eventId).filter(Boolean))] as string[];
-    const [linkedEvents, raisers] = await Promise.all([
-      eventIds.length ? this.events.find({ where: { id: In(eventIds) } }) : Promise.resolve([]),
-      disputes.length
-        ? this.users.find({
-            where: { id: In([...new Set(disputes.map((d) => d.raisedBy))]) },
-            select: ['id', 'role'],
-          })
-        : Promise.resolve([]),
-    ]);
+    const linkedEvents = eventIds.length
+      ? await this.events.find({ where: { id: In(eventIds) } })
+      : [];
     const eventById = new Map(linkedEvents.map((e) => [e.id, e]));
-    const roleOf = new Map(raisers.map((u) => [u.id, u.role]));
     const dayOf = (b: Booking) =>
       bookingContextOf(b, b.eventId ? eventById.get(b.eventId) : null).eventDate;
 
-    const items: ActivityItem[] = [
+    const drafts: Draft[] = [
       ...users.map((u) => ({
         at: u.createdAt,
         kind: 'account.registered',
         summary: `A ${u.role.replace(/_/g, ' ')} account was created`,
         resourceType: 'user',
         resourceId: u.id,
+        actorUserId: u.id,
+        metadata: { role: u.role },
       })),
       ...listings.map((v) => ({
         at: v.createdAt,
         kind: 'business.created',
-        summary: `${v.name} was listed under ${v.category}`,
+        summary: `${v.name} was listed under ${
+          v.categories?.length ? v.categories.join(', ') : (v.category ?? 'no category')
+        }`,
         resourceType: 'vendor',
         resourceId: v.id,
+        actorUserId: v.ownerUserId,
+        metadata: { status: v.status },
       })),
       ...bookings.map((b) => ({
         at: b.createdAt,
@@ -182,6 +191,8 @@ export class AdminActivityService {
         summary: `A booking was placed${dayOf(b) ? ` for ${dayOf(b)}` : ''}`,
         resourceType: 'booking',
         resourceId: b.id,
+        actorUserId: b.bookedByUserId ?? null,
+        metadata: { status: b.status, providerType: b.providerType },
       })),
       ...cases.map((c) => ({
         at: c.createdAt,
@@ -192,6 +203,8 @@ export class AdminActivityService {
         summary: `Case raised: ${c.title}`,
         resourceType: 'support_case',
         resourceId: c.id,
+        actorUserId: c.raisedByUserId ?? null,
+        metadata: { status: c.status },
       })),
       ...verifications.map((v) => ({
         at: v.createdAt,
@@ -199,6 +212,8 @@ export class AdminActivityService {
         summary: `A ${v.applicantType} verification entered the queue`,
         resourceType: 'verification_request',
         resourceId: v.id,
+        actorUserId: v.applicantUserId ?? null,
+        metadata: { applicantType: v.applicantType },
       })),
       ...clients.map((c) => ({
         at: c.createdAt,
@@ -206,6 +221,8 @@ export class AdminActivityService {
         summary: 'An agency took on a client',
         resourceType: 'agent_client',
         resourceId: c.id,
+        actorUserId: c.managedByAgentId ?? null,
+        metadata: {},
       })),
       ...planners.map((p) => ({
         at: p.createdAt,
@@ -213,6 +230,8 @@ export class AdminActivityService {
         summary: `${p.agencyName} registered as a wedding planner`,
         resourceType: 'planner',
         resourceId: p.id,
+        actorUserId: p.ownerUserId ?? null,
+        metadata: {},
       })),
       ...completed.map((b) => ({
         at: b.completedAt as Date,
@@ -220,6 +239,8 @@ export class AdminActivityService {
         summary: 'A booking was marked complete',
         resourceType: 'booking',
         resourceId: b.id,
+        actorUserId: null,
+        metadata: { status: b.status },
       })),
       ...cancelled.map((b) => ({
         at: b.cancelledAt as Date,
@@ -227,6 +248,8 @@ export class AdminActivityService {
         summary: 'A booking was cancelled',
         resourceType: 'booking',
         resourceId: b.id,
+        actorUserId: b.cancelledByUserId ?? null,
+        metadata: { status: b.status },
       })),
       ...decided.map((v) => ({
         at: v.decidedAt as Date,
@@ -237,6 +260,8 @@ export class AdminActivityService {
         summary: `A ${v.applicantType} verification was ${v.status === VerificationStatus.APPROVED ? 'approved' : 'rejected'}`,
         resourceType: 'verification_request',
         resourceId: v.id,
+        actorUserId: v.decidedByUserId ?? null,
+        metadata: { applicantType: v.applicantType, newStatus: v.status },
       })),
       ...resolved.map((c) => ({
         at: c.resolvedAt as Date,
@@ -244,13 +269,17 @@ export class AdminActivityService {
         summary: `Case resolved: ${c.title}`,
         resourceType: 'support_case',
         resourceId: c.id,
+        actorUserId: c.resolvedByUserId ?? null,
+        metadata: { status: c.status },
       })),
       ...disputes.map((d) => ({
         at: d.createdAt,
         kind: 'dispute.raised',
-        summary: `${AdminActivityService.disputeRaiser(roleOf.get(d.raisedBy))} raised a dispute on a booking`,
+        summary: 'raised a dispute on a booking',
         resourceType: 'dispute',
         resourceId: d.id,
+        actorUserId: d.raisedBy ?? null,
+        metadata: {},
       })),
       ...payments.map((p) => ({
         at: p.createdAt,
@@ -258,9 +287,32 @@ export class AdminActivityService {
         summary: `${p.milestone} payment of ${Number(p.amount).toLocaleString('en-IN')} taken into escrow`,
         resourceType: 'payment',
         resourceId: p.id,
+        actorUserId: null,
+        metadata: { bookingId: p.bookingId, milestone: p.milestone, amount: p.amount, status: p.status },
       })),
     ];
 
-    return items.sort((a, b) => b.at.getTime() - a.at.getTime()).slice(0, take);
+    const newest = drafts.sort((a, b) => b.at.getTime() - a.at.getTime()).slice(0, take);
+
+    // Name the people behind the rows that made it into the feed, in one read.
+    const actorIds = [...new Set(newest.map((d) => d.actorUserId).filter((id): id is string => Boolean(id)))];
+    const actors = actorIds.length
+      ? await this.users.find({ where: { id: In(actorIds) }, select: ['id', 'email', 'phone', 'role'] })
+      : [];
+    const actorById = new Map(actors.map((actor) => [actor.id, actor]));
+
+    return newest.map((draft) => {
+      const actor = draft.actorUserId ? actorById.get(draft.actorUserId) : undefined;
+      return {
+        ...draft,
+        id: `${draft.kind}:${draft.resourceId}`,
+        summary:
+          draft.kind === 'dispute.raised'
+            ? `${AdminActivityService.disputeRaiser(actor?.role)} ${draft.summary}`
+            : draft.summary,
+        actorName: actor ? (actor.email ?? actor.phone ?? null) : null,
+        actorRole: actor?.role ?? null,
+      };
+    });
   }
 }

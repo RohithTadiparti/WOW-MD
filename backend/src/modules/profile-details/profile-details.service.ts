@@ -1,7 +1,9 @@
+import { saveBusiness } from './business-entries';
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { ProfileDetails } from './entities/profile-details.entity';
+import { isKnownSubCaste, OTHER_NOT_LISTED } from './caste-catalog';
 import { ProfileSibling } from './entities/profile-sibling.entity';
 import { ProfileAsset } from './entities/profile-asset.entity';
 import { Profile } from '../users/entities/profile.entity';
@@ -11,6 +13,7 @@ import { ModerationService } from '../../platform/moderation/moderation.service'
 import {
   AssetDto,
   EducationDetailsDto,
+  OccupationDetailsDto,
   FamilyDetailsDto,
   HoroscopeDetailsDto,
   MaritalDetailsDto,
@@ -51,6 +54,7 @@ export const REQUIRED_SECTIONS = [
   'marital',
   'family',
   'education',
+  'occupation',
   'preferences',
   'identity',
 ] as const;
@@ -72,10 +76,32 @@ const SECTION_LABEL: Record<ProfileSection, string> = {
   horoscope: 'Horoscope',
   marital: 'Marital status',
   family: 'Family',
-  education: 'Education and occupation',
+  education: 'Education',
+  occupation: 'Occupation',
   preferences: 'Partner preferences',
   identity: 'Identity verification',
 };
+
+/**
+ * The occupation fields of an education or occupation save.
+ *
+ * Only what was sent changes. Switching the occupation without a business
+ * leaves the saved businesses alone, so a family that tries another option
+ * and switches back has not lost them; what is shown follows the occupation.
+ * A business is merged through `saveBusiness`, which keeps the extra entries a
+ * single-business client cannot see.
+ */
+function occupationFields(
+  row: ProfileDetails,
+  dto: Pick<EducationDetailsDto, 'occupationStatus' | 'employment' | 'business' | 'incomeVisible'>,
+): Partial<ProfileDetails> {
+  const fields: Partial<ProfileDetails> = {};
+  if (dto.occupationStatus !== undefined) fields.occupationStatus = dto.occupationStatus;
+  if (dto.employment !== undefined) fields.employment = dto.employment;
+  if (dto.business !== undefined) fields.business = saveBusiness(row.business ?? {}, dto.business);
+  if (dto.incomeVisible !== undefined) fields.incomeVisible = dto.incomeVisible;
+  return fields;
+}
 
 /**
  * The matrimonial biodata, section by section.
@@ -198,11 +224,14 @@ export class ProfileDetailsService {
       await this.profiles.save(profile);
     }
 
-    return this.persist(profileId, row);
+    return this.persist(row);
   }
 
   async saveReligion(actor: AuthUser, profileId: string, dto: ReligionDetailsDto) {
     const row = await this.editable(actor, profileId);
+    if (dto.subCaste !== OTHER_NOT_LISTED && !isKnownSubCaste(dto.caste, dto.subCaste)) {
+      throw new BadRequestException('Sub-caste is not valid for the selected caste.');
+    }
     Object.assign(row, {
       religion: dto.religion,
       caste: dto.caste,
@@ -212,7 +241,7 @@ export class ProfileDetailsService {
       // every save; only a value actually sent (null clears) is written.
       ...(dto.denomination !== undefined ? { denomination: dto.denomination || null } : {}),
     });
-    return this.persist(profileId, row);
+    return this.persist(row);
   }
 
   async saveHoroscope(actor: AuthUser, profileId: string, dto: HoroscopeDetailsDto) {
@@ -250,7 +279,7 @@ export class ProfileDetailsService {
     // The document goes with the chart: a family saying they keep no horoscope
     // should not still have one attached to the profile.
     row.horoscopeDocumentUrl = horoscopeAvailable ? (horoscopeDocumentUrl ?? null) : null;
-    return this.persist(profileId, row);
+    return this.persist(row);
   }
 
   async saveMarital(actor: AuthUser, profileId: string, dto: MaritalDetailsDto) {
@@ -262,11 +291,12 @@ export class ProfileDetailsService {
     // before correcting the status would be worse than losing them.
     row.maritalHistory =
       maritalStatus === MaritalStatus.NEVER_MARRIED ? {} : (history as Record<string, unknown>);
-    return this.persist(profileId, row);
+    return this.persist(row);
   }
 
   async saveFamily(actor: AuthUser, profileId: string, dto: FamilyDetailsDto) {
     const row = await this.editable(actor, profileId);
+
     Object.assign(row, {
       father: dto.father as unknown as Record<string, unknown>,
       mother: dto.mother as unknown as Record<string, unknown>,
@@ -307,20 +337,18 @@ export class ProfileDetailsService {
         ? {}
         : { familyNetWorthVisible: dto.familyNetWorthVisible === true }),
     });
-    return this.persist(profileId, row);
+    return this.persist(row);
   }
 
   async saveEducation(actor: AuthUser, profileId: string, dto: EducationDetailsDto) {
     const row = await this.editable(actor, profileId);
     Object.assign(row, {
-      highestQualification: dto.highestQualification,
-      course: dto.course,
+      ...(dto.highestQualification !== undefined ? { highestQualification: dto.highestQualification } : {}),
+      ...(dto.course !== undefined ? { course: dto.course } : {}),
       // Absent leaves the stored value alone; null (or '') clears it.
       ...(dto.institution !== undefined ? { institution: dto.institution || null } : {}),
       ...(dto.collegePlace !== undefined ? { collegePlace: dto.collegePlace || null } : {}),
-      occupationStatus: dto.occupationStatus,
-      employment: dto.employment ?? {},
-      business: dto.business ?? {},
+      ...occupationFields(row, dto),
       // Absent leaves the list alone, so an older client cannot wipe it.
       ...(dto.otherIncome !== undefined
         ? {
@@ -331,13 +359,30 @@ export class ProfileDetailsService {
             })),
           }
         : {}),
-      incomeVisible: dto.incomeVisible ?? false,
     });
-    return this.persist(profileId, row);
+    return this.persist(row);
+  }
+
+  async saveOccupation(actor: AuthUser, profileId: string, dto: OccupationDetailsDto) {
+    const row = await this.editable(actor, profileId);
+    Object.assign(row, {
+      ...occupationFields(row, dto),
+      ...(dto.highestQualification !== undefined ? { highestQualification: dto.highestQualification } : {}),
+      ...(dto.course !== undefined ? { course: dto.course } : {}),
+      ...(dto.institution !== undefined ? { institution: dto.institution || null } : {}),
+      ...(dto.collegePlace !== undefined ? { collegePlace: dto.collegePlace || null } : {}),
+    });
+    return this.persist(row);
   }
 
   async savePreferences(actor: AuthUser, profileId: string, dto: PartnerPreferencesDto) {
     const row = await this.editable(actor, profileId);
+
+    const packageMin = dto.preferredPackageMin === undefined ? row.preferredPackageMin : dto.preferredPackageMin;
+    const packageMax = dto.preferredPackageMax === undefined ? row.preferredPackageMax : dto.preferredPackageMax;
+    if (packageMin != null && packageMax != null && packageMin > packageMax) {
+      throw new BadRequestException('The minimum package cannot be above the maximum');
+    }
 
     if (dto.preferredAgeMin > dto.preferredAgeMax) {
       throw new BadRequestException('The minimum age cannot be above the maximum');
@@ -355,6 +400,8 @@ export class ProfileDetailsService {
      * is where they stop — but it lands in exactly one place.
      */
     Object.assign(row, {
+      preferredPackageMin: packageMin,
+      preferredPackageMax: packageMax,
       preferredAgeMin: dto.preferredAgeMin,
       preferredAgeMax: dto.preferredAgeMax,
       preferredHeightMinCm: dto.preferredHeightMinCm,
@@ -387,7 +434,7 @@ export class ProfileDetailsService {
       },
       ...(dto.horoscopeDocumentUrl ? { horoscopeDocumentUrl: dto.horoscopeDocumentUrl } : {}),
     });
-    const saved = await this.persist(profileId, row);
+    const saved = await this.persist(row);
 
     // The biodata is where preferences are *entered*; the compatibility engine
     // reads them from `profiles.preferences`. Those were two unconnected
@@ -497,6 +544,13 @@ export class ProfileDetailsService {
     }
 
     return this.photoState(saved);
+  }
+
+  async setFamilyPhoto(actor: AuthUser, profileId: string, url: string) {
+    const row = await this.editable(actor, profileId);
+    await this.moderation.assertGenuinePhoto(url, { userId: actor.userId, kind: 'biodata' });
+    row.familyPhotoUrl = url;
+    return this.persist(row);
   }
 
   async removePhoto(actor: AuthUser, profileId: string, url: string) {
@@ -969,10 +1023,10 @@ export class ProfileDetailsService {
       ...rest
     } = details;
 
-    const strip = (block: Record<string, unknown>) => {
+    const strip = (block: Record<string, unknown>): Record<string, unknown> => {
       if (incomeVisible) return block;
-      const { salary, income, businessIncome, annualIncome, ...safe } = block;
-      return safe;
+      const { salary, income, businessIncome, annualIncome, otherIncome, entries, ...safe } = block;
+      return { ...safe, ...(Array.isArray(entries) ? { entries: entries.map((entry) => strip(entry)) } : {}) };
     };
 
     return {
@@ -1051,7 +1105,10 @@ export class ProfileDetailsService {
           siblings.length >= 0,
       ),
       education: Boolean(
-        details && has(details.highestQualification) && has(details.occupationStatus),
+        details && has(details.highestQualification),
+      ),
+      occupation: Boolean(
+        details && has(details.occupationStatus),
       ),
       preferences: Boolean(
         details && has(details.preferredAgeMin) && has(details.preferredHeightMinCm),
@@ -1127,22 +1184,34 @@ export class ProfileDetailsService {
    * of anyone this profile appears in. The second cannot be enumerated without
    * scanning, so the key pattern covers it.
    */
-  private async persist(profileId: string, row: ProfileDetails): Promise<ProfileDetails> {
+  private async persist(row: ProfileDetails): Promise<ProfileDetails> {
     // Photographs come before the first biodata section, so the row is usually
     // created after they were uploaded and nothing recorded the profile photo.
     // Default it to the first photo — the one shown until somebody chooses.
     if (!row.primaryPhotoUrl) {
-      const profile = await this.profiles.findOne({ where: { id: profileId }, select: ['id', 'photos'] });
+      const profile = await this.profiles.findOne({ where: { id: row.profileId }, select: ['id', 'photos'] });
       row.primaryPhotoUrl = profile?.photos?.[0] ?? null;
     }
     const saved = await this.details.save(row);
-    await this.invalidateSuggestions(profileId);
+    await this.invalidateSuggestions(saved.profileId);
     return saved;
   }
 
   private async invalidateSuggestions(profileId: string): Promise<void> {
-    const own = await this.redis.raw.keys(`match:suggestions:${profileId}:*`);
-    if (own.length) await this.redis.del(...own);
+    const keys: string[] = [];
+    let cursor = '0';
+    do {
+      const [next, found] = await this.redis.raw.scan(
+        cursor,
+        'MATCH',
+        `match:suggestions:${profileId}:*`,
+        'COUNT',
+        100,
+      );
+      cursor = next;
+      keys.push(...found);
+    } while (cursor !== '0');
+    if (keys.length) await this.redis.del(...keys);
   }
 
   /**

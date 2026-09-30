@@ -23,6 +23,8 @@ export default function ChoiceField({
   required,
   allowOther = true,
   placeholder = 'Not stated',
+  otherOption = OTHER,
+  disabled = false,
 }: {
   label: string;
   value: string;
@@ -33,6 +35,8 @@ export default function ChoiceField({
   /** Off for lists that really are closed, like the twelve rashis. */
   allowOther?: boolean;
   placeholder?: string;
+  otherOption?: string;
+  disabled?: boolean;
 }) {
   const id = useId();
   // A stored value that is not on the list reopens as "Other, already filled in".
@@ -43,7 +47,7 @@ export default function ChoiceField({
   // field reports "Please select an item in the list" on save. Remember it.
   const [otherPicked, setOtherPicked] = useState(false);
   const showOther = offList || otherPicked;
-  const selectValue = showOther ? OTHER : value;
+  const selectValue = showOther ? otherOption : value;
 
   return (
     <div>
@@ -55,13 +59,14 @@ export default function ChoiceField({
         className="input mt-1"
         value={selectValue}
         required={required}
+        disabled={disabled}
         onChange={(e) => {
           // Choosing "Other" clears the value rather than storing the word
           // "Other" — the box below is what carries the answer, and a profile
           // whose caste literally reads "Other" is a profile nobody can match.
           // The select still shows "Other" (via otherPicked) so a required
           // field stays satisfied while the box is being typed into.
-          if (e.target.value === OTHER) {
+          if (e.target.value === otherOption) {
             setOtherPicked(true);
             onChange('');
           } else {
@@ -76,7 +81,9 @@ export default function ChoiceField({
             {o}
           </option>
         ))}
-        {allowOther && !options.includes(OTHER) && <option value={OTHER}>{OTHER}</option>}
+        {allowOther && !options.includes(otherOption) && (
+          <option value={otherOption}>{otherOption}</option>
+        )}
       </select>
 
       {showOther && (

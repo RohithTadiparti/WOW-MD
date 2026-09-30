@@ -27,6 +27,7 @@ import { api, apiMessage } from '@/lib/api';
 import { ageFrom, GENDER_LABEL, labelFor, stewardshipLine, type Stewardship } from '@/lib/labels';
 import { isChartImage } from '@/shared/horoscope';
 import { formatDate } from '@/shared/dates';
+import { formatHeight } from '@/shared/height';
 import { FAMILY_TYPE_LABEL, MARITAL_LABEL, OCCUPATION_LABEL, OTHER_INCOME_LABEL } from '@/shared/permissions';
 import { NRI_LABEL } from '@/components/biodata/constants';
 import { DetailGrid, DetailRow } from '@/components/chrome';
@@ -326,7 +327,7 @@ export default function MatchProfile() {
             <Fact icon={Cake} label="Age" value={age} />
             <Fact icon={GenderIntersex} label="Gender" value={labelFor(GENDER_LABEL, profile.gender?.toLowerCase())} />
             <Fact icon={Heart} label="Marital Status" value={labelFor(MARITAL_LABEL, d.maritalStatus)} />
-            <Fact icon={Ruler} label="Height" value={typeof d.heightCm === 'number' ? `${d.heightCm} cm` : null} />
+            <Fact icon={Ruler} label="Height" value={d.heightCm != null ? formatHeight(d.heightCm) : null} />
             <Fact icon={MapPin} label="Location" value={profile.city} />
             <Fact icon={House} label="Hometown" value={hometown || null} />
             <Fact icon={HandsPraying} label="Religion" value={text('religion')} />
@@ -377,7 +378,7 @@ export default function MatchProfile() {
           ) : (
             <DetailGrid>
               <DetailRow label="Age">{range(d.preferredAgeMin, d.preferredAgeMax, 'years') ?? '—'}</DetailRow>
-              <DetailRow label="Height">{range(d.preferredHeightMinCm, d.preferredHeightMaxCm, 'cm') ?? '—'}</DetailRow>
+              <DetailRow label="Height">{d.preferredHeightMinCm != null && d.preferredHeightMaxCm != null ? `${formatHeight(d.preferredHeightMinCm)} to ${formatHeight(d.preferredHeightMaxCm)}` : '—'}</DetailRow>
               <DetailRow label="Religion">{text('religion', prefs) ?? '—'}</DetailRow>
               <DetailRow label="Caste">{text('caste', prefs) ?? '—'}</DetailRow>
               <DetailRow label="Education">{text('education', prefs) ?? '—'}</DetailRow>

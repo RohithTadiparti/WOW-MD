@@ -8,6 +8,7 @@ import { Alert, Button, Card, Field, Caption, Body } from '@/components/ui';
 import { CASTES_BY_RELIGION, MOTHER_TONGUES, RELIGIONS } from '@/shared/reference';
 import { STATES_BY_COUNTRY, districtsForState, DISTRICTS_BY_STATE } from '@/shared/locations';
 import { radius, space } from '@/theme';
+import { MAX_HEIGHT_CM, MIN_HEIGHT_CM, cmToFeetInches, feetInchesToCm } from '@/shared/height';
 import { ProfileSilhouette } from '@/components/profile-silhouette';
 import { ChoiceField, canonical } from './choice-field';
 import { WowCalendar } from '@/components/common/WowCalendar';
@@ -168,6 +169,14 @@ export function PersonalForm({
     setDraft({ ...form, [key]: capitalize ? capitalizeWords(value) : value });
   };
 
+  const height = cmToFeetInches(form.heightCm);
+  const updateHeight = (unit: 'feet' | 'inches', value: string) => {
+    const feet = unit === 'feet' ? value : String(height?.feet ?? 0);
+    const inches = unit === 'inches' ? value : String(height?.inches ?? 0);
+    const cm = feetInchesToCm(feet, inches);
+    set('heightCm')(value === '' || cm === null ? '' : String(cm));
+  };
+
   function submit() {
     let newErrors: Record<string, string> = {};
     if (!photos || photos.length < 3) return setError('At least 3 photographs are required.');
@@ -178,8 +187,8 @@ export function PersonalForm({
     if (!form.gender) newErrors.gender = 'Gender is required.';
     
     const h = Number(form.heightCm);
-    if (!form.heightCm || Number.isNaN(h) || h < 120 || h > 230) {
-      newErrors.heightCm = 'Height must be between 120cm and 230cm.';
+    if (!form.heightCm || Number.isNaN(h) || h < MIN_HEIGHT_CM || h > MAX_HEIGHT_CM) {
+      newErrors.heightCm = 'Height must be between 3 ft 0 in and 8 ft 0 in.';
     }
     
     if (!form.complexion) newErrors.complexion = 'Complexion is required.';
@@ -251,14 +260,17 @@ export function PersonalForm({
           </View>
         </View>
 
+        {/* Feet and inches, as the web form and partner preferences ask it; stored in cm. */}
         <View style={{ flexDirection: 'row', gap: space(2) }}>
           <View style={{ flex: 1 }}>
-            <Field label="Height (cm)" value={form.heightCm} onChangeText={set('heightCm')} keyboardType="number-pad" maxLength={3} required autoFilled={autofilledKeys?.has('heightCm')} error={errors.heightCm} />
+            <Field label="Height (feet)" value={String(height?.feet ?? '')} onChangeText={(value) => updateHeight('feet', value)} keyboardType="number-pad" maxLength={1} required autoFilled={autofilledKeys?.has('heightCm')} error={errors.heightCm} />
           </View>
           <View style={{ flex: 1 }}>
-            <SelectField label="Complexion" value={form.complexion} options={COMPLEXIONS} onChange={set('complexion')} required autoFilled={autofilledKeys?.has('complexion')} error={errors.complexion} />
+            <Field label="Height (inches)" value={String(height?.inches ?? '')} onChangeText={(value) => updateHeight('inches', value)} keyboardType="number-pad" maxLength={2} required autoFilled={autofilledKeys?.has('heightCm')} />
           </View>
         </View>
+
+        <SelectField label="Complexion" value={form.complexion} options={COMPLEXIONS} onChange={set('complexion')} required autoFilled={autofilledKeys?.has('complexion')} error={errors.complexion} />
         
         <SelectField label="Marital Status" value={form.maritalStatus} options={MARITAL} onChange={set('maritalStatus')} required autoFilled={autofilledKeys?.has('maritalStatus')} error={errors.maritalStatus} />
       </Card>

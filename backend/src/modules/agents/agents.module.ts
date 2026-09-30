@@ -16,6 +16,11 @@ import { AgentBillingService } from './agent-billing.service';
 import { ProfileClaimsService } from './profile-claims.service';
 import { AgentReviewsService } from './agent-reviews.service';
 import { ProfileClaimRequest } from './entities/profile-claim-request.entity';
+import { Booking } from '../bookings/entities/booking.entity';
+import { Payment } from '../bookings/entities/payment.entity';
+import { Vendor } from '../vendors/entities/vendor.entity';
+import { PlannerProfile } from '../wedding-planners/entities/planner-profile.entity';
+import { SupportCase } from '../verification/entities/support-case.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 import {
   MockPaymentProvider,
@@ -35,6 +40,11 @@ import { ClaimRequestsController } from './claim-requests.controller';
       AgentCharge,
       AgentReview,
       ProfileClaimRequest,
+      Booking,
+      Payment,
+      Vendor,
+      PlannerProfile,
+      SupportCase,
     ]),
     InvitationsModule,
     NotificationsModule,

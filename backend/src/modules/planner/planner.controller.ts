@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Put, Query } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { PlannerService } from './planner.service';
 import { WeddingDashboardService } from './wedding-dashboard.service';
@@ -13,6 +13,7 @@ import {
 import { AuthUser, CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { Permission } from '../../common/authz/permissions';
+import { UserRole } from '../../common/enums';
 
 @ApiTags('planner')
 @ApiBearerAuth()
@@ -34,8 +35,11 @@ export class PlannerController {
   @RequirePermissions(Permission.PLAN_MANAGE_ENGAGED)
   @ApiOperation({ summary: 'The couples this planner is engaged on, and any unanswered requests' })
   @Get('clients')
-  listClients(@CurrentUser() actor: AuthUser) {
-    return this.clients.listClients(actor);
+  listClients(@CurrentUser() actor: AuthUser, @Query('userId') userId?: string) {
+    const selectedActor = actor.role === UserRole.ADMIN && userId
+      ? { ...actor, userId, role: UserRole.PLANNER }
+      : actor;
+    return this.clients.listClients(selectedActor);
   }
 
   @RequirePermissions(Permission.PLAN_MANAGE_ENGAGED)
@@ -47,8 +51,9 @@ export class PlannerController {
       'plans this planner is engaged on, so the dashboard agrees with My Clients (EZ1-I184).',
   })
   @Get('overview')
-  overview(@CurrentUser('userId') userId: string) {
-    return this.weddingDashboard.plannerOverview(userId);
+  overview(@CurrentUser() actor: AuthUser, @Query('userId') userId?: string) {
+    const selectedUserId = actor.role === UserRole.ADMIN && userId ? userId : actor.userId;
+    return this.weddingDashboard.plannerOverview(selectedUserId);
   }
 
   @RequirePermissions(Permission.PLAN_MANAGE_ENGAGED)
@@ -106,8 +111,9 @@ export class PlannerController {
   })
   @RequirePermissions(Permission.PLAN_MANAGE_OWN)
   @Get('dashboard')
-  dashboard(@CurrentUser('userId') userId: string) {
-    return this.weddingDashboard.summary(userId);
+  dashboard(@CurrentUser() actor: AuthUser, @Query('userId') userId?: string) {
+    const selectedUserId = actor.role === UserRole.ADMIN && userId ? userId : actor.userId;
+    return this.weddingDashboard.summary(selectedUserId);
   }
 
   @RequirePermissions(Permission.PLAN_MANAGE_OWN)

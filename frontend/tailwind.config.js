@@ -38,6 +38,7 @@ export default {
         brand: {
           ...ramp('rose'),
           DEFAULT: channel('brand'),
+          rose: channel('rose-500'),
           strong: channel('brand-strong'),
           soft: channel('brand-soft'),
           // What sits on top of the accent. White on the light-mode rose,
@@ -73,6 +74,7 @@ export default {
          * than leaving a light-mode alert glowing on a dark page.
          */
         positive: { fg: channel('positive-fg'), bg: channel('positive-bg') },
+        info: { fg: channel('info-fg'), bg: channel('info-bg') },
         caution: { fg: channel('caution-fg'), bg: channel('caution-bg') },
         critical: { fg: channel('critical-fg'), bg: channel('critical-bg') },
 
@@ -108,9 +110,33 @@ export default {
           800: channel('caution-fg'),
           900: channel('caution-fg'),
         },
+        // Informational tints (notes, neutral states) share one token pair,
+        // defined for both themes in index.css. Only the tint and text steps
+        // are mapped; the others keep their stock values.
         blue: {
+          50: channel('info-bg'),
+          700: channel('info-fg'),
+          800: channel('info-fg'),
+          900: channel('info-fg'),
+        },
+        sky: {
+          50: channel('info-bg'),
+          700: channel('info-fg'),
+          800: channel('info-fg'),
+          900: channel('info-fg'),
+        },
+        rose: {
           50: channel('brand-soft'),
-          800: channel('brand-strong'),
+          100: channel('brand-soft'),
+          300: channel('rose-300'),
+          500: channel('rose-500'),
+          600: channel('rose-600'),
+          700: channel('rose-700'),
+          800: channel('rose-800'),
+        },
+        violet: {
+          50: channel('info-bg'),
+          800: channel('info-fg'),
         },
       },
 

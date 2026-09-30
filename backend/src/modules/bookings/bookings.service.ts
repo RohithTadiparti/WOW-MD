@@ -185,6 +185,7 @@ export class BookingsService {
     private readonly outbox: OutboxService,
     private readonly dataSource: DataSource,
     private readonly audit: AuditService,
+    @Inject(forwardRef(() => SupportCasesService))
     private readonly cases: SupportCasesService,
     private readonly matchmaking: MatchmakingService,
     // Bookings and the vendor calendar need each other; the cycle is broken
@@ -1800,10 +1801,18 @@ export class BookingsService {
       .groupBy('b.status')
       .getRawMany<{ status: string; count: string }>();
 
-    const counts: Record<string, number> = { all: 0 };
+    /*
+     * One key per status, each counted once, so a client adding up the
+     * statuses of a tab gets the right number. `requests` gathers the three
+     * request statuses for the dashboard tile; it is not a status name, so it
+     * cannot be mistaken for one.
+     */
+    const counts: Record<string, number> = { all: 0, requests: 0 };
     for (const row of rows) {
-      counts[row.status] = Number(row.count);
-      counts.all += Number(row.count);
+      const n = Number(row.count) || 0;
+      counts[row.status] = (counts[row.status] ?? 0) + n;
+      counts.all += n;
+      if ((REQUEST_STATUSES as string[]).includes(row.status)) counts.requests += n;
     }
 
     // Not a status, so not in the tally above. Counted with the same rule as
@@ -1817,16 +1826,16 @@ export class BookingsService {
       .andWhere('(b."eventDate" IS NOT NULL OR e."eventDate" IS NOT NULL)')
       .andWhere('b.status IN (:...statuses)', { statuses: REQUEST_STATUSES })
       .getCount();
+
     return counts;
   }
 
   /**
-   * Buyer-side status buckets for the individual dashboard tiles (EZ1-I75):
-   * total, active, cancelled and completed. Active is everything still in
-   * flight — neither cancelled nor completed — so the three buckets add up to
-   * the total. Scoped exactly like listForBuyer so the numbers match the list.
+   * Buyer-side counts: the individual dashboard tiles (EZ1-I75), total,
+   * active, cancelled and completed, plus one count per status for the tabs.
+   * Scoped exactly like listForBuyer so the numbers match the list.
    */
-  async buyerCounts(actor: AuthUser): Promise<{
+  async buyerCounts(actor: AuthUser): Promise<Record<string, number> & {
     all: number;
     active: number;
     cancelled: number;
@@ -1836,9 +1845,7 @@ export class BookingsService {
       .createQueryBuilder('b')
       .select('b.status', 'status')
       .addSelect('COUNT(*)', 'count');
-    // Match-fixed couples share one wedding (EZ1-I160), so the tiles count
-    // both sides' bookings — the same scope as listForBuyer, so the numbers
-    // match the list. Null partner keeps this the caller's own rows.
+
     const partnerUserId = await this.matchmaking.fixedPartnerUserId(actor.userId);
     if (partnerUserId) {
       qb.where('b."userId" IN (:...ids)', { ids: [actor.userId, partnerUserId] });
@@ -1847,16 +1854,24 @@ export class BookingsService {
     }
     const rows = await qb.groupBy('b.status').getRawMany<{ status: string; count: string }>();
 
-    let all = 0;
-    let cancelled = 0;
-    let completed = 0;
+    // One key per status, counted once, for the status tabs; the tiles' three
+    // buckets are the same as before, with active everything still in flight
+    // (a disputed booking included), so the buckets add up to the total.
+    const counts: Record<string, number> = { all: 0 };
     for (const row of rows) {
-      const n = Number(row.count);
-      all += n;
-      if (row.status === BookingStatus.CANCELLED) cancelled += n;
-      else if (row.status === BookingStatus.COMPLETED) completed += n;
+      const n = Number(row.count) || 0;
+      counts[row.status] = (counts[row.status] ?? 0) + n;
+      counts.all += n;
     }
-    return { all, active: all - cancelled - completed, cancelled, completed };
+    const cancelled = counts[BookingStatus.CANCELLED] ?? 0;
+    const completed = counts[BookingStatus.COMPLETED] ?? 0;
+    return {
+      ...counts,
+      all: counts.all,
+      active: counts.all - cancelled - completed,
+      cancelled,
+      completed,
+    };
   }
 
   /**

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { AnimatedProgress } from './ui/Motion';
 
 /**
  * Bookings over time, as a small hand-rolled bar chart (EZ1-I147).
@@ -88,10 +89,11 @@ export default function BookingsOverviewChart({ bookings }: { bookings: ChartBoo
                 {b.count > 0 ? b.count : ''}
               </span>
               <div className="flex w-full flex-1 items-end">
-                <div
-                  className="w-full rounded-t-sm bg-brand transition-[height] duration-300"
-                  style={{ height: `${(b.count / max) * 100}%`, minHeight: b.count > 0 ? '0.25rem' : '0' }}
-                  title={`${b.label}: ${b.count}`}
+                <AnimatedProgress
+                  value={(b.count / max) * 100}
+                  className="h-full w-full rounded-t-sm bg-gray-100"
+                  barClassName="bg-brand"
+                  label={`${b.label}: ${b.count}`}
                 />
               </div>
               <span className="w-full truncate text-center text-[0.6875rem] text-gray-400">
