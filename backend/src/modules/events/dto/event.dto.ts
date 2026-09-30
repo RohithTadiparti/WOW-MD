@@ -16,6 +16,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 import { IsUploadedUrl } from '../../../common/decorators/uploaded-url.decorator';
 import { IsStrictString } from '../../../common/decorators/strict-type.decorator';
@@ -350,9 +351,19 @@ export class SharedRsvpDto {
   @MaxLength(160)
   contact?: string;
 
-  @ApiProperty({ description: 'true for coming, false for unable to attend' })
+  @ApiPropertyOptional({
+    enum: [RsvpStatus.ATTENDING, RsvpStatus.MAYBE, RsvpStatus.DECLINED],
+    description: 'The guest\'s reply. Maybe records that they have not decided yet.',
+  })
+  @IsOptional()
+  @IsIn([RsvpStatus.ATTENDING, RsvpStatus.MAYBE, RsvpStatus.DECLINED])
+  status?: RsvpStatus.ATTENDING | RsvpStatus.MAYBE | RsvpStatus.DECLINED;
+
+  /** Kept for links produced by earlier web clients. */
+  @ApiPropertyOptional({ description: 'Legacy: true for coming, false for unable to attend' })
+  @ValidateIf((dto: SharedRsvpDto) => dto.status === undefined)
   @IsBoolean()
-  attending: boolean;
+  attending?: boolean;
 
   @ApiPropertyOptional({
     minimum: 1,

@@ -58,9 +58,6 @@ interface EventSummary {
   ongoing: number;
   completed: number;
   cancelled: number;
-  confirmedGuests: number;
-  expectedGuests: number;
-  budget: string;
 }
 
 interface Guest {
@@ -321,19 +318,7 @@ export default function Events() {
 
       {error && <p className="alert-critical">{error}</p>}
 
-      {/* The status counts live on the filter tabs below rather than being
-          repeated as their own tiles (EZ1-I126); this row keeps only the
-          summary numbers a tab cannot carry — days, and the two guest counts.
-          Expected is what the caterer was booked against; confirmed is what the
-          RSVPs actually say. */}
-      {summary && summary.total > 0 && (
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Stat label="Days" value={summary.total} onClick={() => setStatusFilter('')} />
-          <Stat label="Expected guests" value={summary.expectedGuests} />
-          <Stat label="Confirmed guests" value={summary.confirmedGuests} tone="text-emerald-700" />
-        </div>
-      )}
-
+      {/* Status counts live on the filter tabs below rather than as summary tiles. */}
       <div className="flex flex-wrap items-center gap-2">
         <input
           className="input max-w-xs"
@@ -893,39 +878,5 @@ function EditEvent({
         </button>
       </div>
     </form>
-  );
-}
-
-/** One number above the list, and the filter it applies. */
-function Stat({
-  label,
-  value,
-  tone,
-  onClick,
-}: {
-  label: string;
-  value: number;
-  tone?: string;
-  onClick?: () => void;
-}) {
-  const body = (
-    <>
-      <p className="text-xs uppercase tracking-wide text-gray-500">{label}</p>
-      <p
-        className={`mt-1 text-2xl font-semibold ${tone ?? 'text-gray-900'}`}
-        style={{ fontVariantNumeric: 'tabular-nums' }}
-      >
-        {value}
-      </p>
-    </>
-  );
-  // Only the ones that filter are clickable. A card that looks pressable and
-  // does nothing is worse than one that plainly does not.
-  return onClick ? (
-    <button className="card text-left transition hover:shadow-lifted" onClick={onClick}>
-      {body}
-    </button>
-  ) : (
-    <div className="card">{body}</div>
   );
 }

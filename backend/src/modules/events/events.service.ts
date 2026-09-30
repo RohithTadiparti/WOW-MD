@@ -949,7 +949,13 @@ export class EventsService {
    */
   async respondShared(
     token: string,
-    dto: { name: string; contact?: string; attending: boolean; partySize?: number },
+    dto: {
+      name: string;
+      contact?: string;
+      status?: RsvpStatus.ATTENDING | RsvpStatus.MAYBE | RsvpStatus.DECLINED;
+      attending?: boolean;
+      partySize?: number;
+    },
   ) {
     const event = await this.eventByShareToken(token);
 
@@ -974,13 +980,16 @@ export class EventsService {
     if (!invite) {
       invite = this.invites.create({ eventId: event.id, guestId: guest.id });
     }
-    invite.status = dto.attending ? RsvpStatus.ATTENDING : RsvpStatus.DECLINED;
-    invite.attendingCount = dto.attending ? (dto.partySize ?? 1) : 0;
+    // Older public links sent a boolean. Keep accepting it while new links can
+    // record a useful tentative answer as well.
+    const status = dto.status ?? (dto.attending ? RsvpStatus.ATTENDING : RsvpStatus.DECLINED);
+    invite.status = status;
+    invite.attendingCount = status === RsvpStatus.ATTENDING ? (dto.partySize ?? 1) : null;
     invite.respondedAt = new Date();
     invite.answeredIndividually = true;
     await this.invites.save(invite);
 
-    return { recorded: true, attending: dto.attending, name: guest.name };
+    return { recorded: true, status, name: guest.name };
   }
 
   private async inviteByToken(token: string): Promise<EventInvite> {

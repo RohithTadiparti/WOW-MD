@@ -5,18 +5,7 @@ import { api, apiMessage } from '../lib/api';
 import { formatDate } from '../lib/dates';
 import { Loading } from '../components/ui/Feedback';
 
-/**
- * The invitation somebody was forwarded.
- *
- * Reached by whoever the link reached — a family group, a cousin who passed it
- * on — so it is signed in as nobody and shows what an invitation shows: which
- * day, when, where, and who is asking. Nothing about the household, the other
- * guests, or who else has replied.
- *
- * Replying is what creates the guest record. The host has no list yet; this is
- * how they get one.
- */
-
+/** The invitation somebody was forwarded. */
 interface Invitation {
   eventName: string;
   eventDate: string | null;
@@ -27,9 +16,20 @@ interface Invitation {
   hostName: string;
 }
 
+type SharedRsvpStatus = 'attending' | 'maybe' | 'declined';
+
+const RSVP_CHOICES: Array<{ status: SharedRsvpStatus; label: string; className: string }> = [
+  { status: 'attending', label: 'Coming', className: 'btn' },
+  { status: 'maybe', label: 'Maybe', className: 'btn-outline' },
+  { status: 'declined', label: 'Unable to attend', className: 'btn-outline' },
+];
+
+/**
+ * This public page deliberately stays thin: anyone with the forwarded link
+ * can see the invitation and send their own reply, but not the guest list.
+ */
 export default function SharedInvitation() {
   const { token = '' } = useParams<{ token: string }>();
-
   const { data, isPending, error } = useQuery<Invitation>({
     queryKey: ['shared-invitation', token],
     queryFn: async () => (await api.get(`/events/share/${token}`)).data,
@@ -40,11 +40,11 @@ export default function SharedInvitation() {
   const [name, setName] = useState('');
   const [contact, setContact] = useState('');
   const [partySize, setPartySize] = useState('1');
-  const [sent, setSent] = useState<null | { attending: boolean; name: string }>(null);
+  const [sent, setSent] = useState<null | { status: SharedRsvpStatus; name: string }>(null);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState('');
 
-  async function reply(attending: boolean) {
+  async function reply(status: SharedRsvpStatus) {
     if (name.trim().length < 2) {
       setFailed('Please give a name so the hosts know who replied.');
       return;
@@ -52,13 +52,11 @@ export default function SharedInvitation() {
     setFailed('');
     setBusy(true);
     try {
-      const body: Record<string, unknown> = { name: name.trim(), attending };
+      const body: Record<string, unknown> = { name: name.trim(), status };
       if (contact.trim()) body.contact = contact.trim();
-      // Only meaningful for a yes; sending a party size with a decline would
-      // read as "four of us are not coming", which nobody means.
-      if (attending && Number(partySize) > 0) body.partySize = Number(partySize);
+      if (status === 'attending' && Number(partySize) > 0) body.partySize = Number(partySize);
       const { data: result } = await api.post(`/events/share/${token}`, body);
-      setSent({ attending, name: result.name ?? name.trim() });
+      setSent({ status: result.status ?? status, name: result.name ?? name.trim() });
     } catch (err) {
       setFailed(apiMessage(err, 'That could not be sent. Try again in a moment.'));
     } finally {
@@ -66,117 +64,108 @@ export default function SharedInvitation() {
     }
   }
 
-  if (isPending) return <div className="mx-auto max-w-md p-6"><Loading rows={4} /></div>;
+  if (isPending) return <div className="mx-auto max-w-xl p-6"><Loading rows={4} /></div>;
 
-  if (error) {
+  if (error || !data) {
     return (
-      <div className="mx-auto max-w-md p-6">
-        <div className="card text-center">
+      <main className="flex min-h-[100dvh] items-center px-4 py-8 sm:px-6">
+        <div className="card mx-auto w-full max-w-xl text-center">
           <h1 className="section-title">This invitation is not available</h1>
-          <p className="mt-1 text-sm text-gray-600">
-            The link may have been withdrawn, or copied incompletely. Ask whoever sent it for a
-            fresh one.
+          <p className="mt-2 text-sm leading-relaxed text-gray-600">
+            The link may have been withdrawn, or copied incompletely. Ask whoever sent it for a fresh one.
           </p>
         </div>
-      </div>
+      </main>
     );
   }
 
+  const sentMessage = sent?.status === 'attending'
+    ? 'The hosts can see your reply.'
+    : sent?.status === 'maybe'
+      ? 'You can update your answer at any time.'
+      : 'They will be sorry to miss you.';
+  const sentHeading = sent?.status === 'attending'
+    ? 'Thank you — see you there'
+    : sent?.status === 'maybe'
+      ? 'Thank you — we will keep a place in mind'
+      : 'Thank you for letting them know';
+
   return (
-    <div className="mx-auto max-w-md space-y-4 p-6">
-      <div className="card text-center">
-        <p className="text-xs uppercase tracking-[0.2em] text-gray-400">You are invited to</p>
-        <h1 className="page-title mt-1">{data.eventName}</h1>
-        <p className="mt-1 text-sm text-gray-600">by {data.hostName}</p>
+    <main className="flex min-h-[100dvh] items-center px-4 py-8 sm:px-6">
+      <div className="mx-auto w-full max-w-xl space-y-4">
+        <section className="card px-5 py-7 text-center sm:px-8">
+          <span aria-hidden className="mx-auto block h-px w-16 bg-gold" />
+          <p className="eyebrow mt-4">You are invited to</p>
+          <h1 className="page-title mx-auto mt-2">{data.eventName}</h1>
+          <p className="mt-2 text-sm text-gray-600">Hosted by {data.hostName}</p>
 
-        <dl className="mt-4 space-y-1 text-sm text-gray-700">
-          {data.eventDate && <p>{formatDate(data.eventDate)}{data.startTime ? `, ${data.startTime}` : ''}</p>}
-          {data.venue && <p className="font-medium">{data.venue}</p>}
-          {(data.venueAddress || data.city) && (
-            <p className="text-gray-500">{[data.venueAddress, data.city].filter(Boolean).join(', ')}</p>
+          {(data.eventDate || data.venue || data.venueAddress || data.city) && (
+            <dl className="mx-auto mt-6 grid max-w-md gap-y-1 border-y border-gray-200 py-4 text-sm leading-relaxed text-gray-700">
+              {data.eventDate && <p>{formatDate(data.eventDate)}{data.startTime ? `, ${data.startTime}` : ''}</p>}
+              {data.venue && <p className="font-medium text-gray-900">{data.venue}</p>}
+              {(data.venueAddress || data.city) && (
+                <p className="text-gray-500">{[data.venueAddress, data.city].filter(Boolean).join(', ')}</p>
+              )}
+            </dl>
           )}
-        </dl>
+        </section>
+
+        {sent ? (
+          <section className="card space-y-2 text-center">
+            <h2 className="section-title">{sentHeading}</h2>
+            <p className="text-sm leading-relaxed text-gray-600">
+              Recorded for {sent.name}. {sentMessage}
+            </p>
+            <button className="btn-outline mt-2" onClick={() => setSent(null)}>
+              Reply again, or for somebody else
+            </button>
+          </section>
+        ) : (
+          <section className="card space-y-5 px-5 py-6 sm:px-8">
+            <div>
+              <p className="eyebrow">Your reply</p>
+              <h2 className="section-title mt-1">Will you be there?</h2>
+              <p className="section-subtitle">Let your hosts know when you can. You can change this later.</p>
+            </div>
+            {failed && <p className="alert-critical" role="alert">{failed}</p>}
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="label" htmlFor="rsvp-name">Your name</label>
+                <input id="rsvp-name" className="input" value={name} maxLength={120} onChange={(e) => setName(e.target.value)} />
+              </div>
+              <div>
+                <label className="label" htmlFor="rsvp-contact">
+                  Phone or email <span className="font-normal text-gray-400">(optional)</span>
+                </label>
+                <input id="rsvp-contact" className="input" value={contact} maxLength={160} onChange={(e) => setContact(e.target.value)} />
+              </div>
+            </div>
+
+            <div>
+              <label className="label" htmlFor="rsvp-party">How many of you, including yourself</label>
+              <input id="rsvp-party" className="input" type="number" min={1} max={100} value={partySize} onChange={(e) => setPartySize(e.target.value)} />
+              <p className="mt-1 text-xs text-gray-500">Only used when you are coming.</p>
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-3">
+              {RSVP_CHOICES.map((choice) => (
+                <button
+                  key={choice.status}
+                  className={`${choice.className} min-w-0 whitespace-normal px-3 tracking-[0.12em]`}
+                  disabled={busy}
+                  onClick={() => reply(choice.status)}
+                >
+                  {busy ? 'Sending…' : choice.label}
+                </button>
+              ))}
+            </div>
+            <p className="border-t border-gray-200 pt-4 text-xs leading-relaxed text-gray-500">
+              Choose Maybe if you are still deciding. Not answering leaves you as “not responded”.
+            </p>
+          </section>
+        )}
       </div>
-
-      {sent ? (
-        <div className="card text-center">
-          <h2 className="section-title">
-            {sent.attending ? 'Thank you — see you there' : 'Thank you for letting them know'}
-          </h2>
-          <p className="mt-1 text-sm text-gray-600">
-            Recorded for {sent.name}.{' '}
-            {sent.attending
-              ? 'The hosts can see your reply.'
-              : 'They will be sorry to miss you.'}
-          </p>
-          {/*
-            Opening the form again rather than hiding it. People reply for
-            somebody else, or change their mind on the spot, and a page that
-            can only be answered once sends them back to the group asking how.
-          */}
-          <button className="btn-outline mt-3" onClick={() => setSent(null)}>
-            Reply again, or for somebody else
-          </button>
-        </div>
-      ) : (
-        <div className="card space-y-3">
-          <h2 className="section-title">Will you be there?</h2>
-          {failed && <p className="alert-critical">{failed}</p>}
-
-          <div>
-            <label className="label" htmlFor="rsvp-name">
-              Your name
-            </label>
-            <input
-              id="rsvp-name"
-              className="input"
-              value={name}
-              maxLength={120}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label className="label" htmlFor="rsvp-contact">
-              Phone or email <span className="font-normal text-gray-400">(optional)</span>
-            </label>
-            <input
-              id="rsvp-contact"
-              className="input"
-              value={contact}
-              maxLength={160}
-              onChange={(e) => setContact(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label className="label" htmlFor="rsvp-party">
-              How many of you, including yourself
-            </label>
-            <input
-              id="rsvp-party"
-              className="input"
-              type="number"
-              min={1}
-              max={100}
-              value={partySize}
-              onChange={(e) => setPartySize(e.target.value)}
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <button className="btn flex-1" disabled={busy} onClick={() => reply(true)}>
-              {busy ? 'Sending…' : 'Coming'}
-            </button>
-            <button className="btn-outline flex-1" disabled={busy} onClick={() => reply(false)}>
-              Unable to attend
-            </button>
-          </div>
-          <p className="text-xs text-gray-500">
-            Not answering leaves you as &ldquo;not responded&rdquo;, which the hosts can see too.
-          </p>
-        </div>
-      )}
-    </div>
+    </main>
   );
 }

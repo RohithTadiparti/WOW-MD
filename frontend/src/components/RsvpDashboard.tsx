@@ -106,15 +106,19 @@ export default function RsvpDashboard({ eventId }: { eventId: string }) {
       <div>
         <h3 className="section-title">Who is coming</h3>
         <p className="text-sm text-gray-600">
-          {data.totalInvited} invitation(s), covering {data.totalInvitedHeadcount} people. Click a
-          number to see who.
+          {data.totalInvitedHeadcount} people invited. Select a response group to see who.
         </p>
       </div>
 
       {error && <p className="alert-critical">{error}</p>}
       {notice && <p className="alert-positive">{notice}</p>}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="rounded-sm border border-gray-200 p-3">
+          <p className="text-xs uppercase tracking-wide text-gray-500">Invitations sent</p>
+          <p className="mt-1 text-2xl font-semibold text-brand">{data.totalInvited}</p>
+          <p className="text-xs text-gray-400">{data.totalInvitedHeadcount} people invited</p>
+        </div>
         {(Object.keys(CATEGORY_LABEL) as Category[]).map((key) => (
           <button
             key={key}
