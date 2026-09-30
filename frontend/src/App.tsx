@@ -112,6 +112,7 @@ import Security from './pages/Security';
 import Support from './pages/Support';
 import ProviderConsole from './pages/ProviderConsole';
 import WeddingPlanners from './pages/WeddingPlanners';
+import PlannerDetail from './pages/PlannerDetail';
 import Forbidden from './pages/Forbidden';
 import Verification from './pages/Verification';
 import OfficerCases from './pages/OfficerCases';
@@ -1114,6 +1115,15 @@ export default function App() {
         element={
           <Protected requires={[Permission.BOOKING_CREATE]}>
             <WeddingPlanners />
+          </Protected>
+        }
+      />
+      {/* A planner's full profile and availability, like a vendor's. */}
+      <Route
+        path="/wedding-planners/:id"
+        element={
+          <Protected requires={[Permission.BOOKING_CREATE]}>
+            <PlannerDetail />
           </Protected>
         }
       />

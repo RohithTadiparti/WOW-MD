@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import {
   ArrowClockwise,
   CalendarBlank,
@@ -13,9 +14,7 @@ import {
   WarningCircle,
   X,
 } from '@phosphor-icons/react';
-import { api, apiMessage } from '../lib/api';
-import { useAuth } from '../store/auth';
-import { Permission, can } from '../lib/permissions';
+import { api } from '../lib/api';
 import { EmptyState, LoadingCards } from '../components/ui/Feedback';
 
 interface PlannerPackage {
@@ -90,8 +89,7 @@ function readShortlist(): Set<string> {
  * who they are hiring.
  */
 export default function WeddingPlanners() {
-  const permissions = useAuth((s) => s.user?.permissions ?? []);
-  const canBook = can(permissions, Permission.BOOKING_CREATE);
+  const navigate = useNavigate();
 
   // City and rating are the two filters the server understands; everything
   // else below refines the loaded set on the client (the search endpoint takes
@@ -109,8 +107,6 @@ export default function WeddingPlanners() {
 
   const [pages, setPages] = useState(1);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [openId, setOpenId] = useState<string | null>(null);
-  const [message, setMessage] = useState('');
   const [shortlist, setShortlist] = useState<Set<string>>(readShortlist);
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
@@ -213,7 +209,6 @@ export default function WeddingPlanners() {
     return sorted;
   }, [planners, budgetMin, budgetMax, minYears, sort]);
 
-  const open = planners.find((p) => p.id === openId) ?? null;
 
   return (
     <div className="space-y-4">
@@ -312,12 +307,6 @@ export default function WeddingPlanners() {
         </div>
       </div>
 
-      {message && (
-        <p className="alert-positive" role="status">
-          {message}
-        </p>
-      )}
-
       {/* Result summary and sort. */}
       {!isLoading && !isError && (
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -381,7 +370,13 @@ export default function WeddingPlanners() {
                 weddingDate={weddingDate}
                 shortlisted={shortlist.has(p.id)}
                 onToggleShortlist={() => toggleShortlist(p.id)}
-                onOpen={() => setOpenId(p.id)}
+                // A page rather than a dialog: it has an address, and the
+                // date picked here comes along for the availability check.
+                onOpen={() =>
+                  navigate(
+                    `/wedding-planners/${p.id}${weddingDate ? `?date=${encodeURIComponent(weddingDate)}` : ''}`,
+                  )
+                }
               />
             ))}
           </div>
@@ -483,19 +478,6 @@ export default function WeddingPlanners() {
             </div>
           </div>
         </div>
-      )}
-
-      {open && (
-        <PlannerDetail
-          planner={open}
-          canBook={canBook}
-          initialDate={weddingDate}
-          onClose={() => setOpenId(null)}
-          onBooked={(msg) => {
-            setOpenId(null);
-            setMessage(msg);
-          }}
-        />
       )}
     </div>
   );
@@ -696,230 +678,5 @@ function AvailabilityChip({
     >
       Availability on request
     </span>
-  );
-}
-
-/**
- * A planner's full profile, opened from the grid — the explore step of the
- * flow (EZ1-I113). The booking action lives here, after the buyer has seen who
- * they are hiring, and carries the date they checked (and, for an agent, the
- * client and budget) into the request.
- */
-function PlannerDetail({
-  planner,
-  canBook,
-  initialDate,
-  onClose,
-  onBooked,
-}: {
-  planner: Planner;
-  canBook: boolean;
-  initialDate: string;
-  onClose: () => void;
-  onBooked: (message: string) => void;
-}) {
-  // The full record, so packages/portfolio show even if search trimmed them.
-  const { data } = useQuery({
-    queryKey: ['planner', planner.id],
-    queryFn: async () => (await api.get(`/wedding-planners/${planner.id}`)).data as Planner,
-    initialData: planner,
-  });
-  const p = data ?? planner;
-
-  const [date, setDate] = useState(initialDate);
-  const [checkedDate, setCheckedDate] = useState('');
-  const [amount, setAmount] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-
-  const {
-    data: slots,
-    isFetching: checking,
-    refetch: check,
-  } = useQuery({
-    queryKey: ['planner-availability', planner.id, date],
-    enabled: false,
-    queryFn: async () =>
-      (
-        await api.get(`/wedding-planners/${planner.id}/availability/bookable`, {
-          params: { from: date, to: date },
-        })
-      ).data as BookableSlot[],
-  });
-  const daySlots = (slots ?? []).filter((s) => s.date === checkedDate && s.remaining > 0);
-  const hasChecked = Boolean(checkedDate);
-
-  async function book() {
-    setBusy(true);
-    setError('');
-    try {
-      const payload: Record<string, unknown> = { providerType: 'planner', providerId: planner.id };
-      // An empty budget means "quote me" — the planner prices the job, so a
-      // number is never invented on the client's behalf.
-      const quoted = Number(amount);
-      if (amount.trim() && Number.isFinite(quoted) && quoted > 0) payload.amount = quoted;
-      if (checkedDate) payload.eventDate = checkedDate;
-      await api.post('/bookings', payload);
-      onBooked('Booking requested. Pay to move it into escrow from the Bookings page.');
-    } catch (err) {
-      setError(apiMessage(err, 'Could not create the booking.'));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-scrim/40 p-4">
-      <div className="my-8 w-full max-w-2xl rounded-lg bg-surface p-6">
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <div>
-            <h2 className="section-title flex items-center gap-2">
-              {p.agencyName}
-              <span className="pill-brand">
-                <SealCheck size={13} weight="fill" aria-hidden />
-                Verified
-              </span>
-            </h2>
-            <p className="text-sm text-gray-500">
-              {p.city}
-              {p.yearsExperience ? ` · ${p.yearsExperience} yrs experience` : ''}
-              {p.ratingCount > 0 ? ` · ★ ${p.ratingAvg.toFixed(1)} (${p.ratingCount})` : ''}
-            </p>
-          </div>
-          <button className="text-gray-400 hover:text-gray-700" onClick={onClose} aria-label="Close">
-            <X size={20} aria-hidden />
-          </button>
-        </div>
-
-        {p.bio && <p className="text-sm text-gray-700">{p.bio}</p>}
-
-        {(p.servesCities?.length ?? 0) > 0 && (
-          <p className="mt-3 text-sm text-gray-600">
-            <span className="font-medium text-gray-800">Serves:</span> {p.servesCities!.join(', ')}
-          </p>
-        )}
-
-        {(p.packages?.length ?? 0) > 0 && (
-          <div className="mt-3">
-            <h3 className="section-title text-sm">Packages</h3>
-            <ul className="mt-1 space-y-1 text-sm">
-              {p.packages!.map((k, i) => (
-                <li key={i} className="flex items-baseline justify-between gap-3 border-b py-1">
-                  <span>
-                    {k.name}
-                    {k.includes?.length ? (
-                      <span className="ml-1 text-xs text-gray-400">· {k.includes.join(', ')}</span>
-                    ) : null}
-                  </span>
-                  <span className="tabular-nums text-gray-700">
-                    ₹{Number(k.price).toLocaleString('en-IN')}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {(p.portfolio?.length ?? 0) > 0 && (
-          <div className="mt-3">
-            <h3 className="section-title text-sm">Portfolio</h3>
-            <div className="mt-1 grid grid-cols-3 gap-2">
-              {p.portfolio!.map((url) => (
-                <a key={url} href={url} target="_blank" rel="noreferrer">
-                  <img
-                    src={url}
-                    alt=""
-                    loading="lazy"
-                    className="aspect-square w-full rounded-sm object-cover"
-                  />
-                </a>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {p.website && (
-          <p className="mt-3 text-sm">
-            <a className="text-brand underline" href={p.website} target="_blank" rel="noreferrer">
-              Visit website
-            </a>
-          </p>
-        )}
-
-        {canBook ? (
-          <div className="mt-5 space-y-3 border-t border-gray-200 pt-4">
-            <h3 className="section-title text-sm">Check availability</h3>
-            <div className="flex flex-wrap items-end gap-2">
-              <label className="text-sm">
-                <span className="block text-gray-600">Event date</span>
-                <input
-                  className="input mt-1"
-                  type="date"
-                  min={new Date().toISOString().slice(0, 10)}
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                />
-              </label>
-              <button
-                className="btn-outline"
-                disabled={!date || checking}
-                onClick={async () => {
-                  await check();
-                  setCheckedDate(date);
-                }}
-              >
-                {checking ? 'Checking…' : 'Check availability'}
-              </button>
-            </div>
-
-            {hasChecked && !checking && (
-              <div className="rounded-sm bg-surface-sunken p-3 text-sm">
-                {daySlots.length > 0 ? (
-                  <p className="text-emerald-700">
-                    Available on {new Date(checkedDate).toLocaleDateString()} —{' '}
-                    {daySlots.reduce((n, s) => n + s.remaining, 0)} opening
-                    {daySlots.reduce((n, s) => n + s.remaining, 0) === 1 ? '' : 's'} left.
-                  </p>
-                ) : (
-                  <p className="text-gray-600">
-                    No published opening on {new Date(checkedDate).toLocaleDateString()}. You can
-                    still send a request and the planner will confirm.
-                  </p>
-                )}
-              </div>
-            )}
-
-            <label className="block text-sm">
-              <span className="text-gray-600">
-                Your budget <span className="text-gray-400">(optional)</span>
-              </span>
-              <input
-                className="input mt-1 max-w-[12rem]"
-                type="number"
-                min={1}
-                placeholder="Leave blank to be quoted"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-              />
-            </label>
-
-            {error && <p className="alert-critical">{error}</p>}
-
-            <button className="btn w-full" disabled={busy || !hasChecked} onClick={book}>
-              {busy ? 'Requesting…' : 'Request booking'}
-            </button>
-            {!hasChecked && (
-              <p className="text-xs text-gray-400">
-                Check a date first, so your request carries the day you need.
-              </p>
-            )}
-          </div>
-        ) : (
-          <p className="mt-5 text-sm text-gray-500">
-            Sign in as an individual or agent to request a booking.
-          </p>
-        )}
-      </div>
-    </div>
   );
 }
