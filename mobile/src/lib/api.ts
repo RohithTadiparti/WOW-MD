@@ -21,13 +21,25 @@ import { useAuth, type AuthUser } from '@/store/auth';
  * and the comments there are worth reading alongside these.
  */
 /**
- * Prefer the deployment's explicit API URL. During local Expo development,
- * use the host serving Expo so a phone reaches the API on the developer's
- * machine instead of trying to reach its own localhost. A production build
- * should always provide EXPO_PUBLIC_API_URL.
+ * Where the API is.
+ *
+ * A build names it with EXPO_PUBLIC_API_URL (set per EAS environment). Only a
+ * development bundle may guess: it uses the machine serving the bundle, so a
+ * phone on the same network reaches the API on the developer's machine rather
+ * than its own localhost. A preview or release build without the URL fails
+ * here at startup instead of quietly pointing every request, passwords and
+ * bank details included, at an address that cannot be right.
  */
-const expoHost = Constants.expoConfig?.hostUri?.split(':')[0] ?? 'localhost';
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? `http://${expoHost}:3000/api`;
+function resolveBaseUrl(): string {
+  const configured = process.env.EXPO_PUBLIC_API_URL;
+  if (configured) return configured;
+  if (__DEV__) {
+    const expoHost = Constants.expoConfig?.hostUri?.split(':')[0] ?? 'localhost';
+    return `http://${expoHost}:3000/api`;
+  }
+  throw new Error('EXPO_PUBLIC_API_URL is not set for this build, so the app has no API to talk to.');
+}
+const BASE_URL = resolveBaseUrl();
 /** Alphanumerics, dot, dash and underscore only: SecureStore rejects the rest. */
 const REFRESH_KEY = 'wow.refreshToken';
 

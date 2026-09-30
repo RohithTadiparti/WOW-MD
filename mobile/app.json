@@ -21,8 +21,6 @@
 
     "android": {
       "package": "com.worldofweddings.app",
-      "usesCleartextTraffic": true,
-
       "adaptiveIcon": {
         "backgroundColor": "#C41E63",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -32,13 +30,14 @@
 
       "predictiveBackGestureEnabled": false,
 
+      "blockedPermissions": ["android.permission.SYSTEM_ALERT_WINDOW"],
+
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.ACCESS_NETWORK_STATE",
         "android.permission.CAMERA",
         "android.permission.INTERNET",
         "android.permission.MODIFY_AUDIO_SETTINGS",
-        "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.WAKE_LOCK",
         "android.permission.BLUETOOTH"
       ]
