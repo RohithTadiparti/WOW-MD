@@ -23,4 +23,7 @@ e2e-results/
 # Local compose secrets
 docker/.env
 
+# Android test builds served by the frontend container
+docker/downloads/
+
 mobile/.env
