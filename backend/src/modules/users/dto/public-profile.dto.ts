@@ -270,6 +270,18 @@ export function ageBand(dateOfBirth: string | null): string | null {
 }
 
 /**
+ * The profile photo another person may see: the first photo, which is the one
+ * its owner chose or, if they never chose, the first they uploaded. None for a
+ * PRIVATE profile, which hides itself entirely.
+ */
+export function profilePhotoOf(
+  profile: Pick<Profile, 'photos' | 'visibility'> | null | undefined,
+): string | null {
+  if (!profile || profile.visibility === ProfileVisibility.PRIVATE) return null;
+  return profile.photos?.[0] ?? null;
+}
+
+/**
  * Projects a profile for another user's eyes.
  *
  * `matched` unlocks the full photo set and free-text bio; before that, a viewer
@@ -282,12 +294,15 @@ export function toPublicProfile(
   const matched = Boolean(opts.matched);
   const allPhotos = profile.photos ?? [];
 
-  // MATCHES_ONLY hides imagery until both sides have agreed. PUBLIC profiles
-  // show a lead photo to browsers. PRIVATE profiles never reach here, but treat
-  // them as hidden anyway rather than relying on the caller having filtered.
+  // Before a match a viewer sees the lead photo — the profile photo its owner
+  // chose, which is always first — and the full set only once both sides have
+  // agreed. MATCHES_ONLY used to hide even the lead photo here while the
+  // profile view showed it, so match cards came up blank for the default
+  // visibility. PRIVATE profiles never reach here, but treat them as hidden
+  // anyway rather than relying on the caller having filtered.
   let photos: string[] = [];
   if (matched) photos = allPhotos;
-  else if (profile.visibility === ProfileVisibility.PUBLIC) photos = allPhotos.slice(0, 1);
+  else if (profile.visibility !== ProfileVisibility.PRIVATE) photos = allPhotos.slice(0, 1);
 
   return {
     sourceAgency: opts.sourceAgency ?? null,

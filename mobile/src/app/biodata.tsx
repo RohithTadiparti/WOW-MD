@@ -61,7 +61,10 @@ export default function BiodataWizard() {
     queryKey: ['biodata-photos', profileId],
     enabled: Boolean(profileId),
     queryFn: async () =>
-      (await api.get(`/profiles/${profileId}/details/photos`)).data as { photos: string[] },
+      (await api.get(`/profiles/${profileId}/details/photos`)).data as {
+        photos: string[];
+        primaryPhotoUrl?: string | null;
+      },
     retry: false,
   });
 
@@ -217,8 +220,19 @@ export default function BiodataWizard() {
                 style={{ width: 116, height: 84, borderRadius: radius.sm }}
               />
             ) : null}
+            {photoCount > 1 ? (
+              <Caption tone="muted">
+                Tap “Set as profile photo” under the one you want families to see first.
+              </Caption>
+            ) : null}
             <MediaStrip
               urls={photos?.photos ?? []}
+              primary={photos?.primaryPhotoUrl ?? photos?.photos?.[0] ?? null}
+              onMakePrimary={(url) => {
+                void api
+                  .put(`/profiles/${profileId}/details/primary-photo`, { url })
+                  .then(refresh);
+              }}
               onRemove={(url) => {
                 void api
                   .delete(`/profiles/${profileId}/details/photos`, { data: { url } })

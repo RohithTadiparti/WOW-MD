@@ -43,6 +43,7 @@ import { WeddingFacts, bookingContextOf } from './booking-venue';
 import { loadWeddingFacts } from './wedding-facts';
 import { serviceNamesByIds } from '../catalog/service-names';
 import { displayNamesByUserIds } from '../users/display-names';
+import { profilePhotoOf } from '../users/dto/public-profile.dto';
 import { SupportCasesService } from '../verification/support-cases.service';
 import { MatchmakingService } from '../matchmaking/matchmaking.service';
 import { AvailabilityService } from '../vendors/availability.service';
@@ -1844,7 +1845,7 @@ export class BookingsService {
       booking.clientEmail = user?.email ?? null;
       booking.clientPhone = user?.phone ?? null;
       booking.clientCity = clientProfile?.city ?? null;
-      booking.clientPhoto = clientProfile?.photos?.[0] ?? null;
+      booking.clientPhoto = profilePhotoOf(clientProfile);
       // Judged before the linked function's date replaces the booking's own,
       // with the same rule incomingCounts uses for the tab.
       booking.requestOnDate =

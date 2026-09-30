@@ -69,8 +69,9 @@ export default function ProfilePhotos({
   return (
     <div className="space-y-3">
       <p className="text-sm text-gray-600">
-        The first photograph is the one shown on your profile and on anything circulated. You can
-        add up to {data?.max ?? 20}.
+        Your profile photo is the one shown on match cards, in chat and on anything circulated.
+        Choose it from the photos below, and change it whenever you like. You can add up to{' '}
+        {data?.max ?? 20}.
       </p>
 
       {error && <p className="alert-critical">{error}</p>}
@@ -89,7 +90,7 @@ export default function ProfilePhotos({
             />
             <figcaption className="mt-1 space-y-1 text-center">
               {url === primary ? (
-                <span className="block text-xs font-medium text-brand">Shown first</span>
+                <span className="block text-xs font-medium text-brand">Profile photo</span>
               ) : (
                 !readOnly && (
                   <button
@@ -103,7 +104,7 @@ export default function ProfilePhotos({
                       )
                     }
                   >
-                    Show this first
+                    Set as profile photo
                   </button>
                 )
               )}
