@@ -104,7 +104,7 @@ function priceText(offering: Offering) {
   return offering.unitLabel ? `${amount} ${offering.unitLabel}` : amount;
 }
 
-function ServiceInformation({ service }: { service: ServiceSummary }) {
+export function ServiceInformation({ service }: { service: ServiceSummary }) {
   const fields = service.serviceForm.filter((field) => service.attributes[field.key] !== undefined);
   const files = fields.filter((field) => field.type === 'file');
   const details = fields.filter((field) => field.type !== 'file');
