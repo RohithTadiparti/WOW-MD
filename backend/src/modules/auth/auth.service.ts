@@ -787,6 +787,13 @@ export class AuthService {
     // Returning 401 here would trigger the clients' automatic session refresh.
     if (!ok) throw new BadRequestException('Current password is incorrect.');
 
+    // Compare against the stored hash instead of the submitted current-password
+    // string. This keeps the rule true even when a client bypasses its own form
+    // validation, and avoids ever retaining or logging a plaintext password.
+    if (await bcrypt.compare(dto.newPassword, user.passwordHash)) {
+      throw new BadRequestException('New password must be different from your current password.');
+    }
+
     const passwordHash = await bcrypt.hash(dto.newPassword, this.cfg.auth.bcryptRounds);
     // Clearing `mustResetPassword` here is what lifts the lock a provisioned
     // account starts under. Revoking the sessions immediately afterwards is

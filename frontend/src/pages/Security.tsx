@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiMessage } from '../lib/api';
 import { useAuth } from '../store/auth';
+import PasswordField from '../components/PasswordField';
 
 interface Session {
   id: string;
@@ -307,8 +308,12 @@ function ChangePasswordCard() {
     e.preventDefault();
     if (busy) return;
     setError('');
+    if (newPassword === currentPassword) {
+      setError('New password must be different from your current password.');
+      return;
+    }
     if (newPassword !== confirmPassword) {
-      setError('New passwords do not match.');
+      setError('New password and confirm password must match.');
       return;
     }
     setBusy(true);
@@ -338,39 +343,31 @@ function ChangePasswordCard() {
         Use 8–128 characters, including an uppercase letter, a lowercase letter and a digit.
       </p>
       <div className="grid gap-3 sm:grid-cols-3">
-        <input
-          className="input"
-          type="password"
-          aria-label="Current Password"
+        <PasswordField
+          label="Current password"
           autoComplete="current-password"
-          maxLength={128}
-          placeholder="Current password"
           value={currentPassword}
-          onChange={(e) => setCurrent(e.target.value)}
+          onChange={setCurrent}
+          maxLength={128}
           required
         />
-        <input
-          className="input"
-          type="password"
+        <PasswordField
+          label="New password"
+          autoComplete="new-password"
           minLength={8}
           maxLength={128}
-          pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}"
+          pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).{8,}"
           title="Use an uppercase letter, a lowercase letter and a digit."
-          aria-label="New Password"
-          autoComplete="new-password"
-          placeholder="New password"
+          hint="Use an uppercase letter, a lowercase letter and a digit."
           value={newPassword}
-          onChange={(e) => setNew(e.target.value)}
+          onChange={setNew}
           required
         />
-        <input
-          className="input"
-          type="password"
-          aria-label="Confirm New Password"
+        <PasswordField
+          label="Confirm new password"
           autoComplete="new-password"
-          placeholder="Confirm new password"
           value={confirmPassword}
-          onChange={(e) => setConfirm(e.target.value)}
+          onChange={setConfirm}
           required
         />
       </div>

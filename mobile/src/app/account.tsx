@@ -193,8 +193,12 @@ function ChangePassword({ onDone }: { onDone: () => void }) {
   });
 
   function submit() {
+    if (newPassword === currentPassword) {
+      setError('New password must be different from your current password.');
+      return;
+    }
     if (newPassword !== confirmPassword) {
-      setError('Password and Confirm Password do not match.');
+      setError('New password and confirm password must match.');
       return;
     }
     setError('');
@@ -211,6 +215,7 @@ function ChangePassword({ onDone }: { onDone: () => void }) {
         value={currentPassword}
         onChangeText={setCurrent}
         secureTextEntry
+        showPasswordToggle
         autoCapitalize="none"
       />
       <Field
@@ -218,6 +223,7 @@ function ChangePassword({ onDone }: { onDone: () => void }) {
         value={newPassword}
         onChangeText={setNew}
         secureTextEntry
+        showPasswordToggle
         autoCapitalize="none"
         hint="At least 8 characters, with an uppercase letter, a lowercase letter and a digit."
       />
@@ -226,6 +232,7 @@ function ChangePassword({ onDone }: { onDone: () => void }) {
         value={confirmPassword}
         onChangeText={setConfirm}
         secureTextEntry
+        showPasswordToggle
         autoCapitalize="none"
       />
       <Button

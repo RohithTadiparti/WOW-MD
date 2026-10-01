@@ -206,8 +206,12 @@ function ChangePassword({ onDone }: { onDone: () => void }) {
   });
 
   function submit() {
+    if (newPassword === currentPassword) {
+      setError('New password must be different from your current password.');
+      return;
+    }
     if (newPassword !== confirmPassword) {
-      setError('Password and Confirm Password do not match.');
+      setError('New password and confirm password must match.');
       return;
     }
     setError('');
