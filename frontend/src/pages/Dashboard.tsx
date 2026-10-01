@@ -406,11 +406,11 @@ export default function Dashboard({
         (b.slaDeadline ? new Date(b.slaDeadline).getTime() : Infinity),
     );
 
-  const isFamily = user?.role === 'family';
-  const accountName = isFamily
-    ? (profile?.accountName ?? user?.accountName ?? profile?.displayName)
-    : (profile?.accountName ?? profile?.displayName);
-  const firstName = (accountName ?? '').trim().split(' ')[0];
+  // The dashboard is about the profile being completed, so its greeting must
+  // use the name saved in Profile Details. `accountName` is deliberately kept
+  // separate for account navigation: for family accounts it can be inferred
+  // from the login/steward record and is not necessarily this profile's name.
+  const profileName = typeof profile?.displayName === 'string' ? profile.displayName.trim() : '';
 
   // The vendor's home is a dedicated, backend-driven dashboard (EZ1-I147). All
   // the hooks above still run so the hook order is stable across a role change;
@@ -437,7 +437,7 @@ export default function Dashboard({
         </p>
         <h1 className="relative mt-1 border-0 pl-0 font-serif text-[2.25rem] font-normal leading-[1.1] text-brand-fg sm:text-[3rem]">
           {greeting()}
-          {firstName ? `, ${firstName}` : ''}
+          {profileName ? `, ${profileName}` : ''}
         </h1>
         {profile && !profile.profileCompleted && (
           <div className="relative mt-5 flex flex-wrap items-center gap-4 rounded-md border border-gold/60 bg-surface-raised/95 p-4 text-gray-900">

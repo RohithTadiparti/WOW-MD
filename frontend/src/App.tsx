@@ -244,7 +244,6 @@ const NAV: NavEntry[] = [
      * four permissions granted to the role with nowhere to exercise them
      * (council round 2).
      */
-    labelFor: { family: 'Family Profiles' },
     /*
      * An agent has one client page now, and this is the lower half of it
      * (EZ1-I241). The section was moved rather than rebuilt, so nothing an
@@ -255,8 +254,8 @@ const NAV: NavEntry[] = [
      * and this is the only route to creating, inviting or circulating a
      * relative's profile.
      */
-    hideFor: ['agent'],
-    deniedRedirect: '/clients',
+    hideFor: ['agent', 'family'],
+    deniedRedirect: '/',
     group: 'clients',
     icon: UsersThree,
   },
