@@ -12,6 +12,14 @@ import { LoadingCards } from '../components/ui/Feedback';
 import CategoryPicker, { useCategoryNames } from '../components/CategoryPicker';
 import VendorServices, { priceLabel } from '../components/VendorServices';
 import PhotoUploader from '../components/PhotoUploader';
+import RequiredMark, { RequiredNote } from '../components/ui/RequiredMark';
+import { SocialLinksEditor, SocialLinksList } from '../components/SocialLinks';
+import {
+  SocialLink,
+  listingSocialLinks,
+  normaliseSocialLinks,
+  socialLinkErrors,
+} from '../lib/social-links';
 import {
   CORRECTABLE_FIELD_KEYS,
   CORRECTION_FIELD_LABELS,
@@ -141,6 +149,11 @@ interface VendorListing {
   contactPhone: string | null;
   portfolio: string[];
   complianceDocuments: string[];
+  /** Absent from a server that predates the list; see `listingSocialLinks`. */
+  socialLinks?: SocialLink[];
+  website?: string | null;
+  instagramUrl?: string | null;
+  youtubeUrl?: string | null;
   isApproved: boolean;
   payoutAccountId: string | null;
   /** Where this business is in its life, from draft to live. */
@@ -401,6 +414,7 @@ function ReviewSummary({ current }: { current: VendorListing }) {
 
   const portfolio = current.portfolio ?? [];
   const documents = current.complianceDocuments ?? [];
+  const links = listingSocialLinks(current);
 
   return (
     <div className="card space-y-4">
@@ -434,6 +448,17 @@ function ReviewSummary({ current }: { current: VendorListing }) {
           <p className="text-sm text-gray-700">{current.description}</p>
         </div>
       )}
+
+      <div className="border-t pt-3">
+        <p className="mb-1 text-sm font-medium text-gray-900">Social media and website</p>
+        {links.length > 0 ? (
+          <SocialLinksList links={links} />
+        ) : (
+          <p className="text-sm text-gray-500">
+            None added. Optional, but couples like to see more of your work.
+          </p>
+        )}
+      </div>
 
       {/* The actual portfolio images, not a count of them (EZ1-I152). */}
       <div className="border-t pt-3">
@@ -596,8 +621,12 @@ function VendorListingForm({
   const [categories, setCategories] = useState<string[]>([]);
   const [portfolio, setPortfolio] = useState<string[]>([]);
   const [documents, setDocuments] = useState<string[]>([]);
+  const [socialLinks, setSocialLinks] = useState<SocialLink[]>([]);
   const [msg, setMsg] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  // After a save attempt every link row shows its problem, not only the ones
+  // the vendor has already left.
+  const [showLinkErrors, setShowLinkErrors] = useState(false);
 
   useEffect(() => {
     // No listing renders the create form on its own. This used to set
@@ -622,7 +651,21 @@ function VendorListingForm({
     setCategories(current.categories ?? []);
     setPortfolio(current.portfolio ?? []);
     setDocuments(current.complianceDocuments ?? []);
+    // The stored list as it is, so a link the rules now refuse is shown to be
+    // fixed rather than silently dropped; the three single fields only when the
+    // server has no list to give.
+    setSocialLinks(
+      Array.isArray(current.socialLinks) ? current.socialLinks : listingSocialLinks(current),
+    );
+    setShowLinkErrors(false);
   }, [current]);
+
+  /** The link rows' problems, folded into the form's errors under one key. */
+  function socialLinksError(): string | undefined {
+    const check = socialLinkErrors(socialLinks);
+    if (!check.any) return undefined;
+    return check.list ?? 'Fix the highlighted links.';
+  }
 
   /** Field-level, and specific about what is wrong rather than "invalid". */
   function validate(): Record<string, string> {
@@ -675,6 +718,8 @@ function VendorListingForm({
     } else if (!/^(\+91)?[6-9]\d{9}$/.test(form.contactPhone.replace(/\s|-/g, ''))) {
       errors.contactPhone = 'Enter a 10-digit Indian mobile number';
     }
+    const linksError = socialLinksError();
+    if (linksError) errors.socialLinks = linksError;
     return errors;
   }
 
@@ -692,6 +737,8 @@ function VendorListingForm({
     } else if (!/^(\+91)?[6-9]\d{9}$/.test(form.contactPhone.replace(/\s|-/g, ''))) {
       errors.contactPhone = 'Enter a 10-digit Indian mobile number';
     }
+    const linksError = socialLinksError();
+    if (linksError) errors.socialLinks = linksError;
     return errors;
   }
 
@@ -700,6 +747,7 @@ function VendorListingForm({
     setMsg('');
     const errors = presentationalOnly ? validatePresentational() : validate();
     setFieldErrors(errors);
+    setShowLinkErrors(true);
     if (Object.keys(errors).length > 0) return;
 
     try {
@@ -711,14 +759,17 @@ function VendorListingForm({
             description: form.description.trim(),
             contactPhone: form.contactPhone.trim(),
             portfolio,
+            socialLinks: normaliseSocialLinks(socialLinks),
           }
         : {
             name: form.name.trim(),
             categories,
             // Portfolio is deliberately always sent, including empty: clearing
-            // the last photo has to be able to reach the server.
+            // the last photo has to be able to reach the server. The links
+            // likewise, so removing the last one clears them.
             portfolio,
             complianceDocuments: documents,
+            socialLinks: normaliseSocialLinks(socialLinks),
           };
       if (!presentationalOnly) {
         for (const key of [
@@ -776,6 +827,7 @@ function VendorListingForm({
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
   if (current && !editing) {
+    const savedLinks = listingSocialLinks(current);
     return (
       <div className="card space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -837,6 +889,18 @@ function VendorListingForm({
           <Detail label="Contact number">{current.contactPhone ?? 'Not provided'}</Detail>
         </dl>
 
+        {/* What a couple is sent to from the public listing, checked here first. */}
+        <div className="border-t pt-3">
+          <p className="mb-2 text-sm font-medium text-gray-900">Social media and website</p>
+          {savedLinks.length > 0 ? (
+            <SocialLinksList links={savedLinks} />
+          ) : (
+            <p className="text-sm text-gray-500">
+              No links yet. Add your Instagram, YouTube, website or others with Edit.
+            </p>
+          )}
+        </div>
+
         {current.portfolio?.length > 0 && (
           <div className="border-t pt-3">
             <p className="mb-2 text-sm font-medium text-gray-900">Portfolio</p>
@@ -869,31 +933,48 @@ function VendorListingForm({
     return (
       <form onSubmit={submit} className="card space-y-3" noValidate>
         <h2 className="section-title">Edit your listing</h2>
+        <RequiredNote />
         <p className="text-sm text-gray-600">
-          Your listing is verified. About, contact number and photos are yours to change and go
-          live straight away. The verified details — name, category, PAN, GST, registration and
-          address — are locked; use “Request a change” for those.
+          Your listing is verified. About, contact number, photos and social links are yours to
+          change and go live straight away. The verified details — name, category, PAN, GST,
+          registration and address — are locked; use “Request a change” for those.
         </p>
         {msg && <p className="rounded-sm bg-brand-light p-2 text-sm text-brand-dark">{msg}</p>}
 
-        <Field label="Description" error={fieldErrors.description}>
+        <Field label="Description" required error={fieldErrors.description}>
           <textarea
             className="input"
             rows={3}
             maxLength={1000}
             required
+            aria-required="true"
             value={form.description}
             onChange={set('description')}
           />
           <p className="mt-1 text-right text-xs text-gray-500">{form.description.length}/1,000</p>
         </Field>
 
-        <Field label="Contact number" error={fieldErrors.contactPhone}>
-          <input className="input" value={form.contactPhone} onChange={set('contactPhone')} />
+        <Field label="Contact number" required error={fieldErrors.contactPhone}>
+          <input
+            className="input"
+            aria-required="true"
+            value={form.contactPhone}
+            onChange={set('contactPhone')}
+          />
         </Field>
 
+        <SocialLinksSection
+          links={socialLinks}
+          onChange={setSocialLinks}
+          showErrors={showLinkErrors}
+          error={fieldErrors.socialLinks}
+        />
+
         <div className="border-t pt-3">
-          <h3 className="section-title">Portfolio</h3>
+          <h3 className="section-title">
+            Portfolio
+            <RequiredMark />
+          </h3>
           {fieldErrors.portfolio && <p className="mb-2 alert-critical">{fieldErrors.portfolio}</p>}
           {portfolio.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-2">
@@ -938,25 +1019,38 @@ function VendorListingForm({
       <h2 className="section-title">
         {current ? 'Edit your listing' : 'Create your listing'}
       </h2>
+      <RequiredNote />
       {msg && <p className="rounded-sm bg-brand-light p-2 text-sm text-brand-dark">{msg}</p>}
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Business name" error={fieldErrors.name}>
-          <input className="input" value={form.name} onChange={set('name')} maxLength={100} />
+        <Field label="Business name" required error={fieldErrors.name}>
+          <input
+            className="input"
+            aria-required="true"
+            value={form.name}
+            onChange={set('name')}
+            maxLength={100}
+          />
         </Field>
-        <Field label="City" error={fieldErrors.city}>
-          <input className="input" value={form.city} onChange={set('city')} />
+        <Field label="City" required error={fieldErrors.city}>
+          <input className="input" aria-required="true" value={form.city} onChange={set('city')} />
         </Field>
       </div>
 
-      <CategoryPicker value={categories} onChange={setCategories} error={fieldErrors.categories} />
+      <CategoryPicker
+        required
+        value={categories}
+        onChange={setCategories}
+        error={fieldErrors.categories}
+      />
 
-      <Field label="Description" error={fieldErrors.description}>
+      <Field label="Description" required error={fieldErrors.description}>
         <textarea
           className="input"
           rows={3}
           maxLength={1000}
           required
+          aria-required="true"
           value={form.description}
           onChange={set('description')}
         />
@@ -970,8 +1064,18 @@ function VendorListingForm({
         from. Two answers to one question meant a vendor could not tell which
         one a buyer saw.
       */}
+      <SocialLinksSection
+        links={socialLinks}
+        onChange={setSocialLinks}
+        showErrors={showLinkErrors}
+        error={fieldErrors.socialLinks}
+      />
+
       <div className="border-t pt-3">
-        <h3 className="section-title">Portfolio</h3>
+        <h3 className="section-title">
+          Portfolio
+          <RequiredMark />
+        </h3>
         <p className="mb-2 text-sm text-gray-600">
           At least one photo is required (EZ1-I152). Clients rarely book from a listing with none.
         </p>
@@ -1016,7 +1120,10 @@ function VendorListingForm({
         as well as photographs: a GST certificate is rarely a picture.
       */}
       <div className="border-t pt-3">
-        <h3 className="section-title">Compliance documents</h3>
+        <h3 className="section-title">
+          Compliance documents
+          <RequiredMark />
+        </h3>
         <p className="mb-2 text-sm text-gray-600">
           At least one is required (EZ1-I152). Your PAN document is what the officer checks first.
           GST and any trade licence are useful if you have them. PDF, JPG or PNG.
@@ -1072,9 +1179,10 @@ function VendorListingForm({
               onChange={(e) => setForm((f) => ({ ...f, gstNumber: e.target.value.toUpperCase() }))}
             />
           </Field>
-          <Field label="PAN" error={fieldErrors.panNumber}>
+          <Field label="PAN" required error={fieldErrors.panNumber}>
             <input
               className="input"
+              aria-required="true"
               placeholder="ABCDE1234F"
               maxLength={10}
               value={form.panNumber}
@@ -1102,16 +1210,22 @@ function VendorListingForm({
             />
           </Field>
           <div className="sm:col-span-2">
-            <Field label="Registered address" error={fieldErrors.registeredAddress}>
+            <Field label="Registered address" required error={fieldErrors.registeredAddress}>
               <input
                 className="input"
+                aria-required="true"
                 value={form.registeredAddress}
                 onChange={set('registeredAddress')}
               />
             </Field>
           </div>
-          <Field label="Contact number" error={fieldErrors.contactPhone}>
-            <input className="input" value={form.contactPhone} onChange={set('contactPhone')} />
+          <Field label="Contact number" required error={fieldErrors.contactPhone}>
+            <input
+              className="input"
+              aria-required="true"
+              value={form.contactPhone}
+              onChange={set('contactPhone')}
+            />
           </Field>
         </div>
       </div>
@@ -1142,17 +1256,51 @@ function Detail({ label, children }: { label: string; children: ReactNode }) {
 function Field({
   label,
   error,
+  required = false,
   children,
 }: {
   label: string;
   error?: string;
+  /**
+   * Marks the label. The form's own validate() is what enforces it, so mark
+   * exactly the fields it refuses to save without, and set `aria-required`
+   * on the control.
+   */
+  required?: boolean;
   children: ReactNode;
 }) {
   return (
     <div>
-      <label className="label">{label}</label>
+      <label className="label">
+        {label}
+        {required && <RequiredMark />}
+      </label>
       {children}
       {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+    </div>
+  );
+}
+
+/** The social links block, the same in the full form and the verified-listing form. */
+function SocialLinksSection({
+  links,
+  onChange,
+  showErrors,
+  error,
+}: {
+  links: SocialLink[];
+  onChange: (next: SocialLink[]) => void;
+  showErrors: boolean;
+  error?: string;
+}) {
+  return (
+    <div className="border-t pt-3">
+      <h3 className="section-title">Social media and website</h3>
+      <p className="mb-2 text-sm text-gray-600">
+        Optional. Where couples can see more of your work: your website, Instagram, YouTube,
+        Facebook, Pinterest and the like. Each link must start with https://.
+      </p>
+      <SocialLinksEditor value={links} onChange={onChange} showErrors={showErrors} error={error} />
     </div>
   );
 }
@@ -1284,6 +1432,9 @@ interface PlannerListing {
   state?: string | null;
   pincode?: string | null;
   website?: string | null;
+  instagramUrl?: string | null;
+  youtubeUrl?: string | null;
+  socialLinks?: SocialLink[];
   isApproved?: boolean;
   portfolio?: string[];
   packages?: PlannerPackage[];
@@ -1318,7 +1469,6 @@ const EMPTY_PLANNER = {
   address: '',
   state: '',
   pincode: '',
-  website: '',
 };
 
 function PlannerListingForm({ existing }: { existing?: PlannerListing }) {
@@ -1326,6 +1476,10 @@ function PlannerListingForm({ existing }: { existing?: PlannerListing }) {
   const [form, setForm] = useState(EMPTY_PLANNER);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [portfolio, setPortfolio] = useState<string[]>([]);
+  // Replaces the one free-text "Website / social" box, which could hold one
+  // link and did not say which platform it was on.
+  const [socialLinks, setSocialLinks] = useState<SocialLink[]>([]);
+  const [showLinkErrors, setShowLinkErrors] = useState(false);
   const [packages, setPackages] = useState<PlannerPackage[]>([]);
   const [pkgName, setPkgName] = useState('');
   const [pkgPrice, setPkgPrice] = useState('');
@@ -1361,8 +1515,11 @@ function PlannerListingForm({ existing }: { existing?: PlannerListing }) {
       address: existing.address ?? '',
       state: existing.state ?? '',
       pincode: existing.pincode ?? '',
-      website: existing.website ?? '',
     });
+    setSocialLinks(
+      Array.isArray(existing.socialLinks) ? existing.socialLinks : listingSocialLinks(existing),
+    );
+    setShowLinkErrors(false);
     setPortfolio(existing.portfolio ?? []);
     setPackages(existing.packages ?? []);
   }, [existing]);
@@ -1390,9 +1547,8 @@ function PlannerListingForm({ existing }: { existing?: PlannerListing }) {
     ) {
       errors.yearsExperience = 'Enter a realistic number of years';
     }
-    if (form.website && !/^https?:\/\/[^\s.]+\.[^\s]{2,}$/.test(form.website.trim())) {
-      errors.website = 'Enter a full web address, starting http:// or https://';
-    }
+    const links = socialLinkErrors(socialLinks);
+    if (links.any) errors.socialLinks = links.list ?? 'Fix the highlighted links.';
     return errors;
   }
 
@@ -1401,6 +1557,7 @@ function PlannerListingForm({ existing }: { existing?: PlannerListing }) {
     setMsg('');
     const errors = validate();
     setFieldErrors(errors);
+    setShowLinkErrors(true);
     if (Object.keys(errors).length > 0) {
       setMsg('Fix the highlighted fields before saving.');
       return;
@@ -1419,7 +1576,8 @@ function PlannerListingForm({ existing }: { existing?: PlannerListing }) {
         ...(form.address.trim() ? { address: form.address.trim() } : {}),
         ...(form.state.trim() ? { state: form.state.trim() } : {}),
         ...(form.pincode.trim() ? { pincode: form.pincode.trim() } : {}),
-        ...(form.website.trim() ? { website: form.website.trim() } : {}),
+        // Always sent, including empty, so removing the last link clears it.
+        socialLinks: normaliseSocialLinks(socialLinks),
         // Portfolio and packages are the couple's evidence and the couple's
         // prices — the backend already stored both, the form never sent them
         // (EZ1-I24). Always sent, including empty, so removing the last one
@@ -1489,6 +1647,7 @@ function PlannerListingForm({ existing }: { existing?: PlannerListing }) {
           administrator must review the decision before it can return to the queue.
         </p>
       )}
+      {!approved && <RequiredNote />}
       {msg && <p className="rounded-sm bg-brand-light p-2 text-sm text-brand-dark">{msg}</p>}
       {approved && (
         <p className="rounded-sm bg-emerald-50 p-2 text-sm text-emerald-800">
@@ -1500,8 +1659,14 @@ function PlannerListingForm({ existing }: { existing?: PlannerListing }) {
           edited or re-saved (EZ1-I138). */}
       <fieldset disabled={approved} className="space-y-3 border-0 p-0">
       <div className="grid gap-3 sm:grid-cols-3">
-        <Field label="Agency name" error={fieldErrors.agencyName}>
-          <input className="input" value={form.agencyName} onChange={set('agencyName')} required />
+        <Field label="Agency name" required error={fieldErrors.agencyName}>
+          <input
+            className="input"
+            value={form.agencyName}
+            onChange={set('agencyName')}
+            required
+            aria-required="true"
+          />
         </Field>
         {/* City as a dropdown (EZ1-I127), with a free-text escape for anywhere
             not on the list. */}
@@ -1511,6 +1676,7 @@ function PlannerListingForm({ existing }: { existing?: PlannerListing }) {
           onChange={(v) => setForm((f) => ({ ...f, city: v }))}
           options={CITIES}
           required
+          markRequired
         />
         {fieldErrors.city && <p className="-mt-2 text-xs text-red-600">{fieldErrors.city}</p>}
         <Field label="Years of experience" error={fieldErrors.yearsExperience}>
@@ -1527,12 +1693,19 @@ function PlannerListingForm({ existing }: { existing?: PlannerListing }) {
 
       {/* Contact and location, with field-level validation (EZ1-I69). */}
       <div className="grid gap-3 sm:grid-cols-3">
-        <Field label="Contact person" error={fieldErrors.contactPerson}>
-          <input className="input" value={form.contactPerson} onChange={set('contactPerson')} required />
-        </Field>
-        <Field label="Contact mobile" error={fieldErrors.contactPhone}>
+        <Field label="Contact person" required error={fieldErrors.contactPerson}>
           <input
             className="input"
+            value={form.contactPerson}
+            onChange={set('contactPerson')}
+            required
+            aria-required="true"
+          />
+        </Field>
+        <Field label="Contact mobile" required error={fieldErrors.contactPhone}>
+          <input
+            className="input"
+            aria-required="true"
             placeholder="9876543210"
             value={form.contactPhone}
             onChange={set('contactPhone')}
@@ -1556,14 +1729,6 @@ function PlannerListingForm({ existing }: { existing?: PlannerListing }) {
             onChange={set('pincode')}
           />
         </Field>
-        <Field label="Website / social" error={fieldErrors.website}>
-          <input
-            className="input"
-            placeholder="https://…"
-            value={form.website}
-            onChange={set('website')}
-          />
-        </Field>
       </div>
       <div>
         <label className="label">Business address</label>
@@ -1579,6 +1744,13 @@ function PlannerListingForm({ existing }: { existing?: PlannerListing }) {
         <label className="label">About your agency</label>
         <textarea className="input" rows={3} maxLength={2000} value={form.bio} onChange={set('bio')} />
       </div>
+
+      <SocialLinksSection
+        links={socialLinks}
+        onChange={setSocialLinks}
+        showErrors={showLinkErrors}
+        error={fieldErrors.socialLinks}
+      />
 
       {/* Portfolio — uploaded from the device, the same as the vendor listing. */}
       <div className="border-t pt-3">
