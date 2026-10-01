@@ -35,12 +35,13 @@ interface Form {
 }
 
 function formFrom(
-  me: Record<string, unknown>,
-  full?: { details?: Record<string, unknown> | null; dateOfBirth?: string | null },
+  subject: Record<string, unknown>,
+  full?: { details?: Record<string, unknown> | null; dateOfBirth?: string | null; profile?: Record<string, unknown> | null },
 ): Form {
   const d = (full?.details ?? {}) as Record<string, unknown>;
+  const profile = full?.profile ?? {};
   const religion = canonical(String(d.religion ?? ''), RELIGIONS);
-  const city = String(me.city ?? '');
+  const city = String(profile.city ?? subject.city ?? '');
   let state = '';
   for (const [s, cities] of Object.entries(DISTRICTS_BY_STATE)) {
     if (cities.includes(city)) {
@@ -49,12 +50,12 @@ function formFrom(
     }
   }
 
-  const names = namesFrom(me.displayName, d);
+  const names = namesFrom(profile.displayName ?? subject.displayName, d);
   return {
     firstName: capitalizeWords(names.firstName),
     lastName: capitalizeWords(names.lastName),
-    dateOfBirth: String(me.dateOfBirth ?? full?.dateOfBirth ?? '').slice(0, 10),
-    gender: String(me.gender ?? '').toLowerCase(),
+    dateOfBirth: String(profile.dateOfBirth ?? full?.dateOfBirth ?? subject.dateOfBirth ?? '').slice(0, 10),
+    gender: String(profile.gender ?? subject.gender ?? '').toLowerCase(),
     heightCm: stored(d.heightCm),
     maritalStatus: String(d.maritalStatus ?? ''),
     religion,
@@ -81,10 +82,11 @@ export function PersonalForm({
   onSaved,
   onBack,
   autofilledKeys,
+  syncAccount = true,
 }: {
   profileId: string | null;
   me: Record<string, unknown>;
-  full?: { details?: Record<string, unknown> | null; dateOfBirth?: string | null };
+  full?: { details?: Record<string, unknown> | null; dateOfBirth?: string | null; profile?: Record<string, unknown> | null };
   photos?: string[];
   onPhotoAdded?: (url: string) => void;
   onPhotoRemoved?: (url: string) => void;
@@ -94,6 +96,8 @@ export function PersonalForm({
   onSaved: () => void;
   onBack?: () => void;
   autofilledKeys?: Set<string>;
+  /** Only the account holder's own biodata may update /users/me/profile. */
+  syncAccount?: boolean;
 }) {
   const qc = useQueryClient();
   const [error, setError] = useState('');
@@ -130,12 +134,17 @@ export function PersonalForm({
       if (form.gender) payload.gender = form.gender;
       if (form.dateOfBirth) payload.dateOfBirth = form.dateOfBirth;
       if (form.location.trim()) payload.city = form.location.trim();
-      await api.put('/users/me/profile', payload);
+      // A managed profile belongs to the selected bride/groom, not to the
+      // parent/guardian who is signed in. Its details are saved through the
+      // profile endpoint below; writing /users/me here overwrote the guardian.
+      if (syncAccount) await api.put('/users/me/profile', payload);
 
       if (!profileId) return;
         await api.put(`/profiles/${profileId}/details/personal`, {
           firstName: form.firstName.trim(),
           lastName: form.lastName.trim(),
+          gender: form.gender || undefined,
+          dateOfBirth: form.dateOfBirth || undefined,
           heightCm: Number(form.heightCm),
           complexion: form.complexion,
           communicationAddress: form.communicationAddress.trim(),
@@ -268,7 +277,7 @@ export function PersonalForm({
             {errors.dateOfBirth ? <Caption tone="critical">{errors.dateOfBirth}</Caption> : null}
           </View>
           <View style={{ flex: 1 }}>
-            <SelectField label="Gender" value={form.gender} options={GENDERS} onChange={set('gender')} required autoFilled={autofilledKeys?.has('gender')} error={errors.gender} />
+            <SelectField label="Gender" value={form.gender} options={GENDERS} onChange={set('gender')} required autoFilled={autofilledKeys?.has('gender')} error={errors.gender} disabled={Boolean(full?.profile?.gender)} hint={full?.profile?.gender ? 'Set from the registered profile.' : undefined} />
           </View>
         </View>
 

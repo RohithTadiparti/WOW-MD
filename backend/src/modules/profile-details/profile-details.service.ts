@@ -226,6 +226,14 @@ export class ProfileDetailsService {
       await this.profiles.save(profile);
     }
 
+    // Extraction may suggest a gender, but it must never replace the one set
+    // when a bride/groom registered.  An unassigned managed profile can use
+    // the reviewed form value to establish its identity exactly once.
+    if (!profile.gender && dto.gender) {
+      profile.gender = dto.gender;
+      await this.profiles.save(profile);
+    }
+
     return this.persist(row);
   }
 
@@ -1119,6 +1127,9 @@ export class ProfileDetailsService {
         details &&
           has(details.firstName) &&
           has(details.lastName) &&
+          has(profile.gender) &&
+          has(profile.dateOfBirth) &&
+          (profile.photos?.length ?? 0) >= ProfileDetailsService.REQUIRED_PHOTOS &&
           has(details.heightCm) &&
           has(details.complexion) &&
           has(details.communicationAddress),
@@ -1138,6 +1149,7 @@ export class ProfileDetailsService {
           has(details.father) &&
           has(details.mother) &&
           has(details.familyType) &&
+          (matchGender(profile) !== 'male' || has(details.familyNetWorth)) &&
           details.brothers !== null &&
           details.sisters !== null &&
           // Counts and records have to agree, or the family section is telling
@@ -1145,7 +1157,7 @@ export class ProfileDetailsService {
           siblings.length >= 0,
       ),
       education: Boolean(
-        details && has(details.highestQualification),
+        details && has(details.highestQualification) && has(details.course),
       ),
       occupation: Boolean(
         details && has(details.occupationStatus),

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { View, ScrollView, Alert as NativeAlert, Pressable } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { api } from '@/lib/api';
 import {
@@ -30,12 +30,19 @@ interface BiodataResponse {
   profileId: string;
   details: Record<string, unknown> | null;
   dateOfBirth: string | null;
-  profile?: { gender?: string | null; managingFor?: string | null };
+  profile?: {
+    displayName?: string | null;
+    gender?: string | null;
+    dateOfBirth?: string | null;
+    city?: string | null;
+    managingFor?: string | null;
+  };
 }
 
 export default function BiodataWizard() {
   const qc = useQueryClient();
   const router = useRouter();
+  const params = useLocalSearchParams<{ profileId?: string | string[] }>();
 
   const [step, setStep] = useState(0);
   const [autofilledKeys, setAutofilledKeys] = useState<Set<string>>(new Set());
@@ -46,7 +53,12 @@ export default function BiodataWizard() {
       (await api.get('/users/me')).data as { id?: string | null; gender?: string | null; managingFor?: string | null; displayName?: string | null; dateOfBirth?: string | null; city?: string | null },
     retry: false,
   });
-  const profileId = me?.id ?? null;
+  // A family member can open a managed person's biodata by profile id.  Never
+  // fall back to the family account after a profile was explicitly selected:
+  // that is how one relative's fields leaked into another one's form.
+  const selectedProfileId = Array.isArray(params.profileId) ? params.profileId[0] : params.profileId;
+  const profileId = selectedProfileId ?? me?.id ?? null;
+  const isOwnProfile = profileId !== null && profileId === me?.id;
 
   const { data: full, isPending } = useQuery({
     queryKey: ['biodata-details', profileId],
@@ -85,6 +97,15 @@ export default function BiodataWizard() {
     }
   }, [step, full]);
 
+  // Expo can keep this route mounted while a family member changes the target
+  // profile. Reset route-local UI state; the query keys already isolate the
+  // server data, and this prevents the previous person's draft/highlights
+  // surviving for one render.
+  useEffect(() => {
+    setStep(0);
+    setAutofilledKeys(new Set());
+  }, [profileId]);
+
   if (loadingMe || (profileId && isPending)) {
     return (
       <Screen>
@@ -107,7 +128,7 @@ export default function BiodataWizard() {
   }
 
   const d = (full?.details ?? {}) as Record<string, unknown>;
-  const targetGender = String(full?.profile?.managingFor ?? me?.managingFor ?? full?.profile?.gender ?? me?.gender ?? '').toLowerCase();
+  const targetGender = String(full?.profile?.gender ?? full?.profile?.managingFor ?? me?.gender ?? me?.managingFor ?? '').toLowerCase();
   const isGroom = targetGender === 'groom' || targetGender === 'male' || targetGender === 'm';
   const showMarital = d.maritalStatus && d.maritalStatus !== 'never_married';
 
@@ -218,9 +239,11 @@ export default function BiodataWizard() {
 
       {currentStep.id === 'personal' && (
         <PersonalForm
+          key={`personal-${profileId}`}
           profileId={profileId}
           me={me as Record<string, unknown>}
           full={full}
+          syncAccount={isOwnProfile}
           photos={photos?.photos ?? []}
           onPhotoAdded={(url) => {
             void api.post(`/profiles/${profileId}/details/photos`, { url }).then(refresh).catch((err) => {
@@ -248,6 +271,7 @@ export default function BiodataWizard() {
 
       {currentStep.id === 'marital' && (
         <MaritalHistoryForm
+          key={`marital-${profileId}`}
           profileId={profileId}
           details={d}
           onSaved={nextStep}
@@ -259,6 +283,7 @@ export default function BiodataWizard() {
 
       {currentStep.id === 'education' && (
         <EducationCareerForm
+          key={`education-${profileId}`}
           profileId={profileId}
           details={d}
           onSaved={nextStep}
@@ -270,6 +295,7 @@ export default function BiodataWizard() {
 
       {currentStep.id === 'family' && (
         <FamilyBackgroundForm
+          key={`family-${profileId}`}
           profileId={profileId}
           details={d}
           isGroom={isGroom}
@@ -282,6 +308,7 @@ export default function BiodataWizard() {
 
       {currentStep.id === 'horoscope' && (
         <HoroscopeSection
+          key={`horoscope-${profileId}`}
           profileId={profileId}
           details={d}
           onSaved={() => {
@@ -296,6 +323,7 @@ export default function BiodataWizard() {
 
       {currentStep.id === 'preferences' && (
         <PreferencesSection
+          key={`preferences-${profileId}`}
           profileId={profileId}
           details={d}
           onSaved={() => {
@@ -322,8 +350,8 @@ export default function BiodataWizard() {
             <View style={{ marginTop: space(2) }}>
               <DetailGrid>
                 <DetailRow label="Name">{`${d.firstName ?? ''} ${d.lastName ?? ''}`.trim()}</DetailRow>
-                <DetailRow label="Date of Birth">{String(me?.dateOfBirth ?? full?.dateOfBirth ?? '—').slice(0, 10)}</DetailRow>
-                <DetailRow label="Gender">{String(me?.gender ?? '—')}</DetailRow>
+                <DetailRow label="Date of Birth">{String(full?.profile?.dateOfBirth ?? full?.dateOfBirth ?? me?.dateOfBirth ?? '—').slice(0, 10)}</DetailRow>
+                <DetailRow label="Gender">{String(full?.profile?.gender ?? me?.gender ?? '—')}</DetailRow>
                 <DetailRow label="Height">{String(d.height ?? '—')}</DetailRow>
                 <DetailRow label="Complexion">{String(d.complexion ?? '—')}</DetailRow>
                 <DetailRow label="Marital Status">{String(d.maritalStatus ?? '—').replace(/_/g, ' ')}</DetailRow>

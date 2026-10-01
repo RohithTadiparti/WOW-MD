@@ -111,6 +111,16 @@ export class PersonalDetailsDto {
   @IsAdultDate(18, { message: 'The bride/groom must be at least 18 years old' })
   dateOfBirth?: string;
 
+  /**
+   * Used only when an unassigned managed profile is first filled in. Once a
+   * profile has a registered gender, the service keeps that identity as the
+   * source of truth instead of accepting a conflicting document extraction.
+   */
+  @ApiPropertyOptional({ enum: ['male', 'female', 'other'] })
+  @IsOptional()
+  @IsIn(['male', 'female', 'other'])
+  gender?: string;
+
   @ApiProperty({ example: 168, minimum: MIN_HEIGHT_CM, maximum: MAX_HEIGHT_CM, description: 'Height in whole centimetres' })
   @Transform(({ obj, key }) => parseHeightCmQuery(obj[key]))
   @IsInt()
