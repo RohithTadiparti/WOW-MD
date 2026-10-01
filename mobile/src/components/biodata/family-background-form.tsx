@@ -39,6 +39,7 @@ export function FamilyBackgroundForm({
   onBack,
   onSkip,
   autofilledKeys,
+  isGroom,
 }: {
   profileId: string;
   details: Record<string, unknown>;
@@ -46,6 +47,7 @@ export function FamilyBackgroundForm({
   onBack?: () => void;
   onSkip?: () => void;
   autofilledKeys?: Set<string>;
+  isGroom: boolean;
 }) {
   const qc = useQueryClient();
   const [error, setError] = useState('');
@@ -93,7 +95,7 @@ export function FamilyBackgroundForm({
         familyStatus: form.familyStatus,
         brothers: Number(form.brothers) || 0,
         sisters: Number(form.sisters) || 0,
-        familyNetWorth: form.familyNetWorth ? Number(form.familyNetWorth) : undefined,
+        ...(isGroom ? { familyNetWorth: Number(form.familyNetWorth) } : {}),
         nativeCountry: form.nativeCountry || undefined,
         nativeState: form.nativeState || undefined,
         nativeDistrict: form.nativeDistrict || undefined,
@@ -126,6 +128,9 @@ export function FamilyBackgroundForm({
     if (!form.motherName.trim()) newErrors.motherName = "Mother's Name is required.";
     if (!form.familyType) newErrors.familyType = "Family Type is required.";
     if (!form.familyStatus) newErrors.familyStatus = "Family Status is required.";
+    if (isGroom && (!form.familyNetWorth || Number(form.familyNetWorth) < 1)) {
+      newErrors.familyNetWorth = 'Family Net Worth is required for groom biodata.';
+    }
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -187,7 +192,7 @@ export function FamilyBackgroundForm({
             <Field label="No. of Sisters" value={form.sisters} onChangeText={set('sisters')} keyboardType="number-pad" maxLength={2} autoFilled={autofilledKeys?.has('sisters')} />
           </View>
         </View>
-        <Field label="Family Net Worth" value={form.familyNetWorth} onChangeText={set('familyNetWorth')} keyboardType="number-pad" hint="Optional, in Rupees" autoFilled={autofilledKeys?.has('familyNetWorth')} />
+        {isGroom ? <Field label="Family Net Worth" value={form.familyNetWorth} onChangeText={set('familyNetWorth')} keyboardType="number-pad" hint="Required, in Rupees" required error={errors.familyNetWorth} autoFilled={autofilledKeys?.has('familyNetWorth')} /> : null}
       </Card>
 
       <Card>

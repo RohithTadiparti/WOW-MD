@@ -30,6 +30,7 @@ interface BiodataResponse {
   profileId: string;
   details: Record<string, unknown> | null;
   dateOfBirth: string | null;
+  profile?: { gender?: string | null; managingFor?: string | null };
 }
 
 export default function BiodataWizard() {
@@ -42,7 +43,7 @@ export default function BiodataWizard() {
   const { data: me, isPending: loadingMe } = useQuery({
     queryKey: ['me'],
     queryFn: async () =>
-      (await api.get('/users/me')).data as { id?: string | null; gender?: string | null; displayName?: string | null; dateOfBirth?: string | null; city?: string | null },
+      (await api.get('/users/me')).data as { id?: string | null; gender?: string | null; managingFor?: string | null; displayName?: string | null; dateOfBirth?: string | null; city?: string | null },
     retry: false,
   });
   const profileId = me?.id ?? null;
@@ -106,6 +107,8 @@ export default function BiodataWizard() {
   }
 
   const d = (full?.details ?? {}) as Record<string, unknown>;
+  const targetGender = String(full?.profile?.managingFor ?? me?.managingFor ?? full?.profile?.gender ?? me?.gender ?? '').toLowerCase();
+  const isGroom = targetGender === 'groom' || targetGender === 'male' || targetGender === 'm';
   const showMarital = d.maritalStatus && d.maritalStatus !== 'never_married';
 
   // Photographs are on the first step: the server will not save the basic
@@ -269,6 +272,7 @@ export default function BiodataWizard() {
         <FamilyBackgroundForm
           profileId={profileId}
           details={d}
+          isGroom={isGroom}
           onSaved={nextStep}
           onBack={prevStep}
           onSkip={nextStep}

@@ -56,6 +56,7 @@ export default function Profile() {
   const qc = useQueryClient();
   const permissions = useAuth((s) => s.user?.permissions ?? []);
   const role = useAuth((s) => s.user?.role);
+  const accountEmail = useAuth((s) => s.user?.email ?? '');
   const hasBiodata = can(permissions, Permission.MATCH_BROWSE);
   /*
    * A vendor or planner signs in with an email, so the phone on this page is
@@ -86,6 +87,7 @@ export default function Profile() {
    */
   const isAgency = can(permissions, Permission.AGENCY_MANAGE);
   const stewardFields = isSteward && !isAgency;
+  const isFamilyMember = role === 'family';
   /*
    * Profile visibility is a matrimony-profile setting: who may see the biodata
    * in matching. Vendors, planners and verification officers have no biodata
@@ -217,9 +219,11 @@ export default function Profile() {
               className="h-16 w-16 shrink-0 rounded-full object-cover ring-1 ring-inset ring-gray-900/10"
             />
             <div>
-            <h1 className="page-title">Your Profile</h1>
+            <h1 className="page-title">{isFamilyMember ? 'Family Member Details' : 'Your Profile'}</h1>
             <p className="page-subtitle">
-              Your account details. {hasBiodata && 'The biodata families see lives separately.'}
+              {isFamilyMember
+                ? 'Enter your own details. Groom or bride details belong in Biodata.'
+                : <>Your account details. {hasBiodata && 'The biodata families see lives separately.'}</>}
             </p>
             </div>
           </div>
@@ -233,6 +237,13 @@ export default function Profile() {
         {notice && <p className="alert-positive">{notice}</p>}
         {error && <p className="alert-critical">{error}</p>}
         {isLoading && <Loading rows={3} />}
+        {isFamilyMember && (
+          <p className="rounded-md border border-brand/20 bg-brand-soft px-3 py-2 text-sm text-gray-700">
+            <strong>Important:</strong> You are logged in as a Family Member. Enter your own
+            parent or guardian details here, not the groom&apos;s or bride&apos;s. Their information is
+            entered separately in Biodata.
+          </p>
+        )}
 
         {/*
           Read back from the server's own response, not from the form state, so
@@ -240,16 +251,16 @@ export default function Profile() {
         */}
         {!editing && data && (
           <dl className="divide-y text-sm">
-            <Saved label="Name">{data.displayName}</Saved>
+            <Saved label={isFamilyMember ? 'Name (Your)' : 'Name'}>{data.displayName}</Saved>
             {!isAgency && (
               <>
-                <Saved label="Gender">{data.gender}</Saved>
-                <Saved label="Date of birth">
+                <Saved label={isFamilyMember ? 'Gender (Your)' : 'Gender'}>{data.gender}</Saved>
+                <Saved label={isFamilyMember ? 'Date of birth (Your)' : 'Date of birth'}>
                   {data.dateOfBirth ? formatDate(data.dateOfBirth) : null}
                 </Saved>
               </>
             )}
-            <Saved label="City">{data.city}</Saved>
+            <Saved label={isFamilyMember ? 'City (Your)' : 'City'}>{data.city}</Saved>
             {stewardFields && (
               <>
                 <Saved label="Managing profile for">
@@ -258,8 +269,9 @@ export default function Profile() {
                 <Saved label="Relationship with the user">{data.stewardRelation}</Saved>
               </>
             )}
-            <Saved label="Mobile number">{data.contactPhone}</Saved>
-            <Saved label="Address">{data.address}</Saved>
+            <Saved label={isFamilyMember ? 'Mobile number (Your)' : 'Mobile number'}>{data.contactPhone}</Saved>
+            {isFamilyMember && <Saved label="Email address (Your)">{accountEmail}</Saved>}
+            <Saved label={isFamilyMember ? 'Address (Your)' : 'Address'}>{data.address}</Saved>
             <Saved label="About you">{data.bio}</Saved>
           </dl>
         )}
@@ -282,7 +294,7 @@ export default function Profile() {
         {editing && (
           <form onSubmit={submit} className="space-y-4">
             <label className="block text-sm">
-              <span className="text-gray-700">Name</span>
+              <span className="text-gray-700">{isFamilyMember ? 'Name (Your)' : 'Name'}</span>
               <input
                 className="input mt-1"
                 value={form.displayName}
@@ -290,6 +302,12 @@ export default function Profile() {
                 required
               />
             </label>
+            {isFamilyMember && (
+              <p className="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                <span className="font-medium">Email address (Your): </span>
+                {accountEmail || 'Not available'}
+              </p>
+            )}
 
             {/*
               Two fields, not one "User type: Bride/Groom".
@@ -349,7 +367,7 @@ export default function Profile() {
 
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block text-sm">
-                <span className="text-gray-700">Gender</span>
+                <span className="text-gray-700">{isFamilyMember ? 'Gender (Your)' : 'Gender'}</span>
                 <select className="input mt-1" value={form.gender} onChange={set('gender')}>
                   <option value="">Prefer not to say</option>
                   <option value="Female">Female</option>
@@ -357,7 +375,7 @@ export default function Profile() {
                 </select>
               </label>
               <label className="block text-sm">
-                <span className="text-gray-700">Date of birth</span>
+                <span className="text-gray-700">{isFamilyMember ? 'Date of birth (Your)' : 'Date of birth'}</span>
                 <input
                   className="input mt-1"
                   type="date"
@@ -369,11 +387,11 @@ export default function Profile() {
                 />
               </label>
               <label className="block text-sm">
-                <span className="text-gray-700">City</span>
+                <span className="text-gray-700">{isFamilyMember ? 'City (Your)' : 'City'}</span>
                 <input className="input mt-1" value={form.city} onChange={set('city')} />
               </label>
               <label className="block text-sm">
-                <span className="text-gray-700">Mobile number</span>
+                <span className="text-gray-700">{isFamilyMember ? 'Mobile number (Your)' : 'Mobile number'}</span>
                 <input
                   className={`input mt-1${
                     fieldErrors.contactPhone
@@ -400,7 +418,7 @@ export default function Profile() {
             </div>
 
             <label className="block text-sm">
-              <span className="text-gray-700">Address</span>
+              <span className="text-gray-700">{isFamilyMember ? 'Address (Your)' : 'Address'}</span>
               <textarea
                 className="input mt-1"
                 rows={2}

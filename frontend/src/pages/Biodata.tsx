@@ -73,7 +73,7 @@ interface Completion {
 interface ContactBlock {
   primaryMobile: string | null;
   primaryMobileVerified: boolean;
-  primaryMobileSource: 'account' | 'agency_record';
+  primaryMobileSource: 'account' | 'profile' | 'agency_record';
   alternateMobile: string | null;
   email: string | null;
 }
@@ -88,6 +88,7 @@ interface SharedProfile {
   address: string | null;
   bio: string | null;
   visibility: 'public' | 'matches_only' | 'private' | null;
+  managingFor?: 'bride' | 'groom' | null;
 }
 
 /** One caste in the reference catalogue, with the sub-castes filed under it. */
@@ -484,6 +485,10 @@ export default function Biodata() {
         {current === 'family' && (
           <FamilyForm
             initial={details}
+            isGroom={
+              sharedProfile?.managingFor === 'groom' ||
+              (!sharedProfile?.managingFor && String(sharedProfile?.gender ?? data?.gender ?? '').toLowerCase() === 'male')
+            }
             siblings={siblings}
             assets={assets}
             onSave={(b) => save('family', [['family', b]])}
@@ -991,7 +996,9 @@ function BasicInfoForm({
           hint={
             contact?.primaryMobileSource === 'agency_record'
               ? 'Taken by the agency. Changes when the profile is claimed.'
-              : 'Your sign-in number. Change it under Security.'
+              : contact?.primaryMobileSource === 'profile'
+                ? 'Your main profile number. Update it in Your Profile.'
+                : 'Your sign-in number. Change it under Security.'
           }
         >
           <div className="input mt-1 flex items-center justify-between bg-gray-50">
@@ -1535,6 +1542,7 @@ function MaritalForm({
  */
 function FamilyForm({
   initial,
+  isGroom,
   siblings,
   assets,
   onSave,
@@ -1545,6 +1553,7 @@ function FamilyForm({
   storageKey,
 }: {
   initial: Draft;
+  isGroom: boolean;
   siblings: Sibling[];
   assets: Asset[];
   onSave: (b: Draft) => Promise<boolean>;
@@ -1637,13 +1646,12 @@ function FamilyForm({
             nriCountry: values.isNri ? values.nriCountry || undefined : undefined,
             brothers: Number(values.brothers) || 0,
             sisters: Number(values.sisters) || 0,
-            // Omitted rather than sent as zero when it is blank. Zero is a
-            // claim about the family's finances; "not answered" is not.
-            familyNetWorth:
-              String(values.familyNetWorth ?? '').trim() === ''
-                ? undefined
-                : Number(values.familyNetWorth),
-            familyNetWorthVisible: Boolean(values.familyNetWorthVisible),
+            ...(isGroom
+              ? {
+                  familyNetWorth: Number(values.familyNetWorth),
+                  familyNetWorthVisible: Boolean(values.familyNetWorthVisible),
+                }
+              : {}),
           });
           void submitDraft(sent, () => guard.clear(storageKey));
         }}
@@ -1798,25 +1806,30 @@ function FamilyForm({
             than instead of them. Optional, and private unless the family says
             otherwise — the same rule money follows everywhere else here.
           */}
-          <Field label="Family net worth" hint="Rupees. Optional, and hidden unless you say otherwise">
-            <input
-              className="input mt-1"
-              type="number"
-              min={0}
-              value={String(values.familyNetWorth ?? '')}
-              onChange={set('familyNetWorth')}
-            />
-          </Field>
-          <label className="flex items-end gap-2 pb-2 text-sm">
-            <input
-              type="checkbox"
-              checked={Boolean(values.familyNetWorthVisible)}
-              onChange={(e) =>
-                setValues((v) => ({ ...v, familyNetWorthVisible: e.target.checked }))
-              }
-            />
-            <span>Show net worth on the biodata</span>
-          </label>
+          {isGroom && (
+            <>
+              <Field label="Family net worth" hint="Rupees. Required for groom biodata.">
+                <input
+                  className="input mt-1"
+                  type="number"
+                  min={1}
+                  required
+                  value={String(values.familyNetWorth ?? '')}
+                  onChange={set('familyNetWorth')}
+                />
+              </Field>
+              <label className="flex items-end gap-2 pb-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={Boolean(values.familyNetWorthVisible)}
+                  onChange={(e) =>
+                    setValues((v) => ({ ...v, familyNetWorthVisible: e.target.checked }))
+                  }
+                />
+                <span>Show net worth on the biodata</span>
+              </label>
+            </>
+          )}
         </div>
         <button className="btn">Save family details</button>
       </form>

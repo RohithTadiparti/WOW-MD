@@ -435,11 +435,11 @@ export class FamilyDetailsDto {
    * Optional, and hidden by default. Plenty of families will not answer it and
    * should not be blocked from completing the section for that.
    */
-  @ApiPropertyOptional({ minimum: 0, example: 7500000 })
+  @ApiPropertyOptional({ minimum: 1, example: 7500000 })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  @Min(0)
+  @Min(1)
   familyNetWorth?: number;
 
   @ApiPropertyOptional({ default: false })
