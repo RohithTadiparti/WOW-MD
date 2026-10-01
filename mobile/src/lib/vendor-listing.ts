@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
+import type { SocialLink } from '@/shared/social-links';
 
 /**
  * The vendor's own business record, as `GET /vendors/me` answers it.
@@ -28,6 +29,8 @@ export interface VendorListing {
   tradingSince: string | null;
   registeredAddress: string | null;
   contactPhone: string | null;
+  /** Absent from a server that predates the list; the three below mirror it. */
+  socialLinks?: SocialLink[];
   website: string | null;
   instagramUrl: string | null;
   youtubeUrl: string | null;

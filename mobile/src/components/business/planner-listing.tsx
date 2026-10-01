@@ -10,7 +10,13 @@ import { EMAIL_PATTERN } from '@/shared/permissions';
 import { Badge, Divider } from '@/components/chrome';
 import { Textarea } from '@/components/form';
 import { MediaStrip, PhotoPicker } from '@/components/uploader';
-import { SOCIAL_KEYS, SocialLinkFields, socialLinkErrors } from '@/components/social-links';
+import { SocialLinksEditor } from '@/components/social-links';
+import {
+  listingSocialLinks,
+  normaliseSocialLinks,
+  socialLinkErrors,
+  type SocialLink,
+} from '@/shared/social-links';
 import {
   Alert,
   Body,
@@ -48,13 +54,10 @@ const EMPTY = {
   contactPhone: '',
   contactEmail: '',
   address: '',
-  website: '',
-  instagramUrl: '',
-  youtubeUrl: '',
 };
 
 type Form = typeof EMPTY;
-type Errors = Partial<Record<keyof Form, string>>;
+type Errors = Partial<Record<keyof Form | 'socialLinks', string>>;
 
 const MOBILE = /^(\+91)?[6-9]\d{9}$/;
 
@@ -66,6 +69,9 @@ export function PlannerListingForm() {
   const [form, setForm] = useState<Form>(EMPTY);
   const [packages, setPackages] = useState<PlannerPackage[]>([]);
   const [portfolio, setPortfolio] = useState<string[]>([]);
+  const [socialLinks, setSocialLinks] = useState<SocialLink[]>([]);
+  // After a save attempt every link row shows its problem.
+  const [showLinkErrors, setShowLinkErrors] = useState(false);
   const [draft, setDraft] = useState({ name: '', price: '', includes: '' });
   const [errors, setErrors] = useState<Errors>({});
   const [packageError, setPackageError] = useState('');
@@ -90,12 +96,13 @@ export function PlannerListingForm() {
       contactPhone: listing.contactPhone ?? '',
       contactEmail: listing.contactEmail ?? '',
       address: listing.address ?? '',
-      website: listing.website ?? '',
-      instagramUrl: listing.instagramUrl ?? '',
-      youtubeUrl: listing.youtubeUrl ?? '',
     });
     setPackages(listing.packages ?? []);
     setPortfolio(listing.portfolio ?? []);
+    setSocialLinks(
+      Array.isArray(listing.socialLinks) ? listing.socialLinks : listingSocialLinks(listing),
+    );
+    setShowLinkErrors(false);
   }, [listing]);
 
   const set = (key: keyof Form) => (value: string) => setForm((f) => ({ ...f, [key]: value }));
@@ -138,7 +145,9 @@ export function PlannerListingForm() {
     if (years && !(/^\d{1,2}$/.test(years) && Number(years) <= 80)) {
       found.yearsExperience = 'Years of experience, from 0 to 80';
     }
-    return { ...found, ...socialLinkErrors(form) };
+    const links = socialLinkErrors(socialLinks);
+    if (links.any) found.socialLinks = links.list ?? 'Fix the highlighted links.';
+    return found;
   }
 
   async function save() {
@@ -146,6 +155,7 @@ export function PlannerListingForm() {
     setNotice('');
     const found = validate();
     setErrors(found);
+    setShowLinkErrors(true);
     if (Object.keys(found).length > 0) return;
 
     setBusy(true);
@@ -165,8 +175,8 @@ export function PlannerListingForm() {
       for (const key of ['city', 'contactPerson', 'contactPhone', 'contactEmail', 'address'] as const) {
         payload[key] = form[key].trim() ? form[key].trim() : null;
       }
-      // Always sent: a blank social link is how one is removed.
-      for (const key of SOCIAL_KEYS) payload[key] = form[key].trim();
+      // Always sent, including empty: removing the last link has to reach the server.
+      payload.socialLinks = normaliseSocialLinks(socialLinks);
       payload.yearsExperience = form.yearsExperience.trim() ? Number(form.yearsExperience) : null;
 
       await api.put('/wedding-planners/me', payload);
@@ -216,6 +226,7 @@ export function PlannerListingForm() {
         <SectionTitle>The agency</SectionTitle>
         <Field
           label="Agency name"
+          required
           value={form.agencyName}
           onChangeText={set('agencyName')}
           error={errors.agencyName}
@@ -268,7 +279,12 @@ export function PlannerListingForm() {
         <Textarea label="Address" value={form.address} onChange={set('address')} rows={3} maxLength={500} />
       </Card>
 
-      <SocialLinkFields values={form} onChange={(key, value) => set(key)(value)} errors={errors} />
+      <SocialLinksEditor
+        value={socialLinks}
+        onChange={setSocialLinks}
+        showErrors={showLinkErrors}
+        error={errors.socialLinks}
+      />
 
       <Card>
         <SectionTitle>Packages</SectionTitle>

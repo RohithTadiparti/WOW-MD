@@ -5,14 +5,13 @@ import {
   CalendarCheck,
   Check,
   ClipboardText,
-  Globe,
-  InstagramLogo,
   MapPin,
   SealCheck,
   Star,
-  YoutubeLogo,
 } from '@phosphor-icons/react';
 import { api, apiMessage } from '../lib/api';
+import { SocialLink, listingSocialLinks, socialLinkName } from '../lib/social-links';
+import { SOCIAL_ICONS } from '../components/SocialLinks';
 import { Permission, can } from '../lib/permissions';
 import { useAuth } from '../store/auth';
 import { EmptyState, Loading } from '../components/ui/Feedback';
@@ -50,6 +49,7 @@ interface Planner {
   website?: string | null;
   instagramUrl?: string | null;
   youtubeUrl?: string | null;
+  socialLinks?: SocialLink[];
   portfolio?: string[];
   ratingAvg: number;
   ratingCount: number;
@@ -110,18 +110,6 @@ const longDate = (value: string) =>
   });
 
 const rupees = (value: number) => `₹${Math.round(value).toLocaleString('en-IN')}`;
-
-/** Only http(s) links leave the page; anything else is not a link. */
-function safeUrl(value?: string | null): string | null {
-  if (!value) return null;
-  const withScheme = /^https?:\/\//i.test(value) ? value : `https://${value}`;
-  try {
-    const url = new URL(withScheme);
-    return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : null;
-  } catch {
-    return null;
-  }
-}
 
 function initials(name: string): string {
   return name
@@ -220,11 +208,8 @@ function PlannerProfile({
   const rating = summary?.total ? summary.average : p.ratingAvg;
   const ratingCount = summary?.total ?? p.ratingCount;
   const place = [p.city, p.state].filter(Boolean).join(', ');
-  const links = [
-    { url: safeUrl(p.website), label: 'Website', icon: Globe },
-    { url: safeUrl(p.instagramUrl), label: 'Instagram', icon: InstagramLogo },
-    { url: safeUrl(p.youtubeUrl), label: 'YouTube', icon: YoutubeLogo },
-  ].filter((l): l is { url: string; label: string; icon: typeof Globe } => Boolean(l.url));
+  // Only https links on a real host leave the page; anything else is not a link.
+  const links = listingSocialLinks(p);
 
   const facts = [
     p.yearsExperience > 0 && {
@@ -380,18 +365,21 @@ function PlannerProfile({
           {links.length > 0 && (
             <Section title="Elsewhere">
               <div className="flex flex-wrap gap-3">
-                {links.map(({ url, label, icon: Icon }) => (
-                  <a
-                    key={label}
-                    href={url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="btn-outline btn-sm"
-                  >
-                    <Icon size={15} aria-hidden />
-                    {label}
-                  </a>
-                ))}
+                {links.map((link) => {
+                  const Icon = SOCIAL_ICONS[link.platform];
+                  return (
+                    <a
+                      key={link.url}
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn-outline btn-sm"
+                    >
+                      <Icon size={15} aria-hidden />
+                      {socialLinkName(link)}
+                    </a>
+                  );
+                })}
               </div>
             </Section>
           )}

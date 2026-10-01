@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
 import { Permission, can } from '@/shared/permissions';
+import type { SocialLink } from '@/shared/social-links';
 
 /**
  * A wedding planner's own listing, from `GET /wedding-planners/me`.
@@ -34,6 +35,8 @@ export interface PlannerListing {
   contactPhone: string | null;
   contactEmail: string | null;
   address: string | null;
+  /** Absent from a server that predates the list; the three below mirror it. */
+  socialLinks?: SocialLink[];
   website: string | null;
   instagramUrl: string | null;
   youtubeUrl: string | null;

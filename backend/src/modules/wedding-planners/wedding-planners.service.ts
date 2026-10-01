@@ -8,6 +8,7 @@ import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
 import { VerificationService } from '../verification/verification.service';
 import { ApplicantType } from '../../common/enums';
 import { likeEscape } from '../../common/util/like';
+import { resolveSocialLinks } from '../../common/dto/social-links.dto';
 
 @Injectable()
 export class WeddingPlannersService {
@@ -31,7 +32,10 @@ export class WeddingPlannersService {
       // the saved listing untouched.
       await this.verification.assertNotRejected(ownerUserId, profile.id);
     }
-    Object.assign(profile, dto);
+    // The list and the single columns mirroring it move together, whichever
+    // of them the client sent (see resolveSocialLinks).
+    const { socialLinks: _list, ...fields } = dto;
+    Object.assign(profile, fields, resolveSocialLinks(dto, profile) ?? {});
     const saved = await this.planners.save(profile);
 
     /*

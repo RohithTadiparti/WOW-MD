@@ -35,6 +35,30 @@ export interface CompletionItem {
   missing: string | null;
 }
 
+/** JSON with object keys sorted, so equal values print the same. */
+function canonical(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value && typeof value === 'object' && !(value instanceof Date)) {
+    return Object.fromEntries(
+      Object.keys(value as object)
+        .sort()
+        .map((key) => [key, canonical((value as Record<string, unknown>)[key])]),
+    );
+  }
+  return value;
+}
+
+/**
+ * Whether a submitted field leaves the stored value as it is.
+ *
+ * Key order is ignored: Postgres hands a jsonb object back with its keys
+ * reordered (`{ url, platform }` for the `{ platform, url }` that was saved),
+ * so a plain string comparison called an untouched social link list changed.
+ */
+export function sameValue(a: unknown, b: unknown): boolean {
+  return JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
+}
+
 /**
  * A business from first draft to live, and back when something is wrong.
  *
@@ -314,7 +338,7 @@ export class BusinessLifecycleService {
     const current = business as unknown as Record<string, unknown>;
     for (const [key, value] of Object.entries(dto)) {
       if (value === undefined || allow.has(key)) continue;
-      if (JSON.stringify(value) !== JSON.stringify(current[key] ?? null)) {
+      if (!sameValue(value, current[key] ?? null)) {
         throw new ForbiddenException(
           `Only the fields flagged for correction can be changed right now: ${allowed.join(', ')}.`,
         );
@@ -494,7 +518,7 @@ export class BusinessLifecycleService {
     const current = business as unknown as Record<string, unknown>;
     for (const [key, value] of Object.entries(dto)) {
       if (value === undefined || allow.has(key)) continue;
-      if (JSON.stringify(value) !== JSON.stringify(current[key] ?? null)) {
+      if (!sameValue(value, current[key] ?? null)) {
         throw new ForbiddenException(
           'This listing is verified. Only the description, contact number, portfolio and social ' +
             'links can be changed here — for the verified details, raise a change request.',
