@@ -9,6 +9,8 @@ import { priceLabel } from '@/lib/pricing';
 import { useActiveListing } from '@/lib/vendor-listing';
 import { DetailGrid, DetailRow, Divider } from '@/components/chrome';
 import { BusinessChecklist } from '@/components/business/completion';
+import { useCompletion } from '@/components/business/completion';
+import { BusinessWizard, WizardNavigation } from '@/components/business/wizard';
 import { DocumentList, MediaStrip } from '@/components/uploader';
 import {
   Body,
@@ -59,6 +61,7 @@ export default function BusinessReview() {
   const router = useRouter();
   const { activeId } = useBusinesses();
   const { listing, isPending } = useActiveListing(activeId);
+  const { data: completion } = useCompletion(activeId);
 
   const { data: services = [] } = useQuery<ReviewService[]>({
     queryKey: ['vendor-services', activeId],
@@ -90,6 +93,7 @@ export default function BusinessReview() {
 
   return (
     <Screen>
+      <BusinessWizard step={2} completion={completion} />
       <View style={{ gap: space(1) }}>
         <PageSubtitle>
           Everything you have entered, read-only. Go back to change anything, then submit for
@@ -203,6 +207,7 @@ export default function BusinessReview() {
         variant="outline"
         onPress={() => router.push('/business-details')}
       />
+      <WizardNavigation back={() => router.back()} />
     </Screen>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'expo-router';
 
 import { api, apiMessage } from '@/lib/api';
 import { cleanAnswers, validateAnswers, type Answers, type FieldSpec } from '@/shared/dynamic-form';
@@ -25,6 +26,8 @@ import {
 } from '@/components/ui';
 import { useBusinesses } from '@/store/business';
 import { useActiveListing } from '@/lib/vendor-listing';
+import { useCompletion } from '@/components/business/completion';
+import { BusinessWizard, WizardNavigation } from '@/components/business/wizard';
 import { space } from '@/theme';
 
 /**
@@ -42,9 +45,13 @@ import { space } from '@/theme';
  * service a client could see and could not book.
  */
 export default function BusinessServices() {
+  const router = useRouter();
   const qc = useQueryClient();
   const { activeId } = useBusinesses();
   const { listing } = useActiveListing(activeId);
+  const { data: completion } = useCompletion(activeId);
+  const catalogItem = completion?.items.find((item) => /catalog|service/.test(item.key));
+  const catalogComplete = Boolean(catalogItem?.complete);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [adding, setAdding] = useState(false);
@@ -93,6 +100,7 @@ export default function BusinessServices() {
 
   return (
     <Screen>
+      <BusinessWizard step={1} completion={completion} />
       <Header />
 
       {error ? <Alert tone="critical">{error}</Alert> : null}
@@ -136,6 +144,8 @@ export default function BusinessServices() {
           onNotice={setNotice}
         />
       ))}
+      {!catalogComplete ? <Alert tone="caution">{catalogItem?.missing ?? 'Add and price a service before reviewing your listing.'}</Alert> : null}
+      <WizardNavigation back={() => router.back()} next={() => router.push('/business-review')} nextLabel="Review & submit" disabled={!catalogComplete} />
     </Screen>
   );
 }

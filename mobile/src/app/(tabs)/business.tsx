@@ -46,8 +46,8 @@ export default function MyBusiness() {
   const theme = useTheme();
   const router = useRouter();
   const { activeId, isLoading } = useBusinesses();
-  const { listing, isPending } = useActiveListing(activeId);
-  const { data: completion } = useCompletion(activeId);
+  const { listing, isPending, refetch: refetchListing, isRefetching } = useActiveListing(activeId);
+  const { data: completion, refetch: refetchCompletion } = useCompletion(activeId);
   const categoryNames = useCategoryNames();
 
   const rejected = listing?.status === 'rejected';
@@ -59,6 +59,7 @@ export default function MyBusiness() {
   // reports; anything it does not report simply has no tick.
   const done = (prefix: string) =>
     (completion?.items ?? []).some((item) => item.key.startsWith(prefix) && item.complete);
+  const refresh = () => { void refetchListing(); void refetchCompletion(); };
 
   if (isLoading || isPending) {
     return (
@@ -152,6 +153,7 @@ export default function MyBusiness() {
     <Screen>
       <Header />
       <BusinessSwitcher />
+      <Button label={isRefetching ? 'Refreshing…' : 'Refresh latest status'} variant="outline" busy={isRefetching} onPress={refresh} />
 
       {/*
         The officer's own words when a listing is sent back — the vendor cannot

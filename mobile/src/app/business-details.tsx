@@ -14,6 +14,7 @@ import { Divider, InfoNote } from '@/components/chrome';
 import { Textarea } from '@/components/form';
 import { WowCalendar } from '@/components/common/WowCalendar';
 import { useCompletion, useRefreshBusiness } from '@/components/business/completion';
+import { BusinessWizard, WizardNavigation } from '@/components/business/wizard';
 import { VerifiedDetails } from '@/components/business/verified-details';
 import { CategoryPicker } from '@/components/business/category-picker';
 import { DocumentList, MediaStrip, PhotoPicker } from '@/components/uploader';
@@ -232,7 +233,7 @@ function BusinessDetails() {
     return { ...found, ...linkErrors() };
   }
 
-  async function save() {
+  async function save(continueToCatalog = false) {
     setError('');
     setNotice('');
     const found = presentationalOnly ? validatePresentational() : validate();
@@ -299,6 +300,7 @@ function BusinessDetails() {
           : 'Saved. A verification officer visits the registered address before the listing goes live.',
       );
       if (presentationalOnly) setEditing(false);
+      else if (continueToCatalog) router.push('/business-services');
     } catch (err) {
       setError(apiMessage(err, 'Could not save the listing.'));
     } finally {
@@ -339,6 +341,7 @@ function BusinessDetails() {
 
   return (
     <Screen>
+      {!presentationalOnly ? <BusinessWizard step={0} completion={completion} /> : null}
       <View style={{ gap: space(1) }}>
         {/* No title: the native header carries it. Whether this is a first
             listing or an edit is said by the subtitle and by the save button. */}
@@ -549,6 +552,7 @@ function BusinessDetails() {
         busy={busy}
         onPress={() => void save()}
       />
+      {!presentationalOnly && listing ? <WizardNavigation back={() => router.back()} next={() => void save(true)} nextLabel="Save & continue" disabled={busy} /> : null}
       {presentationalOnly && listing ? (
         <Button label="Cancel" variant="outline" disabled={busy} onPress={cancelEdit} />
       ) : null}
