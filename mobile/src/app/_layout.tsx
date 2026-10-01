@@ -12,6 +12,7 @@ import { useAuth } from '@/store/auth';
 import { rgb, useHydrateTheme, useTheme } from '@/theme';
 import { FONT_ASSETS, typeface } from '@/theme/fonts';
 import { KeyboardAwareApp } from '@/components/keyboard-aware-app';
+import { WowHeaderLogo } from '@/components/common/wow-header';
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -127,7 +128,10 @@ function Routes() {
   return (
     <Stack
       screenOptions={{
-        headerShown: false,
+        // A native navigation header owns the safe-area inset on every route.
+        // Its right-side wordmark leaves the existing title and back affordance
+        // untouched, while making the brand persist across portal navigation.
+        headerShown: true,
         contentStyle: { backgroundColor: rgb(theme.canvas) },
         // The header follows the theme rather than the platform default, or a
         // dark-mode user gets one white bar at the top of an otherwise dark
@@ -142,11 +146,17 @@ function Routes() {
         },
         headerBackTitle: '',
         headerShadowVisible: false,
+        headerRight: () => (
+          <View style={{ marginRight: 4 }}>
+            <WowHeaderLogo />
+          </View>
+        ),
       }}
     >
-      <Stack.Screen name="login" />
-      <Stack.Screen name="register" />
-      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="login" options={{ title: '' }} />
+      <Stack.Screen name="register" options={{ title: '' }} />
+      {/* The child tab navigator supplies the one shared header for its routes. */}
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
 
       {/*
         The screens pushed out of a tab, each with the platform's own header.
@@ -204,7 +214,7 @@ function Routes() {
       />
       <Stack.Screen name="plan/more" options={{ headerShown: true, title: 'Plan More' }} />
       <Stack.Screen name="vendors/index" options={{ headerShown: true, title: 'Vendors' }} />
-      <Stack.Screen name="vendors/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="vendors/[id]" options={{ title: 'Vendor' }} />
       <Stack.Screen
         name="vendors/[id]/gallery"
         options={{ headerShown: true, title: 'Photos' }}
@@ -213,9 +223,10 @@ function Routes() {
         name="planners/index"
         options={{ headerShown: true, title: 'Hire a Planner' }}
       />
-      <Stack.Screen name="planners/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="planners/[id]" options={{ title: 'Wedding Planner' }} />
       {/* The title becomes the other person's name once the thread knows it. */}
       <Stack.Screen name="chat/index" options={{ headerShown: true, title: 'Chat' }} />
+      {/* These routes retain their specialised headers; the shared mark is rendered in them. */}
       <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="match/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="visit/[id]" options={{ headerShown: true, title: 'Visit' }} />

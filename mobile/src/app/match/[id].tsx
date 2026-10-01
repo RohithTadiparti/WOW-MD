@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
+import { WowHeaderLogo } from '@/components/common/wow-header';
 import {
   ArrowLeft,
   Briefcase,
@@ -493,6 +494,7 @@ function ProfileHeader({ title, onBack, onMore }: { title: string; onBack: () =>
       <Caption numberOfLines={1} style={{ flex: 1, fontSize: 17, fontWeight: '700', color: rgb(theme.ink[900]) }}>
         {title}
       </Caption>
+      <WowHeaderLogo />
       {onMore ? (
         <Pressable accessibilityRole="button" accessibilityLabel="More options" onPress={onMore} hitSlop={8}>
           <DotsThreeVertical size={22} weight="bold" color={rgb(theme.ink[700])} />
