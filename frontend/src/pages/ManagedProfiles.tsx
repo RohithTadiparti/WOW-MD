@@ -83,7 +83,7 @@ interface AgencyStatus {
 }
 
 /** The categories, in the order a family would think of them. */
-const STEWARD_RELATIONS = ['Self', 'Parent', 'Sibling', 'Relative', 'Friend', 'Other'];
+const STEWARD_RELATIONS = ['Parent / Guardian', 'Sibling', 'Relative', 'Friend', 'Other'];
 
 const emptyDraft = {
   firstName: '',
@@ -261,7 +261,10 @@ export default function ManagedProfiles({
   // Contact details can arrive later with a family member. A supplied mobile
   // must be valid, but neither it nor email blocks an agent from saving the
   // imported biodata. A contact channel is only needed to send an invitation.
-  const readyToSave = (!draft.contactPhone || isValidMobile(draft.contactPhone)) && Boolean(draft.gender);
+  const readyToSave =
+    (!draft.contactPhone || isValidMobile(draft.contactPhone)) &&
+    Boolean(draft.firstName.trim() && draft.lastName.trim() && draft.gender) &&
+    (!isFamily || Boolean(draft.stewardRelation.trim()) && draft.stewardRelation !== 'Other');
   const readyToInvite = readyToSave && Boolean(draft.contactPhone || draft.contactEmail);
   const [importing, setImporting] = useState(false);
   const [consent, setConsent] = useState<ConsentDraft>(emptyConsent());
@@ -496,10 +499,10 @@ export default function ManagedProfiles({
   function renderCreateForm() {
     const form = (
       <form onSubmit={submit} className="card space-y-4">
-        <h2 className="section-title">New profile</h2>
+        <h2 className="section-title">{isFamily ? 'Add another profile' : 'New profile'}</h2>
 
         <div>
-          <p className="label">How would you like to create this client?</p>
+          <p className="label">How would you like to create this {isFamily ? 'profile' : 'client'}?</p>
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
@@ -566,7 +569,7 @@ export default function ManagedProfiles({
           */}
           {isFamily && (
             <div>
-              <label className="label">Relationship with the user</label>
+              <label className="label">Relationship to this person</label>
               {/*
                 A list first, free text after.
 
@@ -577,6 +580,7 @@ export default function ManagedProfiles({
               */}
               <select
                 className="input"
+                required
                 value={
                   STEWARD_RELATIONS.includes(draft.stewardRelation)
                     ? draft.stewardRelation
@@ -605,7 +609,7 @@ export default function ManagedProfiles({
                 />
               ) : null}
               <p className="mt-1 text-xs text-gray-500">
-                Shown to families looking at this profile. It is the first thing they ask.
+                Your relationship to the person whose matrimonial profile you are managing.
               </p>
             </div>
           )}

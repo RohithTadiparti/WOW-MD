@@ -46,7 +46,7 @@ describe('managed profile biodata intake', () => {
       { provide: getRepositoryToken(Profile), useValue: { ...profileRepo, manager: { transaction } } },
       { provide: getRepositoryToken(User), useValue: { findOne: jest.fn(async () => null) } },
       { provide: getRepositoryToken(AgentProfile), useValue: {} },
-      { provide: AppConfigService, useValue: { stewardship: { requireAgentApproval: false, maxManagedProfiles: 100 } } },
+      { provide: AppConfigService, useValue: { stewardship: { requireAgentApproval: false, maxManagedProfiles: 100, maxManagedProfilesFamily: 5 } } },
       { provide: AuditService, useValue: { record: jest.fn() } },
       { provide: InvitationsService, useValue: invitations },
       { provide: ConsentService, useValue: consent },
@@ -105,5 +105,26 @@ describe('managed profile biodata intake', () => {
     await expect(service.create(actor, { ...dto, inviteNow: true })).rejects.toThrow('database failure');
     expect(consent.record).not.toHaveBeenCalled();
     expect(invitations.invite).not.toHaveBeenCalled();
+  });
+
+  it('requires a relationship when a family member creates someone else\'s profile', async () => {
+    const { service, transaction } = await setup();
+    const familyActor: AuthUser = { ...actor, userId: 'family-1', role: UserRole.FAMILY };
+
+    await expect(service.create(familyActor, { ...dto, contactPhone: '9876543212' }))
+      .rejects.toThrow('Select your relationship to the person whose profile you are managing.');
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it('never accepts Self as a family member relationship', async () => {
+    const { service, transaction } = await setup();
+    const familyActor: AuthUser = { ...actor, userId: 'family-1', role: UserRole.FAMILY };
+
+    await expect(service.create(familyActor, {
+      ...dto,
+      contactPhone: '9876543213',
+      stewardRelation: 'Self',
+    })).rejects.toThrow('Select your relationship to the person whose profile you are managing.');
+    expect(transaction).not.toHaveBeenCalled();
   });
 });

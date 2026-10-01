@@ -228,6 +228,7 @@ const NAV: NavEntry[] = [
   {
     to: '/client-profiles',
     label: 'Client Profiles',
+    labelFor: { family: 'Family Profiles' },
     requires: [Permission.MANAGED_PROFILE_MANAGE],
     /*
      * A family member has relatives, not clients — so they get the same page
@@ -254,7 +255,7 @@ const NAV: NavEntry[] = [
      * and this is the only route to creating, inviting or circulating a
      * relative's profile.
      */
-    hideFor: ['agent', 'family'],
+    hideFor: ['agent'],
     deniedRedirect: '/',
     group: 'clients',
     icon: UsersThree,

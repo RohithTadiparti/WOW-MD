@@ -156,6 +156,20 @@ export class ManagedProfilesService {
   async create(actor: AuthUser, dto: CreateManagedProfileDto): Promise<Profile> {
     await this.assertMaySteward(actor);
 
+    // A family account always creates a profile for somebody else. Keeping the
+    // relationship on that managed profile prevents the account holder's own
+    // identity from being mistaken for the bride/groom's, and makes the same
+    // rule hold for direct API calls as for the form.
+    if (actor.role === UserRole.FAMILY) {
+      const relation = dto.stewardRelation?.trim();
+      if (!relation || relation.toLowerCase() === 'self' || relation.toLowerCase() === 'other') {
+        throw new BadRequestException(
+          'Select your relationship to the person whose profile you are managing.',
+        );
+      }
+      dto.stewardRelation = relation;
+    }
+
     const held = await this.profiles.count({ where: { managedByUserId: actor.userId } });
     if (held >= this.quotaFor(actor)) {
       throw new BadRequestException(
@@ -411,6 +425,16 @@ export class ManagedProfilesService {
 
     const { inviteNow, ...fields } = dto;
     void inviteNow; // only meaningful at creation
+
+    if (actor.role === UserRole.FAMILY && fields.stewardRelation !== undefined) {
+      const relation = fields.stewardRelation?.trim();
+      if (!relation || relation.toLowerCase() === 'self' || relation.toLowerCase() === 'other') {
+        throw new BadRequestException(
+          'Select your relationship to the person whose profile you are managing.',
+        );
+      }
+      fields.stewardRelation = relation;
+    }
 
     const phoneChanged = fields.contactPhone && fields.contactPhone !== profile.contactPhone;
     const emailChanged = fields.contactEmail && fields.contactEmail !== profile.contactEmail;
