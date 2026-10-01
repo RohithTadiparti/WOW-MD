@@ -116,7 +116,7 @@ export function WowCalendar({
   return (
     <Wrapper label={label} hint={hint} error={error} required={required} autoFilled={autoFilled}>
       <Trigger
-        value={value ? formatLongDate(value) : undefined}
+        value={value ? new Date(`${value}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : undefined}
         placeholder={placeholder}
         invalid={Boolean(error)}
         onPress={() => setOpen(true)}

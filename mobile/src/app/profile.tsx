@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api, apiMessage } from '@/lib/api';
 import { formatDate } from '@/shared/dates';
-import { ROLE_LABEL } from '@/shared/permissions';
+import { Permission, ROLE_LABEL, can } from '@/shared/permissions';
 import { DetailGrid, DetailRow } from '@/components/chrome';
 import { ChoiceField } from '@/components/biodata/choice-field';
 import { STATES_BY_COUNTRY, districtsForState, DISTRICTS_BY_STATE } from '@/shared/locations';
@@ -33,16 +33,43 @@ import { useAuth } from '@/store/auth';
 import { space } from '@/theme';
 
 /**
+ * Who the family member is managing the profile for.
+ * Backend only accepts 'bride' or 'groom' (@IsIn(['bride', 'groom'])).
+ */
+const MANAGING_FOR_OPTIONS = [
+  { value: 'bride', label: 'Bride' },
+  { value: 'groom', label: 'Groom' },
+];
+
+const MANAGING_FOR_LABEL: Record<string, string> = { bride: 'Bride', groom: 'Groom' };
+
+/**
+ * How the steward is related to the profile subject.
+ * Free text after 'Other', matching the Web Profile behaviour.
+ */
+const STEWARD_RELATIONS = ['Self', 'Parent', 'Sibling', 'Relative', 'Friend', 'Other'];
+
+const VISIBILITY_OPTIONS = [
+  { value: 'public', label: 'Public' },
+  { value: 'matches_only', label: 'Private / Matches only' },
+  { value: 'private', label: 'Private (hidden until matched)' },
+];
+
+const VISIBILITY_LABEL: Record<string, string> = {
+  public: 'Public',
+  matches_only: 'Private / Matches only',
+  private: 'Private (hidden until matched)',
+};
+
+/**
  * My Profile: what the platform holds about the person, not their business.
  *
- * The web app's Profile page, less the parts that only mean something to
- * somebody in the matches. A vendor and a verification officer have no biodata,
- * so the visibility control and the steward fields are not here — they were
- * noise on the web page too (EZ1-I85, EZ1-I93) and the same argument settles it
- * for this app.
+ * The web app's Profile page, adapted for mobile. Steward fields (Managing
+ * Profile For, Relationship with the user) and visibility are shown only to
+ * the roles that need them — the same gates the web uses.
  *
- * Read first, edit on request. A page that opens as a form invites an accidental
- * edit of a field somebody only came to check.
+ * Read first, edit on request. A page that opens as a form invites an
+ * accidental edit of a field somebody only came to check.
  */
 interface MeResponse {
   displayName?: string | null;
@@ -52,6 +79,9 @@ interface MeResponse {
   address?: string | null;
   contactPhone?: string | null;
   bio?: string | null;
+  managingFor?: string | null;
+  stewardRelation?: string | null;
+  visibility?: string | null;
 }
 
 const EMPTY = {
@@ -63,6 +93,9 @@ const EMPTY = {
   address: '',
   contactPhone: '',
   bio: '',
+  managingFor: '',
+  stewardRelation: '',
+  visibility: 'matches_only',
 };
 
 function getStateForCity(city: string | null | undefined): string {
@@ -107,6 +140,19 @@ const GENDERS = [
 export default function Profile() {
   const qc = useQueryClient();
   const user = useAuth((s) => s.user);
+  const permissions = useAuth((s) => s.user?.permissions ?? []);
+
+  /*
+   * A steward (family member or agent) is asked the managing-for and
+   * relationship fields. An agency is not — their profile is not a biodata
+   * and these fields don't apply to them (same logic as Web Profile.tsx).
+   */
+  const isSteward = can(permissions, Permission.ACT_ON_BEHALF);
+  const isAgency = can(permissions, Permission.AGENCY_MANAGE);
+  const stewardFields = isSteward && !isAgency;
+  // Visibility is meaningful for anyone whose profile can appear in matches.
+  const hasBiodata = can(permissions, Permission.MATCH_BROWSE);
+  const showVisibility = hasBiodata || stewardFields;
 
   const [form, setForm] = useState(EMPTY);
   const [editing, setEditing] = useState(false);
@@ -131,6 +177,9 @@ export default function Profile() {
       address: data.address ?? '',
       contactPhone: data.contactPhone ?? '',
       bio: data.bio ?? '',
+      managingFor: data.managingFor ?? '',
+      stewardRelation: data.stewardRelation ?? '',
+      visibility: data.visibility ?? 'matches_only',
     });
   }, [data]);
 
@@ -149,6 +198,15 @@ export default function Profile() {
         } else {
           payload[key] = value;
         }
+      const base = ['gender', 'dateOfBirth', 'city', 'address', 'contactPhone', 'bio'] as const;
+      const extraKeys: (keyof typeof EMPTY)[] = [
+        ...base,
+        ...(stewardFields ? (['managingFor', 'stewardRelation'] as (keyof typeof EMPTY)[]) : []),
+        ...(showVisibility ? (['visibility'] as (keyof typeof EMPTY)[]) : []),
+      ];
+      for (const key of extraKeys) {
+        const value = ((form[key] as string) ?? '').trim();
+        if (value) payload[key] = value;
       }
       await api.put('/users/me/profile', payload);
     },
@@ -220,6 +278,36 @@ export default function Profile() {
             error={fieldErrors.displayName}
             placeholder="The name people see"
           />
+
+          {/*
+            Two questions a family member is always asked.
+            A bride filling in her own profile has no answer to "who are you
+            managing this for?" — asking anyway is how a form teaches people
+            to ignore it. Gated on the steward capability, exactly as the web.
+          */}
+          {stewardFields ? (
+            <View style={{ gap: space(2) }}>
+              <SelectField
+                label="Managing profile for"
+                value={form.managingFor}
+                options={MANAGING_FOR_OPTIONS}
+                onChange={set('managingFor')}
+              />
+              <SelectField
+                label="Relationship with the user"
+                value={
+                  STEWARD_RELATIONS.includes(form.stewardRelation)
+                    ? form.stewardRelation
+                    : form.stewardRelation
+                      ? 'Other'
+                      : ''
+                }
+                options={STEWARD_RELATIONS.map((r) => ({ value: r, label: r }))}
+                onChange={set('stewardRelation')}
+              />
+            </View>
+          ) : null}
+
           <SelectField
             label="Gender"
             value={form.gender}
@@ -257,6 +345,15 @@ export default function Profile() {
           />
           <Textarea label="About you" value={form.bio} onChange={set('bio')} rows={4} />
 
+          {showVisibility ? (
+            <SelectField
+              label="Profile visibility"
+              value={form.visibility}
+              options={VISIBILITY_OPTIONS}
+              onChange={set('visibility')}
+            />
+          ) : null}
+
           <View style={{ gap: space(2) }}>
             <Button label="Save" busy={save.isPending} onPress={submit} />
             <Button
@@ -276,6 +373,16 @@ export default function Profile() {
           <SectionTitle>Your details</SectionTitle>
           <DetailGrid>
             <DetailRow label="Name">{data?.displayName || '—'}</DetailRow>
+            {stewardFields ? (
+              <>
+                <DetailRow label="Managing profile for">
+                  {data?.managingFor ? (MANAGING_FOR_LABEL[data.managingFor] ?? data.managingFor) : '—'}
+                </DetailRow>
+                <DetailRow label="Relationship with the user">
+                  {data?.stewardRelation || '—'}
+                </DetailRow>
+              </>
+            ) : null}
             <DetailRow label="Gender">
               {GENDERS.find((g) => g.value === data?.gender)?.label ?? '—'}
             </DetailRow>
@@ -284,6 +391,11 @@ export default function Profile() {
             <DetailRow label="City">{data?.city || '—'}</DetailRow>
             <DetailRow label="Address">{data?.address || '—'}</DetailRow>
             <DetailRow label="Contact number">{data?.contactPhone || '—'}</DetailRow>
+            {showVisibility ? (
+              <DetailRow label="Profile visibility">
+                {data?.visibility ? (VISIBILITY_LABEL[data.visibility] ?? data.visibility) : '—'}
+              </DetailRow>
+            ) : null}
           </DetailGrid>
           {data?.bio ? <Body tone="muted">{data.bio}</Body> : null}
           <Button label="Edit profile" onPress={() => setEditing(true)} />

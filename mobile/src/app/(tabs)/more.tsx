@@ -15,6 +15,7 @@ import {
   Star,
   Storefront,
   UserCircle,
+  UsersThree,
   type IconProps,
 } from 'phosphor-react-native';
 
@@ -71,6 +72,12 @@ export default function More() {
     Permission.VENDOR_LISTING_MANAGE,
     Permission.PLANNER_LISTING_MANAGE,
   ]);
+  // A steward (family member) manages one or more profiles on behalf of others.
+  // ACT_ON_BEHALF is set on the 'family' role but not on 'agent' (agents have
+  // their own Agency section). Show Managed Profiles only for the family persona.
+  const isFamilySteward =
+    can(permissions, Permission.ACT_ON_BEHALF) &&
+    !can(permissions, Permission.AGENCY_MANAGE);
 
   return (
     <Screen>
@@ -80,8 +87,27 @@ export default function More() {
           here rather than in the bar because a conversation is opened from the
           person it is with — a match, an interest — far more often than from a
           list of all of them (EZ1-I261). */}
+      {/* Family members manage profiles on behalf of relatives. */}
+      {isFamilySteward ? (
+        <Group title="Managed Profiles">
+          <Row
+            icon={UsersThree}
+            label="Managed Profiles"
+            hint="View and switch between the profiles you are managing"
+            to="/managed-profiles"
+          />
+          <Row
+            icon={IdentificationCard}
+            label="Biodata"
+            hint="Fill in the Biodata for the selected profile"
+            to="/biodata"
+          />
+        </Group>
+      ) : null}
+
       {canAny(permissions, [Permission.PROFILE_MANAGE_OWN, Permission.CHAT_MATCH]) &&
-      canAny(permissions, [Permission.MATCH_BROWSE, Permission.CHAT_MATCH]) ? (
+      canAny(permissions, [Permission.MATCH_BROWSE, Permission.CHAT_MATCH]) &&
+      !isFamilySteward ? (
         <Group title="Matchmaking">
           <Row
             icon={IdentificationCard}

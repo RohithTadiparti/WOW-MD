@@ -321,6 +321,7 @@ interface FieldProps extends TextInputProps {
   error?: string;
   required?: boolean;
   autoFilled?: boolean;
+  rightAccessory?: React.ReactNode;
 }
 
 export function Field({

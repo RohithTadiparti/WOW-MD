@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'react-native';
-import { Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 
 import { acceptAuth, api, apiMessage } from '@/lib/api';
 import {
@@ -12,6 +12,8 @@ import {
 } from '@/shared/permissions';
 import { Alert, Body, Button, Caption, Field, PageSubtitle, PageTitle, Screen } from '@/components/ui';
 import { radius, rgb, space, useTheme } from '@/theme';
+import { Eye, EyeClosed } from 'phosphor-react-native';
+import { SelectField } from '@/components/form';
 
 /**
  * Sign up.
@@ -64,21 +66,46 @@ const ACCOUNT_TYPES: TypeOption[] = [
   },
 ];
 
+/**
+ * Who the family member is managing the profile for.
+ *
+ * The backend CreateProfileDto only accepts 'bride' or 'groom' for the
+ * managingFor field (@IsIn(['bride', 'groom'])). Self, Parent, Sibling etc.
+ * are not valid values — those belong to the separate stewardRelation field
+ * which records how the steward is related to the person. This dropdown
+ * answers "are you looking for a bride or a groom?" not "who are you?".
+ */
+const MANAGING_FOR_OPTIONS = [
+  { value: 'bride', label: 'Bride' },
+  { value: 'groom', label: 'Groom' },
+];
+
+
+
 export default function Register() {
   const theme = useTheme();
+  const router = useRouter();
 
   const [accountType, setAccountType] = useState<AccountType>('individual');
   const [role, setRole] = useState('bride');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
 
+  // Family Member fields
+  const [managingFor, setManagingFor] = useState('');
+
   const selected = ACCOUNT_TYPES.find((a) => a.type === accountType)!;
+  const isFamilyMember = accountType === 'individual' && role === 'family';
 
   /**
    * The same rules the server applies, checked before the round trip.
@@ -89,12 +116,30 @@ export default function Register() {
    */
   function validate(): Record<string, string> {
     const errors: Record<string, string> = {};
-    const name = displayName.trim();
     const digits = phone.replace(/\s|-/g, '').replace(/^\+91/, '');
 
-    if (!name) errors.displayName = 'Enter your name';
-    else if (accountType === 'individual' && !NAME_PATTERN.test(name)) {
-      errors.displayName = 'A name may only contain letters and spaces';
+    if (isFamilyMember) {
+      // Name: First Name + Last Name (no combined Full Name / displayName for family)
+      if (!firstName.trim()) errors.firstName = 'Enter the first name';
+      else if (!NAME_PATTERN.test(firstName.trim()))
+        errors.firstName = 'A name may only contain letters and spaces';
+
+      if (!lastName.trim()) errors.lastName = 'Enter the last name';
+      else if (!NAME_PATTERN.test(lastName.trim()))
+        errors.lastName = 'A name may only contain letters and spaces';
+
+      // Managing Profile For: must be 'bride' or 'groom' (backend constraint)
+      if (!managingFor) {
+        errors.managingFor = 'Select who you are managing this profile for';
+      } else if (!['bride', 'groom'].includes(managingFor)) {
+        errors.managingFor = 'Select Bride or Groom';
+      }
+    } else {
+      const name = displayName.trim();
+      if (!name) errors.displayName = 'Enter your name';
+      else if (accountType === 'individual' && !NAME_PATTERN.test(name)) {
+        errors.displayName = 'A name may only contain letters and spaces';
+      }
     }
 
     if (!EMAIL_PATTERN.test(email.trim())) errors.email = 'Enter a valid email address';
@@ -142,11 +187,16 @@ export default function Register() {
 
     setBusy(true);
     try {
+      // For a family member the display name is assembled from first + last name.
+      const finalDisplayName = isFamilyMember
+        ? `${firstName.trim()} ${lastName.trim()}`
+        : displayName.trim();
+
       const payload: Record<string, unknown> = {
         email: email.trim(),
         password,
         accountType,
-        displayName: displayName.trim(),
+        displayName: finalDisplayName,
       };
       if (phone.trim()) payload.phone = phone.replace(/\s|-/g, '');
       // Only meaningful for an individual; the server derives the role from
@@ -154,10 +204,35 @@ export default function Register() {
       if (accountType === 'individual') payload.role = role;
 
       const { data } = await api.post('/auth/register', payload);
-      // Not `setAuth`: on a device the refresh token arrives in the body and
-      // has to reach the keystore, or the session ends when the app is closed.
-      // The root layout's gate takes it from here.
       await acceptAuth(data);
+
+      if (isFamilyMember) {
+        /*
+         * Save the family-member-specific profile fields immediately after
+         * registration. These map to specific backend-accepted field names:
+         *
+         *   managingFor  → 'bride' | 'groom'  (backend @IsIn(['bride', 'groom']))
+         *
+         * Other profile details (gender, DOB, city, address, etc.) and
+         * stewardRelation (how the family member is related to the person) are
+         * NOT sent here. They are collected later when completing the profile.
+         */
+        const profilePayload: Record<string, string> = {};
+        if (managingFor) profilePayload.managingFor = managingFor;
+
+        try {
+          await api.put('/users/me/profile', profilePayload);
+        } catch (e) {
+          // Profile fields are best-effort at registration time. The account
+          // is created; the user can update their profile from the Profile page.
+          console.warn('Failed to save family member profile fields after registration', e);
+        }
+      }
+
+      // Navigate to the app home after successful registration.
+      // The auth gate in _layout.tsx will also redirect signed-in users away
+      // from /register, but replacing here ensures immediate navigation.
+      router.replace('/');
     } catch (err) {
       setError(apiMessage(err, 'Could not register. The email may already be in use.'));
     } finally {
@@ -231,17 +306,74 @@ export default function Register() {
           </View>
         ) : null}
 
-        <Field
-          label={accountType === 'individual' ? 'Full name' : 'Your name'}
-          value={displayName}
-          onChangeText={setDisplayName}
-          maxLength={120}
-          autoComplete="name"
-          textContentType="name"
-        />
-        {fieldErrors.displayName ? (
-          <Caption tone="critical">{fieldErrors.displayName}</Caption>
-        ) : null}
+        {isFamilyMember ? (
+          <View style={{ gap: space(2) }}>
+            {/* First Name + Last Name side by side */}
+            <View style={{ flexDirection: 'row', gap: space(2) }}>
+              <View style={{ flex: 1 }}>
+                <Field
+                  label="First Name"
+                  required
+                  value={firstName}
+                  onChangeText={setFirstName}
+                  maxLength={60}
+                  autoComplete="name"
+                  textContentType="name"
+                  autoCapitalize="words"
+                />
+                {fieldErrors.firstName ? (
+                  <Caption tone="critical">{fieldErrors.firstName}</Caption>
+                ) : null}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Field
+                  label="Last Name"
+                  required
+                  value={lastName}
+                  onChangeText={setLastName}
+                  maxLength={60}
+                  autoComplete="name"
+                  textContentType="name"
+                  autoCapitalize="words"
+                />
+                {fieldErrors.lastName ? (
+                  <Caption tone="critical">{fieldErrors.lastName}</Caption>
+                ) : null}
+              </View>
+            </View>
+
+            {/*
+              Managing Profile For: Bride or Groom only.
+              The backend @IsIn(['bride', 'groom']) constraint means Self,
+              Parent, Sibling etc. are all rejected. This field answers
+              "who is the match for?" not "who are you?".
+            */}
+            <SelectField
+              label="Managing Profile For"
+              required
+              value={managingFor}
+              options={MANAGING_FOR_OPTIONS}
+              onChange={setManagingFor}
+            />
+            {fieldErrors.managingFor ? (
+              <Caption tone="critical">{fieldErrors.managingFor}</Caption>
+            ) : null}
+          </View>
+        ) : (
+          <View>
+            <Field
+              label={accountType === 'individual' ? 'Full name' : 'Your name'}
+              value={displayName}
+              onChangeText={setDisplayName}
+              maxLength={120}
+              autoComplete="name"
+              textContentType="name"
+            />
+            {fieldErrors.displayName ? (
+              <Caption tone="critical">{fieldErrors.displayName}</Caption>
+            ) : null}
+          </View>
+        )}
 
         <Field
           label="Email"
@@ -286,6 +418,19 @@ export default function Register() {
           autoCapitalize="none"
           autoComplete="new-password"
           textContentType="newPassword"
+          rightAccessory={
+            <Pressable
+              onPress={() => setShowPassword(!showPassword)}
+              accessibilityRole="button"
+              hitSlop={12}
+            >
+              {showPassword ? (
+                <Eye size={20} color={rgb(theme.ink[500])} />
+              ) : (
+                <EyeClosed size={20} color={rgb(theme.ink[500])} />
+              )}
+            </Pressable>
+          }
         />
         {fieldErrors.password ? <Caption tone="critical">{fieldErrors.password}</Caption> : null}
 
@@ -294,24 +439,53 @@ export default function Register() {
           hint={fieldErrors.confirmPassword ? undefined : 'The same password again.'}
           value={confirmPassword}
           onChangeText={setConfirmPassword}
+<<<<<<< HEAD
           secureTextEntry
           showPasswordToggle
+=======
+          secureTextEntry={!showConfirmPassword}
+>>>>>>> a664545 (family login)
           autoCapitalize="none"
           autoComplete="new-password"
           textContentType="newPassword"
           onSubmitEditing={submit}
           returnKeyType="go"
+          rightAccessory={
+            <Pressable
+              onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+              accessibilityRole="button"
+              hitSlop={12}
+            >
+              {showConfirmPassword ? (
+                <Eye size={20} color={rgb(theme.ink[500])} />
+              ) : (
+                <EyeClosed size={20} color={rgb(theme.ink[500])} />
+              )}
+            </Pressable>
+          }
         />
         {fieldErrors.confirmPassword ? (
           <Caption tone="critical">{fieldErrors.confirmPassword}</Caption>
         ) : null}
 
         <Button
-          label={`Create ${selected.label.toLowerCase()} account`}
+          label={
+            isFamilyMember
+              ? 'Create family member account'
+              : `Create ${selected.label.toLowerCase()} account`
+          }
           onPress={submit}
           busy={busy}
           disabled={
-            !email.trim() || !password || !confirmPassword || !displayName.trim() || !phone.trim()
+            !email.trim() ||
+            !password ||
+            !confirmPassword ||
+            !phone.trim() ||
+            (isFamilyMember
+              ? !firstName.trim() ||
+                !lastName.trim() ||
+                !managingFor
+              : !displayName.trim())
           }
         />
 

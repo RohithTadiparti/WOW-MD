@@ -1,9 +1,12 @@
-  import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { View, ScrollView, Alert as NativeAlert, Pressable } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 
 import { api } from '@/lib/api';
+import { Permission, can } from '@/shared/permissions';
+import { useAuth } from '@/store/auth';
+import { useManagedProfileStore } from '@/store/managed-profile';
 import {
   PersonalForm,
   MaritalHistoryForm,
@@ -40,13 +43,34 @@ export default function BiodataWizard() {
   const [step, setStep] = useState(0);
   const [autofilledKeys, setAutofilledKeys] = useState<Set<string>>(new Set());
 
+  // Determine if the authenticated user is a steward (family member / agent).
+  // A steward acts on behalf of a managed profile — their own ID is NOT the
+  // Biodata owner. The correct ID comes from the managed profile store.
+  const permissions = useAuth((s) => s.user?.permissions ?? []);
+  const isSteward = can(permissions, Permission.ACT_ON_BEHALF);
+  const activeManagedProfileId = useManagedProfileStore((s) => s.activeManagedProfileId);
+  const activeManagedProfileName = useManagedProfileStore((s) => s.activeManagedProfileName);
+
   const { data: me, isPending: loadingMe } = useQuery({
     queryKey: ['me'],
     queryFn: async () =>
       (await api.get('/users/me')).data as { id?: string | null; gender?: string | null; displayName?: string | null; dateOfBirth?: string | null; city?: string | null },
     retry: false,
   });
-  const profileId = me?.id ?? null;
+
+  /**
+   * profileId is the MANAGED PERSON's profile ID, not the authenticated user's.
+   *
+   * - For a regular individual (bride/groom): me?.id is their own profile ID.
+   * - For a family member (steward): activeManagedProfileId is the selected
+   *   managed person's profile ID. Their own me?.id belongs to their Family
+   *   Member account, which has no Biodata.
+   *
+   * NEVER use me?.id as the Biodata owner for a family member.
+   */
+  const profileId: string | null = isSteward
+    ? activeManagedProfileId
+    : (me?.id ?? null);
 
   const { data: full, isPending } = useQuery({
     queryKey: ['biodata-details', profileId],
@@ -89,6 +113,24 @@ export default function BiodataWizard() {
     return (
       <Screen>
         <Loading rows={4} />
+      </Screen>
+    );
+  }
+
+  // A family member who has not selected a managed profile yet
+  if (isSteward && !activeManagedProfileId) {
+    return (
+      <Screen>
+        <Card style={{ gap: space(2) }}>
+          <SectionTitle>No profile selected</SectionTitle>
+          <Body tone="muted">
+            Select the person you are managing from Managed Profiles before editing their Biodata.
+          </Body>
+          <Button
+            label="Go to Managed Profiles"
+            onPress={() => router.replace('/managed-profiles')}
+          />
+        </Card>
       </Screen>
     );
   }

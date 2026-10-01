@@ -130,6 +130,7 @@ export function PersonalForm({
           complexion: form.complexion,
           communicationAddress: form.communicationAddress.trim(),
           alternateMobile: form.alternateMobile.trim() || null,
+          dateOfBirth: form.dateOfBirth || undefined,
         });
 
       if (religionStarted) {
