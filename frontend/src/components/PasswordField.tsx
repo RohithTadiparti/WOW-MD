@@ -23,6 +23,10 @@ export default function PasswordField({
   hint,
   error,
   minLength,
+  maxLength,
+  required = false,
+  pattern,
+  title,
   onEnter,
   labelAside,
 }: {
@@ -33,6 +37,10 @@ export default function PasswordField({
   hint?: string;
   error?: string;
   minLength?: number;
+  maxLength?: number;
+  required?: boolean;
+  pattern?: string;
+  title?: string;
   onEnter?: () => void;
   /** Sits opposite the label — the sign-in form puts "Forgot?" here. */
   labelAside?: ReactNode;
@@ -61,6 +69,10 @@ export default function PasswordField({
           type={shown ? 'text' : 'password'}
           value={value}
           minLength={minLength}
+          maxLength={maxLength}
+          required={required}
+          pattern={pattern}
+          title={title}
           autoComplete={autoComplete}
           aria-invalid={Boolean(error)}
           onChange={(e) => onChange(e.target.value)}

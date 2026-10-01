@@ -2,6 +2,7 @@ import { FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, apiMessage } from '../lib/api';
 import { useAuth } from '../store/auth';
+import PasswordField from '../components/PasswordField';
 
 /**
  * Where a provisioned account lands on its first sign-in.
@@ -28,8 +29,12 @@ export default function SetPassword() {
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError('');
+    if (next === current) {
+      setError('New password must be different from your current password.');
+      return;
+    }
     if (next !== confirm) {
-      setError('The two passwords do not match.');
+      setError('New password and confirm password must match.');
       return;
     }
     setBusy(true);
@@ -61,45 +66,35 @@ export default function SetPassword() {
 
         {error && <p className="alert-critical">{error}</p>}
 
-        <label className="block text-sm">
-          <span className="text-gray-700">Temporary password</span>
-          <input
-            className="input mt-1"
-            type="password"
-            autoComplete="current-password"
-            value={current}
-            onChange={(e) => setCurrent(e.target.value)}
-            required
-          />
-        </label>
+        <PasswordField
+          label="Temporary password"
+          autoComplete="current-password"
+          value={current}
+          onChange={setCurrent}
+          maxLength={128}
+          required
+        />
 
-        <label className="block text-sm">
-          <span className="text-gray-700">New password</span>
-          <input
-            className="input mt-1"
-            type="password"
-            autoComplete="new-password"
-            minLength={8}
-            value={next}
-            onChange={(e) => setNext(e.target.value)}
-            required
-          />
-          <span className="mt-1 block text-xs text-gray-500">
-            At least 8 characters, with an upper-case letter, a lower-case letter and a digit.
-          </span>
-        </label>
+        <PasswordField
+          label="New password"
+          autoComplete="new-password"
+          minLength={8}
+          maxLength={128}
+          pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).{8,}"
+          title="Use an uppercase letter, a lowercase letter and a digit."
+          hint="At least 8 characters, with an upper-case letter, a lower-case letter and a digit."
+          value={next}
+          onChange={setNext}
+          required
+        />
 
-        <label className="block text-sm">
-          <span className="text-gray-700">Confirm new password</span>
-          <input
-            className="input mt-1"
-            type="password"
-            autoComplete="new-password"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            required
-          />
-        </label>
+        <PasswordField
+          label="Confirm new password"
+          autoComplete="new-password"
+          value={confirm}
+          onChange={setConfirm}
+          required
+        />
 
         <button className="btn w-full" disabled={busy}>
           {busy ? 'Saving...' : 'Set password and sign in again'}

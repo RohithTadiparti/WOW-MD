@@ -161,6 +161,15 @@ describe('AuthService', () => {
       expect(sessions.revokeAllForUser).not.toHaveBeenCalled();
     });
 
+    it('rejects reusing the current password without changing credentials or sessions', async () => {
+      repo.findOne.mockResolvedValueOnce({ id: 'u1', passwordHash: await bcrypt.hash('OldPass123', 4) });
+      await expect(service.changePassword('u1', {
+        currentPassword: 'OldPass123', newPassword: 'OldPass123',
+      })).rejects.toThrow('New password must be different from your current password.');
+      expect(repo.update).not.toHaveBeenCalled();
+      expect(sessions.revokeAllForUser).not.toHaveBeenCalled();
+    });
+
     it('stores a new hash, retires sessions, and accepts only the new password at login', async () => {
       const user = {
         id: 'u1', email: 'a.tester@gmail.com', role: UserRole.BRIDE,
