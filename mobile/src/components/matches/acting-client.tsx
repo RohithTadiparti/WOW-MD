@@ -7,6 +7,7 @@ import { Permission, can } from '@/shared/permissions';
 import { FilterChips } from '@/components/chrome';
 import { Caption } from '@/components/ui';
 import { selectPermissions, useAuth } from '@/store/auth';
+import { useManagedProfileStore } from '@/store/managed-profile';
 import { space } from '@/theme';
 
 /**
@@ -32,8 +33,10 @@ interface ActableProfile {
 export function useActingClient() {
   const permissions = useAuth(selectPermissions);
   const isAgent = can(permissions, Permission.AGENCY_MANAGE);
+  const isSteward = can(permissions, Permission.ACT_ON_BEHALF);
   const chosen = useActingClientStore((s) => s.profileId);
   const setProfileId = useActingClientStore((s) => s.set);
+  const activeManagedProfileId = useManagedProfileStore((s) => s.activeManagedProfileId);
 
   const clients = useQuery({
     queryKey: ['actable-profiles'],
@@ -46,9 +49,12 @@ export function useActingClient() {
   });
 
   const list = clients.data ?? [];
-  // Only a client this account can still act for — a choice left over from
-  // another sign-in on the same device is not one.
-  const profileId = isAgent && list.some((c) => c.id === chosen) ? chosen : null;
+  // For agents, use their picker choice. For family members, use the globally selected managed profile.
+  const profileId = isAgent
+    ? (list.some((c) => c.id === chosen) ? chosen : null)
+    : isSteward
+    ? activeManagedProfileId
+    : null;
 
   return {
     isAgent,
@@ -57,8 +63,8 @@ export function useActingClient() {
     clientsError: clients.error,
     profileId,
     setProfileId,
-    /** False while an agency has not said which client this is for. */
-    ready: !isAgent || Boolean(profileId),
+    /** False while an agency or family member has not said which client/relative this is for. */
+    ready: (!isAgent && !isSteward) || Boolean(profileId),
   };
 }
 

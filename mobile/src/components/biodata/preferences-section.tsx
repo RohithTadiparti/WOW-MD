@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View } from 'react-native';
+import { View, ScrollView } from 'react-native';
 import { useMutation } from '@tanstack/react-query';
 
 import { api, apiMessage } from '@/lib/api';
@@ -30,6 +30,7 @@ export function PreferencesSection({
   onSkip,
   startEditing = false,
   isWizard = false,
+  scrollRef,
 }: {
   profileId: string;
   details: Record<string, unknown>;
@@ -38,10 +39,12 @@ export function PreferencesSection({
   onSkip?: () => void;
   startEditing?: boolean;
   isWizard?: boolean;
+  scrollRef?: React.RefObject<ScrollView | null>;
 }) {
   const bag = (details.partnerPreferences as Record<string, unknown> | undefined) ?? {};
   const [editing, setEditing] = useState(isWizard || startEditing);
   const [error, setError] = useState('');
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState('');
   const [form, setForm] = useState({
     preferredAgeMin: stored(details.preferredAgeMin),
@@ -100,24 +103,34 @@ export function PreferencesSection({
     setForm((current) => ({ ...current, [key]: capitalize ? capitalizeWords(value) : value }));
 
   function submit() {
-    const ranges = [
-      form.preferredAgeMin,
-      form.preferredAgeMax,
-      form.preferredHeightMinCm,
-      form.preferredHeightMaxCm,
-    ];
-    if (ranges.some((value) => !value.trim())) {
-      setError('Give both ends of the age range and the height range before saving.');
+    let newErrors: Record<string, string> = {};
+
+    const ageMin = form.preferredAgeMin.trim();
+    const ageMax = form.preferredAgeMax.trim();
+    if (!ageMin) newErrors.preferredAgeMin = 'Please enter both Age From and Age To.';
+    if (!ageMax) newErrors.preferredAgeMax = 'Please enter both Age From and Age To.';
+    if (ageMin && ageMax && Number(ageMin) > Number(ageMax)) {
+      newErrors.preferredAgeMin = 'Age From cannot be greater than Age To.';
+    }
+
+    const heightMin = form.preferredHeightMinCm.trim();
+    const heightMax = form.preferredHeightMaxCm.trim();
+    if (!heightMin) newErrors.preferredHeightMinCm = 'Please enter both Height From and Height To.';
+    if (!heightMax) newErrors.preferredHeightMaxCm = 'Please enter both Height From and Height To.';
+    if (heightMin && heightMax && Number(heightMin) > Number(heightMax)) {
+      newErrors.preferredHeightMinCm = 'Height From cannot be greater than Height To.';
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      setError('');
+      if (scrollRef?.current) {
+        scrollRef.current.scrollTo({ y: 0, animated: true });
+      }
       return;
     }
-    if (Number(form.preferredAgeMin) > Number(form.preferredAgeMax)) {
-      setError('The minimum age cannot be above the maximum.');
-      return;
-    }
-    if (Number(form.preferredHeightMinCm) > Number(form.preferredHeightMaxCm)) {
-      setError('The minimum height cannot be above the maximum.');
-      return;
-    }
+
+    setErrors({});
     setError('');
     save.mutate();
   }
@@ -133,19 +146,19 @@ export function PreferencesSection({
           <>
             <View style={{ flexDirection: 'row', gap: space(2) }}>
               <View style={{ flex: 1 }}>
-                <Field label="Age from" value={form.preferredAgeMin} onChangeText={set('preferredAgeMin')} keyboardType="number-pad" maxLength={3} />
+                <Field label="Age from" value={form.preferredAgeMin} onChangeText={set('preferredAgeMin')} keyboardType="number-pad" maxLength={3} required error={errors.preferredAgeMin} />
               </View>
               <View style={{ flex: 1 }}>
-                <Field label="Age to" value={form.preferredAgeMax} onChangeText={set('preferredAgeMax')} keyboardType="number-pad" maxLength={3} />
+                <Field label="Age to" value={form.preferredAgeMax} onChangeText={set('preferredAgeMax')} keyboardType="number-pad" maxLength={3} required error={errors.preferredAgeMax} />
               </View>
             </View>
 
             <View style={{ flexDirection: 'row', gap: space(2) }}>
               <View style={{ flex: 1 }}>
-                <Field label="Height from (cm)" value={form.preferredHeightMinCm} onChangeText={set('preferredHeightMinCm')} keyboardType="number-pad" maxLength={3} />
+                <Field label="Height from (cm)" value={form.preferredHeightMinCm} onChangeText={set('preferredHeightMinCm')} keyboardType="number-pad" maxLength={3} required error={errors.preferredHeightMinCm} />
               </View>
               <View style={{ flex: 1 }}>
-                <Field label="Height to (cm)" value={form.preferredHeightMaxCm} onChangeText={set('preferredHeightMaxCm')} keyboardType="number-pad" maxLength={3} />
+                <Field label="Height to (cm)" value={form.preferredHeightMaxCm} onChangeText={set('preferredHeightMaxCm')} keyboardType="number-pad" maxLength={3} required error={errors.preferredHeightMaxCm} />
               </View>
             </View>
 
@@ -225,7 +238,7 @@ export function PreferencesSection({
                 onChangeText={set('preferredNriCountry', true)}
                 placeholder="USA, UK, Canada, Australia…"
                 maxLength={120}
-                autoCapitalize="words"
+                autoCapitalize="sentences"
               />
             ) : null}
 

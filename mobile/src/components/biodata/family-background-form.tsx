@@ -148,7 +148,7 @@ export function FamilyBackgroundForm({
             <SelectField label="Father" value={form.fatherLifeStatus} options={[{ value: 'alive', label: 'Mr.' }, { value: 'deceased', label: 'Late' }]} onChange={(v) => { setForm({ ...form, fatherLifeStatus: v, fatherProfession: v === 'deceased' ? '' : form.fatherProfession }); setErrors(e => ({ ...e, fatherLifeStatus: '' })); }} required autoFilled={autofilledKeys?.has('father.lifeStatus') || autofilledKeys?.has('fatherLifeStatus')} error={errors.fatherLifeStatus} />
           </View>
           <View style={{ flex: 2 }}>
-            <Field label="Father's Name" value={form.fatherName} onChangeText={set('fatherName', true)} required autoFilled={autofilledKeys?.has('father.name') || autofilledKeys?.has('fatherName')} autoCapitalize="words" error={errors.fatherName} />
+            <Field label="Father's Name" value={form.fatherName} onChangeText={set('fatherName', true)} required autoFilled={autofilledKeys?.has('father.name') || autofilledKeys?.has('fatherName')} autoCapitalize="sentences" error={errors.fatherName} />
           </View>
         </View>
         {form.fatherLifeStatus !== 'deceased' && (
@@ -162,7 +162,7 @@ export function FamilyBackgroundForm({
             <SelectField label="Mother" value={form.motherLifeStatus} options={[{ value: 'alive', label: 'Mrs.' }, { value: 'deceased', label: 'Late' }]} onChange={(v) => { setForm({ ...form, motherLifeStatus: v, motherProfession: v === 'deceased' ? '' : form.motherProfession }); setErrors(e => ({ ...e, motherLifeStatus: '' })); }} required autoFilled={autofilledKeys?.has('mother.lifeStatus') || autofilledKeys?.has('motherLifeStatus')} error={errors.motherLifeStatus} />
           </View>
           <View style={{ flex: 2 }}>
-            <Field label="Mother's Name" value={form.motherName} onChangeText={set('motherName', true)} required autoFilled={autofilledKeys?.has('mother.name') || autofilledKeys?.has('motherName')} autoCapitalize="words" error={errors.motherName} />
+            <Field label="Mother's Name" value={form.motherName} onChangeText={set('motherName', true)} required autoFilled={autofilledKeys?.has('mother.name') || autofilledKeys?.has('motherName')} autoCapitalize="sentences" error={errors.motherName} />
           </View>
         </View>
         {form.motherLifeStatus !== 'deceased' && (
@@ -201,7 +201,7 @@ export function FamilyBackgroundForm({
           labels={{ country: 'Native Country', state: 'Native State', district: 'Native District' }}
           autoFilled={autofilledKeys?.has('nativeCountry') || autofilledKeys?.has('nativeState') || autofilledKeys?.has('nativeDistrict')}
         />
-        <Field label="Native Place (village / town)" value={form.nativePlace} onChangeText={set('nativePlace', true)} maxLength={120} autoFilled={autofilledKeys?.has('nativePlace')} autoCapitalize="words" />
+        <Field label="Native Place (village / town)" value={form.nativePlace} onChangeText={set('nativePlace', true)} maxLength={120} autoFilled={autofilledKeys?.has('nativePlace')} autoCapitalize="sentences" />
         <SelectField
           label="Settled abroad"
           value={form.isNri}
@@ -211,8 +211,8 @@ export function FamilyBackgroundForm({
         />
         {form.isNri === 'yes' && (
           <>
-            <Field label="City abroad" value={form.nriCity} onChangeText={set('nriCity', true)} maxLength={120} autoFilled={autofilledKeys?.has('nriCity')} autoCapitalize="words" />
-            <Field label="Country" value={form.nriCountry} onChangeText={set('nriCountry', true)} maxLength={80} autoFilled={autofilledKeys?.has('nriCountry')} autoCapitalize="words" />
+            <Field label="City abroad" value={form.nriCity} onChangeText={set('nriCity', true)} maxLength={120} autoFilled={autofilledKeys?.has('nriCity')} autoCapitalize="sentences" />
+            <Field label="Country" value={form.nriCountry} onChangeText={set('nriCountry', true)} maxLength={80} autoFilled={autofilledKeys?.has('nriCountry')} autoCapitalize="sentences" />
           </>
         )}
       </Card>

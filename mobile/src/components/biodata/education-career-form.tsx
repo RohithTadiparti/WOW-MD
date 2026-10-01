@@ -184,9 +184,9 @@ export function EducationCareerForm({
       <Card>
         <ChoiceField label="Highest Qualification" value={form.highestQualification} options={QUALIFICATIONS} onChange={set('highestQualification')} required autoFilled={autofilledKeys?.has('highestQualification')} />
         {errors.highestQualification ? <Caption tone="critical">{errors.highestQualification}</Caption> : null}
-        <Field label="Course" value={form.course} onChangeText={set('course', true)} required autoFilled={autofilledKeys?.has('course')} autoCapitalize="words" error={errors.course} />
-        <Field label="Institution / College" value={form.institution} onChangeText={set('institution', true)} autoFilled={autofilledKeys?.has('institution')} autoCapitalize="words" />
-        <Field label="College Place" value={form.collegePlace} onChangeText={set('collegePlace', true)} autoFilled={autofilledKeys?.has('collegePlace')} autoCapitalize="words" />
+        <Field label="Course" value={form.course} onChangeText={set('course', true)} required autoFilled={autofilledKeys?.has('course')} autoCapitalize="sentences" error={errors.course} />
+        <Field label="Institution / College" value={form.institution} onChangeText={set('institution', true)} autoFilled={autofilledKeys?.has('institution')} autoCapitalize="sentences" />
+        <Field label="College Place" value={form.collegePlace} onChangeText={set('collegePlace', true)} autoFilled={autofilledKeys?.has('collegePlace')} autoCapitalize="sentences" />
       </Card>
 
       <Card>
@@ -202,8 +202,8 @@ export function EducationCareerForm({
 
         {form.occupationStatus === 'employed' && (
           <View style={{ gap: space(2), marginTop: space(2) }}>
-            <Field label="Company" value={form.company} onChangeText={set('company', true)} required autoFilled={autofilledKeys?.has('employment.company') || autofilledKeys?.has('company')} autoCapitalize="words" error={errors.company} />
-            <Field label="Designation" value={form.designation} onChangeText={set('designation', true)} required autoFilled={autofilledKeys?.has('employment.designation') || autofilledKeys?.has('designation')} autoCapitalize="words" error={errors.designation} />
+            <Field label="Company" value={form.company} onChangeText={set('company', true)} required autoFilled={autofilledKeys?.has('employment.company') || autofilledKeys?.has('company')} autoCapitalize="sentences" error={errors.company} />
+            <Field label="Designation" value={form.designation} onChangeText={set('designation', true)} required autoFilled={autofilledKeys?.has('employment.designation') || autofilledKeys?.has('designation')} autoCapitalize="sentences" error={errors.designation} />
             <ChoiceField label="Work Location" value={form.workLocation} options={CITIES} onChange={set('workLocation', true)} autoFilled={autofilledKeys?.has('employment.workLocation') || autofilledKeys?.has('employment.location') || autofilledKeys?.has('workLocation')} />
             <Field label="Salary (Annual)" value={form.salary} onChangeText={numeric('salary')} keyboardType="number-pad" autoFilled={autofilledKeys?.has('employment.salary') || autofilledKeys?.has('salary')} />
           </View>
@@ -211,9 +211,9 @@ export function EducationCareerForm({
 
         {form.occupationStatus === 'self_employed' && (
           <View style={{ gap: space(2), marginTop: space(2) }}>
-            <Field label="Business Name" value={form.businessName} onChangeText={set('businessName', true)} required autoFilled={autofilledKeys?.has('business.businessName') || autofilledKeys?.has('business.name') || autofilledKeys?.has('businessName')} autoCapitalize="words" error={errors.businessName} />
-            <Field label="Business Location" value={form.businessLocation} onChangeText={set('businessLocation', true)} autoFilled={autofilledKeys?.has('business.businessLocation') || autofilledKeys?.has('business.location') || autofilledKeys?.has('businessLocation')} autoCapitalize="words" />
-            <Field label="Business Income (Annual)" value={form.businessIncome} onChangeText={numeric('businessIncome')} keyboardType="number-pad" autoFilled={autofilledKeys?.has('business.businessIncome') || autofilledKeys?.has('business.income') || autofilledKeys?.has('businessIncome')} />
+            <Field label="Business Name" value={form.businessName} onChangeText={set('businessName', true)} required autoFilled={autofilledKeys?.has('business.businessName') || autofilledKeys?.has('business.name') || autofilledKeys?.has('businessName')} autoCapitalize="sentences" error={errors.businessName} />
+            <Field label="Business Location" value={form.businessLocation} onChangeText={set('businessLocation', true)} autoFilled={autofilledKeys?.has('business.businessLocation') || autofilledKeys?.has('business.location') || autofilledKeys?.has('businessLocation')} autoCapitalize="sentences" />
+            <Field label="Business Income" value={form.businessIncome} onChangeText={digits('businessIncome')} keyboardType="number-pad" autoFilled={autofilledKeys?.has('business.businessIncome') || autofilledKeys?.has('business.income') || autofilledKeys?.has('businessIncome')} />
           </View>
         )}
       </Card>

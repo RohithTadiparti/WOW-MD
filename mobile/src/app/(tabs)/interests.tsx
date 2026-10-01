@@ -154,7 +154,7 @@ export default function Interests() {
             interest={row}
             busy={act.isPending}
             onOpenProfile={() =>
-              router.push({ pathname: '/match/[id]', params: { id: row.counterpart.id } })
+              router.push({ pathname: '/match/[id]', params: { id: row.counterpart.id, actingProfileId: acting.profileId ?? '' } })
             }
             onAct={(path) => {
               // Both of these are hard to undo — one takes back a message

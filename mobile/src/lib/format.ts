@@ -70,11 +70,10 @@ export function dateTime(value: string | null | undefined): string {
   });
 }
 
-/** Capitalizes the first letter of every word (for names, cities, etc) */
+/** Capitalizes the first letter of the string */
 export function capitalizeWords(str: string | null | undefined): string {
   if (!str) return '';
-  return str.split(/(\s+)/).map(part => {
-    if (part.trim().length === 0) return part;
-    return part.charAt(0).toUpperCase() + part.slice(1);
-  }).join('');
+  const match = str.match(/^(\s*)(.)(.*)$/);
+  if (!match) return str;
+  return match[1] + match[2].toUpperCase() + match[3];
 }

@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { View, ScrollView, Alert as NativeAlert, Pressable } from 'react-native';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 
 import { api } from '@/lib/api';
@@ -33,12 +33,14 @@ interface BiodataResponse {
   profileId: string;
   details: Record<string, unknown> | null;
   dateOfBirth: string | null;
+  gender?: string | null;
 }
 
 export default function BiodataWizard() {
   const theme = useTheme();
   const qc = useQueryClient();
   const router = useRouter();
+  const scrollRef = useRef<ScrollView>(null);
 
   const [step, setStep] = useState(0);
   const [autofilledKeys, setAutofilledKeys] = useState<Set<string>>(new Set());
@@ -56,6 +58,7 @@ export default function BiodataWizard() {
     queryFn: async () =>
       (await api.get('/users/me')).data as { id?: string | null; gender?: string | null; displayName?: string | null; dateOfBirth?: string | null; city?: string | null },
     retry: false,
+    staleTime: 1000 * 60 * 5, // Prevent immediate refetch wiping out extracted cache
   });
 
   /**
@@ -78,6 +81,7 @@ export default function BiodataWizard() {
     queryFn: async () =>
       (await api.get(`/profiles/${profileId}/details`)).data as BiodataResponse,
     retry: false,
+    staleTime: 1000 * 60 * 5, // Prevent immediate refetch wiping out extracted cache
   });
 
   const { data: photos } = useQuery({
@@ -98,6 +102,36 @@ export default function BiodataWizard() {
       (await api.get(`/profiles/${profileId}/details/completion`)).data as { percent: number, complete: boolean },
     retry: false,
   });
+
+  const completeBiodata = useMutation({
+    mutationFn: async () => {
+      if (!profileId) return;
+      await api.post(`/profiles/${profileId}/details/complete`);
+    },
+    onSuccess: async () => {
+      if (profileId) {
+        await qc.invalidateQueries({ queryKey: ['biodata-completion', profileId] });
+      }
+      await qc.invalidateQueries({ queryKey: ['me'] });
+      router.back();
+    },
+    onError: (err: any) => {
+      NativeAlert.alert("Error", err?.response?.data?.message || "Failed to complete biodata.");
+    }
+  });
+
+  const userRole = useAuth((s) => s.user?.role);
+  const derivedGender = userRole === 'bride' ? 'female' : userRole === 'groom' ? 'male' : me?.gender;
+
+  const biodataOwner = isSteward
+    ? {
+      id: activeManagedProfileId,
+      displayName: activeManagedProfileName,
+      dateOfBirth: full?.dateOfBirth,
+      gender: (full as any)?.gender,
+      city: (full as any)?.city || (full?.details as any)?.city,
+    }
+    : { ...me, gender: derivedGender };
 
   // Skip selection screen if already has details
   useEffect(() => {
@@ -201,9 +235,14 @@ export default function BiodataWizard() {
               ...(data.education || {}),
               father: data.family?.father ?? data.father,
               mother: data.family?.mother ?? data.mother,
+              brothers: data.family?.brothers,
+              sisters: data.family?.sisters,
+              ...(data.horoscope || {}),
+              partnerPreferences: data.partnerPreferences || {},
             };
             delete flatData.education;
             delete flatData.family;
+            delete flatData.horoscope;
 
             const keys = new Set<string>();
             const traverse = (obj: any, prefix = '') => {
@@ -219,16 +258,26 @@ export default function BiodataWizard() {
             setAutofilledKeys(keys);
 
             // Update local cache
-            qc.setQueryData(['me'], (old: any) => ({
-              ...old,
-              displayName: data.firstName ? `${data.firstName} ${data.lastName ?? ''}`.trim() : old?.displayName,
-              dateOfBirth: data.dateOfBirth ?? old?.dateOfBirth,
-              gender: data.gender ?? old?.gender,
-            }));
+            if (!isSteward) {
+              qc.setQueryData(['me'], (old: any) => ({
+                ...old,
+                displayName: data.firstName ? `${data.firstName} ${data.lastName ?? ''}`.trim() : old?.displayName,
+                dateOfBirth: data.dateOfBirth ?? old?.dateOfBirth,
+                gender: data.gender ?? old?.gender,
+              }));
+            } else {
+              // Update managed profile store name so it reflects immediately
+              if (data.firstName) {
+                const newName = `${data.firstName} ${data.lastName ?? ''}`.trim();
+                useManagedProfileStore.getState().setActiveManagedProfile(activeManagedProfileId!, newName);
+              }
+            }
 
             qc.setQueryData(['biodata-details', profileId], (old: any) => {
               return {
                 ...old,
+                dateOfBirth: data.dateOfBirth ?? old?.dateOfBirth,
+                gender: data.gender ?? old?.gender,
                 details: {
                   ...(old?.details ?? {}),
                   ...flatData,
@@ -243,7 +292,7 @@ export default function BiodataWizard() {
   }
 
   return (
-    <Screen>
+    <Screen ref={scrollRef}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: space(2) }}>
         <SectionTitle>{currentStep.title}</SectionTitle>
         <Caption tone="muted" style={{ fontWeight: '600' }}>
@@ -259,7 +308,7 @@ export default function BiodataWizard() {
       {currentStep.id === 'personal' && (
         <PersonalForm
           profileId={profileId}
-          me={me as Record<string, unknown>}
+          me={biodataOwner as Record<string, unknown>}
           full={full}
           photos={photos?.photos ?? []}
           onPhotoAdded={(url) => {
@@ -344,6 +393,7 @@ export default function BiodataWizard() {
           onBack={prevStep}
           onSkip={nextStep}
           isWizard
+          scrollRef={scrollRef}
         />
       )}
 
@@ -361,9 +411,9 @@ export default function BiodataWizard() {
             <View style={{ marginTop: space(2) }}>
               <DetailGrid>
                 <DetailRow label="Name">{`${d.firstName ?? ''} ${d.lastName ?? ''}`.trim()}</DetailRow>
-                <DetailRow label="Date of Birth">{String(me?.dateOfBirth ?? full?.dateOfBirth ?? '—').slice(0, 10)}</DetailRow>
-                <DetailRow label="Gender">{String(me?.gender ?? '—')}</DetailRow>
-                <DetailRow label="Height">{String(d.height ?? '—')}</DetailRow>
+                <DetailRow label="Date of Birth">{String(biodataOwner?.dateOfBirth ?? full?.dateOfBirth ?? '—').slice(0, 10)}</DetailRow>
+                <DetailRow label="Gender">{String(biodataOwner?.gender ?? '—')}</DetailRow>
+                <DetailRow label="Height">{String(d.heightCm ?? '—')}</DetailRow>
                 <DetailRow label="Complexion">{String(d.complexion ?? '—')}</DetailRow>
                 <DetailRow label="Marital Status">{String(d.maritalStatus ?? '—').replace(/_/g, ' ')}</DetailRow>
                 <DetailRow label="Religion">{String(d.religion ?? '—')}</DetailRow>
@@ -415,7 +465,7 @@ export default function BiodataWizard() {
               </DetailGrid>
             </View>
           </Card>
-          
+
           <Card style={{ padding: space(3), gap: space(1) }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
               <SectionTitle>Location & Personal Details</SectionTitle>
@@ -474,12 +524,12 @@ export default function BiodataWizard() {
 
           <View style={{ flexDirection: 'row', gap: space(2) }}>
             <Button label="Back" variant="outline" onPress={prevStep} />
-            <Button style={{ flex: 1 }} label="Complete Biodata" onPress={() => {
+            <Button style={{ flex: 1 }} label="Complete Biodata" busy={completeBiodata.isPending} onPress={() => {
               if (completion && !completion.complete) {
                 // Not completed - require completion
                 NativeAlert.alert("Incomplete", "Please fill all mandatory fields (marked with *) across all steps to complete your Biodata.");
               } else {
-                router.back();
+                completeBiodata.mutate();
               }
             }} />
           </View>

@@ -28,6 +28,7 @@ interface ActableProfile {
   gender?: string | null;
   photos?: string[];
   managedByUserId?: string | null;
+  stewardRelation?: string | null;
 }
 
 /**
@@ -78,7 +79,7 @@ export default function ManagedProfiles() {
   });
 
   function handleManage(profile: ActableProfile) {
-    setActiveManagedProfile(profile.id, profile.displayName);
+    setActiveManagedProfile(profile.id, profile.displayName, profile.stewardRelation);
     router.push('/');
   }
 
@@ -104,7 +105,7 @@ export default function ManagedProfiles() {
     );
   }
 
-  const profiles = data ?? [];
+  const profiles = (data ?? []).filter(p => p.claimStatus !== 'self');
 
   return (
     <Screen>
@@ -198,7 +199,11 @@ export default function ManagedProfiles() {
                     <Body style={{ fontWeight: '600' }} numberOfLines={1}>
                       {profile.displayName}
                     </Body>
-                    {profile.city ? (
+                    {profile.stewardRelation ? (
+                      <Caption tone="muted" numberOfLines={1}>
+                        {profile.stewardRelation}
+                      </Caption>
+                    ) : profile.city ? (
                       <Caption tone="muted" numberOfLines={1}>
                         {profile.city}
                       </Caption>
@@ -254,7 +259,7 @@ export default function ManagedProfiles() {
                       small
                       variant="outline"
                       style={{ flex: 1 }}
-                      onPress={() => router.push('/profile')}
+                      onPress={() => router.push({ pathname: '/match/[id]', params: { id: profile.id } })}
                     />
                   </View>
                 ) : null}

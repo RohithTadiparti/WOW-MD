@@ -61,6 +61,12 @@ export class ProfileDetailsController {
     return this.details.completion(actor, id);
   }
 
+  @ApiOperation({ summary: 'Mark the biodata as complete and make the profile visible' })
+  @Post('details/complete')
+  markComplete(@CurrentUser() actor: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.details.markComplete(actor, id);
+  }
+
   @Put('details/personal')
   personal(
     @CurrentUser() actor: AuthUser,

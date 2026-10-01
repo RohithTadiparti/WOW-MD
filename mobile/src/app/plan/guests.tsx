@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
-import { Alert as NativeAlert, Linking, Pressable, Share, TextInput, View } from 'react-native';
+import { Alert as NativeAlert, Linking, Pressable, Share, TextInput, View, Image } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Clipboard from 'expo-clipboard';
@@ -14,15 +14,17 @@ import {
   Plus,
   ShareNetwork,
   WhatsappLogo,
+  X,
 } from 'phosphor-react-native';
 
 import { api, apiMessage } from '@/lib/api';
 import { shortDate } from '@/lib/format';
 import { rsvpBadge, rsvpLink, whatsappUrl, type RsvpStatus } from '@/lib/rsvp';
 import { Badge, FilterChips } from '@/components/chrome';
-import { CheckRow, Textarea } from '@/components/form';
+import { Textarea } from '@/components/form';
 import { Alert, Body, Button, Caption, Card, EmptyState, Field, Loading, Screen } from '@/components/ui';
 import { rgb, space, useTheme, radius } from '@/theme';
+import { PhotoPicker } from '@/components/uploader';
 
 type RelationFilter = 'all' | 'family' | 'friends' | 'work' | 'others';
 
@@ -55,8 +57,8 @@ interface WeddingEventRow {
 type Mode =
   | { kind: 'list' }
   | { kind: 'form'; guest?: Guest }
-  | { kind: 'choose'; guest: Guest }
-  | { kind: 'sent'; guest: Guest; link: string };
+  | { kind: 'sent'; guest: Guest; link: string }
+  | { kind: 'direct-link'; link: string };
 
 const RELATION_CHIPS: { key: RelationFilter; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -107,6 +109,7 @@ export default function PlanGuests() {
   const [mode, setMode] = useState<Mode>({ kind: 'list' });
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [previewCardOpen, setPreviewCardOpen] = useState(false);
 
   const guests = useQuery({
     queryKey: ['guests'],
@@ -122,14 +125,16 @@ export default function PlanGuests() {
     queryFn: async () => (await api.get('/events')).data,
     retry: false,
   });
-  const eventRows = useMemo(
-    () =>
-      ((Array.isArray(events.data) ? events.data : (events.data?.data ?? [])) as WeddingEventRow[]).filter(
-        (e) => e.status !== 'cancelled',
-      ),
-    [events.data],
-  );
-  const hasEvents = eventRows.length > 0;
+  const eventCount = (Array.isArray(events.data) ? events.data : (events.data?.data ?? [])).length;
+  const hasEvents = eventCount > 0;
+  const firstEventId = hasEvents ? (Array.isArray(events.data) ? events.data[0].id : events.data?.data[0].id) : null;
+
+  const cardQuery = useQuery({
+    queryKey: ['invitation-card'],
+    queryFn: async () => (await api.get('/events/invitation-card')).data as { url: string },
+    retry: false,
+  });
+  const cardUrl = cardQuery.data?.url;
 
   const refreshGuests = useCallback(
     () =>
@@ -138,6 +143,7 @@ export default function PlanGuests() {
         qc.invalidateQueries({ queryKey: ['guest-list'] }),
         qc.invalidateQueries({ queryKey: ['rsvp-guests'] }),
         qc.invalidateQueries({ queryKey: ['wedding-dashboard'] }),
+        qc.invalidateQueries({ queryKey: ['invitation-card'] }),
       ]),
     [qc],
   );
@@ -162,6 +168,39 @@ export default function PlanGuests() {
     },
   });
 
+  const directLinkMut = useMutation({
+    mutationFn: async () => {
+      if (!firstEventId) throw new Error('Add an event first');
+      return (await api.post(`/events/${firstEventId}/share-link`)).data as { shareTokenHash: string, url?: string };
+    },
+    onSuccess: (data) => {
+      setError('');
+      const url = data.url ? data.url : rsvpLink('/rsvp/' + data.shareTokenHash);
+      setMode({ kind: 'direct-link', link: url });
+    },
+    onError: (err) => setError(apiMessage(err, 'Could not create direct link.')),
+  });
+
+  const uploadCard = useMutation({
+    mutationFn: async (url: string) => (await api.put('/events/invitation-card', { url })).data,
+    onSuccess: () => {
+      setError('');
+      setNotice('Invitation card uploaded.');
+      qc.invalidateQueries({ queryKey: ['invitation-card'] });
+    },
+    onError: (err) => setError(apiMessage(err, 'Card upload failed. Wait for backend support.')),
+  });
+
+  const removeCard = useMutation({
+    mutationFn: async () => (await api.delete('/events/invitation-card')).data,
+    onSuccess: () => {
+      setError('');
+      setNotice('Invitation card removed.');
+      qc.invalidateQueries({ queryKey: ['invitation-card'] });
+    },
+    onError: (err) => setError(apiMessage(err, 'Could not remove card.')),
+  });
+
   const override = useMutation({
     mutationFn: async ({ guestId, status }: { guestId: string; status: RsvpStatus }) =>
       api.put(`/events/guests/${guestId}/rsvp`, { status }),
@@ -180,17 +219,31 @@ export default function PlanGuests() {
       return (
         guest.name.toLowerCase().includes(q) ||
         (guest.relation ?? '').toLowerCase().includes(q) ||
-        (guest.phone ?? '').includes(q) ||
-        (guest.contact ?? '').toLowerCase().includes(q)
+        (guest.phone ?? '').includes(q)
       );
     });
   }, [guests.data, search, filter]);
+
+  if (previewCardOpen && cardUrl) {
+    return (
+      <Screen>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Body style={{ fontWeight: '700' }}>Invitation Card</Body>
+          <Pressable accessibilityRole="button" onPress={() => setPreviewCardOpen(false)}>
+            <X size={24} color={rgb(theme.ink[900])} />
+          </Pressable>
+        </View>
+        <View style={{ flex: 1, backgroundColor: rgb(theme.surfaceSunken), borderRadius: radius.md, overflow: 'hidden', marginTop: space(2) }}>
+          <Image source={{ uri: cardUrl }} style={{ flex: 1 }} resizeMode="contain" />
+        </View>
+      </Screen>
+    );
+  }
 
   if (mode.kind === 'form') {
     return (
       <GuestForm
         guest={mode.guest}
-        canInvite={hasEvents && !mode.guest?.rsvpStatus}
         onCancel={() => setMode({ kind: 'list' })}
         onSaved={async (guest, send) => {
           await refreshGuests();
@@ -217,7 +270,11 @@ export default function PlanGuests() {
   }
 
   if (mode.kind === 'sent') {
-    return <InvitationSent {...mode} onDone={() => setMode({ kind: 'list' })} />;
+    return <InvitationSent {...mode} cardUrl={cardUrl} onDone={() => setMode({ kind: 'list' })} />;
+  }
+
+  if (mode.kind === 'direct-link') {
+    return <DirectLink link={mode.link} cardUrl={cardUrl} onDone={() => setMode({ kind: 'list' })} />;
   }
 
   const all = guests.data ?? [];
@@ -243,6 +300,38 @@ export default function PlanGuests() {
           <Button small variant="outline" label="Go to Events" onPress={() => router.push('/events')} />
         </Card>
       ) : null}
+
+      <Card style={{ gap: space(2) }}>
+        <Body style={{ fontWeight: '700' }}>Invitation Card</Body>
+        {!cardUrl ? (
+          <View style={{ gap: space(2) }}>
+            <Caption tone="muted">Upload your wedding invitation card to include it when sharing invitations with your guests.</Caption>
+            {uploadCard.isPending ? <Loading rows={1} /> : (
+              <PhotoPicker label="Upload Invitation Card" onUploaded={(url) => uploadCard.mutate(url)} />
+            )}
+          </View>
+        ) : (
+          <View style={{ gap: space(3) }}>
+            <View style={{ height: 120, borderRadius: radius.md, overflow: 'hidden', backgroundColor: rgb(theme.surfaceSunken) }}>
+              <Image source={{ uri: cardUrl }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+            </View>
+            <View style={{ flexDirection: 'row', gap: space(2) }}>
+              <Button small variant="outline" label="Preview" style={{ flex: 1 }} onPress={() => setPreviewCardOpen(true)} />
+              {uploadCard.isPending ? (
+                <View style={{ flex: 1 }}><Loading rows={1} /></View>
+              ) : (
+                <View style={{ flex: 1 }}><PhotoPicker label="Replace" onUploaded={(url) => uploadCard.mutate(url)} /></View>
+              )}
+              <Button small variant="outline" label="Remove" style={{ flex: 1 }} disabled={removeCard.isPending} onPress={() => {
+                NativeAlert.alert('Remove invitation card?', 'This card will be removed from your wedding.', [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Remove', style: 'destructive', onPress: () => removeCard.mutate() }
+                ]);
+              }} />
+            </View>
+          </View>
+        )}
+      </Card>
 
       <View style={{ flexDirection: 'row', gap: space(2) }}>
         <StatBox label="Total" value={onList} tone="brand" />
@@ -273,7 +362,7 @@ export default function PlanGuests() {
         <TextInput
           value={search}
           onChangeText={setSearch}
-          placeholder="Search guests by name, phone or email"
+          placeholder="Search guests by name or phone"
           placeholderTextColor={rgb(theme.ink[400])}
           style={{ flex: 1, padding: space(3), color: rgb(theme.ink[900]) }}
         />
@@ -393,6 +482,14 @@ export default function PlanGuests() {
           setMode({ kind: 'form' });
         }}
       />
+      
+      <Button
+        label="Direct Link"
+        variant="outline"
+        busy={directLinkMut.isPending}
+        disabled={directLinkMut.isPending || !hasEvents}
+        onPress={() => directLinkMut.mutate()}
+      />
     </Screen>
   );
 }
@@ -414,35 +511,29 @@ const RELATION_PICKS = ['Family', 'Friends', 'Work'];
 
 function GuestForm({
   guest,
-  canInvite,
   onCancel,
   onSaved,
 }: {
   guest?: Guest;
-  canInvite: boolean;
   onCancel: () => void;
   onSaved: (guest: Guest, send: boolean) => void | Promise<void>;
 }) {
   const theme = useTheme();
   const [name, setName] = useState(guest?.name ?? '');
   const [phone, setPhone] = useState((guest?.phone ?? '').replace(/^\+91/, ''));
-  const [email, setEmail] = useState(guest?.contact ?? '');
   const [relation, setRelation] = useState(guest?.relation ?? '');
-  const [partySize, setPartySize] = useState(guest?.partySize ?? 1);
+  const [partySize, setPartySize] = useState<number | null>(guest?.partySize ?? null);
   const [notes, setNotes] = useState(guest?.notes ?? '');
-  const [send, setSend] = useState(!guest && canInvite);
   const [error, setError] = useState('');
 
   const digits = phone.replace(/\D/g, '');
   const phoneError = digits && !/^[6-9]\d{9}$/.test(digits) ? 'Enter a 10-digit Indian mobile number' : undefined;
-  const emailError = email.trim() && !/^\S+@\S+\.\S+$/.test(email.trim()) ? 'Enter a valid email address' : undefined;
 
   const save = useMutation({
     mutationFn: async () => {
       const body = {
         name: name.trim(),
         phone: digits || null,
-        contact: email.trim() || null,
         relation: relation.trim() || null,
         partySize,
         notes: notes.trim() || null,
@@ -450,7 +541,7 @@ function GuestForm({
       return (guest ? await api.put(`/events/guests/${guest.id}`, body) : await api.post('/events/guests', body))
         .data as Guest;
     },
-    onSuccess: (saved) => onSaved(saved, send && canInvite),
+    onSuccess: (saved) => onSaved(saved, !guest),
     onError: (err) => setError(apiMessage(err, 'That guest could not be saved.')),
   });
 
@@ -460,7 +551,7 @@ function GuestForm({
         {guest ? 'Edit Guest' : 'Add Guest'}
       </Body>
       {error ? <Alert tone="critical">{error}</Alert> : null}
-      <Field label="Full Name *" value={name} onChangeText={setName} placeholder="Guest name" maxLength={120} />
+      <Field label="Guest Name" value={name} onChangeText={setName} placeholder="Enter guest name" maxLength={120} />
       <Field
         label="Phone Number"
         value={phone}
@@ -469,24 +560,8 @@ function GuestForm({
         placeholder="10-digit mobile number"
         error={phoneError}
       />
-      <Field
-        label="Email (optional)"
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
-        placeholder="name@example.com"
-        maxLength={120}
-        error={emailError}
-      />
       <View style={{ gap: space(2) }}>
-        <Field
-          label="Relation"
-          value={relation}
-          onChangeText={setRelation}
-          placeholder="Family, Friends, Work, Bride's uncle…"
-          maxLength={60}
-        />
+        <Caption style={{ fontWeight: '600', color: rgb(theme.ink[800]) }}>Guest Category</Caption>
         <View style={{ flexDirection: 'row', gap: space(2) }}>
           {RELATION_PICKS.map((pick) => (
             <Button
@@ -498,13 +573,20 @@ function GuestForm({
             />
           ))}
         </View>
+        <Field
+          label=""
+          value={relation}
+          onChangeText={setRelation}
+          placeholder="Or type a custom category…"
+          maxLength={60}
+        />
       </View>
       <View style={{ gap: space(1) }}>
-        <Caption style={{ fontWeight: '600', color: rgb(theme.ink[800]) }}>Number of Guests</Caption>
+        <Caption style={{ fontWeight: '600', color: rgb(theme.ink[800]) }}>Number of Guests / Party Size</Caption>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(3) }}>
-          <Stepper icon="minus" disabled={partySize <= 1} onPress={() => setPartySize((n) => n - 1)} />
-          <Body style={{ minWidth: 32, textAlign: 'center', fontWeight: '700' }}>{partySize}</Body>
-          <Stepper icon="plus" disabled={partySize >= 100} onPress={() => setPartySize((n) => n + 1)} />
+          <Stepper icon="minus" disabled={(partySize ?? 1) <= 1} onPress={() => setPartySize((n) => Math.max(1, (n ?? 1) - 1))} />
+          <Body style={{ minWidth: 32, textAlign: 'center', fontWeight: '700' }}>{partySize ?? '-'}</Body>
+          <Stepper icon="plus" disabled={(partySize ?? 1) >= 100} onPress={() => setPartySize((n) => Math.min(100, (n ?? 1) + 1))} />
         </View>
       </View>
       <Textarea
@@ -526,9 +608,9 @@ function GuestForm({
         </Card>
       ) : null}
       <Button
-        label={send && canInvite ? 'Save & Send Invitation' : guest ? 'Save Changes' : 'Save Guest'}
+        label={!guest ? 'Send Invitation' : 'Save Changes'}
         busy={save.isPending}
-        disabled={!name.trim() || Boolean(phoneError) || Boolean(emailError)}
+        disabled={!name.trim() || Boolean(phoneError)}
         onPress={() => save.mutate()}
       />
       <Button label="Cancel" variant="outline" disabled={save.isPending} onPress={onCancel} />
@@ -623,14 +705,14 @@ function Stepper({ icon, disabled, onPress }: { icon: 'minus' | 'plus'; disabled
   );
 }
 
-function InvitationSent({ guest, link, onDone }: { guest: Guest; link: string; onDone: () => void }) {
+function InvitationSent({ guest, link, cardUrl, onDone }: { guest: Guest; link: string; cardUrl?: string; onDone: () => void }) {
   const theme = useTheme();
   const [copied, setCopied] = useState(false);
-  const message = `${guest.name}, you are invited to our wedding. See the events you are invited to and let us know if you can join us: ${link}`;
+  const message = `${guest.name}, you are invited to our wedding. Let us know if you can join us: ${link}`;
 
   return (
     <Screen>
-      <Card style={{ alignItems: 'center', gap: space(3), paddingVertical: space(6) }}>
+      <Card style={{ alignItems: 'center', gap: space(3), paddingVertical: space(4) }}>
         <View
           style={{
             width: 72,
@@ -642,15 +724,23 @@ function InvitationSent({ guest, link, onDone }: { guest: Guest; link: string; o
         >
           <PaperPlaneTilt size={34} color={rgb(theme.brand)} />
         </View>
-        <Body style={{ fontSize: 20, fontWeight: '700' }}>Invitation link created</Body>
+        <Body style={{ fontSize: 20, fontWeight: '700' }}>Invitation Sent!</Body>
         <Caption tone="muted" style={{ textAlign: 'center' }}>
-          {`A unique RSVP link for the wedding, covering the events you chose, has been created for ${guest.name}.`}
-          {guest.contact?.includes('@') ? ` It has also been emailed to ${guest.contact}.` : ''}
+          {`${guest.name} has been added to your guest list and the invitation has been sent.`}
         </Caption>
       </Card>
 
+      {cardUrl ? (
+        <Card style={{ gap: space(2) }}>
+          <Body style={{ fontWeight: '700' }}>Invitation Card</Body>
+          <View style={{ height: 160, borderRadius: radius.md, overflow: 'hidden', backgroundColor: rgb(theme.surfaceSunken) }}>
+            <Image source={{ uri: cardUrl }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+          </View>
+        </Card>
+      ) : null}
+
       <Card style={{ gap: space(2) }}>
-        <Caption style={{ fontWeight: '600', color: rgb(theme.ink[800]) }}>RSVP Link</Caption>
+        <Caption style={{ fontWeight: '600', color: rgb(theme.ink[800]) }}>Invitation Link</Caption>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Copy link"
@@ -682,7 +772,7 @@ function InvitationSent({ guest, link, onDone }: { guest: Guest; link: string; o
       />
       <ShareRow
         icon={<ShareNetwork size={22} color={rgb(theme.brand)} />}
-        label="Share via Other Apps"
+        label="Share Link"
         onPress={() => void Share.share({ message })}
       />
       <ShareRow
@@ -694,10 +784,60 @@ function InvitationSent({ guest, link, onDone }: { guest: Guest; link: string; o
         }}
       />
 
-      <Caption tone="muted">
-        {`This link is only for ${guest.name}. When they respond, their status updates automatically. Sending a new link replaces this one.`}
-      </Caption>
+      <Button label="Done" onPress={onDone} />
+    </Screen>
+  );
+}
 
+function DirectLink({ link, cardUrl, onDone }: { link: string; cardUrl?: string; onDone: () => void }) {
+  const theme = useTheme();
+  const [copied, setCopied] = useState(false);
+  const message = `You are invited to our wedding. Please let us know if you can join us: ${link}`;
+
+  return (
+    <Screen>
+      <Card style={{ alignItems: 'center', gap: space(3), paddingVertical: space(4) }}>
+        <Body style={{ fontSize: 20, fontWeight: '700' }}>Direct Link</Body>
+        <Caption tone="muted" style={{ textAlign: 'center' }}>
+          Share this link with your guests. They can enter their details and respond to your wedding invitation.
+        </Caption>
+      </Card>
+
+      {cardUrl ? (
+        <Card style={{ gap: space(2) }}>
+          <Body style={{ fontWeight: '700' }}>Invitation Card</Body>
+          <View style={{ height: 160, borderRadius: radius.md, overflow: 'hidden', backgroundColor: rgb(theme.surfaceSunken) }}>
+            <Image source={{ uri: cardUrl }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+          </View>
+        </Card>
+      ) : null}
+
+      <Card style={{ gap: space(2) }}>
+        <Caption style={{ fontWeight: '600', color: rgb(theme.ink[800]) }}>Link</Caption>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Copy link"
+          onPress={async () => {
+            await Clipboard.setStringAsync(link);
+            setCopied(true);
+          }}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: space(2),
+            padding: space(3),
+            borderWidth: 1,
+            borderColor: rgb(theme.border),
+            backgroundColor: rgb(theme.surfaceSunken),
+          }}
+        >
+          <Caption numberOfLines={1} style={{ flex: 1 }}>{link}</Caption>
+          <Copy size={18} color={rgb(theme.brand)} />
+        </Pressable>
+      </Card>
+
+      <ShareRow icon={<ShareNetwork size={22} color={rgb(theme.brand)} />} label="Share Link" onPress={() => void Share.share({ message })} />
+      <ShareRow icon={<Copy size={22} color={rgb(theme.brand)} />} label={copied ? 'Link Copied' : 'Copy Link'} onPress={async () => { await Clipboard.setStringAsync(link); setCopied(true); }} />
       <Button label="Done" onPress={onDone} />
     </Screen>
   );

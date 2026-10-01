@@ -63,10 +63,9 @@ interface Suggestion {
   shortlisted?: boolean;
   interaction?: string;
 }
-type Tab = "for-you" | "nearby" | "new" | "shortlisted";
+type Tab = "for-you" | "new" | "shortlisted";
 const tabs: { key: Tab; label: string }[] = [
   { key: "for-you", label: "For You" },
-  { key: "nearby", label: "Nearby" },
   { key: "new", label: "New" },
   { key: "shortlisted", label: "Shortlisted" },
 ];
@@ -95,9 +94,7 @@ export default function Matches() {
       ? { view: "shortlisted" }
       : tab === "new"
         ? { addedWithinDays: 30, sort: "recent" }
-        : tab === "nearby"
-          ? { view: "active" }
-          : { sort };
+        : { sort };
   const {
     data,
     isLoading,

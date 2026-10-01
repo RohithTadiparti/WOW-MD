@@ -91,7 +91,7 @@ export function MaritalHistoryForm({
       <Card>
         <Field label="Children (Boys)" value={form.childrenBoys} onChangeText={setCount('childrenBoys')} keyboardType="number-pad" maxLength={2} autoFilled={autofilledKeys?.has('maritalHistory.boys') || autofilledKeys?.has('boys')} />
         <Field label="Children (Girls)" value={form.childrenGirls} onChangeText={setCount('childrenGirls')} keyboardType="number-pad" maxLength={2} autoFilled={autofilledKeys?.has('maritalHistory.girls') || autofilledKeys?.has('girls')} />
-        <Field label="Living With" value={form.livingWith} onChangeText={set('livingWith', true)} hint="E.g. Father, Mother, Self" autoFilled={autofilledKeys?.has('maritalHistory.childrenLivingWith') || autofilledKeys?.has('childrenLivingWith')} autoCapitalize="words" />
+        <Field label="Living With" value={form.livingWith} onChangeText={set('livingWith', true)} hint="E.g. Father, Mother, Self" autoFilled={autofilledKeys?.has('maritalHistory.childrenLivingWith') || autofilledKeys?.has('childrenLivingWith')} autoCapitalize="sentences" />
       </Card>
       
       <View style={{ gap: space(2) }}>

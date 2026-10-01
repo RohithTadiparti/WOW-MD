@@ -29,8 +29,12 @@ export function ProfileCompletionCard({ percent, hideAction }: ProfileCompletion
       </View>
       <View style={{ flex: 1, gap: space(2) }}>
         <View>
-          <Body style={{ fontWeight: '600' }}>Complete your profile</Body>
-          <Caption tone="muted">Get more relevant matches</Caption>
+          <Body style={{ fontWeight: '600' }}>
+            {percent >= 100 ? 'Profile complete' : 'Complete your profile'}
+          </Body>
+          <Caption tone="muted">
+            {percent >= 100 ? 'Your biodata is complete' : 'Get more relevant matches'}
+          </Caption>
         </View>
         {!hideAction ? (
           <Pressable

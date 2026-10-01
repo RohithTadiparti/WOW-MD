@@ -99,17 +99,67 @@ export class AiService {
   "firstName": "string (required if found)",
   "lastName": "string",
   "dateOfBirth": "YYYY-MM-DD",
+  "gender": "string (male, female, other)",
   "heightCm": "number (in cm)",
   "complexion": "string (Fair, Wheatish, Dark)",
   "communicationAddress": "string",
   "alternateMobile": "string",
   "religion": "string",
   "caste": "string",
-  "subCaste": "string",
+  "subcaste": "string",
   "motherTongue": "string",
   "maritalStatus": "string (never_married, divorced, widowed, awaiting_divorce)",
-  "education": { "highestQualification": "string", "course": "string", "institution": "string", "occupationStatus": "string (employed, self_employed, not_working)" },
-  "family": { "father": { "name": "string", "profession": "string" }, "mother": { "name": "string", "profession": "string" } }
+  "city": "string",
+  "state": "string",
+  "country": "string",
+  "diet": "string",
+  "smoking": "string",
+  "drinking": "string",
+  "languages": "array of strings",
+  "education": { 
+    "highestQualification": "string", 
+    "college": "string", 
+    "occupationStatus": "string (employed, self_employed, not_working)", 
+    "profession": "string", 
+    "companyName": "string", 
+    "annualIncome": "string",
+    "workCity": "string",
+    "workState": "string",
+    "workCountry": "string"
+  },
+  "family": { 
+    "father": { "name": "string", "profession": "string" }, 
+    "mother": { "name": "string", "profession": "string" }, 
+    "brothers": "number", 
+    "sisters": "number" 
+  },
+  "horoscope": { 
+    "timeOfBirth": "string", 
+    "cityOfBirth": "string", 
+    "stateOfBirth": "string",
+    "countryOfBirth": "string",
+    "rasi": "string", 
+    "star": "string", 
+    "padam": "string", 
+    "gothram": "string", 
+    "kujaDosham": "string",
+    "horoscopeMatch": "string"
+  },
+  "partnerPreferences": { 
+    "ageMin": "number", 
+    "ageMax": "number", 
+    "heightMin": "number", 
+    "heightMax": "number", 
+    "maritalStatus": "array of strings", 
+    "religion": "string", 
+    "caste": "array of strings",
+    "motherTongue": "array of strings", 
+    "education": "array of strings", 
+    "occupation": "array of strings", 
+    "nri": "string",
+    "location": "array of strings",
+    "otherInfo": "string"
+  }
 }
 Do not invent values. If a field is not present in the document, omit it or set it to null. Return ONLY raw JSON, without markdown formatting or code blocks.`;
     const responseText = await this.ai.complete(prompt, {

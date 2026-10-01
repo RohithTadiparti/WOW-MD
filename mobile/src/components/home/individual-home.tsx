@@ -95,8 +95,8 @@ export function IndividualHome({ profileId }: { profileId: string | null }) {
   });
 
   const recommendations = useQuery({
-    queryKey: ['recommendations-matches'],
-    queryFn: async () => (await api.get('/ai/recommendations/matches')).data as { data: Suggestion[] },
+    queryKey: ['recommendations-matches', profileId],
+    queryFn: async () => (await api.get('/ai/recommendations/matches', { params: profileId ? { profileId } : undefined })).data as { data: Suggestion[] },
     enabled: Boolean(completion.data?.complete),
     retry: false,
   });
@@ -274,6 +274,7 @@ export function IndividualHome({ profileId }: { profileId: string | null }) {
                       score: String(Math.round(rec.score ?? 0)),
                       shortlisted: String(Boolean(rec.shortlisted)),
                       interaction: rec.interaction ?? 'none',
+                      actingProfileId: profileId ?? '',
                     },
                   })
                 }

@@ -48,7 +48,7 @@ export class UsersService {
     } else {
       Object.assign(profile, dto);
     }
-    profile.profileCompleted = this.isComplete(profile);
+    // Biodata completion dictates this flag now.
     return this.profiles.save(profile);
   }
 

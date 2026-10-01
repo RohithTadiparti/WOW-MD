@@ -167,7 +167,10 @@ export function Eyebrow({ children, style }: TxtProps) {
 
 // --------------------------------------------------------------- surfaces --
 
-export function Screen({ children, scroll = true, onRefresh, refreshing = false }: { children: ReactNode; scroll?: boolean; onRefresh?: () => void; refreshing?: boolean }) {
+import { forwardRef } from 'react';
+
+export const Screen = forwardRef<ScrollView, { children: ReactNode; scroll?: boolean; onRefresh?: () => void; refreshing?: boolean }>(
+  ({ children, scroll = true, onRefresh, refreshing = false }, ref) => {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const style = { flex: 1 };
@@ -188,6 +191,7 @@ export function Screen({ children, scroll = true, onRefresh, refreshing = false 
   return (
     <HeartBackdrop>
       <ScrollView 
+        ref={ref}
         style={style} 
         contentContainerStyle={content} 
         keyboardShouldPersistTaps="handled"
@@ -197,12 +201,13 @@ export function Screen({ children, scroll = true, onRefresh, refreshing = false 
       </ScrollView>
     </HeartBackdrop>
   );
-}
+});
 
-export function Card({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
+export function Card({ children, style, onLayout }: { children: ReactNode; style?: StyleProp<ViewStyle>; onLayout?: (e: any) => void; }) {
   const theme = useTheme();
   return (
     <View
+      onLayout={onLayout}
       style={[
         {
           backgroundColor: rgb(theme.surface),

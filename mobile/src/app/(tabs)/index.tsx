@@ -3,6 +3,7 @@ import { View } from 'react-native';
 
 import { api } from '@/lib/api';
 import { useAuth } from '@/store/auth';
+import { useManagedProfileStore } from '@/store/managed-profile';
 import { Permission, canAny } from '@/shared/permissions';
 import { IndividualHome } from '@/components/home/individual-home';
 import { NotificationBell } from '@/components/home/notification-bell';
@@ -58,6 +59,8 @@ export default function Home() {
     canAny(permissions, [Permission.MATCH_BROWSE]) &&
     !canAny(permissions, [Permission.AGENCY_MANAGE]);
   const isAgent = canAny(permissions, [Permission.AGENCY_MANAGE]);
+  const isSteward = canAny(permissions, [Permission.ACT_ON_BEHALF]);
+  const activeManagedProfileId = useManagedProfileStore((s) => s.activeManagedProfileId);
 
   const { data: profile, isPending } = useQuery({
     queryKey: ['me'],
@@ -133,7 +136,7 @@ export default function Home() {
         <View style={{ gap: space(4) }}>
           {isProvider ? <ProviderHome /> : null}
           {isOfficer ? <OfficerHome canFieldwork={canFieldwork} /> : null}
-          {isIndividual ? <IndividualHome profileId={profile?.id ?? null} /> : null}
+          {isIndividual ? <IndividualHome profileId={isSteward ? activeManagedProfileId : (profile?.id ?? null)} /> : null}
 
           {/* The counters this screen has always carried, for the accounts that
               are neither selling nor verifying. */}

@@ -79,8 +79,6 @@ interface MeResponse {
   address?: string | null;
   contactPhone?: string | null;
   bio?: string | null;
-  managingFor?: string | null;
-  stewardRelation?: string | null;
   visibility?: string | null;
 }
 
@@ -93,8 +91,6 @@ const EMPTY = {
   address: '',
   contactPhone: '',
   bio: '',
-  managingFor: '',
-  stewardRelation: '',
   visibility: 'matches_only',
 };
 
@@ -142,17 +138,14 @@ export default function Profile() {
   const user = useAuth((s) => s.user);
   const permissions = useAuth((s) => s.user?.permissions ?? []);
 
-  /*
-   * A steward (family member or agent) is asked the managing-for and
-   * relationship fields. An agency is not — their profile is not a biodata
-   * and these fields don't apply to them (same logic as Web Profile.tsx).
-   */
   const isSteward = can(permissions, Permission.ACT_ON_BEHALF);
   const isAgency = can(permissions, Permission.AGENCY_MANAGE);
-  const stewardFields = isSteward && !isAgency;
+  const isFamilyMember = isSteward && !isAgency;
+  
   // Visibility is meaningful for anyone whose profile can appear in matches.
-  const hasBiodata = can(permissions, Permission.MATCH_BROWSE);
-  const showVisibility = hasBiodata || stewardFields;
+  // Family members do not appear in matches themselves.
+  const showVisibility = can(permissions, Permission.MATCH_BROWSE) && !isFamilyMember;
+  const showMatrimonialDetails = !isFamilyMember;
 
   const [form, setForm] = useState(EMPTY);
   const [editing, setEditing] = useState(false);
@@ -177,8 +170,6 @@ export default function Profile() {
       address: data.address ?? '',
       contactPhone: data.contactPhone ?? '',
       bio: data.bio ?? '',
-      managingFor: data.managingFor ?? '',
-      stewardRelation: data.stewardRelation ?? '',
       visibility: data.visibility ?? 'matches_only',
     });
   }, [data]);
@@ -201,10 +192,10 @@ export default function Profile() {
       const base = ['gender', 'dateOfBirth', 'city', 'address', 'contactPhone', 'bio'] as const;
       const extraKeys: (keyof typeof EMPTY)[] = [
         ...base,
-        ...(stewardFields ? (['managingFor', 'stewardRelation'] as (keyof typeof EMPTY)[]) : []),
         ...(showVisibility ? (['visibility'] as (keyof typeof EMPTY)[]) : []),
       ];
       for (const key of extraKeys) {
+        if (!showMatrimonialDetails && ['gender', 'dateOfBirth', 'city', 'address', 'bio'].includes(key)) continue;
         const value = ((form[key] as string) ?? '').trim();
         if (value) payload[key] = value;
       }
@@ -343,7 +334,40 @@ export default function Profile() {
             keyboardType="phone-pad"
             placeholder="10-digit mobile number"
           />
-          <Textarea label="About you" value={form.bio} onChange={set('bio')} rows={4} />
+
+          {showMatrimonialDetails ? (
+            <>
+              <SelectField
+                label="Gender"
+                value={form.gender}
+                options={GENDERS}
+                onChange={set('gender')}
+              />
+              <WowCalendar
+                label="Date of birth"
+                title="Select date of birth"
+                value={form.dateOfBirth}
+                onChange={set('dateOfBirth')}
+                maximumDate={latestAdultDob()}
+              />
+              <ChoiceField
+                label="State"
+                value={form.state}
+                options={STATES_BY_COUNTRY['India'] ?? []}
+                onChange={(newState) => {
+                  setForm((f) => ({
+                    ...f,
+                    state: newState,
+                    city: districtsForState(newState).includes(f.city) ? f.city : '',
+                  }));
+                }}
+                placeholder="Choose…"
+              />
+              <ChoiceField label="City" value={form.city} options={districtsForState(form.state)} onChange={set('city')} placeholder="Choose…" />
+              <Field label="Address" value={form.address} onChangeText={set('address')} />
+              <Textarea label="About you" value={form.bio} onChange={set('bio')} rows={4} />
+            </>
+          ) : null}
 
           {showVisibility ? (
             <SelectField
@@ -373,31 +397,25 @@ export default function Profile() {
           <SectionTitle>Your details</SectionTitle>
           <DetailGrid>
             <DetailRow label="Name">{data?.displayName || '—'}</DetailRow>
-            {stewardFields ? (
+            <DetailRow label="Contact number">{data?.contactPhone || '—'}</DetailRow>
+            {showMatrimonialDetails ? (
               <>
-                <DetailRow label="Managing profile for">
-                  {data?.managingFor ? (MANAGING_FOR_LABEL[data.managingFor] ?? data.managingFor) : '—'}
+                <DetailRow label="Gender">
+                  {GENDERS.find((g) => g.value === data?.gender)?.label ?? '—'}
                 </DetailRow>
-                <DetailRow label="Relationship with the user">
-                  {data?.stewardRelation || '—'}
-                </DetailRow>
+                <DetailRow label="Date of birth">{formatDate(data?.dateOfBirth, '—')}</DetailRow>
+                <DetailRow label="State">{getStateForCity(data?.city) || '—'}</DetailRow>
+                <DetailRow label="City">{data?.city || '—'}</DetailRow>
+                <DetailRow label="Address">{data?.address || '—'}</DetailRow>
               </>
             ) : null}
-            <DetailRow label="Gender">
-              {GENDERS.find((g) => g.value === data?.gender)?.label ?? '—'}
-            </DetailRow>
-            <DetailRow label="Date of birth">{formatDate(data?.dateOfBirth, '—')}</DetailRow>
-            <DetailRow label="State">{getStateForCity(data?.city) || '—'}</DetailRow>
-            <DetailRow label="City">{data?.city || '—'}</DetailRow>
-            <DetailRow label="Address">{data?.address || '—'}</DetailRow>
-            <DetailRow label="Contact number">{data?.contactPhone || '—'}</DetailRow>
             {showVisibility ? (
               <DetailRow label="Profile visibility">
                 {data?.visibility ? (VISIBILITY_LABEL[data.visibility] ?? data.visibility) : '—'}
               </DetailRow>
             ) : null}
           </DetailGrid>
-          {data?.bio ? <Body tone="muted">{data.bio}</Body> : null}
+          {showMatrimonialDetails && data?.bio ? <Body tone="muted">{data.bio}</Body> : null}
           <Button label="Edit profile" onPress={() => setEditing(true)} />
         </Card>
       )}

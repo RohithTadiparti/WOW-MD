@@ -263,19 +263,20 @@ export function PhotoPicker({
         : await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'],
             quality: 0.85,
+            allowsMultipleSelection: true,
           });
     if (result.canceled || result.assets.length === 0) return;
 
-    const asset = result.assets[0];
     setBusy(true);
     setProgress(0);
     try {
-      const name =
-        asset.fileName ?? `upload-${Date.now()}.${asset.uri.split('.').pop() ?? FALLBACK_EXTENSION}`;
-      const { url, key } = await upload(asset.uri, name, asset.mimeType ?? 'image/jpeg', kind, setProgress);
-      onUploaded(url, key);
+      for (const asset of result.assets) {
+        const name = asset.fileName ?? `upload-${Date.now()}.${asset.uri.split('.').pop() ?? FALLBACK_EXTENSION}`;
+        const url = await upload(asset.uri, name, asset.mimeType ?? 'image/jpeg', kind, setProgress);
+        onUploaded(url);
+      }
     } catch (err) {
-      report(err, 'That photo could not be uploaded.');
+      report(err, 'Your photos could not be uploaded.');
     } finally {
       setBusy(false);
       setProgress(0);

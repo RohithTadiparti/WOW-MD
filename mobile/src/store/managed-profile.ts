@@ -31,20 +31,31 @@ interface ManagedProfileState {
   clear: () => void;
 }
 
-export const useManagedProfileStore = create<ManagedProfileState>()((set) => ({
-  activeManagedProfileId: null,
-  activeManagedProfileName: null,
-  activeManagedProfileRelation: null,
-  setActiveManagedProfile: (id, displayName, relation = null) =>
-    set({
-      activeManagedProfileId: id,
-      activeManagedProfileName: displayName,
-      activeManagedProfileRelation: relation,
-    }),
-  clear: () =>
-    set({
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { persist, createJSONStorage } from 'zustand/middleware';
+
+export const useManagedProfileStore = create<ManagedProfileState>()(
+  persist(
+    (set) => ({
       activeManagedProfileId: null,
       activeManagedProfileName: null,
       activeManagedProfileRelation: null,
+      setActiveManagedProfile: (id, displayName, relation = null) =>
+        set({
+          activeManagedProfileId: id,
+          activeManagedProfileName: displayName,
+          activeManagedProfileRelation: relation,
+        }),
+      clear: () =>
+        set({
+          activeManagedProfileId: null,
+          activeManagedProfileName: null,
+          activeManagedProfileRelation: null,
+        }),
     }),
-}));
+    {
+      name: 'managed-profile-storage',
+      storage: createJSONStorage(() => AsyncStorage),
+    }
+  )
+);

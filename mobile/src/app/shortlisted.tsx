@@ -1,6 +1,6 @@
 import { Pressable, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { Heart } from 'phosphor-react-native';
 
@@ -9,6 +9,9 @@ import { ProfileSilhouette } from '@/components/profile-silhouette';
 import { ListScreen } from '@/components/layout';
 import { Alert, Body, Caption } from '@/components/ui';
 import { rgb, space, useTheme, radius } from '@/theme';
+import { useAuth, selectPermissions } from '@/store/auth';
+import { useManagedProfileStore } from '@/store/managed-profile';
+import { can, Permission } from '@/shared/permissions';
 
 interface Profile {
   id: string;
@@ -31,14 +34,20 @@ export default function Shortlisted() {
   const router = useRouter();
   const qc = useQueryClient();
 
+  const permissions = useAuth(selectPermissions);
+  const isSteward = can(permissions, Permission.ACT_ON_BEHALF);
+  const activeManagedProfileId = useManagedProfileStore((s) => s.activeManagedProfileId);
+  const profileId = isSteward ? activeManagedProfileId : null;
+  const clientParam = profileId ? { profileId } : undefined;
+
   const { data, isPending, isError, error, refetch, isRefetching } = useQuery({
-    queryKey: ['shortlist'],
-    queryFn: async () => (await api.get('/matches/shortlist')).data as Suggestion[],
+    queryKey: ['shortlist', profileId],
+    queryFn: async () => (await api.get('/matches/shortlist', { params: clientParam })).data as Suggestion[],
     retry: false,
   });
 
   const remove = useMutation({
-    mutationFn: (id: string) => api.delete(`/matches/shortlist/${id}`),
+    mutationFn: (id: string) => api.delete(`/matches/shortlist/${id}`, { params: clientParam }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['shortlist'] });
       void qc.invalidateQueries({ queryKey: ['suggestions'] });
@@ -73,6 +82,7 @@ export default function Shortlisted() {
                 score: String(Math.round(item.score)),
                 shortlisted: 'true',
                 interaction: item.interaction ?? 'none',
+                actingProfileId: profileId ?? '',
               },
             })
           }

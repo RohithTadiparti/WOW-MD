@@ -52,7 +52,7 @@ export const REQUIRED_SECTIONS = [
   'family',
   'education',
   'preferences',
-  'identity',
+  'photos',
 ] as const;
 
 export type ProfileSection = (typeof REQUIRED_SECTIONS)[number];
@@ -74,7 +74,7 @@ const SECTION_LABEL: Record<ProfileSection, string> = {
   family: 'Family',
   education: 'Education and occupation',
   preferences: 'Partner preferences',
-  identity: 'Identity verification',
+  photos: 'Photographs',
 };
 
 /**
@@ -340,10 +340,10 @@ export class ProfileDetailsService {
     const row = await this.editable(actor, profileId);
 
     if (dto.preferredAgeMin > dto.preferredAgeMax) {
-      throw new BadRequestException('The minimum age cannot be above the maximum');
+      throw new BadRequestException('Age From cannot be greater than Age To.');
     }
     if (dto.preferredHeightMinCm > dto.preferredHeightMaxCm) {
-      throw new BadRequestException('The minimum height cannot be above the maximum');
+      throw new BadRequestException('Height From cannot be greater than Height To.');
     }
 
     /*
@@ -999,6 +999,29 @@ export class ProfileDetailsService {
     return this.report(profileId, profile, details, siblings);
   }
 
+  async markComplete(actor: AuthUser, profileId: string): Promise<CompletionReport> {
+    const profile = await this.load(profileId);
+    this.assertMayRead(actor, profile);
+
+    const [details, siblings] = await Promise.all([
+      this.details.findOne({ where: { profileId } }),
+      this.siblings.find({ where: { profileId } }),
+    ]);
+    
+    const report = this.report(profileId, profile, details, siblings);
+    if (!report.complete) {
+      throw new BadRequestException('Cannot mark profile as complete: missing sections ' + report.missing.join(', '));
+    }
+
+    profile.profileCompleted = true;
+    if (profile.visibility === ProfileVisibility.PRIVATE) {
+      profile.visibility = ProfileVisibility.MATCHES_ONLY;
+    }
+    await this.profiles.save(profile);
+
+    return report;
+  }
+
   /**
    * Computed from the stored data every time it is asked for.
    *
@@ -1012,51 +1035,43 @@ export class ProfileDetailsService {
     details: ProfileDetails | null,
     siblings: ProfileSibling[],
   ): CompletionReport {
-    const has = (value: unknown) =>
-      value !== null && value !== undefined && value !== '' &&
-      !(typeof value === 'object' && Object.keys(value as object).length === 0);
+    const has = (value: unknown) => {
+      if (value === null || value === undefined) return false;
+      if (typeof value === 'string' && value.trim() === '') return false;
+      if (typeof value === 'object' && !(value instanceof Date) && Object.keys(value as object).length === 0) return false;
+      return true;
+    };
 
     const done: Record<ProfileSection, boolean> = {
-      // Native place moved to the family section and place of birth is no
-      // longer collected, so neither can be a condition of this one being
-      // complete — every existing profile would otherwise become incomplete on
-      // deploy, and the fix would look like data loss.
       personal: Boolean(
         details &&
           has(details.firstName) &&
           has(details.lastName) &&
           has(details.heightCm) &&
           has(details.complexion) &&
-          has(details.communicationAddress),
+          has(details.communicationAddress) &&
+          has(profile.dateOfBirth) &&
+          has(profile.gender)
       ),
       religion: Boolean(
         details && has(details.religion) && has(details.caste) && has(details.motherTongue),
       ),
-      // Answering "no horoscope" completes the section: the question has been
-      // answered, which is all the profile needs.
-      horoscope: Boolean(
-        details && (details.horoscopeAvailable === false || has(details.horoscope)),
-      ),
-      marital: Boolean(details && has(details.maritalStatus)),
-      // The native place is asked here now.
+      horoscope: true,
+      marital: true,
       family: Boolean(
         details &&
           has(details.father) &&
           has(details.mother) &&
           has(details.familyType) &&
-          details.brothers !== null &&
-          details.sisters !== null &&
-          // Counts and records have to agree, or the family section is telling
-          // two different stories.
-          siblings.length >= 0,
+          has(details.familyStatus)
       ),
       education: Boolean(
-        details && has(details.highestQualification) && has(details.occupationStatus),
+        details && has(details.highestQualification) && has(details.course) && has(details.occupationStatus),
       ),
       preferences: Boolean(
-        details && has(details.preferredAgeMin) && has(details.preferredHeightMinCm),
+        details && has(details.preferredAgeMin) && has(details.preferredAgeMax) && has(details.preferredHeightMinCm) && has(details.preferredHeightMaxCm)
       ),
-      identity: Boolean(profile.governmentIdHash),
+      photos: Boolean((profile.photos?.length ?? 0) >= ProfileDetailsService.REQUIRED_PHOTOS),
     };
 
     const sections = REQUIRED_SECTIONS.map((section) => ({
@@ -1066,6 +1081,7 @@ export class ProfileDetailsService {
     }));
     const missing = sections.filter((s) => !s.complete).map((s) => s.section);
 
+    console.log('COMPLETION_DEBUG:', { profileId, missing, done, photos: profile.photos?.length, details });
     return {
       profileId,
       complete: missing.length === 0,
@@ -1166,7 +1182,7 @@ export class ProfileDetailsService {
       this.siblings.find({ where: { profileId } }),
     ]);
     const report = this.report(profileId, profile, details, siblings);
-    return report.missing.every((section) => section === 'identity');
+    return report.complete;
   }
 
   /** The sections still missing, for a message that says what to go and fill in. */
@@ -1179,7 +1195,7 @@ export class ProfileDetailsService {
       this.siblings.find({ where: { profileId } }),
     ]);
     return this.report(profileId, profile, details, siblings)
-      .sections.filter((s) => !s.complete && s.section !== 'identity')
+      .sections.filter((s) => !s.complete)
       .map((s) => s.label);
   }
 }
