@@ -116,18 +116,15 @@ export const QUOTATION_STAGE_TONE: Record<QuotationStage, Tone> = {
 /**
  * Actions the seller side may take, by current status.
  *
- * A request carries no price: the provider quotes first, which is why
- * `requested` offers a quotation rather than an acceptance.
+ * A request with a listed price or customer budget can be accepted as-is;
+ * otherwise the provider sends a quotation.
  */
 export const ACTIONS: Record<string, { label: string; path: string; primary?: boolean }[]> = {
   requested: [{ label: 'Decline', path: 'cancel' }],
   // Takes the offer back and leaves the request with the provider to re-price.
   // It used to cancel the whole booking (EZ1-I266).
   quotation_sent: [{ label: 'Withdraw quotation', path: 'quotations/withdraw' }],
-  quotation_accepted: [
-    { label: 'Accept the job', path: 'confirm', primary: true },
-    { label: 'Decline', path: 'cancel' },
-  ],
+  quotation_accepted: [{ label: 'Cancel', path: 'cancel' }],
   payment_pending: [{ label: 'Cancel', path: 'cancel' }],
   // Historic: nothing enters `pending` any more, and the server moves it only to
   // confirmed or cancelled, which "Accept the job" never produced.

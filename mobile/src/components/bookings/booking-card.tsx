@@ -79,6 +79,9 @@ export function BookingCard({
   const remaining = Math.max(0, Number(booking.amount ?? 0) - paid);
   const nextAction = nextActionFor(booking);
   const deliverable = canMarkDelivered(booking);
+  const canAccept =
+    booking.status === 'requested' &&
+    (Number(booking.estimatedAmount ?? 0) > 0 || Number(booking.expectedBudget ?? 0) > 0);
 
   return (
     <Card>
@@ -268,8 +271,24 @@ export function BookingCard({
         </>
       )}
 
-      {(actions.length > 0 || (canQuote && QUOTABLE.includes(booking.status))) && (
+      {(actions.length > 0 || canAccept || (canQuote && QUOTABLE.includes(booking.status))) && (
         <View style={{ gap: space(2) }}>
+          {canAccept ? (
+            <Button
+              label="Accept"
+              disabled={acting}
+              onPress={() =>
+                NativeAlert.alert(
+                  'Accept booking request?',
+                  'The customer will be asked to pay the advance once you accept.',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Accept', onPress: () => onAct(booking.id, 'accept') },
+                  ],
+                )
+              }
+            />
+          ) : null}
           {canQuote && QUOTABLE.includes(booking.status) ? (
             <Button
               label={booking.quotation ? 'Re-quote' : 'Send quotation'}

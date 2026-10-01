@@ -220,22 +220,22 @@ export default function ProviderBookings({ canQuote }: { canQuote: boolean }) {
                 {a.label}
               </button>
             ))}
-            {canAcceptListedPrice(b) && (
+            {canAcceptCustomerRequest(b) && (
               <button
                 className="btn btn-sm"
                 disabled={act.isPending}
                 onClick={() => {
                   if (
                     !window.confirm(
-                      `Accept this request at ${formatMoney(b.estimatedAmount, b.currency)}? The customer will then be able to pay the advance.`,
+                      `Accept this request at ${formatMoney(customerRequestedAmount(b), b.currency)}? The customer will then be able to pay the advance.`,
                     )
                   ) {
                     return;
                   }
-                  act.mutate({ id: b.id, path: 'accept-listed-price' });
+                  act.mutate({ id: b.id, path: 'accept' });
                 }}
               >
-                Accept at {formatMoney(b.estimatedAmount, b.currency)}
+                Accept
               </button>
             )}
             {canQuote && QUOTABLE.includes(b.status) && (
@@ -273,16 +273,24 @@ export default function ProviderBookings({ canQuote }: { canQuote: boolean }) {
   );
 }
 
-function canAcceptListedPrice(booking: {
+function canAcceptCustomerRequest(booking: {
   status: string;
-  offeringId?: string | null;
   estimatedAmount?: string | null;
+  expectedBudget?: string | null;
 }): boolean {
   return (
     booking.status === 'requested' &&
-    Boolean(booking.offeringId) &&
-    Number(booking.estimatedAmount ?? 0) > 0
+    (Number(booking.estimatedAmount ?? 0) > 0 || Number(booking.expectedBudget ?? 0) > 0)
   );
+}
+
+function customerRequestedAmount(booking: {
+  estimatedAmount?: string | null;
+  expectedBudget?: string | null;
+}): string | null | undefined {
+  return Number(booking.estimatedAmount ?? 0) > 0
+    ? booking.estimatedAmount
+    : booking.expectedBudget;
 }
 
 function formatMoney(amount: string | null | undefined, currency = 'INR'): string {

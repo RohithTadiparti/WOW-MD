@@ -260,6 +260,39 @@ describe('BookingsService', () => {
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
+    it('accepts a customer budget once and makes the advance payable', async () => {
+      current = baseBooking({
+        status: BookingStatus.REQUESTED,
+        amount: '0.00',
+        expectedBudget: '12500.00',
+        estimatedAmount: null,
+      });
+
+      const result = await service.acceptRequest(asUser('vendor-owner', UserRole.VENDOR), 'b1');
+
+      expect(result).toMatchObject({ status: BookingStatus.PAYMENT_PENDING, amount: '12500.00' });
+      expect(outbox.record).toHaveBeenCalledWith(
+        expect.objectContaining({ eventType: 'booking.confirmed', payload: expect.objectContaining({ amount: '12500.00' }) }),
+        expect.anything(),
+      );
+      await expect(
+        service.acceptRequest(asUser('vendor-owner', UserRole.VENDOR), 'b1'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('uses the selected listed total over a customer budget', async () => {
+      current = baseBooking({
+        status: BookingStatus.REQUESTED,
+        amount: '0.00',
+        estimatedAmount: '10000.00',
+        expectedBudget: '12500.00',
+      });
+
+      const result = await service.acceptRequest(asUser('vendor-owner', UserRole.VENDOR), 'b1');
+
+      expect(result.amount).toBe('10000.00');
+    });
+
     it('rejects an illegal transition COMPLETED to CONFIRMED', async () => {
       current = baseBooking({ status: BookingStatus.COMPLETED });
       await expect(

@@ -958,7 +958,48 @@ export class BookingsService {
 
       await this.outbox.record(
         {
-          eventType: 'booking.listed_price_accepted',
+          eventType: 'booking.confirmed',
+          aggregateType: 'booking',
+          payload: { bookingId, providerId: booking.providerId, amount: booking.amount },
+        },
+        manager,
+      );
+      return saved;
+    });
+  }
+
+  /**
+   * The vendor accepts the amount the customer proposed. A selected catalogue
+   * price wins over a free-form budget because it is the exact immutable total
+   * shown at request time. A budget-only request may be accepted at that budget
+   * too; a request without either still needs a quotation.
+   */
+  async acceptRequest(actor: AuthUser, bookingId: string): Promise<Booking> {
+    const booking = await this.loadOrFail(bookingId);
+    await this.assertSellerSide(actor, booking);
+
+    if (booking.status !== BookingStatus.REQUESTED) {
+      throw new BadRequestException('Only a new customer request can be accepted');
+    }
+
+    const listed = Number(booking.estimatedAmount ?? 0) > 0 ? booking.estimatedAmount : null;
+    const budget = Number(booking.expectedBudget ?? 0) > 0 ? booking.expectedBudget : null;
+    const agreedAmount = listed ?? budget;
+    if (!agreedAmount) {
+      throw new BadRequestException('This request has no customer price or budget. Send a quotation instead.');
+    }
+
+    return this.dataSource.transaction(async (manager) => {
+      if (booking.slotId) await this.availability.confirm(manager, booking.slotId);
+
+      this.assertTransition(booking.status, BookingStatus.PAYMENT_PENDING);
+      booking.amount = agreedAmount;
+      booking.status = BookingStatus.PAYMENT_PENDING;
+      const saved = await manager.getRepository(Booking).save(booking);
+
+      await this.outbox.record(
+        {
+          eventType: 'booking.confirmed',
           aggregateType: 'booking',
           payload: { bookingId, providerId: booking.providerId, amount: booking.amount },
         },

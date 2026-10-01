@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Not, Repository } from 'typeorm';
+import { DataSource, Not, Repository } from 'typeorm';
 import { Booking } from './entities/booking.entity';
 import { Quotation } from './entities/quotation.entity';
 import { RespondQuotationDto, SendQuotationDto } from './dto/quotation.dto';
@@ -9,6 +9,7 @@ import { AppConfigService } from '../../config/app-config.service';
 import { OutboxService } from '../../platform/events/outbox.service';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { BookingStatus, QuotationStatus } from '../../common/enums';
+import { AvailabilityService } from '../vendors/availability.service';
 
 /** Two weeks is long enough to decide and short enough that prices still hold. */
 const DEFAULT_VALIDITY_DAYS = 14;
@@ -29,6 +30,8 @@ export class QuotationsService {
     private readonly bookingsService: BookingsService,
     private readonly cfg: AppConfigService,
     private readonly outbox: OutboxService,
+    private readonly dataSource: DataSource,
+    private readonly availability: AvailabilityService,
   ) {}
 
   /**
@@ -118,30 +121,37 @@ export class QuotationsService {
       throw new BadRequestException('That booking is not waiting on a quotation decision');
     }
 
-    quotation.status = QuotationStatus.ACCEPTED;
-    quotation.respondedByUserId = actor.userId;
-    quotation.respondedAt = new Date();
-    quotation.responseNote = dto.note ?? null;
-    await this.quotations.save(quotation);
+    return this.dataSource.transaction(async (manager) => {
+      if (booking.slotId) await this.availability.confirm(manager, booking.slotId);
 
-    booking.amount = quotation.amount;
-    booking.currency = quotation.currency;
-    // Which offer this booking is. Every quotation on a booking is kept, so
-    // without this the agreed terms are "the newest one", which is exactly
-    // wrong: a vendor who re-quotes after acceptance would rewrite the deal.
-    booking.acceptedQuotationId = quotation.id;
-    // Acceptance settles the price and nothing else. The provider still has to
-    // accept the job before any money moves — they may have taken another
-    // booking in the days the quotation sat unanswered.
-    booking.status = BookingStatus.QUOTATION_ACCEPTED;
-    const saved = await this.bookings.save(booking);
+      quotation.status = QuotationStatus.ACCEPTED;
+      quotation.respondedByUserId = actor.userId;
+      quotation.respondedAt = new Date();
+      quotation.responseNote = dto.note ?? null;
+      await manager.getRepository(Quotation).save(quotation);
 
-    await this.outbox.record({
-      eventType: 'booking.quotation_accepted',
-      aggregateType: 'booking',
-      payload: { bookingId: booking.id, quotationId, amount: quotation.amount },
+      booking.amount = quotation.amount;
+      booking.currency = quotation.currency;
+      // Which offer this booking is. Every quotation on a booking is kept, so
+      // without this the agreed terms are "the newest one", which is exactly
+      // wrong: a vendor who re-quotes after acceptance would rewrite the deal.
+      booking.acceptedQuotationId = quotation.id;
+      // Customer acceptance settles the price, reserves the date and opens the advance.
+      booking.status = BookingStatus.PAYMENT_PENDING;
+      const saved = await manager.getRepository(Booking).save(booking);
+
+      await this.outbox.record({
+        eventType: 'booking.quotation_accepted',
+        aggregateType: 'booking',
+        payload: { bookingId: booking.id, quotationId, amount: quotation.amount },
+      }, manager);
+      await this.outbox.record({
+        eventType: 'booking.confirmed',
+        aggregateType: 'booking',
+        payload: { bookingId: booking.id, providerId: booking.providerId, amount: quotation.amount },
+      }, manager);
+      return saved;
     });
-    return saved;
   }
 
   /** The buyer declines. The booking returns to the vendor to re-price. */

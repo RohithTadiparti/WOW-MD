@@ -411,10 +411,17 @@ export class BookingsController {
 
   @RequirePermissions(Permission.BOOKING_CONFIRM)
   @ApiOperation({
-    summary: 'Accept a selected listed price',
+    summary: 'Accept a customer request',
     description:
-      'Accepts a new request at the fixed package price the customer selected and makes the advance payable.',
+      'Accepts a new request at the customer\'s selected package total or stated budget and makes the advance payable.',
   })
+  @Put(':id/accept')
+  accept(@CurrentUser() actor: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.bookings.acceptRequest(actor, id);
+  }
+
+  /** @deprecated Kept for clients released before the general Accept action. */
+  @RequirePermissions(Permission.BOOKING_CONFIRM)
   @Put(':id/accept-listed-price')
   acceptListedPrice(@CurrentUser() actor: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.bookings.acceptListedPrice(actor, id);
