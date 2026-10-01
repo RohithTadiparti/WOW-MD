@@ -12,6 +12,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
+import { WowHeaderLogo } from "@/components/common/wow-header";
 import {
   ArrowLeft,
   DotsThreeVertical,
@@ -300,6 +301,7 @@ function Header({
           <Caption tone="faint">{online ? "Online" : "Offline"}</Caption>
         </View>
       </View>
+      <WowHeaderLogo />
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="More options"

@@ -19,6 +19,7 @@ import { Permission, can, canAny, type PermissionValue } from '@/shared/permissi
 import { useAuth } from '@/store/auth';
 import { rgb, useTheme } from '@/theme';
 import { typeface } from '@/theme/fonts';
+import { WowHeaderLogo } from '@/components/common/wow-header';
 
 /**
  * The tab bar.
@@ -88,7 +89,14 @@ export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
-        headerShown: false,
+        // Tab routes do not have a native header of their own by default.
+        // Showing this shared one gives every portal the same safe-area-aware
+        // brand placement without changing the page content below it.
+        headerShown: true,
+        headerTitle: () => <WowHeaderLogo />,
+        headerTitleAlign: 'center',
+        headerStyle: { backgroundColor: rgb(theme.surface) },
+        headerShadowVisible: false,
         tabBarActiveTintColor: rgb(theme.brandStrong),
         tabBarInactiveTintColor: rgb(theme.ink[400]),
         tabBarStyle: {
