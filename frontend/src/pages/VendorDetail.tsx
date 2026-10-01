@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useCategoryNames } from '../components/CategoryPicker';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate, useParams, Link } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { Permission, can } from '../lib/permissions';
 import { useAuth } from '../store/auth';
 import { EmptyState, Loading } from '../components/ui/Feedback';
 import { MapPin, Star, Storefront } from '@phosphor-icons/react';
+import RequestDialog from '../components/RequestDialog';
 import { SocialLinksList } from '../components/SocialLinks';
 import { SocialLink, listingSocialLinks } from '../lib/social-links';
 
@@ -17,7 +18,8 @@ import { SocialLink, listingSocialLinks } from '../lib/social-links';
  * vendor they need the whole picture — the trade, how long the business has
  * run, its portfolio, the services and prices it offers, and what other couples
  * said. This is that page, and the request itself still runs through the
- * availability flow on the Vendors page so there is one booking path, not two.
+ * availability flow as a modal over this page, so the selected vendor stays in
+ * context while the buyer selects a service, date and time.
  */
 interface PublicVendor {
   id: string;
@@ -67,7 +69,6 @@ interface Review {
 
 export default function VendorDetail() {
   const { id = '' } = useParams();
-  const navigate = useNavigate();
   const categoryNames = useCategoryNames();
   const permissions = useAuth((s) => s.user?.permissions ?? []);
   const canBook = can(permissions, Permission.BOOKING_CREATE);
@@ -79,6 +80,13 @@ export default function VendorDetail() {
    */
   const canRequestForClient = can(permissions, Permission.BOOKING_REQUEST_FOR_CLIENT);
   const canAsk = canBook || canRequestForClient;
+  const [requestOpen, setRequestOpen] = useState(false);
+  const [requestDate, setRequestDate] = useState('');
+
+  function openRequest(date = '') {
+    setRequestDate(date);
+    setRequestOpen(true);
+  }
 
   const { data: vendor, isLoading } = useQuery({
     queryKey: ['vendor', id],
@@ -205,7 +213,7 @@ export default function VendorDetail() {
           {canAsk && (
             <button
               className="btn mt-4"
-              onClick={() => navigate(`/vendors?request=${vendor.id}`)}
+              onClick={() => openRequest()}
             >
               Check availability &amp; request
             </button>
@@ -277,7 +285,7 @@ export default function VendorDetail() {
             {dayOpen.length === 0 && canAsk && (
               <button
                 className="btn btn-sm mt-2"
-                onClick={() => navigate(`/vendors?request=${vendor.id}&date=${checkedDate}`)}
+                onClick={() => openRequest(checkedDate)}
               >
                 Send request
               </button>
@@ -297,7 +305,7 @@ export default function VendorDetail() {
             {canAsk && (
               <button
                 className="btn btn-sm"
-                onClick={() => navigate(`/vendors?request=${vendor.id}`)}
+                onClick={() => openRequest()}
               >
                 Send request
               </button>
@@ -394,6 +402,14 @@ export default function VendorDetail() {
             ))}
           </div>
         </div>
+      )}
+
+      {requestOpen && (
+        <RequestDialog
+          vendor={vendor}
+          initialDate={requestDate}
+          onClose={() => setRequestOpen(false)}
+        />
       )}
     </div>
   );

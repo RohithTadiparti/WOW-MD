@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { Permission, can } from '../lib/permissions';
 import { CategoryNames, useCatalogCategories } from '../components/CategoryPicker';
@@ -90,7 +90,6 @@ export default function Vendors() {
    */
   const canRequestForClient = can(permissions, Permission.BOOKING_REQUEST_FOR_CLIENT);
   const canAsk = canBook || canRequestForClient;
-  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
 
   const { data, isLoading } = useQuery({
@@ -260,8 +259,10 @@ export default function Vendors() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {vendors.map((v) => (
-          <div
+          <Link
             key={v.id}
+            to={`/vendors/${v.id}`}
+            aria-label={`View ${v.name}`}
             className="group/vendor flex flex-col overflow-hidden rounded-lg border border-gray-200
               bg-surface transition-[border-color,box-shadow] duration-200
               hover:border-gray-300 hover:shadow-card"
@@ -350,12 +351,9 @@ export default function Vendors() {
                     <span className="font-medium">₹{v.startingPrice.toLocaleString('en-IN')}</span>
                   </p>
                 )}
-                <button
-                  className="btn btn-sm w-full transition-colors"
-                  onClick={() => navigate(`/vendors/${v.id}`)}
-                >
+                <span className="btn btn-sm w-full transition-colors">
                   View details
-                </button>
+                </span>
                 {!canAsk && (
                   <p className="rounded-sm bg-surface-sunken px-2 py-1.5 text-center text-xs text-gray-500">
                     Browse to recommend — the couple places the booking.
@@ -363,7 +361,7 @@ export default function Vendors() {
                 )}
               </div>
             </div>
-          </div>
+          </Link>
         ))}
       </div>
 
