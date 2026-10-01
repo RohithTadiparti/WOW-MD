@@ -42,7 +42,16 @@ interface BookingContext {
  *
  * Moved out of pages/Vendors.tsx, which it had grown larger than.
  */
-export default function RequestDialog({ vendor, onClose }: { vendor: RequestVendor; onClose: () => void }) {
+export default function RequestDialog({
+  vendor,
+  initialDate,
+  onClose,
+}: {
+  vendor: RequestVendor;
+  /** A date already checked on the detail page, retained when the request opens. */
+  initialDate?: string;
+  onClose: () => void;
+}) {
   const nav = useNavigate();
   // Arriving from an event carries it in. An organiser who pressed "book
   // someone for this day" has already told the app which day, and asking again
@@ -52,7 +61,7 @@ export default function RequestDialog({ vendor, onClose }: { vendor: RequestVend
   // A request without a published window (EZ1-I179): the vendor may have nothing
   // open, or none of the open windows suit, so the buyer names a date and the
   // vendor confirms. Prefilled from the detail page's date check when it arrives.
-  const [eventDate, setEventDate] = useState(params.get('date') ?? '');
+  const [eventDate, setEventDate] = useState(initialDate ?? params.get('date') ?? '');
   const [eventId, setEventId] = useState(params.get('eventId') ?? '');
   const [serviceId, setServiceId] = useState('');
   const [offeringId, setOfferingId] = useState('');

@@ -1,12 +1,15 @@
 import { useState } from 'react';
 import { useCategoryNames } from '../components/CategoryPicker';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate, useParams, Link } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { Permission, can } from '../lib/permissions';
 import { useAuth } from '../store/auth';
 import { EmptyState, Loading } from '../components/ui/Feedback';
 import { MapPin, Star, Storefront } from '@phosphor-icons/react';
+import RequestDialog from '../components/RequestDialog';
+import { formatAnswer, type FieldSpec } from '../lib/dynamic-form';
+import { PRICING_LABEL } from '../components/VendorServices';
 
 /**
  * A single vendor's full profile (EZ1-I76).
@@ -15,7 +18,8 @@ import { MapPin, Star, Storefront } from '@phosphor-icons/react';
  * vendor they need the whole picture — the trade, how long the business has
  * run, its portfolio, the services and prices it offers, and what other couples
  * said. This is that page, and the request itself still runs through the
- * availability flow on the Vendors page so there is one booking path, not two.
+ * availability flow as a modal over this page, so the selected vendor stays in
+ * context while the buyer selects a service, date and time.
  */
 interface PublicVendor {
   id: string;
@@ -37,17 +41,25 @@ interface Offering {
   id: string;
   name: string;
   description: string | null;
+  pricingModel: string;
   price: string | null;
   currency: string;
+  unitLabel: string | null;
+  minQuantity: number | null;
+  maxQuantity: number | null;
   isPackage: boolean;
+  inclusions: string[];
 }
 
 interface ServiceSummary {
   id: string;
   displayName: string | null;
+  description: string | null;
+  attributes: Record<string, unknown>;
   bookable: boolean;
-  definition: { name: string } | null;
+  definition: { name: string; description: string | null } | null;
   category: { name: string } | null;
+  serviceForm: FieldSpec[];
   offerings: Offering[];
 }
 
@@ -58,10 +70,129 @@ interface Review {
   createdAt: string;
 }
 
+function ReadMore({ children, className = '' }: { children: string; className?: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const long = children.length > 260;
+  return (
+    <div className={className}>
+      <p className={expanded || !long ? 'whitespace-pre-line' : 'line-clamp-3 whitespace-pre-line'}>{children}</p>
+      {long && (
+        <button
+          type="button"
+          className="mt-1 min-h-11 text-sm font-medium text-brand underline underline-offset-4"
+          onClick={() => setExpanded((value) => !value)}
+          aria-expanded={expanded}
+        >
+          {expanded ? 'Show less' : 'View more'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function priceText(offering: Offering) {
+  const model = PRICING_LABEL[offering.pricingModel] ?? offering.pricingModel.replace(/_/g, ' ');
+  if (offering.price === null) return model;
+  const amount = `${offering.currency} ${Number(offering.price).toLocaleString('en-IN')}`;
+  if (offering.pricingModel === 'starting_from') return `From ${amount}`;
+  return offering.unitLabel ? `${amount} ${offering.unitLabel}` : amount;
+}
+
+function ServiceInformation({ service }: { service: ServiceSummary }) {
+  const fields = service.serviceForm.filter((field) => service.attributes[field.key] !== undefined);
+  const files = fields.filter((field) => field.type === 'file');
+  const details = fields.filter((field) => field.type !== 'file');
+
+  return (
+    <div className="space-y-5">
+      {(service.description || service.definition?.description) && (
+        <section>
+          <h3 className="label mb-1">About</h3>
+          <ReadMore className="max-w-3xl text-sm leading-6 text-gray-700">
+            {service.description || service.definition?.description || ''}
+          </ReadMore>
+        </section>
+      )}
+
+      {details.length > 0 && (
+        <section>
+          <h3 className="label mb-2">Venue / service information</h3>
+          <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
+            {details.map((field) => (
+              <div key={field.key} className="border-t border-gray-200 pt-2">
+                <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">{field.label}</dt>
+                <dd className="mt-1 text-sm text-gray-800">
+                  {field.type === 'url' ? (
+                    <a href={String(service.attributes[field.key])} target="_blank" rel="noreferrer" className="text-brand underline">
+                      View link
+                    </a>
+                  ) : (
+                    formatAnswer(field, service.attributes[field.key])
+                  )}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
+
+      {files.length > 0 && (
+        <section>
+          <h3 className="label mb-2">Service photos &amp; files</h3>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {files.map((field) => {
+              const url = String(service.attributes[field.key]);
+              return (
+                <a key={field.key} href={url} target="_blank" rel="noreferrer" className="group relative aspect-square overflow-hidden border border-gray-200 bg-surface-sunken">
+                  <img src={url} alt={field.label} loading="lazy" className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]" />
+                  <span className="absolute inset-x-0 bottom-0 bg-black/55 px-2 py-1 text-xs text-white">{field.label}</span>
+                </a>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      <section>
+        <h3 className="label mb-2">Packages &amp; pricing</h3>
+        {service.offerings.length > 0 ? (
+          <div className="grid gap-3 lg:grid-cols-2">
+            {service.offerings.map((offering) => (
+              <article key={offering.id} className="border border-gray-200 bg-white p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h4 className="font-medium text-gray-900">{offering.name}</h4>
+                    {offering.isPackage && <p className="mt-1 text-xs font-medium uppercase tracking-wide text-brand">Package</p>}
+                  </div>
+                  <p className="shrink-0 text-right text-sm font-medium tabular-nums text-brand-dark">{priceText(offering)}</p>
+                </div>
+                {offering.description && <ReadMore className="mt-2 text-sm leading-6 text-gray-700">{offering.description}</ReadMore>}
+                {(offering.minQuantity || offering.maxQuantity) && (
+                  <p className="mt-2 text-xs text-gray-500">
+                    {offering.minQuantity ? `Minimum ${offering.minQuantity}` : ''}
+                    {offering.minQuantity && offering.maxQuantity ? ' · ' : ''}
+                    {offering.maxQuantity ? `Maximum ${offering.maxQuantity}` : ''}
+                  </p>
+                )}
+                {offering.inclusions.length > 0 && (
+                  <ul className="mt-3 space-y-1 border-t border-gray-100 pt-3 text-sm text-gray-700">
+                    {offering.inclusions.map((item) => <li key={item}>• {item}</li>)}
+                  </ul>
+                )}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500">Pricing is available on request.</p>
+        )}
+      </section>
+    </div>
+  );
+}
+
 
 export default function VendorDetail() {
   const { id = '' } = useParams();
-  const navigate = useNavigate();
   const categoryNames = useCategoryNames();
   const permissions = useAuth((s) => s.user?.permissions ?? []);
   const canBook = can(permissions, Permission.BOOKING_CREATE);
@@ -73,6 +204,13 @@ export default function VendorDetail() {
    */
   const canRequestForClient = can(permissions, Permission.BOOKING_REQUEST_FOR_CLIENT);
   const canAsk = canBook || canRequestForClient;
+  const [requestOpen, setRequestOpen] = useState(false);
+  const [requestDate, setRequestDate] = useState('');
+
+  function openRequest(date = '') {
+    setRequestDate(date);
+    setRequestOpen(true);
+  }
 
   const { data: vendor, isLoading } = useQuery({
     queryKey: ['vendor', id],
@@ -197,7 +335,7 @@ export default function VendorDetail() {
           {canAsk && (
             <button
               className="btn mt-4"
-              onClick={() => navigate(`/vendors?request=${vendor.id}`)}
+              onClick={() => openRequest()}
             >
               Check availability &amp; request
             </button>
@@ -269,7 +407,7 @@ export default function VendorDetail() {
             {dayOpen.length === 0 && canAsk && (
               <button
                 className="btn btn-sm mt-2"
-                onClick={() => navigate(`/vendors?request=${vendor.id}&date=${checkedDate}`)}
+                onClick={() => openRequest(checkedDate)}
               >
                 Send request
               </button>
@@ -289,7 +427,7 @@ export default function VendorDetail() {
             {canAsk && (
               <button
                 className="btn btn-sm"
-                onClick={() => navigate(`/vendors?request=${vendor.id}`)}
+                onClick={() => openRequest()}
               >
                 Send request
               </button>
@@ -386,6 +524,14 @@ export default function VendorDetail() {
             ))}
           </div>
         </div>
+      )}
+
+      {requestOpen && (
+        <RequestDialog
+          vendor={vendor}
+          initialDate={requestDate}
+          onClose={() => setRequestOpen(false)}
+        />
       )}
     </div>
   );
