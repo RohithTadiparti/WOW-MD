@@ -274,9 +274,18 @@ export class VerificationService {
     // records what it went on — an allocation made on workload alone because
     // nobody covers that city is a staffing gap somebody should see.
     const city = await this.applicantCity(request);
+    const previousOfficerUserId =
+      request.status === VerificationStatus.ADDITIONAL_REVIEW
+        ? request.previousOfficerUserId
+        : null;
+    if (dto.officerUserId && previousOfficerUserId === dto.officerUserId) {
+      throw new BadRequestException(
+        'The officer who performed the previous visit cannot be assigned for another look. Choose a different officer.',
+      );
+    }
     const suggestion = dto.officerUserId
       ? null
-      : await this.suggestOfficerWithReason(city);
+      : await this.suggestOfficerWithReason(city, previousOfficerUserId ?? undefined);
     const officerUserId = dto.officerUserId ?? suggestion?.officerUserId ?? null;
     if (!officerUserId) {
       throw new BadRequestException(
@@ -293,6 +302,7 @@ export class VerificationService {
     await this.refuseIfUnavailable(officer.id);
 
     request.assignedToUserId = officer.id;
+    request.previousOfficerUserId = null;
     request.allocatedByUserId = actor.userId;
     request.allocatedAt = new Date();
     // Re-allocating a request that was parked on an issue reopens it.
@@ -397,7 +407,11 @@ export class VerificationService {
       // Sending it back is a real workflow step, not a dead end: the request
       // returns to the officer's queue and the count says how many times.
       request.revisitCount += 1;
-      request.assignedToUserId = request.assignedToUserId ?? null;
+      request.previousOfficerUserId = request.assignedToUserId;
+      // Another look is an independent visit, not an instruction for the same
+      // officer to repeat their report. It stays in the admin queue until a
+      // different eligible officer is selected.
+      request.assignedToUserId = null;
       request.findings = null;
     }
     request.history = [
@@ -1141,7 +1155,7 @@ export class VerificationService {
     return officerUserId;
   }
 
-  async suggestOfficerWithReason(applicantCity?: string | null): Promise<{
+  async suggestOfficerWithReason(applicantCity?: string | null, excludeOfficerUserId?: string): Promise<{
     officerUserId: string | null;
     basis: 'primary_area' | 'secondary_area' | 'state' | 'workload_only';
     city: string | null;
@@ -1149,7 +1163,9 @@ export class VerificationService {
     // On-leave officers stay in `workload()` so the admin still sees them and
     // can name them manually, but auto-suggest must not land new work on
     // someone who is away — so they are dropped here, before ranking (EZ1-I210).
-    const ranked = (await this.workload()).filter((r) => !r.onLeave);
+    const ranked = (await this.workload()).filter(
+      (r) => !r.onLeave && r.officerUserId !== excludeOfficerUserId,
+    );
     if (ranked.length === 0) return { officerUserId: null, basis: 'workload_only', city: null };
 
     const city = canonicalCity(applicantCity);
