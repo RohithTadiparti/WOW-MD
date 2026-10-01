@@ -57,6 +57,8 @@ interface Booking {
   quantity?: number | null;
   /** The chosen price times the quantity, as shown when the request was sent. */
   estimatedAmount?: string | null;
+  /** The live vendor offer returned with the booking list, before it is accepted. */
+  quotation?: { amount: string; currency?: string; stage?: string } | null;
   /** Designs attached to the request for the vendor to see. */
   referenceImages?: string[];
   paymentStatus?: string | null;
@@ -393,6 +395,7 @@ export default function Bookings() {
         )}
         {bookings.map((b) => {
           const priced = Number(b.amount) > 0;
+          const quoted = !priced && Number(b.quotation?.amount ?? 0) > 0;
           // "Category · Location" — what was booked, and where the event is.
           const category = b.serviceName ?? (b.providerType === 'planner' ? 'Planner' : 'Vendor');
           const location = [b.eventVenue, b.eventCity].filter(Boolean).join(', ');
@@ -456,9 +459,14 @@ export default function Bookings() {
                 {extras && <p className="mt-0.5 text-xs text-gray-400">{extras}</p>}
               </div>
               <div className="shrink-0 text-right">
-                <p className="text-base font-semibold text-gray-900">
-                  {priced ? `${b.currency} ${b.amount}` : 'Not yet priced'}
+                <p className={`text-base font-semibold ${quoted ? 'font-mono text-brand-strong' : 'text-gray-900'}`}>
+                  {priced
+                    ? `${b.currency} ${Number(b.amount).toLocaleString('en-IN')}`
+                    : quoted
+                      ? `${b.quotation?.currency ?? b.currency} ${Number(b.quotation?.amount).toLocaleString('en-IN')}`
+                      : 'Not yet priced'}
                 </p>
+                {quoted && <p className="mt-0.5 text-[0.6875rem] font-medium uppercase tracking-wide text-brand-strong">Vendor quotation</p>}
                 {b.eventDate && (
                   <p className="mt-0.5 text-xs text-gray-500">{formatDate(b.eventDate)}</p>
                 )}
