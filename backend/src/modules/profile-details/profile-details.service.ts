@@ -39,6 +39,7 @@ import { AiService } from '../ai/ai.service';
 import { StorageService } from '../../platform/storage/storage.service';
 import { parseKey } from '../../platform/storage/storage-keys';
 import { BIODATA_DOCUMENT_EXTENSIONS, BIODATA_IMAGE_EXTENSIONS } from '../media/dto/media.dto';
+import { matchGender } from '../matchmaking/match-gender';
 
 /** The most brothers and sisters a profile may list (EZ1-I102). */
 export const SIBLING_LIMIT = 10;
@@ -297,6 +298,11 @@ export class ProfileDetailsService {
 
   async saveFamily(actor: AuthUser, profileId: string, dto: FamilyDetailsDto) {
     const row = await this.editable(actor, profileId);
+    const profile = await this.load(profileId);
+    const isGroom = matchGender(profile) === 'male';
+    if (isGroom && (dto.familyNetWorth === undefined || dto.familyNetWorth < 1)) {
+      throw new BadRequestException('Family net worth is required for a groom biodata.');
+    }
 
     Object.assign(row, {
       father: dto.father as unknown as Record<string, unknown>,
@@ -331,12 +337,12 @@ export class ProfileDetailsService {
       // actually answered — `undefined` here would blank a figure entered on a
       // previous save, which is the shape of bug this whole file exists to
       // avoid.
-      ...(dto.familyNetWorth === undefined
-        ? {}
-        : { familyNetWorth: String(dto.familyNetWorth) }),
-      ...(dto.familyNetWorthVisible === undefined
-        ? {}
-        : { familyNetWorthVisible: dto.familyNetWorthVisible === true }),
+      ...(isGroom
+        ? {
+            familyNetWorth: String(dto.familyNetWorth),
+            familyNetWorthVisible: dto.familyNetWorthVisible === true,
+          }
+        : { familyNetWorth: null, familyNetWorthVisible: false }),
     });
     return this.persist(row);
   }
@@ -795,6 +801,7 @@ export class ProfileDetailsService {
         address: profile.address,
         bio: profile.bio,
         visibility: profile.visibility,
+        managingFor: profile.managingFor,
       },
       details: details ?? null,
       siblings,
@@ -826,8 +833,8 @@ export class ProfileDetailsService {
   private async contactFor(profile: Profile): Promise<{
     primaryMobile: string | null;
     primaryMobileVerified: boolean;
-    /** Where the primary lives: the account, so it is edited under Security. */
-    primaryMobileSource: 'account' | 'agency_record';
+    /** Where the primary is maintained. */
+    primaryMobileSource: 'account' | 'profile' | 'agency_record';
     alternateMobile: string | null;
     email: string | null;
   }> {
@@ -849,10 +856,14 @@ export class ProfileDetailsService {
     });
     const details = await this.details.findOne({ where: { profileId: profile.id } });
 
+    // `contactPhone` is the number the person edits on Your Profile. It must
+    // win here too: returning the sign-in phone first made Biodata resurrect a
+    // stale value immediately after a successful Profile save.
+    const profileMobile = profile.contactPhone?.trim() || null;
     return {
-      primaryMobile: user?.phone ?? profile.contactPhone ?? null,
-      primaryMobileVerified: Boolean(user?.phoneVerifiedAt),
-      primaryMobileSource: 'account',
+      primaryMobile: profileMobile ?? user?.phone ?? null,
+      primaryMobileVerified: Boolean(profileMobile && profileMobile === user?.phone && user?.phoneVerifiedAt),
+      primaryMobileSource: profileMobile ? 'profile' : 'account',
       alternateMobile: details?.alternateMobile ?? null,
       email: user?.email ?? profile.contactEmail ?? null,
     };

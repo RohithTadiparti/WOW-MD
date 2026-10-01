@@ -107,6 +107,7 @@ const GENDERS = [
 export default function Profile() {
   const qc = useQueryClient();
   const user = useAuth((s) => s.user);
+  const isFamilyMember = user?.role === 'family';
 
   const [form, setForm] = useState(EMPTY);
   const [editing, setEditing] = useState(false);
@@ -209,25 +210,34 @@ export default function Profile() {
 
       {notice ? <Alert tone="positive">{notice}</Alert> : null}
       {error ? <Alert tone="critical">{error}</Alert> : null}
+      {isFamilyMember ? (
+        <Alert tone="caution">
+          Important: you are logged in as a Family Member. Enter your own parent or guardian
+          details here. Groom or bride details belong in Biodata.
+        </Alert>
+      ) : null}
 
       {editing ? (
         <Card>
-          <SectionTitle>Edit your details</SectionTitle>
+          <SectionTitle>{isFamilyMember ? 'Family Member Details' : 'Edit your details'}</SectionTitle>
           <Field
-            label="Name"
+            label={isFamilyMember ? 'Name (Your)' : 'Name'}
             value={form.displayName}
             onChangeText={set('displayName')}
             error={fieldErrors.displayName}
             placeholder="The name people see"
           />
+          {isFamilyMember ? (
+            <Field label="Email Address (Your)" value={user?.email ?? ''} editable={false} />
+          ) : null}
           <SelectField
-            label="Gender"
+            label={isFamilyMember ? 'Gender (Your)' : 'Gender'}
             value={form.gender}
             options={GENDERS}
             onChange={set('gender')}
           />
           <DobField
-            label="Date of birth"
+            label={isFamilyMember ? 'Date of Birth (Your)' : 'Date of birth'}
             value={form.dateOfBirth}
             onChange={setDateOfBirth}
             error={fieldErrors.dateOfBirth}
@@ -245,10 +255,10 @@ export default function Profile() {
             }}
             placeholder="Choose…"
           />
-          <ChoiceField label="City" value={form.city} options={districtsForState(form.state)} onChange={set('city')} placeholder="Choose…" />
-          <Field label="Address" value={form.address} onChangeText={set('address')} />
+          <ChoiceField label={isFamilyMember ? 'City (Your)' : 'City'} value={form.city} options={districtsForState(form.state)} onChange={set('city')} placeholder="Choose…" />
+          <Field label={isFamilyMember ? 'Address (Your)' : 'Address'} value={form.address} onChangeText={set('address')} />
           <Field
-            label="Contact number"
+            label={isFamilyMember ? 'Mobile Number (Your)' : 'Contact number'}
             value={form.contactPhone}
             onChangeText={set('contactPhone')}
             error={fieldErrors.contactPhone}
@@ -273,17 +283,18 @@ export default function Profile() {
         </Card>
       ) : (
         <Card>
-          <SectionTitle>Your details</SectionTitle>
+          <SectionTitle>{isFamilyMember ? 'Family Member Details' : 'Your details'}</SectionTitle>
           <DetailGrid>
-            <DetailRow label="Name">{data?.displayName || '—'}</DetailRow>
-            <DetailRow label="Gender">
+            {isFamilyMember ? <DetailRow label="Email Address (Your)">{user?.email || '—'}</DetailRow> : null}
+            <DetailRow label={isFamilyMember ? 'Name (Your)' : 'Name'}>{data?.displayName || '—'}</DetailRow>
+            <DetailRow label={isFamilyMember ? 'Gender (Your)' : 'Gender'}>
               {GENDERS.find((g) => g.value === data?.gender)?.label ?? '—'}
             </DetailRow>
-            <DetailRow label="Date of birth">{formatDate(data?.dateOfBirth, '—')}</DetailRow>
+            <DetailRow label={isFamilyMember ? 'Date of Birth (Your)' : 'Date of birth'}>{formatDate(data?.dateOfBirth, '—')}</DetailRow>
             <DetailRow label="State">{getStateForCity(data?.city) || '—'}</DetailRow>
-            <DetailRow label="City">{data?.city || '—'}</DetailRow>
-            <DetailRow label="Address">{data?.address || '—'}</DetailRow>
-            <DetailRow label="Contact number">{data?.contactPhone || '—'}</DetailRow>
+            <DetailRow label={isFamilyMember ? 'City (Your)' : 'City'}>{data?.city || '—'}</DetailRow>
+            <DetailRow label={isFamilyMember ? 'Address (Your)' : 'Address'}>{data?.address || '—'}</DetailRow>
+            <DetailRow label={isFamilyMember ? 'Mobile Number (Your)' : 'Contact number'}>{data?.contactPhone || '—'}</DetailRow>
           </DetailGrid>
           {data?.bio ? <Body tone="muted">{data.bio}</Body> : null}
           <Button label="Edit profile" onPress={() => setEditing(true)} />

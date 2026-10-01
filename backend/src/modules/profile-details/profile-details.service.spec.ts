@@ -68,6 +68,10 @@ describe('ProfileDetailsService section saves', () => {
     save: jest.fn(async (p: Profile) => p),
   } as unknown as Repository<Profile>;
 
+  const users = {
+    findOne: jest.fn(),
+  } as unknown as Repository<User>;
+
   const cachedSuggestionKeys = ['match:suggestions:p1:1:20:', 'match:suggestions:unrelated:1:20:'];
   const redis = {
     raw: {
@@ -84,7 +88,7 @@ describe('ProfileDetailsService section saves', () => {
     {} as Repository<ProfileSibling>,
     {} as Repository<ProfileAsset>,
     profiles,
-    {} as Repository<User>,
+    users,
     redis,
     {} as ModerationService,
     {} as Repository<Interest>,
@@ -123,6 +127,25 @@ describe('ProfileDetailsService section saves', () => {
       photos: ['a.jpg', 'b.jpg', 'c.jpg'],
       preferences: {},
     } as unknown as Profile;
+    (users.findOne as jest.Mock).mockResolvedValue({
+      id: 'u1',
+      phone: '+918008862658',
+      phoneVerifiedAt: new Date(),
+      email: 'u1@example.com',
+    });
+  });
+
+  it('uses the editable profile mobile in biodata contact details', async () => {
+    profile.contactPhone = '+919177797410';
+    const contact = await (
+      service as unknown as { contactFor: (profile: Profile) => Promise<Record<string, unknown>> }
+    ).contactFor(profile);
+
+    expect(contact).toMatchObject({
+      primaryMobile: '+919177797410',
+      primaryMobileSource: 'profile',
+      primaryMobileVerified: false,
+    });
   });
 
   it.each([UserRole.BRIDE, UserRole.FAMILY])('persists package preferences for %s', async (role) => {
@@ -301,22 +324,27 @@ describe('ProfileDetailsService section saves', () => {
     });
   });
 
-  it('keeps family net worth optional for a groom profile', async () => {
+  it('requires and saves family net worth for a groom profile', async () => {
     profile.gender = 'male';
 
-    await expect(service.saveFamily(owner, 'p1', {
+    const base = {
         father: { name: 'Ravi Rao' },
         mother: { name: 'Lata Rao' },
         familyType: FamilyType.NUCLEAR,
         familyStatus: 'middle_class',
         brothers: 0,
         sisters: 1,
-        // familyNetWorth deliberately omitted
-      } as unknown as FamilyDetailsDto)).resolves.toBeDefined();
-    expect(stored).toMatchObject({ familyType: FamilyType.NUCLEAR });
+      } as unknown as FamilyDetailsDto;
+
+    await expect(service.saveFamily(owner, 'p1', base)).rejects.toThrow('Family net worth is required');
+    await expect(service.saveFamily(owner, 'p1', {
+      ...base,
+      familyNetWorth: 7500000,
+      familyNetWorthVisible: true,
+    })).resolves.toMatchObject({ familyNetWorth: '7500000', familyNetWorthVisible: true });
   });
 
-  it('accepts a family section save without net worth for a bride profile (female gender)', async () => {
+  it('hides and clears family net worth for a bride profile (female gender)', async () => {
     profile.gender = 'female';
 
     await expect(
@@ -327,11 +355,13 @@ describe('ProfileDetailsService section saves', () => {
         familyStatus: 'middle_class',
         brothers: 2,
         sisters: 0,
+        familyNetWorth: 7500000,
+        familyNetWorthVisible: true,
         // familyNetWorth deliberately omitted — must not throw
       } as unknown as FamilyDetailsDto),
     ).resolves.toBeDefined();
 
-    expect(stored).toMatchObject({ familyType: FamilyType.NUCLEAR });
+    expect(stored).toMatchObject({ familyType: FamilyType.NUCLEAR, familyNetWorth: null, familyNetWorthVisible: false });
   });
 
   it('validates employment and business on an education save without an occupation', async () => {
