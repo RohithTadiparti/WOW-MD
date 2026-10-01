@@ -5,6 +5,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { WeddingEvent } from './entities/event.entity';
 import { Guest } from './entities/guest.entity';
 import { EventInvite } from './entities/event-invite.entity';
+import { WeddingInvitation } from './entities/wedding-invitation.entity';
 import { Profile } from '../users/entities/profile.entity';
 import { Booking } from '../bookings/entities/booking.entity';
 import { Vendor } from '../vendors/entities/vendor.entity';
@@ -23,6 +24,7 @@ import { EventsController } from './events.controller';
       WeddingEvent,
       Guest,
       EventInvite,
+      WeddingInvitation,
       Profile,
       Booking,
       Vendor,

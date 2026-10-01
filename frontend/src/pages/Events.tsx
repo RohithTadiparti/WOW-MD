@@ -6,6 +6,7 @@ import { BOOKING_STATUS_LABEL, Permission, can } from '../lib/permissions';
 import { useAuth } from '../store/auth';
 import RsvpDashboard from '../components/RsvpDashboard';
 import ShareInvitation from '../components/ShareInvitation';
+import WeddingInvitationCard from '../components/WeddingInvitationCard';
 import { formatDate } from '../lib/dates';
 
 interface WEvent {
@@ -161,9 +162,9 @@ export default function Events() {
   const [venue, setVenue] = useState('');
   const [date, setDate] = useState('');
   const [guestName, setGuestName] = useState('');
-  const [guestContact, setGuestContact] = useState('');
   const [guestPhone, setGuestPhone] = useState('');
   const [guestParty, setGuestParty] = useState('');
+  const [guestCategory, setGuestCategory] = useState('');
 
   const { data: events = [] } = useQuery({
     queryKey: ['events', statusFilter, search, host],
@@ -260,16 +261,16 @@ export default function Events() {
       () =>
         api.post('/events/guests', {
           name: guestName,
-          contact: guestContact || undefined,
           phone: guestPhone || undefined,
           partySize: guestParty ? Number(guestParty) : undefined,
+          relation: guestCategory || undefined,
         }),
       ['guests'],
     );
     setGuestName('');
-    setGuestContact('');
     setGuestPhone('');
     setGuestParty('');
+    setGuestCategory('');
   }
 
   const current = events.find((e) => e.id === selected);
@@ -317,6 +318,8 @@ export default function Events() {
       </div>
 
       {error && <p className="alert-critical">{error}</p>}
+
+      <WeddingInvitationCard />
 
       {/* Status counts live on the filter tabs below rather than as summary tiles. */}
       <div className="flex flex-wrap items-center gap-2">
@@ -768,7 +771,7 @@ export default function Events() {
                       <span>
                         {g.name}
                         {g.phone ? <span className="text-gray-500"> · {g.phone}</span> : null}
-                        {g.contact ? <span className="text-gray-400"> · {g.contact}</span> : null}
+                        {g.relation ? <span className="text-gray-400"> · {g.relation}</span> : null}
                         {g.partySize && g.partySize > 1 ? (
                           <span className="text-gray-400"> · party of {g.partySize}</span>
                         ) : null}
@@ -780,12 +783,12 @@ export default function Events() {
                           className="btn-outline"
                           onClick={() =>
                             act(
-                              () => api.post(`/events/${current.id}/invite`, { guestId: g.id }),
-                              ['guest-list'],
+                              () => api.post(`/events/guests/${g.id}/invite`, { eventIds: [current.id] }),
+                              ['guest-list', 'guests'],
                             )
                           }
                         >
-                          Invite
+                          Send invitation
                         </button>
                       )}
                     </div>
@@ -803,13 +806,6 @@ export default function Events() {
                     onChange={(e) => setGuestName(e.target.value)}
                     required
                   />
-                  <input
-                    className="input flex-1"
-                    placeholder="Email"
-                    type="email"
-                    value={guestContact}
-                    onChange={(e) => setGuestContact(e.target.value)}
-                  />
                   {/*
                     A separate mobile column, because chasing an RSVP happens by
                     phone and "email or phone" in one box means neither can be
@@ -817,16 +813,22 @@ export default function Events() {
                   */}
                   <input
                     className="input w-40"
-                    placeholder="Mobile"
+                    placeholder="Phone number"
                     inputMode="tel"
                     value={guestPhone}
                     onChange={(e) => setGuestPhone(e.target.value)}
                   />
                   <input
+                    className="input w-36"
+                    placeholder="Guest category"
+                    value={guestCategory}
+                    onChange={(e) => setGuestCategory(e.target.value)}
+                  />
+                  <input
                     className="input w-28"
                     type="number"
                     min={1}
-                    placeholder="Party of"
+                    placeholder="Party size (optional)"
                     title="How many people this invitation covers"
                     value={guestParty}
                     onChange={(e) => setGuestParty(e.target.value)}

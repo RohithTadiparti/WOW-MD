@@ -23,6 +23,7 @@ import {
   UpdateEventDto,
   UpdateGuestDto,
   UpdateRsvpDto,
+  SetWeddingInvitationCardDto,
 } from './dto/event.dto';
 import { AuthUser, CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
@@ -137,6 +138,21 @@ export class EventsController {
   @Get('guests')
   listGuests(@CurrentUser('userId') userId: string) {
     return this.events.listGuests(userId);
+  }
+
+  @Get('wedding-invitation')
+  weddingInvitation(@CurrentUser('userId') userId: string) {
+    return this.events.weddingInvitation(userId);
+  }
+
+  @Put('wedding-invitation/card')
+  setWeddingInvitationCard(@CurrentUser('userId') userId: string, @Body() dto: SetWeddingInvitationCardDto) {
+    return this.events.setWeddingInvitationCard(userId, dto);
+  }
+
+  @Delete('wedding-invitation/card')
+  removeWeddingInvitationCard(@CurrentUser('userId') userId: string) {
+    return this.events.removeWeddingInvitationCard(userId);
   }
 
   @Post(':id/invite')

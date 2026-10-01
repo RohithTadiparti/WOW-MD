@@ -71,6 +71,7 @@ function setup() {
     repo(events),
     repo(guests),
     repo(invites),
+    repo({ findOne: jest.fn(async () => null), create: jest.fn((x) => x), save: jest.fn(async (x) => x) }),
     repo({ find: jest.fn(async () => []), findOne: jest.fn(async () => null) }),
     repo({}),
     repo({}),

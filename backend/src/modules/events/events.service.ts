@@ -22,7 +22,9 @@ import {
   UpdateGuestDto,
   UpdateEventDto,
   UpdateRsvpDto,
+  SetWeddingInvitationCardDto,
 } from './dto/event.dto';
+import { WeddingInvitation } from './entities/wedding-invitation.entity';
 import { Booking } from '../bookings/entities/booking.entity';
 import { Quotation } from '../bookings/entities/quotation.entity';
 import { Vendor } from '../vendors/entities/vendor.entity';
@@ -88,6 +90,7 @@ export class EventsService {
     @InjectRepository(WeddingEvent) private readonly events: Repository<WeddingEvent>,
     @InjectRepository(Guest) private readonly guests: Repository<Guest>,
     @InjectRepository(EventInvite) private readonly invites: Repository<EventInvite>,
+    @InjectRepository(WeddingInvitation) private readonly weddingInvitations: Repository<WeddingInvitation>,
     @InjectRepository(Profile) private readonly profiles: Repository<Profile>,
     @InjectRepository(Booking) private readonly bookings: Repository<Booking>,
     @InjectRepository(Vendor) private readonly vendors: Repository<Vendor>,
@@ -513,7 +516,27 @@ export class EventsService {
   }
 
   async addGuest(userId: string, dto: CreateGuestDto) {
-    return this.withoutToken(await this.guests.save(this.guests.create({ userId, ...dto })));
+    return this.withoutToken(await this.guests.save(this.guests.create({ userId, ...dto, contact: '' })));
+  }
+
+  async weddingInvitation(userId: string) {
+    return (await this.weddingInvitations.findOne({ where: { userId } })) ?? { cardUrl: null };
+  }
+
+  async setWeddingInvitationCard(userId: string, dto: SetWeddingInvitationCardDto) {
+    const current = await this.weddingInvitations.findOne({ where: { userId } });
+    if (current) {
+      current.cardUrl = dto.cardUrl;
+      return this.weddingInvitations.save(current);
+    }
+    return this.weddingInvitations.save(this.weddingInvitations.create({ userId, cardUrl: dto.cardUrl }));
+  }
+
+  async removeWeddingInvitationCard(userId: string) {
+    const current = await this.weddingInvitations.findOne({ where: { userId } });
+    if (!current) return { cardUrl: null };
+    current.cardUrl = null;
+    return this.weddingInvitations.save(current);
   }
 
   /**
@@ -928,6 +951,7 @@ export class EventsService {
   async previewShared(token: string) {
     const event = await this.eventByShareToken(token);
     const host = await this.profiles.findOne({ where: { userId: event.userId } });
+    const invitation = await this.weddingInvitations.findOne({ where: { userId: event.userId } });
     return {
       eventName: event.name,
       eventDate: event.eventDate ?? null,
@@ -936,6 +960,7 @@ export class EventsService {
       venueAddress: event.venueAddress ?? null,
       city: event.city ?? null,
       hostName: host?.displayName ?? 'Your hosts',
+      cardUrl: invitation?.cardUrl ?? null,
     };
   }
 
@@ -982,7 +1007,9 @@ export class EventsService {
     }
     // Older public links sent a boolean. Keep accepting it while new links can
     // record a useful tentative answer as well.
-    const status = dto.status ?? (dto.attending ? RsvpStatus.ATTENDING : RsvpStatus.DECLINED);
+    // The direct link is registration, not an attendance question. A guest
+    // who merely registers stays pending until the host records an RSVP.
+    const status = dto.status ?? (dto.attending === undefined ? RsvpStatus.INVITED : dto.attending ? RsvpStatus.ATTENDING : RsvpStatus.DECLINED);
     invite.status = status;
     invite.attendingCount = status === RsvpStatus.ATTENDING ? (dto.partySize ?? 1) : null;
     invite.respondedAt = new Date();

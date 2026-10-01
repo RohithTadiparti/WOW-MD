@@ -179,10 +179,6 @@ export class CreateGuestDto {
   @IsString() @MinLength(1) @MaxLength(120)
   name: string;
 
-  @ApiPropertyOptional({ maxLength: 120, description: 'Email address, if there is one.' })
-  @IsOptional() @IsString() @MaxLength(120)
-  contact?: string;
-
   @ApiPropertyOptional({
     example: '9876543210',
     description: 'Mobile number. Chasing an RSVP happens by phone, so this is worth having.',
@@ -214,10 +210,6 @@ export class UpdateGuestDto {
   @IsOptional() @IsString() @MinLength(1) @MaxLength(120)
   name?: string;
 
-  @ApiPropertyOptional({ maxLength: 120 })
-  @IsOptional() @IsString() @MaxLength(120)
-  contact?: string;
-
   @ApiPropertyOptional({ example: '9876543210' })
   @IsOptional()
   @Transform(normaliseMobile)
@@ -235,6 +227,12 @@ export class UpdateGuestDto {
   @ApiPropertyOptional({ maxLength: 1000 })
   @IsOptional() @IsString() @MaxLength(1000)
   notes?: string;
+}
+
+export class SetWeddingInvitationCardDto {
+  @ApiProperty({ description: 'Uploaded invitation-card image URL.' })
+  @IsUploadedUrl()
+  cardUrl: string;
 }
 
 export class InviteDto {

@@ -14,6 +14,7 @@ interface Invitation {
   venueAddress: string | null;
   city: string | null;
   hostName: string;
+  cardUrl: string | null;
 }
 
 type SharedRsvpStatus = 'attending' | 'maybe' | 'declined';
@@ -38,7 +39,7 @@ export default function SharedInvitation() {
   });
 
   const [name, setName] = useState('');
-  const [contact, setContact] = useState('');
+  const [phone, setPhone] = useState('');
   const [partySize, setPartySize] = useState('1');
   const [sent, setSent] = useState<null | { status: SharedRsvpStatus; name: string }>(null);
   const [busy, setBusy] = useState(false);
@@ -53,7 +54,7 @@ export default function SharedInvitation() {
     setBusy(true);
     try {
       const body: Record<string, unknown> = { name: name.trim(), status };
-      if (contact.trim()) body.contact = contact.trim();
+      if (phone.trim()) body.contact = phone.trim();
       if (status === 'attending' && Number(partySize) > 0) body.partySize = Number(partySize);
       const { data: result } = await api.post(`/events/share/${token}`, body);
       setSent({ status: result.status ?? status, name: result.name ?? name.trim() });
@@ -94,6 +95,13 @@ export default function SharedInvitation() {
     <main className="flex min-h-[100dvh] items-center px-4 py-8 sm:px-6">
       <div className="mx-auto w-full max-w-xl space-y-4">
         <section className="card px-5 py-7 text-center sm:px-8">
+          {data.cardUrl && (
+            <img
+              src={data.cardUrl}
+              alt="Wedding invitation card"
+              className="mx-auto mb-6 max-h-96 w-full border border-gray-200 object-contain"
+            />
+          )}
           <span aria-hidden className="mx-auto block h-px w-16 bg-gold" />
           <p className="eyebrow mt-4">You are invited to</p>
           <h1 className="page-title mx-auto mt-2">{data.eventName}</h1>
@@ -136,9 +144,9 @@ export default function SharedInvitation() {
               </div>
               <div>
                 <label className="label" htmlFor="rsvp-contact">
-                  Phone or email <span className="font-normal text-gray-400">(optional)</span>
+                  Phone number <span className="font-normal text-gray-400">(optional)</span>
                 </label>
-                <input id="rsvp-contact" className="input" value={contact} maxLength={160} onChange={(e) => setContact(e.target.value)} />
+                <input id="rsvp-contact" className="input" inputMode="tel" value={phone} maxLength={20} onChange={(e) => setPhone(e.target.value)} />
               </div>
             </div>
 
