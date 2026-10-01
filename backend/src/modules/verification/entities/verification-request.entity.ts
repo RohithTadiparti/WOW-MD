@@ -67,6 +67,15 @@ export class VerificationRequest {
   @Column({ type: 'uuid', nullable: true })
   assignedToUserId: string | null;
 
+  /**
+   * The officer who completed the last visit before an administrator asked for
+   * another look.  This is intentionally separate from `assignedToUserId`:
+   * a revisit waits unassigned until the administrator chooses an independent
+   * officer, while the prior visit must remain visible and ineligible.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  previousOfficerUserId: string | null;
+
   @Column({ type: 'uuid', nullable: true })
   allocatedByUserId: string | null;
 

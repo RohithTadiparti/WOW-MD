@@ -212,11 +212,18 @@ export function buildSummaryCards(kind: Kind, data: AccountDetail, accountId: st
   }
 
   if (kind === 'officer') {
+    const queue = data.officer?.queue ?? [];
+    const decisions = data.officer?.decisions ?? [];
+    const inProgress = queue.filter((v) => v.status === 'in_progress').length;
+    const completed = decisions.length;
+    const solved = data.casesAssigned.filter((c) => ['resolved', 'closed'].includes(c.status)).length;
     return [
-      { label: 'Assigned cases', value: data.officer?.assigned ?? 0, to: `/admin/support?tab=cases&assignee=${accountId}` },
-      { label: 'Open queue', value: data.officer?.open ?? 0, to: undefined },
-      { label: 'Overdue', value: data.officer?.overdue ?? 0, to: undefined },
-      { label: 'Service areas', value: data.officer?.serviceAreas.length ?? 0, to: undefined },
+      { label: 'Assigned verifications', value: data.officer?.assigned ?? 0, to: `/verification?officerUserId=${accountId}` },
+      { label: 'Completed verifications', value: completed, to: `/verification?officerUserId=${accountId}&status=approved` },
+      { label: 'In progress', value: inProgress, to: `/verification?officerUserId=${accountId}&status=in_progress` },
+      { label: 'Missed / overdue', value: data.officer?.overdue ?? 0, to: `/verification?officerUserId=${accountId}` },
+      { label: 'Cases assigned', value: data.casesAssigned.length, to: `/admin/support?tab=cases&assignee=${accountId}` },
+      { label: 'Cases solved', value: solved, to: `/admin/support?tab=cases&assignee=${accountId}` },
     ];
   }
 
@@ -462,7 +469,7 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
         </Section>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className={`grid gap-3 sm:grid-cols-2 ${kind === 'officer' ? 'lg:grid-cols-3' : 'lg:grid-cols-4'}`}>
         {metricCards.map((card) => (
           card.to ? (
             <Link key={card.label} to={card.to} className="card transition-colors hover:border-brand hover:bg-brand-soft/30">
@@ -481,6 +488,22 @@ export default function AdminAccountDetail({ kind }: { kind: Kind }) {
 
       {kind === 'agent' && data.agentDashboard && (
         <AgentDashboardDetails dashboard={data.agentDashboard} />
+      )}
+
+      {kind === 'officer' && data.officer && (
+        <section className="card">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="section-title">Verification performance</h2>
+            <span className="text-xs text-gray-500">All time</span>
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            <Row label="Assigned vs completed">{data.officer.assigned} assigned / {data.officer.decisions.length} completed</Row>
+            <Row label="Completion rate">
+              {data.officer.assigned ? `${Math.round((data.officer.decisions.length / data.officer.assigned) * 100)}%` : '—'}
+            </Row>
+            <Row label="Coverage">{data.officer.serviceAreas.length ? data.officer.serviceAreas.map((a) => a.label).join(', ') : 'Not set'}</Row>
+          </div>
+        </section>
       )}
 
       {/* An agency's book: the accounts they brought on, each clickable (EZ1-I171). */}

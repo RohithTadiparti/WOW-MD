@@ -43,6 +43,7 @@ interface VerificationRequest {
   subjectId: string | null;
   status: VerificationStatus;
   assignedToUserId: string | null;
+  previousOfficerUserId?: string | null;
   remarks: string | null;
   createdAt: string;
   findings: VerificationFindings | null;
@@ -559,13 +560,6 @@ export default function Verification({
         />
       </section>
 
-      {/*
-        An officer sets whether they are taking fieldwork. Auto-allocation skips
-        them while on leave or unavailable; an admin can still name them (I210).
-        Admins do not hold fieldwork, so this is officers only.
-      */}
-      {canFieldwork && <MyAvailability />}
-
       {metrics && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {/*
@@ -938,6 +932,37 @@ function RequestRow({
             Left to itself this goes to whoever is carrying least. Name an officer only when
             something about this case says it should be theirs.
           </p>
+        </div>
+      )}
+
+      {canAllocate && request.status === 'additional_review' && !request.assignedToUserId && (
+        <div className="rounded-sm border border-amber-200 bg-amber-50 p-3">
+          <p className="mb-2 text-sm font-medium text-amber-900">Needs another look — assign a different officer</p>
+          <div className="flex flex-wrap items-end gap-2">
+            <AllocateePicker
+              officers={officers}
+              value={officerUserId}
+              onChange={setOfficerUserId}
+              excludeUserId={request.previousOfficerUserId}
+            />
+            <button
+              className="btn"
+              disabled={!officerUserId}
+              onClick={() =>
+                onRun(
+                  () => api.put(`/verification/requests/${request.id}/allocate`, { officerUserId }),
+                  'Re-verification assigned. The new officer can review the previous findings and reason.',
+                )
+              }
+            >
+              Assign new officer
+            </button>
+          </div>
+          {request.previousOfficerUserId && (
+            <p className="mt-2 text-xs text-amber-800">
+              Previously visited — not available for reassignment.
+            </p>
+          )}
         </div>
       )}
 
@@ -1945,7 +1970,9 @@ const AVAILABILITY_LABEL: Record<AvailabilityStatus, string> = {
  * not available now — an administrator can still name them directly, which is
  * why this only sets a preference rather than blocking work outright.
  */
-function MyAvailability() {
+// Kept as an exported compatibility component for embedded officer workflows;
+// the portal no longer renders it here because availability belongs on Home.
+export function MyAvailability() {
   const qc = useQueryClient();
   const { data } = useQuery({
     queryKey: ['my-availability'],

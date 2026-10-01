@@ -11,7 +11,7 @@ import {
 } from '../lib/permissions';
 import { Visit, VISIT_TONE, isTodayVisit, scheduledLabel } from '../lib/visits';
 import { BUSINESS_STATUS_LABEL, humanize } from '../lib/labels';
-import { ReactNode } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import ClaimRequests from '../components/ClaimRequests';
 import GetStarted from '../components/GetStarted';
 import VendorDashboard from '../components/VendorDashboard';
@@ -509,6 +509,7 @@ export default function Dashboard({
       */}
       {isOfficer && (
         <section className="space-y-4">
+          <OfficerAvailability />
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="section-title">Verification Overview</h2>
             <Link className="btn-outline btn-sm" to="/visits">
@@ -827,6 +828,39 @@ export default function Dashboard({
       <AppDownloadCard />
     </div>
   );
+}
+
+type OfficerAvailabilityStatus = 'available' | 'on_leave' | 'unavailable';
+
+function OfficerAvailability() {
+  const [status, setStatus] = useState<OfficerAvailabilityStatus>('available');
+  const [leaveFrom, setLeaveFrom] = useState('');
+  const [leaveTo, setLeaveTo] = useState('');
+  const [seeded, setSeeded] = useState(false);
+  const [notice, setNotice] = useState('');
+  const availability = useQuery({
+    queryKey: ['my-availability'],
+    queryFn: async () => (await api.get('/verification/officers/me/availability')).data as { status: OfficerAvailabilityStatus; leaveFrom?: string | null; leaveTo?: string | null },
+    retry: false,
+  });
+  useEffect(() => {
+    if (availability.data && !seeded) { setStatus(availability.data.status); setLeaveFrom(availability.data.leaveFrom ?? ''); setLeaveTo(availability.data.leaveTo ?? ''); setSeeded(true); }
+  }, [availability.data, seeded]);
+  async function save() {
+    await api.put('/verification/officers/me/availability', {
+      status,
+      ...(status === 'on_leave' ? { leaveFrom, leaveTo } : {}),
+    });
+    await availability.refetch();
+    setNotice('Availability updated.');
+  }
+  return <div className="card flex flex-wrap items-end gap-3">
+    <div className="min-w-52 flex-1"><h2 className="section-title">My availability</h2><p className="mt-1 text-sm text-gray-600">Set your fieldwork status before new visits are allocated.</p></div>
+    <label className="text-sm"><span className="mb-1 block text-gray-600">Status</span><select className="input" value={status} onChange={(e) => setStatus(e.target.value as OfficerAvailabilityStatus)}><option value="available">Available</option><option value="on_leave">On leave</option><option value="unavailable">Unavailable</option></select></label>
+    {status === 'on_leave' && <><label className="text-sm"><span className="mb-1 block text-gray-600">From</span><input className="input" type="date" value={leaveFrom} onChange={(e) => setLeaveFrom(e.target.value)} /></label><label className="text-sm"><span className="mb-1 block text-gray-600">To</span><input className="input" type="date" value={leaveTo} min={leaveFrom} onChange={(e) => setLeaveTo(e.target.value)} /></label></>}
+    <button className="btn" disabled={status === 'on_leave' && (!leaveFrom || !leaveTo)} onClick={() => void save()}>Save availability</button>
+    {notice && <p className="w-full text-sm text-positive-fg">{notice}</p>}
+  </div>;
 }
 
 /** Time of day, from the browser. Nothing about it needs a round trip. */
