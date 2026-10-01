@@ -6,6 +6,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import type { SocialLink } from '../../../common/dto/social-links.dto';
 
 export interface PlannerPackage {
   name: string;
@@ -64,6 +65,10 @@ export class PlannerProfile {
 
   @Column({ type: 'varchar', length: 6, nullable: true })
   pincode: string | null;
+
+  /** Public social links, in order; the single columns mirror them (see Vendor). */
+  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
+  socialLinks: SocialLink[];
 
   @Column({ type: 'varchar', length: 200, nullable: true })
   website: string | null;

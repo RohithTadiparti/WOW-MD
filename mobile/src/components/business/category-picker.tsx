@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
 import type { Category } from '@/components/business/service-types';
-import { Body, Caption } from '@/components/ui';
+import { Body, Caption, RequiredMark } from '@/components/ui';
 import { radius, rgb, space, useTheme } from '@/theme';
 
 /** A business lists under one to five catalogue categories (EZ1-I263). */
@@ -57,10 +57,13 @@ export function CategoryPicker({
   value,
   onChange,
   error,
+  required = false,
 }: {
   value: string[];
   onChange: (next: string[]) => void;
   error?: string;
+  /** Marks the heading; the form's own check is what enforces it. */
+  required?: boolean;
 }) {
   const theme = useTheme();
   const { data: categories = [], isPending, isError } = useCatalogCategories();
@@ -69,7 +72,10 @@ export function CategoryPicker({
   return (
     <View style={{ gap: space(2) }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <Body>Categories</Body>
+        <Body>
+          Categories
+          {required ? <RequiredMark /> : null}
+        </Body>
         <Caption tone={full ? 'brand' : 'faint'}>
           {value.length} of {MAX_CATEGORIES} selected
         </Caption>

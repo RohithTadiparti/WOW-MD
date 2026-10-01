@@ -10,6 +10,8 @@ import { MapPin, Star, Storefront } from '@phosphor-icons/react';
 import RequestDialog from '../components/RequestDialog';
 import { formatAnswer, type FieldSpec } from '../lib/dynamic-form';
 import { PRICING_LABEL } from '../components/VendorServices';
+import { SocialLinksList } from '../components/SocialLinks';
+import { SocialLink, listingSocialLinks } from '../lib/social-links';
 
 /**
  * A single vendor's full profile (EZ1-I76).
@@ -35,6 +37,10 @@ interface PublicVendor {
   ratingCount: number;
   registeredAddress: string | null;
   tradingSince: string | null;
+  socialLinks?: SocialLink[];
+  website?: string | null;
+  instagramUrl?: string | null;
+  youtubeUrl?: string | null;
 }
 
 interface Offering {
@@ -332,6 +338,8 @@ export default function VendorDetail() {
           {vendor.description && (
             <p className="mt-3 text-sm text-gray-700">{vendor.description}</p>
           )}
+          {/* Where the vendor's work can be seen beyond this page. */}
+          <SocialLinksList links={listingSocialLinks(vendor)} className="mt-3" />
           {canAsk && (
             <button
               className="btn mt-4"

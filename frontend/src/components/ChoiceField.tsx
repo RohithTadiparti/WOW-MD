@@ -1,5 +1,6 @@
 import { useId, useState } from 'react';
 import { OTHER, isOffList } from '../lib/reference';
+import RequiredMark from './ui/RequiredMark';
 
 /**
  * A dropdown that cannot tell somebody they do not exist.
@@ -21,6 +22,7 @@ export default function ChoiceField({
   options,
   hint,
   required,
+  markRequired = false,
   allowOther = true,
   placeholder = 'Not stated',
   otherOption = OTHER,
@@ -32,6 +34,8 @@ export default function ChoiceField({
   options: readonly string[];
   hint?: string;
   required?: boolean;
+  /** Shows the required mark beside the label; opt-in so forms without the key stay as they are. */
+  markRequired?: boolean;
   /** Off for lists that really are closed, like the twelve rashis. */
   allowOther?: boolean;
   placeholder?: string;
@@ -53,6 +57,7 @@ export default function ChoiceField({
     <div>
       <label className="label" htmlFor={id}>
         {label}
+        {required && markRequired && <RequiredMark />}
       </label>
       <select
         id={id}

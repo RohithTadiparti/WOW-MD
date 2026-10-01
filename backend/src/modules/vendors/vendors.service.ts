@@ -27,6 +27,7 @@ import { BusinessStatus, CaseStatus, ReviewStatus, UserRole } from '../../common
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
 import { likeEscape } from '../../common/util/like';
+import { SocialLink, resolveSocialLinks } from '../../common/dto/social-links.dto';
 
 /**
  * One listing, as somebody who is not the vendor may see it.
@@ -78,6 +79,8 @@ export interface PublicVendor {
    * (null) on the single-listing view where the full catalogue is shown.
    */
   startingPrice: number | null;
+  /** In the order the vendor chose; the three single links mirror it for older clients. */
+  socialLinks: SocialLink[];
   website: string | null;
   instagramUrl: string | null;
   youtubeUrl: string | null;
@@ -102,6 +105,7 @@ export function publicVendor(v: Vendor, startingPrice: number | null = null): Pu
     verifiedAt: v.verifiedAt,
     createdAt: v.createdAt,
     startingPrice,
+    socialLinks: v.socialLinks ?? [],
     website: v.website ?? null,
     instagramUrl: v.instagramUrl ?? null,
     youtubeUrl: v.youtubeUrl ?? null,
@@ -152,7 +156,9 @@ export class VendorsService {
   async create(ownerUserId: string, dto: CreateVendorDto): Promise<Vendor> {
     const categories = await this.resolveCategories(dto);
     if (!categories) throw new BadRequestException('Choose at least one category');
-    const fields: Partial<CreateVendorDto> = { ...dto };
+    // The links are written through resolveSocialLinks, with their mirrors.
+    const { socialLinks: _links, ...rest } = dto;
+    const fields: Partial<Omit<CreateVendorDto, 'socialLinks'>> = { ...rest };
     delete fields.category;
     delete fields.otherCategory;
     delete fields.categories;
@@ -161,6 +167,7 @@ export class VendorsService {
     const vendor = await this.saveListing(
       this.vendors.create({
         ...fields,
+        ...(resolveSocialLinks(dto) ?? {}),
         categories,
         category: categories[0],
         otherCategory: null,
@@ -241,6 +248,11 @@ export class VendorsService {
     delete changes.categories;
     const categories = await this.resolveCategories(dto);
     if (categories) changes.categories = categories;
+    // The list and the single columns mirroring it move together, whichever
+    // of them the client sent (see resolveSocialLinks).
+    delete changes.socialLinks;
+    const social = resolveSocialLinks(dto, vendor);
+    if (social) Object.assign(changes, social);
 
     this.lifecycle.assertIdentityEditable(vendor, changes);
 

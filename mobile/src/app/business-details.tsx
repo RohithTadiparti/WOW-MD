@@ -17,7 +17,13 @@ import { useCompletion, useRefreshBusiness } from '@/components/business/complet
 import { VerifiedDetails } from '@/components/business/verified-details';
 import { CategoryPicker } from '@/components/business/category-picker';
 import { DocumentList, MediaStrip, PhotoPicker } from '@/components/uploader';
-import { SOCIAL_KEYS, SocialLinkFields, socialLinkErrors } from '@/components/social-links';
+import { SocialLinksEditor } from '@/components/social-links';
+import {
+  listingSocialLinks,
+  normaliseSocialLinks,
+  socialLinkErrors,
+  type SocialLink,
+} from '@/shared/social-links';
 import {
   Alert,
   Body,
@@ -28,6 +34,7 @@ import {
   Loading,
   PageSubtitle,
   Screen,
+  RequiredMark,
   SectionTitle,
 } from '@/components/ui';
 import { useBusinesses } from '@/store/business';
@@ -61,13 +68,12 @@ const EMPTY = {
   tradingSince: '',
   registeredAddress: '',
   contactPhone: '',
-  website: '',
-  instagramUrl: '',
-  youtubeUrl: '',
 };
 
 type Form = typeof EMPTY;
-type Errors = Partial<Record<keyof Form | 'categories' | 'portfolio' | 'complianceDocuments', string>>;
+type Errors = Partial<
+  Record<keyof Form | 'categories' | 'portfolio' | 'complianceDocuments' | 'socialLinks', string>
+>;
 
 const MOBILE = /^(\+91)?[6-9]\d{9}$/;
 
@@ -103,7 +109,10 @@ function BusinessDetails() {
   const [categories, setCategories] = useState<string[]>([]);
   const [portfolio, setPortfolio] = useState<string[]>([]);
   const [documents, setDocuments] = useState<string[]>([]);
+  const [socialLinks, setSocialLinks] = useState<SocialLink[]>([]);
   const [errors, setErrors] = useState<Errors>({});
+  // After a save attempt every link row shows its problem.
+  const [showLinkErrors, setShowLinkErrors] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -134,14 +143,23 @@ function BusinessDetails() {
       tradingSince: listing.tradingSince ? listing.tradingSince.slice(0, 10) : '',
       registeredAddress: listing.registeredAddress ?? '',
       contactPhone: listing.contactPhone ?? '',
-      website: listing.website ?? '',
-      instagramUrl: listing.instagramUrl ?? '',
-      youtubeUrl: listing.youtubeUrl ?? '',
     });
     setCategories(listing.categories ?? []);
     setPortfolio(listing.portfolio ?? []);
     setDocuments(listing.complianceDocuments ?? []);
+    // The stored list as it is, so a link the rules now refuse is shown to be
+    // fixed; the three single fields only from a server with no list.
+    setSocialLinks(
+      Array.isArray(listing.socialLinks) ? listing.socialLinks : listingSocialLinks(listing),
+    );
+    setShowLinkErrors(false);
   }, [listing, editing]);
+
+  /** The link rows' problems, under one key; each row shows its own. */
+  function linkErrors(): Errors {
+    const check = socialLinkErrors(socialLinks);
+    return check.any ? { socialLinks: check.list ?? 'Fix the highlighted links.' } : {};
+  }
 
   const set = (key: keyof Form) => (value: string) =>
     setForm((f) => ({ ...f, [key]: value }));
@@ -197,7 +215,7 @@ function BusinessDetails() {
     } else if (!MOBILE.test(form.contactPhone.replace(/\s|-/g, ''))) {
       found.contactPhone = 'Enter a 10-digit Indian mobile number';
     }
-    return { ...found, ...socialLinkErrors(form) };
+    return { ...found, ...linkErrors() };
   }
 
   /** The lighter check for a verified/live listing: only what is on screen. */
@@ -211,7 +229,7 @@ function BusinessDetails() {
     } else if (!MOBILE.test(form.contactPhone.replace(/\s|-/g, ''))) {
       found.contactPhone = 'Enter a 10-digit Indian mobile number';
     }
-    return { ...found, ...socialLinkErrors(form) };
+    return { ...found, ...linkErrors() };
   }
 
   async function save() {
@@ -219,6 +237,7 @@ function BusinessDetails() {
     setNotice('');
     const found = presentationalOnly ? validatePresentational() : validate();
     setErrors(found);
+    setShowLinkErrors(true);
     if (Object.keys(found).length > 0) return;
 
     setBusy(true);
@@ -256,8 +275,8 @@ function BusinessDetails() {
           payload[key] = form[key] ? form[key] : null;
         }
       }
-      // Always sent: a blank social link is how one is removed.
-      for (const key of SOCIAL_KEYS) payload[key] = form[key].trim();
+      // Always sent, including empty: removing the last link has to reach the server.
+      payload.socialLinks = normaliseSocialLinks(socialLinks);
 
       const created = !listing;
       if (listing) await api.put(`/vendors/${listing.id}`, payload);
@@ -335,6 +354,10 @@ function BusinessDetails() {
             the verification officer visits.
           </PageSubtitle>
         )}
+        <Caption tone="faint">
+          Fields marked
+          <RequiredMark /> are required.
+        </Caption>
       </View>
 
       {notice ? <Alert tone="positive">{notice}</Alert> : null}
@@ -345,15 +368,22 @@ function BusinessDetails() {
           <SectionTitle>The business</SectionTitle>
           <Field
             label="Business name"
+            required
             value={form.name}
             onChangeText={set('name')}
             error={errors.name}
             maxLength={100}
             autoCapitalize="words"
           />
-          <CategoryPicker value={categories} onChange={setCategories} error={errors.categories} />
+          <CategoryPicker
+            required
+            value={categories}
+            onChange={setCategories}
+            error={errors.categories}
+          />
           <Field
             label="City"
+            required
             value={form.city}
             onChangeText={set('city')}
             error={errors.city}
@@ -366,6 +396,7 @@ function BusinessDetails() {
         <SectionTitle>About</SectionTitle>
         <Textarea
           label="Description"
+          required
           value={form.description}
           onChange={set('description')}
           rows={4}
@@ -376,6 +407,7 @@ function BusinessDetails() {
         {presentationalOnly && (
           <Field
             label="Contact number"
+            required
             value={form.contactPhone}
             onChangeText={set('contactPhone')}
             error={errors.contactPhone}
@@ -393,7 +425,10 @@ function BusinessDetails() {
         argument for this app existing.
       */}
       <Card>
-        <SectionTitle>Portfolio</SectionTitle>
+        <SectionTitle>
+          Portfolio
+          <RequiredMark />
+        </SectionTitle>
         <Body tone="muted">
           At least one photo is required. Clients rarely book from a listing with none.
         </Body>
@@ -405,13 +440,21 @@ function BusinessDetails() {
         />
       </Card>
 
-      <SocialLinkFields values={form} onChange={(key, value) => set(key)(value)} errors={errors} />
+      <SocialLinksEditor
+        value={socialLinks}
+        onChange={setSocialLinks}
+        showErrors={showLinkErrors}
+        error={errors.socialLinks}
+      />
 
       {!presentationalOnly && (
         <>
           {/* The papers the officer asks to see. */}
           <Card>
-            <SectionTitle>Compliance documents</SectionTitle>
+            <SectionTitle>
+              Compliance documents
+              <RequiredMark />
+            </SectionTitle>
             <Body tone="muted">
               At least one is required. Your PAN document is what the officer checks first. GST and
               any trade licence are useful if you have them.
@@ -448,6 +491,7 @@ function BusinessDetails() {
             />
             <Field
               label="PAN"
+              required
               placeholder="ABCDE1234F"
               maxLength={10}
               autoCapitalize="characters"
@@ -474,6 +518,7 @@ function BusinessDetails() {
             />
             <Textarea
               label="Registered address"
+              required
               value={form.registeredAddress}
               onChange={set('registeredAddress')}
               rows={3}
@@ -482,6 +527,7 @@ function BusinessDetails() {
             />
             <Field
               label="Contact number"
+              required
               value={form.contactPhone}
               onChangeText={set('contactPhone')}
               error={errors.contactPhone}

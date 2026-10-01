@@ -7,6 +7,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { BusinessStatus } from '../../../common/enums';
+import type { SocialLink } from '../../../common/dto/social-links.dto';
 
 export interface VendorPricing {
   currency?: string;
@@ -94,7 +95,14 @@ export class Vendor {
   @Column({ type: 'varchar', nullable: true })
   contactPhone: string | null;
 
-  /** Public social links; validated by SocialLinksDto. */
+  /**
+   * Public social links, in the order the listing shows them; validated by
+   * SocialLinksDto. The three single columns below mirror the first link of
+   * their platform for app builds that predate the list.
+   */
+  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
+  socialLinks: SocialLink[];
+
   @Column({ type: 'varchar', length: 200, nullable: true })
   website: string | null;
 

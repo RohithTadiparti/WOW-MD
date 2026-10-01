@@ -571,6 +571,7 @@ export function Textarea({
   hint?: string;
   error?: string;
   maxLength?: number;
+  required?: boolean;
 }) {
   return (
     <Field
