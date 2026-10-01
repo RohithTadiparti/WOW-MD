@@ -17,7 +17,7 @@ import { loadVendorShortlist, toggleVendorShortlist } from '@/lib/plan-shortlist
 import { cleanAnswers, validateAnswers, type Answers, type FieldSpec } from '@/shared/dynamic-form';
 import { WowCalendar } from '@/components/common/WowCalendar';
 import { DynamicForm } from '@/components/dynamic-form';
-import { SOCIAL_KEYS, SocialLinksList, type SocialLinks } from '@/components/social-links';
+import { SocialLinksList, hasSocialLinks, type SocialLinks } from '@/components/social-links';
 import {
   Alert,
   Body,
@@ -368,7 +368,7 @@ export default function VendorDetail() {
 
           {tab === 'overview' ? (
             <>
-              {vendor.description || SOCIAL_KEYS.some((k) => vendor[k]) ? (
+              {vendor.description || hasSocialLinks(vendor) ? (
                 <Card>
                   <SectionTitle>About</SectionTitle>
                   {vendor.description ? <Caption>{vendor.description}</Caption> : null}

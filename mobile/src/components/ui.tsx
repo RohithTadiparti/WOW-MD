@@ -304,6 +304,16 @@ export function Button({
   );
 }
 
+/**
+ * The mark a required field's label carries, for a heading that is not a Field
+ * (a section a form will not save without, like Portfolio). Nest it inside the
+ * heading's text so it wraps with it.
+ */
+export function RequiredMark() {
+  const theme = useTheme();
+  return <Txt style={{ color: rgb(theme.criticalFg) }}> *</Txt>;
+}
+
 // ------------------------------------------------------------------ input --
 
 interface FieldProps extends TextInputProps {
