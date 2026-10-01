@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -8,7 +8,7 @@ import { Alert, Button, Card, Field, Caption, Body } from '@/components/ui';
 import { CASTES_BY_RELIGION, MOTHER_TONGUES, RELIGIONS } from '@/shared/reference';
 import { STATES_BY_COUNTRY, districtsForState, DISTRICTS_BY_STATE } from '@/shared/locations';
 import { radius, space } from '@/theme';
-import { MAX_HEIGHT_CM, MIN_HEIGHT_CM, cmToFeetInches, feetInchesToCm } from '@/shared/height';
+import { MAX_HEIGHT_CM, MIN_HEIGHT_CM, heightPartsError, heightPartsFromCm, feetInchesToCm } from '@/shared/height';
 import { ProfileSilhouette } from '@/components/profile-silhouette';
 import { ChoiceField, canonical } from './choice-field';
 import { WowCalendar } from '@/components/common/WowCalendar';
@@ -101,6 +101,15 @@ export function PersonalForm({
   const [draft, setDraft] = useState<Form | null>(null);
 
   const form = draft ?? formFrom(me, full);
+  const heightSource = form.heightCm;
+  const heightSourceRef = useRef(heightSource);
+  const [heightParts, setHeightParts] = useState(() => heightPartsFromCm(heightSource));
+
+  useEffect(() => {
+    if (heightSourceRef.current === heightSource) return;
+    heightSourceRef.current = heightSource;
+    setHeightParts(heightPartsFromCm(heightSource));
+  }, [heightSource]);
 
   const maxDob = useMemo(() => {
     const d = new Date();
@@ -169,12 +178,14 @@ export function PersonalForm({
     setDraft({ ...form, [key]: capitalize ? capitalizeWords(value) : value });
   };
 
-  const height = cmToFeetInches(form.heightCm);
   const updateHeight = (unit: 'feet' | 'inches', value: string) => {
-    const feet = unit === 'feet' ? value : String(height?.feet ?? 0);
-    const inches = unit === 'inches' ? value : String(height?.inches ?? 0);
-    const cm = feetInchesToCm(feet, inches);
-    set('heightCm')(value === '' || cm === null ? '' : String(cm));
+    const next = { ...heightParts, [unit]: value };
+    setHeightParts(next);
+    const message = heightPartsError(next, true);
+    setErrors((current) => ({ ...current, heightCm: message ?? '' }));
+    const cm = feetInchesToCm(next.feet, next.inches);
+    if (cm !== null) setDraft({ ...form, heightCm: String(cm) });
+    else if (!next.feet && !next.inches) setDraft({ ...form, heightCm: '' });
   };
 
   function submit() {
@@ -186,9 +197,10 @@ export function PersonalForm({
     if (!form.dateOfBirth) newErrors.dateOfBirth = 'Date of Birth is required.';
     if (!form.gender) newErrors.gender = 'Gender is required.';
     
-    const h = Number(form.heightCm);
-    if (!form.heightCm || Number.isNaN(h) || h < MIN_HEIGHT_CM || h > MAX_HEIGHT_CM) {
-      newErrors.heightCm = 'Height must be between 3 ft 0 in and 8 ft 0 in.';
+    const heightMessage = heightPartsError(heightParts, true);
+    const h = feetInchesToCm(heightParts.feet, heightParts.inches);
+    if (heightMessage || h === null || h < MIN_HEIGHT_CM || h > MAX_HEIGHT_CM) {
+      newErrors.heightCm = heightMessage ?? 'Height must be between 3 ft 0 in and 8 ft 0 in.';
     }
     
     if (!form.complexion) newErrors.complexion = 'Complexion is required.';
@@ -263,10 +275,10 @@ export function PersonalForm({
         {/* Feet and inches, as the web form and partner preferences ask it; stored in cm. */}
         <View style={{ flexDirection: 'row', gap: space(2) }}>
           <View style={{ flex: 1 }}>
-            <Field label="Height (feet)" value={String(height?.feet ?? '')} onChangeText={(value) => updateHeight('feet', value)} keyboardType="number-pad" maxLength={1} required autoFilled={autofilledKeys?.has('heightCm')} error={errors.heightCm} />
+            <Field label="Height (feet)" value={heightParts.feet} onChangeText={(value) => updateHeight('feet', value)} keyboardType="number-pad" maxLength={1} required autoFilled={autofilledKeys?.has('heightCm')} error={errors.heightCm} />
           </View>
           <View style={{ flex: 1 }}>
-            <Field label="Height (inches)" value={String(height?.inches ?? '')} onChangeText={(value) => updateHeight('inches', value)} keyboardType="number-pad" maxLength={2} required autoFilled={autofilledKeys?.has('heightCm')} />
+            <Field label="Height (inches)" value={heightParts.inches} onChangeText={(value) => updateHeight('inches', value)} keyboardType="number-pad" maxLength={2} required autoFilled={autofilledKeys?.has('heightCm')} error={errors.heightCm} />
           </View>
         </View>
 

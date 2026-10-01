@@ -1,4 +1,5 @@
 import { FormEvent, useState } from 'react';
+import { Link } from 'react-router-dom';
 import BiodataImport from '../components/BiodataImport';
 import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -32,6 +33,7 @@ interface ManagedProfile {
   contactEmail: string | null;
   contactPhone: string | null;
   networkVisibility: 'private' | 'pool';
+  visibility: 'private' | 'matches_only' | 'public';
   gender: string | null;
   dateOfBirth: string | null;
   city: string | null;
@@ -256,9 +258,11 @@ export default function ManagedProfiles({
   const [intakeMode, setIntakeMode] = useState<IntakeMode | null>(null);
   const [extractedBiodata, setExtractedBiodata] = useState<Record<string, string>>({});
   const [documentUrl, setDocumentUrl] = useState('');
-  // The API needs a valid mobile and a bride-or-groom choice in both modes,
-  // so Save waits for both rather than failing after the agent presses it.
-  const readyToSave = isValidMobile(draft.contactPhone) && Boolean(draft.gender);
+  // Contact details can arrive later with a family member. A supplied mobile
+  // must be valid, but neither it nor email blocks an agent from saving the
+  // imported biodata. A contact channel is only needed to send an invitation.
+  const readyToSave = (!draft.contactPhone || isValidMobile(draft.contactPhone)) && Boolean(draft.gender);
+  const readyToInvite = readyToSave && Boolean(draft.contactPhone || draft.contactEmail);
   const [importing, setImporting] = useState(false);
   const [consent, setConsent] = useState<ConsentDraft>(emptyConsent());
   const [error, setError] = useState('');
@@ -285,9 +289,6 @@ export default function ManagedProfiles({
       const values = draft;
       const payload: Record<string, unknown> = {
         displayName: [values.firstName.trim(), values.lastName.trim()].filter(Boolean).join(' '),
-        // Required in both modes, as the API requires it: an uploaded
-        // biodata without a number still needs one before the client exists.
-        contactPhone: values.contactPhone,
         gender: values.gender,
         consent: consentPayload(consent),
         inviteNow,
@@ -306,7 +307,9 @@ export default function ManagedProfiles({
       }
       if (Object.keys(biodata).length) payload.biodata = biodata;
       if (documentUrl) payload.biodataDocumentUrl = documentUrl;
-      // Email is optional: a walk-in family often gives only a number.
+      // Either contact channel can be added at the desk or later. They remain
+      // optional until the agent chooses to send a claim invitation.
+      if (values.contactPhone) payload.contactPhone = values.contactPhone;
       if (values.contactEmail) payload.contactEmail = values.contactEmail;
       if (values.dateOfBirth) payload.dateOfBirth = values.dateOfBirth;
       if (values.city) payload.city = values.city;
@@ -510,7 +513,7 @@ export default function ManagedProfiles({
               className={intakeMode === 'upload' ? 'btn' : 'btn-outline'}
               onClick={() => setIntakeMode('upload')}
             >
-              Upload image / PDF
+              Upload PDF, Word, Excel or image
             </button>
           </div>
         </div>
@@ -607,7 +610,9 @@ export default function ManagedProfiles({
             </div>
           )}
           <div>
-            <label className="label">Mobile number</label>
+            <label className="label">
+              Mobile number <span className="font-normal text-gray-400">(optional)</span>
+            </label>
             {/*
               Checked in the field before anything is sent — an invalid or
               incomplete number must not reach the invite, which is where the
@@ -623,13 +628,13 @@ export default function ManagedProfiles({
               value={draft.contactPhone}
               onChange={set('contactPhone')}
               aria-invalid={Boolean(draft.contactPhone) && !isValidMobile(draft.contactPhone)}
-              required
             />
             {draft.contactPhone && !isValidMobile(draft.contactPhone) ? (
               <p className="mt-1 text-xs text-red-600">Enter a 10-digit Indian mobile number.</p>
             ) : (
               <p className="mt-1 text-xs text-gray-500">
-                International format. This is how you reach the family.
+                Add a mobile, email, or both when available. Either one is enough to invite them
+                to claim this profile later.
               </p>
             )}
           </div>
@@ -644,7 +649,7 @@ export default function ManagedProfiles({
               onChange={set('contactEmail')}
             />
             <p className="mt-1 text-xs text-gray-500">
-              Only needed if you want to invite them to manage it themselves.
+              Optional at intake. Email or mobile can be used when they later claim the account.
             </p>
           </div>
           <div>
@@ -683,11 +688,14 @@ export default function ManagedProfiles({
           <textarea className="input" rows={3} maxLength={2000} value={draft.bio} onChange={set('bio')} />
         </div>
 
-        {intakeMode === 'upload' && documentUrl && (
+            {intakeMode === 'upload' && documentUrl && (
           <div className="space-y-4 rounded-lg border border-brand-light bg-brand-light/20 p-4">
             <div>
               <h3 className="font-semibold text-gray-900">Extracted biodata</h3>
               <p className="text-xs text-gray-600">Only values you confirm here will be saved to the new client.</p>
+              <p className="mt-1 text-xs font-medium text-red-700">
+                Fields outlined in red were not found or could not be recognised. Complete them before making this profile matchable.
+              </p>
             </div>
             {IMPORT_REVIEW_SECTIONS.map((section) => (
               <fieldset key={section.title} className="space-y-2">
@@ -695,10 +703,10 @@ export default function ManagedProfiles({
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {section.fields.map(([key, label]) => (
                     <label key={key} className="block">
-                      <span className="label">{label}</span>
+                      <span className={`label${!(extractedBiodata[key] ?? '').trim() ? ' text-red-700' : ''}`}>{label}</span>
                       {REVIEW_CHOICES[key] ? (
                         <select
-                          className="input"
+                          className={`input${!(extractedBiodata[key] ?? '').trim() ? ' border-red-500 bg-red-50 focus:border-red-500 focus:ring-red-500/20' : ''}`}
                           value={extractedBiodata[key] ?? ''}
                           onChange={setBiodata(key)}
                         >
@@ -709,7 +717,7 @@ export default function ManagedProfiles({
                         </select>
                       ) : (
                         <input
-                          className="input"
+                          className={`input${!(extractedBiodata[key] ?? '').trim() ? ' border-red-500 bg-red-50 focus:border-red-500 focus:ring-red-500/20' : ''}`}
                           value={extractedBiodata[key] ?? ''}
                           onChange={setBiodata(key)}
                         />
@@ -741,7 +749,7 @@ export default function ManagedProfiles({
           <button
             type="button"
             className="btn-outline"
-            disabled={importing || create.isPending || !readyToSave}
+            disabled={importing || create.isPending || !readyToInvite}
             onClick={() => {
               setError('');
               create.mutate(true);
@@ -750,9 +758,13 @@ export default function ManagedProfiles({
             Save and invite now
           </button>
           <p className="w-full text-xs text-gray-500">
-            {draft.contactEmail
-              ? 'The invitation goes to their email and mobile.'
-              : 'With no email, the invitation goes by SMS. They can claim it without an email.'}
+            {!draft.contactEmail && !draft.contactPhone
+              ? 'Save the profile now; add an email or mobile before inviting them to claim it.'
+              : draft.contactEmail && draft.contactPhone
+                ? 'The invitation goes to their email and mobile.'
+                : draft.contactEmail
+                  ? 'The invitation goes to their email address.'
+                  : 'The invitation goes by SMS. They can claim it without an email.'}
           </p>
         </div>
         </>}
@@ -815,12 +827,21 @@ export default function ManagedProfiles({
                       This profile belongs to its owner now, so it is read-only for you.
                     </p>
                   )}
+                  <CompletionStatus
+                    profileId={p.id}
+                    visibility={p.visibility}
+                    canPublish={Boolean(p.actions?.canEdit)}
+                    onPublished={() => void qc.invalidateQueries({ queryKey: ['managed-profiles'] })}
+                  />
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {(() => {
                     const allow = p.actions;
                     return (
                     <>
+                      <Link className="btn-outline" to={`/biodata?profileId=${p.id}`}>
+                        Complete biodata
+                      </Link>
                       {/*
                         The invite goes first, and it is the primary button
                         while it is the thing that matters.
@@ -1002,6 +1023,67 @@ export default function ManagedProfiles({
       </>
     );
   }
+}
+
+interface Completion {
+  complete: boolean;
+  percent: number;
+  missing: string[];
+}
+
+/**
+ * The intake import may leave gaps. Keep that answer visible in the agent's
+ * client list, using the same completion report the profile owner sees in
+ * Biodata, so neither party has to guess what remains.
+ */
+function CompletionStatus({
+  profileId,
+  visibility,
+  canPublish,
+  onPublished,
+}: {
+  profileId: string;
+  visibility: ManagedProfile['visibility'];
+  canPublish: boolean;
+  onPublished: () => void;
+}) {
+  const { data } = useQuery({
+    queryKey: ['profile-completion', profileId],
+    queryFn: async () =>
+      (await api.get(`/profiles/${profileId}/details`)).data.completion as Completion,
+    staleTime: 30_000,
+  });
+  const publish = useMutation({
+    mutationFn: async () => api.put(`/agents/profiles/${profileId}`, { visibility: 'matches_only' }),
+    onSuccess: onPublished,
+  });
+
+  if (!data) return null;
+  if (data.complete) {
+    if (visibility !== 'private') {
+      return <p className="mt-1 text-xs font-medium text-emerald-700">Biodata complete</p>;
+    }
+    return (
+      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+        <span className="font-medium text-emerald-700">Biodata complete, but private.</span>
+        {canPublish && (
+          <button
+            type="button"
+            className="text-brand underline underline-offset-2"
+            disabled={publish.isPending}
+            onClick={() => publish.mutate()}
+          >
+            {publish.isPending ? 'Making matchable…' : 'Make matchable'}
+          </button>
+        )}
+      </div>
+    );
+  }
+  return (
+    <p className="mt-1 text-xs text-amber-800">
+      {data.percent}% biodata complete. Private until complete. Still needed: {data.missing.join(', ')}.
+    </p>
+  );
 }
 
 /**

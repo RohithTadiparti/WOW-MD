@@ -111,8 +111,8 @@ export class AgentsController {
     summary: 'Build a profile for someone with no account',
     description:
       'Creates a complete, matchable profile — photos, preferences, contact details — for a ' +
-      'person who has not signed up. Contact email and mobile are required because they are the ' +
-      'only route to an invitation. Pass inviteNow to email the invitation immediately.',
+      'person who has not signed up. Contact email and mobile may be added individually or together; ' +
+      'at least one is needed only when sending an invitation. Pass inviteNow to invite immediately.',
   })
   @Post('profiles')
   createProfile(@CurrentUser() actor: AuthUser, @Body() dto: CreateManagedProfileDto) {

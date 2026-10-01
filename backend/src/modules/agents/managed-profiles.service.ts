@@ -149,11 +149,9 @@ export class ManagedProfilesService {
   /**
    * Builds a profile from what a family handed over at the desk.
    *
-   * Phone is the identity key here, not email: the walk-in family gives a
-   * number, and a duplicate number almost always means the same person has
-   * already been taken on — by this agency or another one. That is worth
-   * catching, because the same biodata circulating twice from two agents is a
-   * real embarrassment in this market.
+   * A supplied phone or email is an identity key. Either one may be missing at
+   * the desk, but any value given is checked so the same biodata is not put in
+   * circulation twice.
    */
   async create(actor: AuthUser, dto: CreateManagedProfileDto): Promise<Profile> {
     await this.assertMaySteward(actor);
@@ -182,10 +180,15 @@ export class ManagedProfilesService {
       const profile = await profiles.save(
         profiles.create({
           ...fields,
+          contactPhone: dto.contactPhone ?? null,
           contactEmail: dto.contactEmail ?? null,
           userId: null,
           managedByUserId: actor.userId,
           claimStatus: ProfileClaimStatus.UNCLAIMED,
+          // An imported biodata often arrives in stages. Keep the new profile
+          // out of Matches until its details have been reviewed and the agent
+          // deliberately makes it matchable.
+          visibility: ProfileVisibility.PRIVATE,
           profileCompleted: this.isComplete(fields),
         }),
       );

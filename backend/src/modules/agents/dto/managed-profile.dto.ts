@@ -97,10 +97,9 @@ export class IntakeConsentDto {
 /**
  * A profile a steward builds for somebody else.
  *
- * Mobile is mandatory; email is not. A family walking into an agency hands over
- * a phone number far more often than an email address, and many clients never
- * want a login at all — the agent is their whole interface. Email is only
- * needed if and when they are invited to claim the profile.
+ * A mobile number and email are both optional at intake. An agent can save the
+ * profile from the biodata and add either contact channel later; at least one
+ * channel is required only when the person is invited to claim their account.
  */
 export class CreateManagedProfileDto {
   @IsOptional()
@@ -131,17 +130,18 @@ export class CreateManagedProfileDto {
   @MaxLength(120)
   displayName: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: '+919876543210',
-    description: 'The primary way to reach this family. Required.',
+    description: 'A mobile number for an eventual SMS invitation. Optional at intake.',
   })
+  @IsOptional()
   @Transform(normaliseMobile)
   @Matches(MOBILE_PATTERN, { message: MOBILE_MESSAGE })
-  contactPhone: string;
+  contactPhone?: string;
 
   @ApiPropertyOptional({
     example: 'priya@example.com',
-    description: 'Optional. Only needed to invite them to claim the profile later.',
+    description: 'An email address for an eventual invitation. Optional at intake.',
   })
   @IsOptional()
   @IsEmail({}, { message: 'Enter a valid email address, or leave it blank' })

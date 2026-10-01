@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { useMutation } from '@tanstack/react-query';
 
 import { api, apiMessage } from '@/lib/api';
-import { cmToFeetInches, feetInchesToCm, formatHeight } from '@/shared/height';
+import { cmToFeetInches, feetInchesToCm, formatHeight, heightPartsError, heightPartsFromCm } from '@/shared/height';
 import { DetailGrid, DetailRow } from '@/components/chrome';
 import { SelectField } from '@/components/form';
 import { Alert, Button, Caption, Card, Field, SectionTitle } from '@/components/ui';
@@ -62,6 +62,21 @@ export function PreferencesSection({
     preferredNriCountry: capitalizeWords(String(bag.preferredNriCountry ?? '')),
     other: String(bag.other ?? bag.anythingElse ?? ''),
   });
+  const heightSource = `${form.preferredHeightMinCm}|${form.preferredHeightMaxCm}`;
+  const heightSourceRef = useRef(heightSource);
+  const [heightParts, setHeightParts] = useState({
+    preferredHeightMinCm: heightPartsFromCm(form.preferredHeightMinCm),
+    preferredHeightMaxCm: heightPartsFromCm(form.preferredHeightMaxCm),
+  });
+
+  useEffect(() => {
+    if (heightSourceRef.current === heightSource) return;
+    heightSourceRef.current = heightSource;
+    setHeightParts({
+      preferredHeightMinCm: heightPartsFromCm(form.preferredHeightMinCm),
+      preferredHeightMaxCm: heightPartsFromCm(form.preferredHeightMaxCm),
+    });
+  }, [heightSource, form.preferredHeightMinCm, form.preferredHeightMaxCm]);
 
   const save = useMutation({
     mutationFn: async () => {
@@ -111,16 +126,22 @@ export function PreferencesSection({
       setError('Give both ends of the age range and the height range before saving.');
       return;
     }
-    if ([form.preferredHeightMinCm, form.preferredHeightMaxCm].some((value) =>
-      cmToFeetInches(value) === null)) {
-      setError('Enter valid heights in feet and inches.');
+    const minHeight = feetInchesToCm(heightParts.preferredHeightMinCm.feet, heightParts.preferredHeightMinCm.inches);
+    const maxHeight = feetInchesToCm(heightParts.preferredHeightMaxCm.feet, heightParts.preferredHeightMaxCm.inches);
+    if (
+      heightPartsError(heightParts.preferredHeightMinCm, true) ||
+      heightPartsError(heightParts.preferredHeightMaxCm, true) ||
+      minHeight === null ||
+      maxHeight === null
+    ) {
+      setError('Enter valid heights in feet and inches (inches must be 0 to 11).');
       return;
     }
     if (Number(form.preferredAgeMin) > Number(form.preferredAgeMax)) {
       setError('The minimum age cannot be above the maximum.');
       return;
     }
-    if (Number(form.preferredHeightMinCm) > Number(form.preferredHeightMaxCm)) {
+    if (minHeight > maxHeight) {
       setError('The minimum height cannot be above the maximum.');
       return;
     }
@@ -129,15 +150,15 @@ export function PreferencesSection({
   }
 
   const heightFields = [
-    { key: 'preferredHeightMinCm' as const, label: 'Height from', height: cmToFeetInches(form.preferredHeightMinCm) },
-    { key: 'preferredHeightMaxCm' as const, label: 'Height to', height: cmToFeetInches(form.preferredHeightMaxCm) },
+    { key: 'preferredHeightMinCm' as const, label: 'Height from', height: heightParts.preferredHeightMinCm },
+    { key: 'preferredHeightMaxCm' as const, label: 'Height to', height: heightParts.preferredHeightMaxCm },
   ];
   const updateHeight = (key: typeof heightFields[number]['key'], unit: 'feet' | 'inches', value: string) => {
-    const current = cmToFeetInches(form[key]);
-    const feet = unit === 'feet' ? value : String(current?.feet ?? 0);
-    const inches = unit === 'inches' ? value : String(current?.inches ?? 0);
-    const cm = feetInchesToCm(feet, inches);
-    set(key)(value === '' || cm === null ? '' : String(cm));
+    const next = { ...heightParts[key], [unit]: value };
+    setHeightParts((current) => ({ ...current, [key]: next }));
+    const cm = feetInchesToCm(next.feet, next.inches);
+    if (cm !== null) setForm((current) => ({ ...current, [key]: String(cm) }));
+    else if (!next.feet && !next.inches) setForm((current) => ({ ...current, [key]: '' }));
   };
 
   return (
@@ -161,11 +182,11 @@ export function PreferencesSection({
           {heightFields.map(({ key, label, height }) => (
             <View key={key} style={{ flexDirection: 'row', gap: space(2) }}>
               <View style={{ flex: 1 }}>
-                <Field label={`${label} (feet)`} value={String(height?.feet ?? '')}
+                <Field label={`${label} (feet)`} value={height.feet}
                   onChangeText={(value) => updateHeight(key, 'feet', value)} keyboardType="number-pad" maxLength={1} />
               </View>
               <View style={{ flex: 1 }}>
-                <Field label={`${label} (inches)`} value={String(height?.inches ?? '')}
+                <Field label={`${label} (inches)`} value={height.inches}
                   onChangeText={(value) => updateHeight(key, 'inches', value)} keyboardType="number-pad" maxLength={2} />
               </View>
             </View>
