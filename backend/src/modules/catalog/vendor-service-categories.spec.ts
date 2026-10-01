@@ -32,6 +32,7 @@ const owner: AuthUser = {
 describe('vendor services outside the selected categories', () => {
   let service: VendorServicesService;
   let vendorCategories: string[];
+  let offeringsData: Record<string, unknown>[];
 
   const catering = { id: 'cat-catering', slug: 'catering' };
   const decor = { id: 'cat-decor', slug: 'decor' };
@@ -54,6 +55,10 @@ describe('vendor services outside the selected categories', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     vendorCategories = ['catering'];
+    offeringsData = [
+      { id: 'o1', vendorServiceId: 'vs-cater', active: true },
+      { id: 'o2', vendorServiceId: 'vs-decor', active: true },
+    ];
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -62,10 +67,7 @@ describe('vendor services outside the selected categories', () => {
         {
           provide: getRepositoryToken(ServiceOffering),
           useValue: {
-            find: jest.fn(async () => [
-              { id: 'o1', vendorServiceId: 'vs-cater', active: true },
-              { id: 'o2', vendorServiceId: 'vs-decor', active: true },
-            ]),
+            find: jest.fn(async () => offeringsData),
           },
         },
         { provide: getRepositoryToken(ServiceDefinition), useValue: { find: jest.fn(async () => definitions) } },
@@ -111,6 +113,24 @@ describe('vendor services outside the selected categories', () => {
   it('leaves it out of the public listing', async () => {
     const list = await service.listForVendor('v1', true);
     expect(list.map((s) => s.id)).toEqual(['vs-cater']);
+  });
+
+  it('returns only public, active catalogue data to a visitor', async () => {
+    services[0].attributes = { seats: 250 };
+    offeringsData = [
+      {
+        id: 'o1', vendorServiceId: 'vs-cater', active: true, name: 'Hall hire',
+        pendingPrice: '99999', pendingSince: new Date(), concurrentCapacity: 12,
+        pricingModel: 'fixed', price: '50000', currency: 'INR', unitLabel: null,
+        minQuantity: null, maxQuantity: null, isPackage: false, inclusions: [], description: null,
+      },
+      { id: 'o2', vendorServiceId: 'vs-cater', active: false, name: 'Retired package' },
+    ];
+    const list = await service.listForVendor('v1', true);
+    expect(list[0]).toMatchObject({ id: 'vs-cater', attributes: { seats: 250 } });
+    expect(list[0].offerings).toHaveLength(1);
+    expect(list[0].offerings[0]).not.toHaveProperty('pendingPrice');
+    expect(list[0]).not.toHaveProperty('concurrentCapacity');
   });
 
   it('treats a business with no categories yet as having chosen everything it sells', async () => {

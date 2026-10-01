@@ -9,7 +9,18 @@ import { EmptyState, Loading } from '../components/ui/Feedback';
 import { MapPin, Star, Storefront } from '@phosphor-icons/react';
 import RequestDialog from '../components/RequestDialog';
 import { formatAnswer, type FieldSpec } from '../lib/dynamic-form';
-import { PRICING_LABEL } from '../components/VendorServices';
+
+const PRICING_LABEL: Record<string, string> = {
+  fixed: 'Fixed price',
+  per_person: 'Per person',
+  per_hour: 'Per hour',
+  per_day: 'Per day',
+  per_session: 'Per session',
+  per_item: 'Per item',
+  starting_from: 'Starting from',
+  custom_quote: 'Custom quote',
+  no_public_price: 'Price on request',
+};
 
 /**
  * A single vendor's full profile (EZ1-I76).
@@ -75,7 +86,7 @@ function ReadMore({ children, className = '' }: { children: string; className?: 
   const long = children.length > 260;
   return (
     <div className={className}>
-      <p className={expanded || !long ? 'whitespace-pre-line' : 'line-clamp-3 whitespace-pre-line'}>{children}</p>
+      <p className="whitespace-pre-line">{expanded || !long ? children : `${children.slice(0, 260)}…`}</p>
       {long && (
         <button
           type="button"
@@ -330,7 +341,7 @@ export default function VendorDetail() {
             </p>
           )}
           {vendor.description && (
-            <p className="mt-3 text-sm text-gray-700">{vendor.description}</p>
+            <ReadMore className="mt-3 max-w-3xl text-sm leading-6 text-gray-700">{vendor.description}</ReadMore>
           )}
           {canAsk && (
             <button
@@ -454,7 +465,7 @@ export default function VendorDetail() {
       {/* Portfolio gallery beyond the cover */}
       {vendor.portfolio.length > 1 && (
         <div>
-          <h2 className="section-title mb-2">Portfolio</h2>
+          <h2 className="section-title mb-2">Photos</h2>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {vendor.portfolio.slice(1).map((url) => (
               <a key={url} href={url} target="_blank" rel="noreferrer">
@@ -465,41 +476,28 @@ export default function VendorDetail() {
         </div>
       )}
 
-      {/* Services and prices */}
+      {/* Service data is catalog driven: any public SERVICE field configured by
+          the vendor is rendered through ServiceInformation, rather than a
+          category-specific component with a fixed set of fields. */}
       {services.length > 0 && (
-        <div>
-          <h2 className="section-title mb-2">Services &amp; pricing</h2>
-          <div className="space-y-2">
+        <div className="space-y-4">
+          <div>
+            <h2 className="section-title">Service details</h2>
+            <p className="mt-1 text-sm text-gray-600">Explore what this vendor offers, including current packages and pricing.</p>
+          </div>
+          <div className="space-y-4">
             {services.map((svc) => (
-              <div key={svc.id} className="card">
-                <p className="font-medium text-gray-900">
-                  {svc.displayName ?? svc.definition?.name ?? 'Service'}
+              <article key={svc.id} className="card space-y-5">
+                <div className="border-b border-gray-200 pb-3">
+                  <h3 className="section-title">
+                    {svc.displayName ?? svc.definition?.name ?? 'Service'}
+                  </h3>
                   {svc.category?.name && (
-                    <span className="ml-2 text-xs font-normal text-gray-500">{svc.category.name}</span>
+                    <p className="mt-1 text-xs font-medium uppercase tracking-wide text-gray-500">{svc.category.name}</p>
                   )}
-                </p>
-                {svc.offerings.length > 0 ? (
-                  <ul className="mt-1 space-y-1 text-sm text-gray-700">
-                    {svc.offerings.map((o) => (
-                      <li key={o.id} className="flex items-baseline justify-between gap-3">
-                        <span>
-                          {o.name}
-                          {o.isPackage && (
-                            <span className="ml-1 text-xs text-gray-400">package</span>
-                          )}
-                        </span>
-                        <span className="tabular-nums text-gray-600">
-                          {o.price
-                            ? `${o.currency} ${Number(o.price).toLocaleString('en-IN')}`
-                            : 'On request'}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="mt-1 text-xs text-gray-400">Priced on request.</p>
-                )}
-              </div>
+                </div>
+                <ServiceInformation service={svc} />
+              </article>
             ))}
           </div>
         </div>

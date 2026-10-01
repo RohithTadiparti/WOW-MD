@@ -129,13 +129,61 @@ export class VendorServicesService {
        */
       const outsideSelectedCategories = !this.inSelectedCategories(vendor, category?.slug ?? null);
 
-      return {
+      const onSale =
+        service.active &&
+        !outsideSelectedCategories &&
+        definition?.active !== false &&
+        category?.active !== false;
+
+      /*
+       * The public catalogue is a deliberate projection, not a serialised
+       * database entity. In particular, pending prices are an internal review
+       * workflow and capacity is operational information, neither of which
+       * belongs on a customer-facing listing.
+       */
+      const publicRow = {
+        id: service.id,
+        displayName: service.displayName,
+        description: service.description,
+        attributes: service.attributes,
+        definition: definition
+          ? {
+              id: definition.id,
+              slug: definition.slug,
+              name: definition.name,
+              description: definition.description,
+            }
+          : null,
+        category: category ? { slug: category.slug, name: category.name } : null,
+        serviceForm: describeForm(attributes, AttributeScope.SERVICE),
+        // Kept as a harmless false marker so callers can use the same display
+        // shape for owner and public reads without exposing the owner's
+        // category-selection state.
+        outsideSelectedCategories: false,
+        offerings: mine
+          .filter((offering) => offering.active)
+          .map((offering) => ({
+            id: offering.id,
+            name: offering.name,
+            description: offering.description,
+            pricingModel: offering.pricingModel,
+            price: offering.price,
+            currency: offering.currency,
+            unitLabel: offering.unitLabel,
+            minQuantity: offering.minQuantity,
+            maxQuantity: offering.maxQuantity,
+            isPackage: offering.isPackage,
+            inclusions: offering.inclusions,
+          })),
+      };
+
+      const ownerRow = {
         ...service,
         definition,
         category,
         serviceForm: describeForm(attributes, AttributeScope.SERVICE),
         bookingForm: describeForm(attributes, AttributeScope.BOOKING),
-        offerings: activeOnly ? mine.filter((o) => o.active) : mine,
+        offerings: mine,
         outsideSelectedCategories,
         /**
          * Whether a buyer could actually book this today. A service with no
@@ -143,12 +191,18 @@ export class VendorServicesService {
          * has nothing to submit — so say so here rather than letting the
          * buyer find out at the end.
          */
-        bookable: service.active && !outsideSelectedCategories && mine.some((o) => o.active),
+        bookable: onSale && mine.some((o) => o.active),
       };
+
+      return activeOnly
+        ? { ...publicRow, bookable: onSale && publicRow.offerings.length > 0 }
+        : ownerRow;
     });
 
     // The public read shows only what can be booked from it.
-    return activeOnly ? expanded.filter((s) => !s.outsideSelectedCategories) : expanded;
+    return activeOnly
+      ? expanded.filter((s) => s.bookable)
+      : expanded;
   }
 
   /**
