@@ -11,6 +11,7 @@ import { bootstrapSession } from '@/lib/api';
 import { useAuth } from '@/store/auth';
 import { rgb, useHydrateTheme, useTheme } from '@/theme';
 import { FONT_ASSETS, typeface } from '@/theme/fonts';
+import { KeyboardAwareApp } from '@/components/keyboard-aware-app';
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -106,7 +107,13 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <StatusBar style={theme.dark ? 'light' : 'dark'} />
-        {ready ? <Routes /> : <View style={{ flex: 1, backgroundColor: rgb(theme.canvas) }} />}
+        {ready ? (
+          <KeyboardAwareApp>
+            <Routes />
+          </KeyboardAwareApp>
+        ) : (
+          <View style={{ flex: 1, backgroundColor: rgb(theme.canvas) }} />
+        )}
       </QueryClientProvider>
     </SafeAreaProvider>
   );

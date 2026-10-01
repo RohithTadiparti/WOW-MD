@@ -25,6 +25,7 @@
 
     "android": {
       "package": "com.worldofweddings.app",
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#C41E63",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
