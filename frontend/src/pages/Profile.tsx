@@ -155,9 +155,11 @@ export default function Profile() {
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) return;
     try {
-      // Blank optional fields are omitted rather than sent as empty strings,
-      // which the validators would reject as malformed rather than absent.
-      const payload: Record<string, string> = { displayName: form.displayName };
+      // Send only fields that actually changed. This protects a biodata or
+      // another browser updating a different field at the same time, while an
+      // explicit null lets a person clear an optional value instead of leaving
+      // an old value visible forever.
+      const payload: Record<string, string | null> = { displayName: form.displayName };
       // An agency is not asked for these, so it does not send them either.
       // Leaving them in the payload would keep resubmitting whatever stale
       // value the form was seeded with, from fields nobody can see.
@@ -174,10 +176,13 @@ export default function Profile() {
             ...(showVisibility ? (['visibility'] as const) : []),
           ];
       for (const key of fields) {
-        if (form[key]) payload[key] = form[key];
+        if (form[key] !== (data?.[key] ?? '')) {
+          payload[key] = form[key] || null;
+        }
       }
       await api.put('/users/me/profile', payload);
       await qc.invalidateQueries({ queryKey: ['me'] });
+      await qc.invalidateQueries({ queryKey: ['biodata'] });
       await qc.invalidateQueries({ queryKey: ['viewable-profile'] });
       setEditing(false);
       setNotice('Saved. This is what we hold for you now.');

@@ -78,6 +78,18 @@ interface ContactBlock {
   email: string | null;
 }
 
+/** Shared fields are owned by the profile, not duplicated in biodata details. */
+interface SharedProfile {
+  displayName: string | null;
+  gender: string | null;
+  dateOfBirth: string | null;
+  contactPhone: string | null;
+  city: string | null;
+  address: string | null;
+  bio: string | null;
+  visibility: 'public' | 'matches_only' | 'private' | null;
+}
+
 /** One caste in the reference catalogue, with the sub-castes filed under it. */
 interface CasteEntry {
   casteName: string;
@@ -150,6 +162,7 @@ export default function Biodata() {
   });
 
   const details = data?.details ?? {};
+  const sharedProfile: SharedProfile | undefined = data?.profile;
   const contact: ContactBlock | undefined = data?.contact;
   const completion: Completion | undefined = data?.completion;
   const siblings: Sibling[] = data?.siblings ?? [];
@@ -364,7 +377,12 @@ export default function Biodata() {
         saved, saw the same boxes and concluded nothing had been stored.
       */}
       <Accordion id="saved-details" title="Saved details" open={savedOpen} setOpen={setSavedOpen}>
-        <SavedBiodata details={details} siblings={siblings} assets={assets} />
+        <SavedBiodata
+          details={details}
+          profile={sharedProfile}
+          siblings={siblings}
+          assets={assets}
+        />
       </Accordion>
 
       {/*

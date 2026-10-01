@@ -13,7 +13,7 @@ import { UsersService } from './users.service';
 import { IdentityService } from './identity.service';
 import { toOwnProfile } from './dto/public-profile.dto';
 import { DataRightsService } from './data-rights.service';
-import { CreateProfileDto } from './dto/profile.dto';
+import { UpdateProfileDto } from './dto/profile.dto';
 import { SubmitGovernmentIdDto } from './dto/identity.dto';
 import { EraseAccountDto } from './dto/data-rights.dto';
 import { AuthUser, CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -68,7 +68,7 @@ export class UsersController {
   }
 
   @Put('me/profile')
-  async upsert(@CurrentUser('userId') userId: string, @Body() dto: CreateProfileDto) {
+  async upsert(@CurrentUser('userId') userId: string, @Body() dto: UpdateProfileDto) {
     const profile = await this.users.upsert(userId, dto);
     const accountName = await this.users.resolveAccountName(userId, profile);
     return toOwnProfile(profile, accountName);

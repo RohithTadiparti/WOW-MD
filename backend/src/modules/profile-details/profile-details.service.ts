@@ -782,6 +782,20 @@ export class ProfileDetailsService {
 
     return {
       profileId,
+      // The shared account/profile fields deliberately remain on `profiles`.
+      // Returning that single canonical record alongside the biodata prevents
+      // the read-back from reviving a stale copy from `profile_details` after
+      // somebody edits Your Profile.
+      profile: {
+        displayName: profile.displayName,
+        gender: profile.gender,
+        dateOfBirth: profile.dateOfBirth,
+        contactPhone: profile.contactPhone,
+        city: profile.city,
+        address: profile.address,
+        bio: profile.bio,
+        visibility: profile.visibility,
+      },
       details: details ?? null,
       siblings,
       assets,

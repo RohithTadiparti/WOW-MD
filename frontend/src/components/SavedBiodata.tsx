@@ -68,16 +68,29 @@ function rupees(value: number | string): string {
 
 export default function SavedBiodata({
   details,
+  profile,
   siblings,
   assets,
 }: {
   details: Record<string, unknown>;
+  profile?: {
+    displayName: string | null;
+    gender: string | null;
+    dateOfBirth: string | null;
+    contactPhone: string | null;
+    city: string | null;
+    address: string | null;
+    bio: string | null;
+    visibility: 'public' | 'matches_only' | 'private' | null;
+  };
   siblings: Sibling[];
   assets: Asset[];
 }) {
-  const has = Object.keys(details ?? {}).some(
-    (k) => details[k] !== null && details[k] !== undefined && details[k] !== '',
-  );
+  const has =
+    Object.keys(details ?? {}).some(
+      (k) => details[k] !== null && details[k] !== undefined && details[k] !== '',
+    ) ||
+    Boolean(profile?.displayName || profile?.gender || profile?.dateOfBirth || profile?.city || profile?.bio);
 
   if (!has) {
     return (
@@ -110,18 +123,32 @@ export default function SavedBiodata({
   const height = num('heightCm');
   const father = bag('father');
   const mother = bag('mother');
+  const profileName = profile?.displayName ?? null;
+  const visibilityLabel: Record<string, string> = {
+    public: 'Public',
+    matches_only: 'Private / Matches only',
+    private: 'Private (hidden until matched)',
+  };
 
   return (
     <div className="space-y-5 text-sm">
       {str('familyPhotoUrl') && <Group title="Family Photo"><img src={str('familyPhotoUrl')!} alt="Family photo" className="max-h-80 rounded-sm object-contain" /></Group>}
       <Group title="Personal">
         <Row label="Name">
-          {[str('firstName'), str('lastName')].filter(Boolean).join(' ') || null}
+          {profileName ?? ([str('firstName'), str('lastName')].filter(Boolean).join(' ') || null)}
         </Row>
+        <Row label="Gender">{profile?.gender ?? null}</Row>
+        <Row label="Date of birth">{profile?.dateOfBirth ? formatDate(profile.dateOfBirth) : null}</Row>
+        <Row label="Mobile number">{profile?.contactPhone ?? null}</Row>
+        <Row label="City">{profile?.city ?? null}</Row>
         <Row label="Height">{height ? formatHeight(height) : null}</Row>
         <Row label="Complexion">{str('complexion')}</Row>
         <Row label="Alternate mobile">{str('alternateMobile')}</Row>
-        <Row label="Address">{str('communicationAddress')}</Row>
+        <Row label="Address">{profile ? profile.address : str('communicationAddress')}</Row>
+        <Row label="About you">{profile?.bio ?? null}</Row>
+        <Row label="Profile visibility">
+          {profile?.visibility ? visibilityLabel[profile.visibility] ?? profile.visibility : null}
+        </Row>
       </Group>
 
       <Group title="Religion and community">
