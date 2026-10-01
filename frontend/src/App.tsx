@@ -417,7 +417,6 @@ const NAV: NavEntry[] = [
     group: 'operations',
     icon: ClipboardText,
   },
-  { to: '/notifications', label: 'Notifications', requires: [], group: 'account', icon: Bell },
   // Vendors had nowhere at all to say something had gone wrong outside a
   // booking they were already inside. Everyone who can raise a case gets it.
   { to: '/support', label: 'Support', requires: [Permission.CASE_RAISE], group: 'account', icon: Lifebuoy },
@@ -431,21 +430,7 @@ const NAV: NavEntry[] = [
 /** Path to the roles refused it, for the route guard. */
 const DENIED_BY_PATH: { to: string; hideFor?: UserRole[]; deniedRedirect?: string }[] = NAV;
 
-/**
- * The unread count, shown on the Notifications tab.
- *
- * There used to be a bell here as well as the tab, which meant two controls
- * for one thing and a count that could be a minute apart between them. The tab
- * won: it is where the whole feed lives, and a badge on it says the same thing
- * the bell did.
- *
- * Polled rather than pushed: the count is a single indexed count query, and a
- * socket that has to survive sleeping laptops and flaky mobile networks is a
- * lot of machinery for one number.
- *
- * The interval lives in lib/notification-copy alongside the wording, so the
- * feed polls on the same clock without importing this file.
- */
+/** The global header bell and the notification centre share this count. */
 function useUnreadCount(): number {
   const { data } = useQuery({
     queryKey: ['unread-count'],
@@ -665,7 +650,7 @@ function Layout({ children }: { children: ReactNode }) {
         label: n.label,
         icon: n.icon,
         group: 'main',
-        badge: n.to === '/admin/notifications' ? Math.max(unread, navCounts[n.to] ?? 0) : navCounts[n.to] ?? undefined,
+        badge: navCounts[n.to] ?? undefined,
       }))
     : NAV.filter(
         (n) =>
@@ -676,10 +661,7 @@ function Layout({ children }: { children: ReactNode }) {
         label: (user && n.labelFor?.[user.role]) ?? n.label,
         icon: n.icon,
         group: n.group,
-        badge:
-          n.to === '/notifications'
-            ? Math.max(unread, navCounts[n.to] ?? 0)
-            : navCounts[n.to] ?? undefined,
+        badge: navCounts[n.to] ?? undefined,
       }));
 
   const groups = isAdmin ? [{ key: 'main', title: null }] : NAV_GROUPS;
@@ -727,6 +709,18 @@ function Layout({ children }: { children: ReactNode }) {
             <div className="flex items-center gap-2">
               {/* Only rendered for an account that holds more than one business. */}
               {canAny(permissions, [Permission.VENDOR_LISTING_MANAGE]) && <BusinessSwitcher />}
+              <Link
+                to="/notifications"
+                aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
+                className="relative grid h-9 w-9 place-items-center rounded-md text-gray-600 transition-colors hover:bg-gray-100 hover:text-brand"
+              >
+                <Bell size={20} weight={unread > 0 ? 'fill' : 'regular'} aria-hidden />
+                {unread > 0 && (
+                  <span className="absolute -right-1 -top-1 grid min-w-4 h-4 place-items-center rounded-full bg-brand px-1 text-[0.625rem] font-semibold leading-none text-brand-fg">
+                    {unread > 99 ? '99+' : unread}
+                  </span>
+                )}
+              </Link>
               <AccountMenu email={user?.email} displayName={accountDisplayName} role={user?.role} onSignOut={signOut} />
             </div>
           </header>
