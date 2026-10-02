@@ -48,6 +48,7 @@ describe('managed profile biodata intake', () => {
     const transaction = jest.fn(async (work: (value: typeof manager) => Promise<unknown>) => work(manager));
     const consent = { record: jest.fn() };
     const invitations = { invite: jest.fn() };
+    const moderation = { assertGenuinePhotos: jest.fn(async () => undefined) };
     const module = await Test.createTestingModule({ providers: [ManagedProfilesService,
       { provide: getRepositoryToken(Profile), useValue: { ...profileRepo, manager: { transaction } } },
       { provide: getRepositoryToken(User), useValue: { findOne: jest.fn(async () => null) } },
@@ -57,9 +58,9 @@ describe('managed profile biodata intake', () => {
       { provide: InvitationsService, useValue: invitations },
       { provide: ConsentService, useValue: consent },
       { provide: AgentBillingService, useValue: {} },
-      { provide: ModerationService, useValue: {} },
+      { provide: ModerationService, useValue: moderation },
     ] }).compile();
-    return { service: module.get(ManagedProfilesService), detailsRepo, profileRepo, transaction, consent, invitations };
+    return { service: module.get(ManagedProfilesService), detailsRepo, profileRepo, transaction, consent, invitations, moderation };
   }
 
   it('persists real profile fields and associated existing Biodata sections', async () => {
@@ -165,5 +166,61 @@ describe('managed profile biodata intake', () => {
       profileRepo.findOne.mockResolvedValue({ ...claimedProfile(), lifecycle: ProfileLifecycle.ARCHIVED });
       await expect(service.update(actor, 'profile-1', { displayName: 'X' })).rejects.toThrow('engagement is closed');
     });
+  });
+});
+
+describe('managed profile photographs are checked before they are saved', () => {
+  const actor: AuthUser = { userId: 'agent-1', email: 'agent@example.com',
+    role: UserRole.AGENT, managedByAgentId: null };
+  const consent = { method: ConsentMethod.IN_PERSON, givenByRelation: ConsentRelation.SELF, givenAt: '2026-01-01' };
+
+  async function setup(existing: Partial<Profile> | null = null) {
+    const profileRepo = {
+      count: jest.fn(async () => 0), find: jest.fn(async () => []),
+      create: jest.fn((value: Partial<Profile>) => value),
+      save: jest.fn(async (value: Partial<Profile>) => ({ ...value, id: value.id ?? 'profile-1' })),
+      findOne: jest.fn(async () => existing),
+    };
+    const manager = { getRepository: () => profileRepo };
+    const transaction = jest.fn(async (work: (value: typeof manager) => Promise<unknown>) => work(manager));
+    const moderation = { assertGenuinePhotos: jest.fn(async () => undefined) };
+    const module = await Test.createTestingModule({ providers: [ManagedProfilesService,
+      { provide: getRepositoryToken(Profile), useValue: { ...profileRepo, manager: { transaction } } },
+      { provide: getRepositoryToken(User), useValue: { findOne: jest.fn(async () => null) } },
+      { provide: getRepositoryToken(AgentProfile), useValue: {} },
+      { provide: AppConfigService, useValue: { stewardship: { requireAgentApproval: false, maxManagedProfiles: 100, maxManagedProfilesFamily: 5 } } },
+      { provide: AuditService, useValue: { record: jest.fn() } },
+      { provide: InvitationsService, useValue: { invite: jest.fn() } },
+      { provide: ConsentService, useValue: { record: jest.fn() } },
+      { provide: AgentBillingService, useValue: {} },
+      { provide: ModerationService, useValue: moderation },
+    ] }).compile();
+    return { service: module.get(ManagedProfilesService), moderation, profileRepo, transaction };
+  }
+
+  it('checks intake photographs, and creates nothing when one is refused', async () => {
+    const { service, moderation, transaction } = await setup();
+    moderation.assertGenuinePhotos.mockRejectedValueOnce(
+      new BadRequestException('This looks like an AI-generated image.'));
+    await expect(service.create(actor, {
+      displayName: 'Asha', contactPhone: '9876500001', consent,
+      photos: ['media://users/agent-1/profile/a.png'],
+    } as CreateManagedProfileDto)).rejects.toThrow('AI-generated');
+    expect(moderation.assertGenuinePhotos).toHaveBeenCalledWith(
+      ['media://users/agent-1/profile/a.png'], [], { userId: 'agent-1', kind: 'managed_profile' });
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it('checks the photographs an edit adds against the ones the profile already has', async () => {
+    const { service, moderation, profileRepo } = await setup({
+      id: 'profile-1', managedByUserId: 'agent-1', photos: ['media://old.jpg'],
+    });
+    moderation.assertGenuinePhotos.mockRejectedValueOnce(
+      new BadRequestException('This looks like an AI-generated image.'));
+    await expect(service.update(actor, 'profile-1', { photos: ['media://old.jpg', 'media://new.png'] }))
+      .rejects.toThrow('AI-generated');
+    expect(moderation.assertGenuinePhotos).toHaveBeenCalledWith(
+      ['media://old.jpg', 'media://new.png'], ['media://old.jpg'], { userId: 'agent-1', kind: 'managed_profile' });
+    expect(profileRepo.save).not.toHaveBeenCalled();
   });
 });

@@ -20,6 +20,7 @@ import { Notification } from '../notifications/entities/notification.entity';
 import { User } from '../auth/entities/user.entity';
 import { ProfileDetails } from '../profile-details/entities/profile-details.entity';
 import { AgentProfile } from '../agents/entities/agent-profile.entity';
+import { ModerationService } from '../../platform/moderation/moderation.service';
 
 /**
  * The account holder's own profile.
@@ -58,6 +59,7 @@ export class UsersService {
     @InjectRepository(User) private readonly users: Repository<User>,
     @InjectRepository(ProfileDetails) private readonly details: Repository<ProfileDetails>,
     @InjectRepository(AgentProfile) private readonly agencies: Repository<AgentProfile>,
+    private readonly moderation: ModerationService,
   ) {}
 
   /** Bride and groom are fixed individual personas, not a value users can accidentally contradict. */
@@ -75,6 +77,13 @@ export class UsersService {
     const roleGender = role ? this.genderForRole(role) : null;
     const fields = roleGender ? { ...dto, gender: roleGender } : dto;
     let profile = await this.profiles.findOne({ where: { userId } });
+
+    // The profile form can carry the whole photo list, so this is an attach
+    // point like the biodata gallery: a photograph that is new to this profile
+    // is checked for AI generation before anything is saved.
+    if (dto.photos) {
+      await this.moderation.assertGenuinePhotos(dto.photos, profile?.photos, { userId, kind: 'profile' });
+    }
     if (!profile) {
       profile = this.profiles.create({
         userId,

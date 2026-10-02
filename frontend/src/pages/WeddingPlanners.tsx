@@ -16,6 +16,8 @@ import {
 } from '@phosphor-icons/react';
 import { api } from '../lib/api';
 import { EmptyState, LoadingCards } from '../components/ui/Feedback';
+import { ViewInstagramLink } from '../components/SocialLinks';
+import type { SocialLink } from '../lib/social-links';
 
 interface PlannerPackage {
   name: string;
@@ -35,6 +37,9 @@ interface Planner {
   packages?: PlannerPackage[];
   portfolio?: string[];
   website?: string | null;
+  /** Read only for the View Instagram button; see `listingInstagramUrl`. */
+  socialLinks?: SocialLink[] | null;
+  instagramUrl?: string | null;
   contactPerson?: string | null;
   createdAt?: string;
 }
@@ -619,13 +624,16 @@ function PlannerCard({
           )}
         </p>
 
-        <button
-          className="btn-outline btn-sm mt-3 w-full transition-colors
-            group-hover:border-brand group-hover:text-brand-strong"
-          onClick={onOpen}
-        >
-          View Profile &amp; Availability
-        </button>
+        <div className="mt-3 flex flex-col gap-2">
+          <ViewInstagramLink listing={p} className="w-full" />
+          <button
+            className="btn-outline btn-sm w-full transition-colors
+              group-hover:border-brand group-hover:text-brand-strong"
+            onClick={onOpen}
+          >
+            View Profile &amp; Availability
+          </button>
+        </div>
       </div>
     </article>
   );

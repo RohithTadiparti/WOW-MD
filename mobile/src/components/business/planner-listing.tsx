@@ -324,6 +324,7 @@ export function PlannerListingForm() {
         onChange={setSocialLinks}
         showErrors={showLinkErrors}
         error={errors.socialLinks}
+        saved={listing}
       />
 
       <Card>

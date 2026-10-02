@@ -448,6 +448,7 @@ function BusinessDetails() {
         onChange={setSocialLinks}
         showErrors={showLinkErrors}
         error={errors.socialLinks}
+        saved={listing}
       />
 
       {!presentationalOnly && (

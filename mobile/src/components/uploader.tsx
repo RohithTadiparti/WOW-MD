@@ -107,6 +107,7 @@ async function upload(
   mimeType: string,
   kind: Kind,
   onProgress?: (fraction: number) => void,
+  purpose?: 'profile_photo',
 ): Promise<Uploaded> {
   const allowed = ALLOWED[kind];
   if (!allowed.extensions.includes(extensionOf(fileName))) {
@@ -199,8 +200,9 @@ async function upload(
   }
 
   // The server reads the file back and refuses one that is not what it
-  // claimed to be, before anything is attached to it.
-  await api.post('/media/complete', { key: data.key });
+  // claimed to be — or, for a profile photograph, one that is AI-generated —
+  // before anything is attached to it. Its message is shown as it is.
+  await api.post('/media/complete', { key: data.key, ...(purpose ? { purpose } : {}) });
 
   return { url: reachable(data.publicUrl as string), key: data.key as string };
 }
@@ -216,10 +218,17 @@ interface Uploaded {
 export function PhotoPicker({
   label = 'Add a photo',
   kind = 'photo',
+  purpose,
   onUploaded,
 }: {
   label?: string;
   kind?: Kind;
+  /**
+   * `profile_photo` for a photograph of a person going onto a profile: the
+   * server checks it for AI generation as soon as it lands, and a refusal is
+   * shown here before `onUploaded` runs, so nothing appears as added.
+   */
+  purpose?: 'profile_photo';
   /** `key` is what a route that takes a storage key (the biodata reader) expects. */
   onUploaded: (url: string, key: string) => void;
 }) {
@@ -272,7 +281,14 @@ export function PhotoPicker({
     try {
       const name =
         asset.fileName ?? `upload-${Date.now()}.${asset.uri.split('.').pop() ?? FALLBACK_EXTENSION}`;
-      const { url, key } = await upload(asset.uri, name, asset.mimeType ?? 'image/jpeg', kind, setProgress);
+      const { url, key } = await upload(
+        asset.uri,
+        name,
+        asset.mimeType ?? 'image/jpeg',
+        kind,
+        setProgress,
+        purpose,
+      );
       onUploaded(url, key);
     } catch (err) {
       report(err, 'That photo could not be uploaded.');

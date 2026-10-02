@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AppConfigService } from '../../config/app-config.service';
+import { ProvenanceFinding, inspectProvenance } from './provenance';
 
 export interface ImageVerdict {
   allowed: boolean;
@@ -7,6 +8,8 @@ export interface ImageVerdict {
   reason: string | null;
   /** 0–1 confidence that the image is synthetic, where the provider gives one. */
   syntheticScore: number | null;
+  /** The provenance marker that decided it, for the audit log. */
+  marker?: string;
 }
 
 /**
@@ -22,9 +25,13 @@ export interface ImageVerdict {
  * The interface is deliberately the small part every detector agrees on: hand
  * it a URL, get back a verdict. Detection is a fast-moving field and the
  * provider will be replaced; the calling code should not have to be.
+ *
+ * `content` is the start of the stored file when the platform could read it
+ * (ModerationService.check), so every provider can look at what the file says
+ * about itself and not only at what it is called.
  */
 export interface ImageModerationProvider {
-  check(url: string): Promise<ImageVerdict>;
+  check(url: string, content?: Buffer | null): Promise<ImageVerdict>;
 }
 
 export const IMAGE_MODERATION_PROVIDER = Symbol('IMAGE_MODERATION_PROVIDER');
@@ -60,26 +67,45 @@ export function looksGenerated(url: string): boolean {
   return GENERATOR_MARKERS.some((marker) => lower.includes(marker));
 }
 
+/** What a person is told when a file is refused, whichever check refused it. */
+export const GENERATED_REASON = 'This looks like an AI-generated image.';
+
 /**
- * The default. Refuses what is plainly labelled, allows the rest.
+ * The checks that need no detector: the file's own provenance metadata, then
+ * its name. Null when neither says "generated" — which is not the same as
+ * "genuine" (see provenance.ts for what metadata cannot catch).
+ *
+ * The name check is the weaker half — a renamed file defeats it — but it is
+ * free: a stored key keeps the uploader's file name (buildKey), so a download
+ * still called `midjourney_…png` is caught even if its metadata was stripped.
+ */
+export function labelledAsGenerated(url: string, content?: Buffer | null): ImageVerdict | null {
+  const found: ProvenanceFinding | null = content ? inspectProvenance(content) : null;
+  if (found) {
+    return { allowed: false, reason: GENERATED_REASON, syntheticScore: 1, marker: `${found.source}: ${found.marker}` };
+  }
+  if (looksGenerated(url)) {
+    return { allowed: false, reason: GENERATED_REASON, syntheticScore: 1, marker: 'filename' };
+  }
+  return null;
+}
+
+/**
+ * The default. Refuses what is plainly labelled — in the file's metadata or in
+ * its name — and allows the rest.
  *
  * Deliberately not a no-op that returns `allowed` for everything: a mock that
  * always says yes means the rejection path is never exercised, and the first
- * time anybody sees it is in production with a real provider behind it. This
- * one mirrors the real rule closely enough that every test which touches a
- * photograph exercises both outcomes.
+ * time anybody sees it is in production with a real provider behind it. And
+ * since the metadata check reads the file itself, this is a real control on
+ * its own for the common case of an image saved straight out of a generator;
+ * what it cannot see is an image whose labels were stripped, which only the
+ * hosted classifier can.
  */
 @Injectable()
 export class HeuristicImageModerationProvider implements ImageModerationProvider {
-  async check(url: string): Promise<ImageVerdict> {
-    if (looksGenerated(url)) {
-      return {
-        allowed: false,
-        reason: 'That looks like a generated image rather than a photograph.',
-        syntheticScore: 1,
-      };
-    }
-    return { allowed: true, reason: null, syntheticScore: null };
+  async check(url: string, content?: Buffer | null): Promise<ImageVerdict> {
+    return labelledAsGenerated(url, content) ?? { allowed: true, reason: null, syntheticScore: null };
   }
 }
 
@@ -107,15 +133,11 @@ export class HostedImageModerationProvider implements ImageModerationProvider {
 
   constructor(private readonly cfg: AppConfigService) {}
 
-  async check(url: string): Promise<ImageVerdict> {
-    // Free, instant, and right often enough to be worth doing first.
-    if (looksGenerated(url)) {
-      return {
-        allowed: false,
-        reason: 'That looks like a generated image rather than a photograph.',
-        syntheticScore: 1,
-      };
-    }
+  async check(url: string, content?: Buffer | null): Promise<ImageVerdict> {
+    // Free, instant, and right often enough to be worth doing first: a file
+    // that names its generator needs no API call.
+    const labelled = labelledAsGenerated(url, content);
+    if (labelled) return labelled;
 
     const { imageModerationUrl, imageModerationKey, imageModerationThreshold, imageModerationTimeoutMs } =
       this.cfg.moderation;
@@ -153,7 +175,7 @@ export class HostedImageModerationProvider implements ImageModerationProvider {
       if (score >= imageModerationThreshold) {
         return {
           allowed: false,
-          reason: 'That looks like a generated image rather than a photograph.',
+          reason: GENERATED_REASON,
           syntheticScore: score,
         };
       }

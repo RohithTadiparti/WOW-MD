@@ -19,6 +19,7 @@ import {
   SocialLink,
   SocialPlatform,
   httpsHost,
+  listingInstagramUrl,
   socialLinkError,
   socialLinkName,
   socialPlatformRule,
@@ -190,6 +191,38 @@ export function SocialLinksEditor({
       </div>
       {error && <p className="text-xs text-red-600">{error}</p>}
     </div>
+  );
+}
+
+/**
+ * "View Instagram", the same button on every vendor and planner card and
+ * profile, and in the provider's own console. Takes a listing and resolves
+ * its profile with `listingInstagramUrl`; renders nothing when there is none,
+ * so a caller never has to check first.
+ *
+ * Its own anchor, so it must never sit inside another link: a card that is a
+ * whole-card link puts its Instagram button beside that link, not in it.
+ */
+export function ViewInstagramLink({
+  listing,
+  className = '',
+}: {
+  listing: Parameters<typeof listingInstagramUrl>[0];
+  className?: string;
+}) {
+  const url = listingInstagramUrl(listing);
+  if (!url) return null;
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`btn-outline btn-sm inline-flex items-center justify-center gap-1.5 ${className}`}
+    >
+      <InstagramLogo size={16} weight="regular" aria-hidden="true" />
+      View Instagram
+      <span className="sr-only">(opens in a new tab)</span>
+    </a>
   );
 }
 

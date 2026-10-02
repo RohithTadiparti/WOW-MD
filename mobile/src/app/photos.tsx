@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api, apiMessage } from '@/lib/api';
@@ -8,6 +9,7 @@ import { radius } from '@/theme';
 
 export default function Photos() {
   const qc = useQueryClient();
+  const [attachError, setAttachError] = useState('');
 
   const { data: me, isPending: loadingMe, isError: meFailed } = useQuery({
     queryKey: ['me'],
@@ -74,6 +76,7 @@ export default function Photos() {
         <Caption tone="muted">
           {urls.length} of 6 uploaded. Add clear photos to get better matches.
         </Caption>
+        {attachError ? <Alert tone="critical">{attachError}</Alert> : null}
         {urls.length === 0 ? (
           <ProfileSilhouette
             gender={me?.gender}
@@ -103,8 +106,16 @@ export default function Photos() {
         {urls.length < 6 ? (
           <PhotoPicker
             label="Add Photo"
+            purpose="profile_photo"
             onUploaded={(url) => {
-              void api.post(`/profiles/${profileId}/details/photos`, { url }).then(refresh);
+              setAttachError('');
+              // Shown, not swallowed: a refusal here (an AI-generated photo,
+              // the photo limit) used to vanish and the photo simply never
+              // appeared. Nothing is added locally, so nothing lingers.
+              void api
+                .post(`/profiles/${profileId}/details/photos`, { url })
+                .then(refresh)
+                .catch((err) => setAttachError(apiMessage(err, 'That photo could not be added.')));
             }}
           />
         ) : null}

@@ -150,6 +150,21 @@ export class StorageService {
     return this.driver.urlFor(key, options);
   }
 
+  /**
+   * The first `maxBytes` of the object a stored or incoming value refers to,
+   * or null when it is not one of ours (or the store cannot say).
+   *
+   * Only ever our own objects, found by key: a URL pointing somewhere else is
+   * never fetched, because "read whatever URL the client sent" is how an API
+   * ends up making requests into its own network on a stranger's behalf.
+   */
+  async readStart(value: string, maxBytes: number): Promise<Buffer | null> {
+    if (!this.driver.readStart) return null;
+    const key = refKey(value) ?? this.driver.keyFromUrl(value);
+    if (!key || !isSafeKey(key)) return null;
+    return this.driver.readStart(key, maxBytes);
+  }
+
   /** The key a stored or incoming value refers to, if it is one of ours. */
   keyOf(value: string): string | null {
     return refKey(value) ?? (this.isPrivate ? this.driver.keyFromUrl(value) : null);
