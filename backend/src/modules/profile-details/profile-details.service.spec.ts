@@ -18,6 +18,7 @@ import {
   FamilyType,
   MaritalStatus,
   OccupationStatus,
+  ProfileLifecycle,
   UserRole,
 } from '../../common/enums';
 import {
@@ -252,6 +253,55 @@ describe('ProfileDetailsService section saves', () => {
 
     expect(stored).toMatchObject(PERSONAL);
     expect(stored).toMatchObject({ religion: 'Hindu', maritalStatus: 'never_married' });
+  });
+
+  describe('a claimed client with an agency still engaged', () => {
+    const agent: AuthUser = {
+      userId: 'agent1',
+      email: 'agent@example.com',
+      role: UserRole.AGENT,
+      managedByAgentId: null,
+    };
+    const religion = (caste: string) =>
+      ({ religion: 'Hindu', caste, subCaste: '', motherTongue: 'Telugu' }) as ReligionDetailsDto;
+
+    beforeEach(() => {
+      // Claimed: the client owns the account, and the agency still manages it.
+      profile = { ...profile, userId: 'u1', managedByUserId: 'agent1', lifecycle: ProfileLifecycle.ACTIVE } as Profile;
+    });
+
+    it('lets both the agency and the client write the one biodata', async () => {
+      await service.saveReligion(agent, 'p1', religion('Kamma'));
+      expect(stored).toMatchObject({ caste: 'Kamma' });
+
+      await service.saveReligion(owner, 'p1', religion('Reddy'));
+      expect(stored).toMatchObject({ caste: 'Reddy' });
+
+      await service.saveReligion(agent, 'p1', religion('Kapu'));
+      expect(stored).toMatchObject({ caste: 'Kapu' });
+    });
+
+    it('still lets a paused client be edited by their agency', async () => {
+      profile.lifecycle = ProfileLifecycle.DEACTIVATED;
+      await service.saveReligion(agent, 'p1', religion('Kamma'));
+      expect(stored).toMatchObject({ caste: 'Kamma' });
+    });
+
+    it('refuses the agency once the engagement is closed, but not the client', async () => {
+      profile.lifecycle = ProfileLifecycle.ARCHIVED;
+      await expect(service.saveReligion(agent, 'p1', religion('Kamma'))).rejects.toThrow(
+        /engagement is closed/,
+      );
+      await service.saveReligion(owner, 'p1', religion('Reddy'));
+      expect(stored).toMatchObject({ caste: 'Reddy' });
+    });
+
+    it('refuses an agency that does not manage the profile', async () => {
+      const other = { ...agent, userId: 'agent2' };
+      await expect(service.saveReligion(other, 'p1', religion('Kamma'))).rejects.toThrow(
+        /not yours to edit/,
+      );
+    });
   });
 
   it('leaves an unsent residence and alternate mobile alone on a personal save', async () => {

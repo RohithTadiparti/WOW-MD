@@ -88,7 +88,7 @@ describe('Multiple Business Entries API', () => {
     expect((await read().expect(200)).body.details.business.entries).toEqual(kept);
   });
 
-  it('enforces ownership and stops agent edits after a client claims their profile', async () => {
+  it('enforces ownership, and keeps the agent editing a claimed client until released', async () => {
     await request(app.getHttpServer()).put(`/api/profiles/${actors[0].profile.id}/details/education`)
       .set('Authorization', `Bearer ${actors[1].token}`).send({ ...base, business: { entries: businesses } }).expect(403);
     await request(app.getHttpServer()).get(`/api/profiles/${actors[1].profile.id}/details`)
@@ -97,8 +97,17 @@ describe('Multiple Business Entries API', () => {
     // A different owner is required to distinguish owner from steward.
     await db.getRepository(Profile).update(actors[0].profile.id, { userId: null });
     await db.getRepository(Profile).update(actors[1].profile.id, { userId: actors[0].user.id });
+    // Claimed, and still on the agent's book: both sides write the one biodata.
+    await request(app.getHttpServer()).put(`/api/profiles/${actors[1].profile.id}/details/education`)
+      .set('Authorization', `Bearer ${actors[1].token}`).send({ ...base, business: { entries: businesses } }).expect(200);
+    await request(app.getHttpServer()).put(`/api/profiles/${actors[1].profile.id}/details/education`)
+      .set('Authorization', `Bearer ${actors[0].token}`).send({ ...base, business: { entries: businesses } }).expect(200);
+    // Released from the book: the agent is refused, the owner is not.
+    await db.getRepository(Profile).update(actors[1].profile.id, { managedByUserId: null });
     await request(app.getHttpServer()).put(`/api/profiles/${actors[1].profile.id}/details/education`)
       .set('Authorization', `Bearer ${actors[1].token}`).send({ ...base, business: { entries: businesses } }).expect(403);
+    await request(app.getHttpServer()).put(`/api/profiles/${actors[1].profile.id}/details/education`)
+      .set('Authorization', `Bearer ${actors[0].token}`).send({ ...base, business: { entries: businesses } }).expect(200);
   });
 
   it('uses the existing JSONB schema', async () => {
