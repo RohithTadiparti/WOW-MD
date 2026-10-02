@@ -183,9 +183,11 @@ export function PlannerBook() {
             </View>
           ))
         )}
-        <Caption tone="faint">
-          Each couple&apos;s plan, tasks and vendors are on the web app, under My Clients.
-        </Caption>
+        <Button
+          label="Open client weddings"
+          variant="outline"
+          onPress={() => router.push('/planner-clients')}
+        />
       </Card>
     </View>
   );
