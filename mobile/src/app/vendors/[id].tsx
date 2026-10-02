@@ -17,7 +17,12 @@ import { loadVendorShortlist, toggleVendorShortlist } from '@/lib/plan-shortlist
 import { cleanAnswers, validateAnswers, type Answers, type FieldSpec } from '@/shared/dynamic-form';
 import { WowCalendar } from '@/components/common/WowCalendar';
 import { DynamicForm } from '@/components/dynamic-form';
-import { SocialLinksList, hasSocialLinks, type SocialLinks } from '@/components/social-links';
+import {
+  SocialLinksList,
+  ViewInstagramButton,
+  hasSocialLinks,
+  type SocialLinks,
+} from '@/components/social-links';
 import {
   Alert,
   Body,
@@ -325,6 +330,8 @@ export default function VendorDetail() {
               <MapPin size={13} color={rgb(theme.ink[400])} />{' '}
               {vendor.city || 'Location on request'}
             </Caption>
+            {/* Under the headline, as on the planner profile. */}
+            <ViewInstagramButton listing={vendor} style={{ marginTop: space(2) }} />
           </View>
 
           {notice ? <Alert tone="positive">{notice}</Alert> : null}

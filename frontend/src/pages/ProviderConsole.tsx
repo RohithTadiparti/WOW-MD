@@ -24,9 +24,10 @@ import {
 } from '../components/PlannerProfileFields';
 import { PlannerWedding } from '../lib/planner-profile';
 import RequiredMark, { RequiredNote } from '../components/ui/RequiredMark';
-import { SocialLinksEditor, SocialLinksList } from '../components/SocialLinks';
+import { SocialLinksEditor, SocialLinksList, ViewInstagramLink } from '../components/SocialLinks';
 import {
   SocialLink,
+  listingInstagramUrl,
   listingSocialLinks,
   normaliseSocialLinks,
   socialLinkErrors,
@@ -463,7 +464,10 @@ function ReviewSummary({ current }: { current: VendorListing }) {
       <div className="border-t pt-3">
         <p className="mb-1 text-sm font-medium text-gray-900">Social media and website</p>
         {links.length > 0 ? (
-          <SocialLinksList links={links} />
+          <>
+            <SocialLinksList links={links} />
+            <ViewInstagramLink listing={current} className="mt-3" />
+          </>
         ) : (
           <p className="text-sm text-gray-500">
             None added. Optional, but couples like to see more of your work.
@@ -904,7 +908,11 @@ function VendorListingForm({
         <div className="border-t pt-3">
           <p className="mb-2 text-sm font-medium text-gray-900">Social media and website</p>
           {savedLinks.length > 0 ? (
-            <SocialLinksList links={savedLinks} />
+            <>
+              <SocialLinksList links={savedLinks} />
+              {/* The button couples get on the listing, to check it lands on the profile. */}
+              <ViewInstagramLink listing={current} className="mt-3" />
+            </>
           ) : (
             <p className="text-sm text-gray-500">
               No links yet. Add your Instagram, YouTube, website or others with Edit.
@@ -979,6 +987,7 @@ function VendorListingForm({
           onChange={setSocialLinks}
           showErrors={showLinkErrors}
           error={fieldErrors.socialLinks}
+          saved={current}
         />
 
         <div className="border-t pt-3">
@@ -1080,6 +1089,7 @@ function VendorListingForm({
         onChange={setSocialLinks}
         showErrors={showLinkErrors}
         error={fieldErrors.socialLinks}
+        saved={current}
       />
 
       <div className="border-t pt-3">
@@ -1298,11 +1308,14 @@ function SocialLinksSection({
   onChange,
   showErrors,
   error,
+  saved,
 }: {
   links: SocialLink[];
   onChange: (next: SocialLink[]) => void;
   showErrors: boolean;
   error?: string;
+  /** The listing as last saved, for the View Instagram check. */
+  saved?: Parameters<typeof listingInstagramUrl>[0];
 }) {
   return (
     <div className="border-t pt-3">
@@ -1312,6 +1325,16 @@ function SocialLinksSection({
         Facebook, Pinterest and the like. Each link must start with https://.
       </p>
       <SocialLinksEditor value={links} onChange={onChange} showErrors={showErrors} error={error} />
+      {/* The saved link, not the one being typed: this is the button couples
+          get, so it is what the provider needs to see open their profile. */}
+      {listingInstagramUrl(saved) && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <ViewInstagramLink listing={saved} />
+          <span className="text-xs text-gray-500">
+            Couples see this button. Check it opens your profile.
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -1820,6 +1843,7 @@ function PlannerListingForm({ existing }: { existing?: PlannerListing }) {
         onChange={setSocialLinks}
         showErrors={showLinkErrors}
         error={fieldErrors.socialLinks}
+        saved={existing}
       />
 
       {/* Portfolio — uploaded from the device, the same as the vendor listing. */}

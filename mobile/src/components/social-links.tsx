@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Linking, Pressable, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, View } from 'react-native';
+import type { StyleProp, ViewStyle } from 'react-native';
 import {
   CaretRight,
   FacebookLogo,
@@ -21,6 +22,7 @@ import {
   MAX_SOCIAL_URL,
   SOCIAL_PLATFORMS,
   httpsHost,
+  listingInstagramUrl,
   listingSocialLinks,
   socialLinkError,
   socialLinkName,
@@ -28,7 +30,7 @@ import {
   type SocialLink,
   type SocialPlatform,
 } from '@/shared/social-links';
-import { rgb, space, useTheme } from '@/theme';
+import { radius, rgb, space, useTheme } from '@/theme';
 
 /**
  * A listing's public social links. The rules are the web client's
@@ -62,11 +64,14 @@ export function SocialLinksEditor({
   onChange,
   showErrors = false,
   error,
+  saved,
 }: {
   value: SocialLink[];
   onChange: (next: SocialLink[]) => void;
   showErrors?: boolean;
   error?: string;
+  /** The listing as last saved, for the View Instagram check. */
+  saved?: SocialLinks | null;
 }) {
   const [touched, setTouched] = useState<boolean[]>([]);
   const full = value.length >= MAX_SOCIAL_LINKS;
@@ -145,6 +150,14 @@ export function SocialLinksEditor({
         {value.length} of {MAX_SOCIAL_LINKS}
       </Caption>
       {error ? <Caption tone="critical">{error}</Caption> : null}
+      {/* The saved link, not the one being typed: this is the button couples
+          get, so it is what the provider needs to see open their profile. */}
+      {listingInstagramUrl(saved) ? (
+        <View style={{ gap: space(1) }}>
+          <ViewInstagramButton listing={saved} />
+          <Caption tone="faint">Couples see this button. Check it opens your profile.</Caption>
+        </View>
+      ) : null}
     </Card>
   );
 }
@@ -159,6 +172,58 @@ export interface SocialLinks {
 /** Whether a listing has any link worth showing. */
 export function hasSocialLinks(listing: SocialLinks | null | undefined): boolean {
   return listingSocialLinks(listing).length > 0;
+}
+
+/**
+ * "View Instagram", the same button on every vendor and planner card and
+ * profile, and on the provider's own business screens. Resolves the profile
+ * with `listingInstagramUrl` and renders nothing when there is none, so a
+ * caller never has to check first.
+ *
+ * The https profile address rather than an `instagram://` one: Instagram
+ * claims its own web links, so the app opens where it is installed and the
+ * browser where it is not, with no scheme query to declare.
+ *
+ * Inside a tappable card, render it as a sibling of the card's Pressable,
+ * not within it: a nested Pressable takes the touch, but a screen reader
+ * reads the outer one as a single button and never reaches this one.
+ */
+export function ViewInstagramButton({
+  listing,
+  style,
+}: {
+  listing: SocialLinks | null | undefined;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const theme = useTheme();
+  const url = listingInstagramUrl(listing);
+  if (!url) return null;
+  return (
+    <Pressable
+      accessibilityRole="link"
+      accessibilityLabel="View Instagram"
+      accessibilityHint="Opens their Instagram profile"
+      onPress={() => void Linking.openURL(url)}
+      style={({ pressed }) => [
+        {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: space(2),
+          minHeight: 40,
+          paddingHorizontal: space(3),
+          borderRadius: radius.md,
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: rgb(theme.borderStrong),
+        },
+        pressed && { opacity: 0.75 },
+        style,
+      ]}
+    >
+      <InstagramLogo size={18} color={rgb(theme.brand)} />
+      <Caption style={{ fontWeight: '600', color: rgb(theme.ink[800]) }}>View Instagram</Caption>
+    </Pressable>
+  );
 }
 
 /** The configured https links only; nothing at all when there are none. */

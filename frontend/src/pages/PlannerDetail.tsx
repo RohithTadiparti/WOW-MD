@@ -18,7 +18,7 @@ import {
 } from '@phosphor-icons/react';
 import { api, apiMessage } from '../lib/api';
 import { listingSocialLinks, socialLinkName } from '../lib/social-links';
-import { SOCIAL_ICONS } from '../components/SocialLinks';
+import { SOCIAL_ICONS, ViewInstagramLink } from '../components/SocialLinks';
 import { Permission, can } from '../lib/permissions';
 import { useAuth } from '../store/auth';
 import { EmptyState, Loading } from '../components/ui/Feedback';
@@ -229,12 +229,17 @@ function Masthead({
             </div>
           </div>
 
-          {canBook && (
-            <button type="button" className="btn w-full shrink-0 sm:w-auto" onClick={onRequest}>
-              <PaperPlaneTilt size={16} aria-hidden />
-              Send Request
-            </button>
-          )}
+          {/* Instagram beside the request, for everyone: it is where a couple
+              judges a planner's taste, and a provider browsing can look too. */}
+          <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+            <ViewInstagramLink listing={p} className="w-full sm:w-auto" />
+            {canBook && (
+              <button type="button" className="btn w-full shrink-0 sm:w-auto" onClick={onRequest}>
+                <PaperPlaneTilt size={16} aria-hidden />
+                Send Request
+              </button>
+            )}
+          </div>
         </div>
 
         <ul className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm text-gray-700">

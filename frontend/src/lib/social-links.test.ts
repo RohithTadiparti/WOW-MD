@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   SocialLink,
   httpsHost,
+  instagramProfileUrl,
+  listingInstagramUrl,
   listingSocialLinks,
   normaliseSocialLinks,
   socialLinkError,
@@ -109,5 +111,74 @@ describe('listingSocialLinks', () => {
     expect(socialLinkName({ platform: 'other', url: 'https://a.in', label: 'Films' })).toBe('Films');
     expect(socialLinkName({ platform: 'linkedin', url: 'https://linkedin.com/a' })).toBe('LinkedIn');
     expect(httpsHost('https://WWW.Everafter.in/x')).toBe('www.everafter.in');
+  });
+});
+
+describe('instagramProfileUrl', () => {
+  it.each([
+    ['@everafter.events', 'https://www.instagram.com/everafter.events/'],
+    ['instagram.com/everafter', 'https://www.instagram.com/everafter/'],
+    ['www.instagram.com/everafter/', 'https://www.instagram.com/everafter/'],
+    ['https://www.instagram.com/everafter', 'https://www.instagram.com/everafter/'],
+    ['http://m.instagram.com/ever_after/', 'https://www.instagram.com/ever_after/'],
+    ['https://Instagram.com/everafter?igsh=abc123', 'https://www.instagram.com/everafter/'],
+    ['https://www.instagram.com/everafter/reels/', 'https://www.instagram.com/everafter/'],
+    ['  https://instagram.com/everafter#top  ', 'https://www.instagram.com/everafter/'],
+  ])('reads %s as the profile', (value, expected) => {
+    expect(instagramProfileUrl(value)).toBe(expected);
+  });
+
+  it.each([
+    [null],
+    [''],
+    ['   '],
+    ['@'],
+    ['https://www.instagram.com/'],
+    ['https://www.instagram.com/p/Cx1abc/'],
+    ['https://www.instagram.com/reel/Cx1abc/'],
+    ['https://instagram.com.evil.in/everafter'],
+    ['https://evil.in/instagram.com/everafter'],
+    ['https://www.facebook.com/everafter'],
+    ['javascript:alert(1)'],
+    ['@not a handle'],
+    ['https://www.instagram.com/' + 'a'.repeat(31)],
+  ])('refuses %s', (value) => {
+    expect(instagramProfileUrl(value)).toBeNull();
+  });
+});
+
+describe('listingInstagramUrl', () => {
+  it('prefers the Instagram entry in the list', () => {
+    expect(
+      listingInstagramUrl({
+        socialLinks: [
+          { platform: 'website', url: 'https://everafter.in' },
+          { platform: 'instagram', url: 'https://instagram.com/from_list' },
+        ],
+        instagramUrl: 'https://instagram.com/from_field',
+      }),
+    ).toBe('https://www.instagram.com/from_list/');
+  });
+
+  it('skips a list entry that is not a profile and falls back to the single field', () => {
+    expect(
+      listingInstagramUrl({
+        socialLinks: [{ platform: 'instagram', url: 'https://www.instagram.com/p/abc/' }],
+        instagramUrl: '@from_field',
+      }),
+    ).toBe('https://www.instagram.com/from_field/');
+    expect(listingInstagramUrl({ instagramUrl: 'instagram.com/older' })).toBe(
+      'https://www.instagram.com/older/',
+    );
+  });
+
+  it('ignores Instagram addresses filed under another platform, and gives null for none', () => {
+    expect(
+      listingInstagramUrl({
+        socialLinks: [{ platform: 'website', url: 'https://www.instagram.com/everafter' }],
+      }),
+    ).toBeNull();
+    expect(listingInstagramUrl({ socialLinks: [], instagramUrl: null })).toBeNull();
+    expect(listingInstagramUrl(null)).toBeNull();
   });
 });
