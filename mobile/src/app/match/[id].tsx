@@ -53,7 +53,9 @@ interface ProfileView {
     profileCode: string | null;
     city: string | null;
     gender: string | null;
-    /** The age band. On the basic card; the full view carries the date instead. */
+    /** Exact age on every view; the full view also carries the date of birth. */
+    age?: number | null;
+    /** The older band, read only when an older server sends no age. */
     ageRange?: string | null;
     dateOfBirth?: string | null;
     /** Only once both sides have accepted. */
@@ -204,7 +206,11 @@ export default function MatchProfile() {
   }
 
   const { profile } = data;
-  const age = ageFrom(profile.dateOfBirth) ?? profile.ageRange ?? null;
+  const age =
+    ageFrom(profile.dateOfBirth) ??
+    (profile.age ? `${profile.age} years` : null) ??
+    profile.ageRange ??
+    null;
   const steward = stewardshipLine(profile.stewardship);
   const score = params.score ? Number(params.score) : null;
   const d = (data.details ?? {}) as Record<string, unknown>;

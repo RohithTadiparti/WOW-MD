@@ -26,7 +26,7 @@ import {
   isIndividual,
   isProvider,
 } from '../../common/enums';
-import { ageBand, profilePhotoOf } from '../users/dto/public-profile.dto';
+import { ageBand, ageOf, profilePhotoOf } from '../users/dto/public-profile.dto';
 import { CompatibilityEngine } from '../matchmaking/compatibility.engine';
 import { ProfileDetails } from '../profile-details/entities/profile-details.entity';
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
@@ -77,6 +77,8 @@ export interface ConversationSummary {
   profileId: string | null;
   profileCode: string | null;
   ageRange: string | null;
+  /** Whole years from the date of birth, which itself is not sent. */
+  age: number | null;
   city: string | null;
   lastActiveAt: Date | null;
   context: ConversationContext | null;
@@ -676,6 +678,7 @@ export class ChatService {
           profileId: profile?.id ?? null,
           profileCode: profile?.profileCode ?? null,
           ageRange: ageBand(profile?.dateOfBirth ?? null),
+          age: ageOf(profile?.dateOfBirth ?? null),
           city: profile?.city ?? null,
           lastActiveAt: profile?.lastActiveAt ?? null,
           context,
@@ -736,6 +739,7 @@ export class ChatService {
           profileId: profile?.id ?? null,
           profileCode: profile?.profileCode ?? null,
           ageRange: ageBand(profile?.dateOfBirth ?? null),
+          age: ageOf(profile?.dateOfBirth ?? null),
           city: profile?.city ?? null,
           lastActiveAt: profile?.lastActiveAt ?? null,
           context,

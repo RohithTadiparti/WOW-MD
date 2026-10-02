@@ -9,12 +9,14 @@ import { ProfileSilhouette } from '@/components/profile-silhouette';
 import { ListScreen } from '@/components/layout';
 import { Alert, Body, Caption } from '@/components/ui';
 import { rgb, space, useTheme, radius } from '@/theme';
+import { ageText } from '@/lib/labels';
 
 interface Profile {
   id: string;
   displayName: string;
   gender?: string | null;
   ageRange: string | null;
+  age?: number | null;
   city?: string | null;
   photos: string[];
   card?: { profession: string | null };
@@ -97,7 +99,7 @@ export default function Shortlisted() {
           <View style={{ flex: 1, gap: 2 }}>
             <Body style={{ fontWeight: '600' }}>{item.profile.displayName}</Body>
             <Caption tone="muted">
-              {[item.profile.ageRange, item.profile.city, item.profile.card?.profession]
+              {[ageText(item.profile.age, item.profile.ageRange), item.profile.city, item.profile.card?.profession]
                 .filter(Boolean)
                 .join(' · ')}
             </Caption>

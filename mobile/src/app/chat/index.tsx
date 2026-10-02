@@ -10,6 +10,7 @@ import { ListScreen } from '@/components/layout';
 import { Body, Caption, Card, PageSubtitle, PageTitle } from '@/components/ui';
 import { ProfileSilhouette } from '@/components/profile-silhouette';
 import { radius, rgb, space, useTheme } from '@/theme';
+import { ageText } from '@/lib/labels';
 
 /**
  * Every conversation, newest first (EZ1-I261).
@@ -38,6 +39,12 @@ interface Conversation {
   online: boolean;
   muted: boolean;
   context?: { standing: 'accepted' | 'fixed' } | null;
+  // Who this is, sent at the top level of each conversation. `facts` is kept
+  // only for an older shape some builds read.
+  age?: number | null;
+  ageRange?: string | null;
+  city?: string | null;
+  profileCode?: string | null;
   facts?: { ageRange?: string | null; city?: string | null; profileCode?: string | null } | null;
 }
 
@@ -133,7 +140,11 @@ export default function Conversations() {
               </View>
 
               <Caption tone="faint" numberOfLines={1}>
-                {[row.facts?.ageRange, row.facts?.city, row.facts?.profileCode]
+                {[
+                  ageText(row.age, row.ageRange ?? row.facts?.ageRange),
+                  row.city ?? row.facts?.city,
+                  row.profileCode ?? row.facts?.profileCode,
+                ]
                   .filter(Boolean)
                   .join(' · ')}
               </Caption>
