@@ -1363,7 +1363,9 @@ export default function App() {
         <Route path="services-catalog" element={<AdminServicesCatalog />} />
         <Route path="services" element={<Navigate to="/admin/services-catalog" replace />} />
         <Route path="catalog" element={<Navigate to="/admin/services-catalog" replace />} />
-        <Route path="reports" element={<AdminReports />} />
+        <Route path="analytics" element={<AdminReports />} />
+        {/* Keep links sent before Analytics was named as its own module working. */}
+        <Route path="reports" element={<Navigate to="/admin/analytics" replace />} />
         <Route path="audit" element={<AdminAuditLogs />} />
         <Route path="support" element={<AdminSupport />} />
         {/*

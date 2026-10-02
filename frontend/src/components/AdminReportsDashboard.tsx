@@ -42,7 +42,7 @@ import {
 } from './reports/reportData';
 
 /*
- * Admin Reports (EZ1-I242).
+ * Admin Analytics.
  *
  * The page resolves one window -- a preset or a custom range -- and every
  * section reads that same window, so no figure can describe a different period
@@ -172,10 +172,10 @@ export default function AdminReportsDashboard() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="page-title">Reports &amp; Analytics</h1>
+          <h1 className="page-title">Analytics</h1>
           <p className="page-subtitle">
-            {w.from === w.to ? longDay(w.from) : `${longDay(w.from)} to ${longDay(w.to)}`}. Every figure is a
-            live read of the platform's own records.
+            Trends and performance for {w.from === w.to ? longDay(w.from) : `${longDay(w.from)} to ${longDay(w.to)}`}. Every figure is a
+            live read of the platform's own records; use Dashboard for current actions.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2" role="group" aria-label={`Export ${tabLabel}`}>
