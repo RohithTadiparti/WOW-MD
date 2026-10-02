@@ -53,7 +53,9 @@ export const ADMIN_NAV: AdminNavEntry[] = [
   { to: '/admin/services-catalog', label: 'Services & Catalog', icon: HandHeart, requires: [Permission.ADMIN_ANALYTICS_READ] },
   { to: '/verification', label: 'Verification', icon: SealCheck, requires: [Permission.VERIFICATION_ALLOCATE, Permission.VERIFICATION_PROCESS], external: true },
   { to: '/admin/support', label: 'Support', icon: Lifebuoy, requires: [Permission.ADMIN_DISPUTE_RESOLVE] },
-  { to: '/admin/reports', label: 'Reports', icon: Graph, requires: [Permission.ADMIN_ANALYTICS_READ] },
+  // Dashboard answers "what needs action now". Analytics is deliberately a
+  // separate destination for time-windowed platform performance and trends.
+  { to: '/admin/analytics', label: 'Analytics', icon: Graph, requires: [Permission.ADMIN_ANALYTICS_READ] },
   { to: '/admin/security', label: 'Security', icon: ShieldCheck, requires: [Permission.ADMIN_ANALYTICS_READ] },
   { to: '/admin/audit', label: 'Audit Logs', icon: ListChecks, requires: [Permission.ADMIN_AUDIT_READ] },
   { to: '/admin/settings', label: 'Settings', icon: Gear, requires: [Permission.ADMIN_ANALYTICS_READ] },
