@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
@@ -68,6 +68,7 @@ const GROUP_LABEL: Record<Group, string> = {
 export default function Notifications() {
   const qc = useQueryClient();
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  const acknowledgedOnEntry = useRef(false);
 
   const { data = [], isLoading } = useQuery<Notification[]>({
     queryKey: ['notifications'],
@@ -87,6 +88,15 @@ export default function Notifications() {
     qc.invalidateQueries({ queryKey: ['notifications'] });
     qc.invalidateQueries({ queryKey: ['unread-count'] });
   }
+
+  // A bell is an inbox affordance: arriving here means the person has seen
+  // the pending alerts. Keep the history in "All", but clear the badge so it
+  // does not keep calling attention to notifications they just checked.
+  useEffect(() => {
+    if (acknowledgedOnEntry.current || data.length === 0) return;
+    acknowledgedOnEntry.current = true;
+    if (data.some((notification) => !notification.isRead)) void markAll();
+  }, [data]);
 
   /**
    * One entry per thing, not per event.
