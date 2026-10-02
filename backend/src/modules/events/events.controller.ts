@@ -24,6 +24,7 @@ import {
   UpdateGuestDto,
   UpdateRsvpDto,
   SetWeddingInvitationCardDto,
+  WeddingRegistrationDto,
 } from './dto/event.dto';
 import { AuthUser, CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
@@ -153,6 +154,42 @@ export class EventsController {
   @Delete('wedding-invitation/card')
   removeWeddingInvitationCard(@CurrentUser('userId') userId: string) {
     return this.events.removeWeddingInvitationCard(userId);
+  }
+
+  @ApiOperation({
+    summary: 'The wedding Direct Link to copy or share',
+    description:
+      'The same link every time, so one already forwarded keeps working. `rotate: true` issues a ' +
+      'new link and stops the old one. Guests who registered are kept either way.',
+  })
+  @HttpCode(200)
+  @Post('wedding-invitation/direct-link')
+  weddingDirectLink(@CurrentUser('userId') userId: string, @Body() body: { rotate?: boolean }) {
+    return this.events.weddingDirectLink(userId, body?.rotate === true);
+  }
+
+  @ApiOperation({ summary: 'Stop the wedding Direct Link working. Registered guests are kept.' })
+  @Delete('wedding-invitation/direct-link')
+  revokeWeddingDirectLink(@CurrentUser('userId') userId: string) {
+    return this.events.revokeWeddingDirectLink(userId);
+  }
+
+  /*
+   * The Direct Link itself, for whoever it reached. Token-addressed like the
+   * other guest routes: guests are not platform users.
+   */
+  @Public()
+  @ApiOperation({ summary: 'The invitation card behind a wedding Direct Link' })
+  @Get('wedding-link/:token')
+  directLinkPreview(@Param('token') token: string) {
+    return this.events.previewDirectLink(token);
+  }
+
+  @Public()
+  @ApiOperation({ summary: 'Register through the wedding Direct Link: name, mobile, how many.' })
+  @Post('wedding-link/:token')
+  directLinkRegister(@Param('token') token: string, @Body() dto: WeddingRegistrationDto) {
+    return this.events.registerByDirectLink(token, dto);
   }
 
   @Post(':id/invite')

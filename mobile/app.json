@@ -8,7 +8,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "wow",
     "userInterfaceStyle": "automatic",
-
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.worldofweddings.app",
@@ -22,7 +21,6 @@
       },
       "bitcode": false
     },
-
     "android": {
       "package": "com.worldofweddings.app",
       "softwareKeyboardLayoutMode": "resize",
@@ -32,11 +30,10 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-
       "predictiveBackGestureEnabled": false,
-
-      "blockedPermissions": ["android.permission.SYSTEM_ALERT_WINDOW"],
-
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ],
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.ACCESS_NETWORK_STATE",
@@ -47,12 +44,10 @@
         "android.permission.BLUETOOTH"
       ]
     },
-
     "web": {
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
-
     "plugins": [
       "expo-router",
       [
@@ -74,14 +69,13 @@
           "photosPermission": "WOW needs your photo library to add photographs to your profile and to your wedding albums."
         }
       ],
-      "@config-plugins/react-native-webrtc"
+      "@config-plugins/react-native-webrtc",
+      "expo-sharing"
     ],
-
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
     },
-
     "extra": {
       "router": {},
       "eas": {

@@ -23,6 +23,7 @@ import {
   UpdateEventDto,
   UpdateRsvpDto,
   SetWeddingInvitationCardDto,
+  WeddingRegistrationDto,
 } from './dto/event.dto';
 import { WeddingInvitation } from './entities/wedding-invitation.entity';
 import { Booking } from '../bookings/entities/booking.entity';
@@ -519,8 +520,122 @@ export class EventsService {
     return this.withoutToken(await this.guests.save(this.guests.create({ userId, ...dto, contact: '' })));
   }
 
+  /**
+   * The wedding's invitation as the couple sees it: the card, and the Direct
+   * Link when one has been issued. Both belong to the wedding, never to a
+   * guest, so changing either leaves every guest and reply as it was.
+   */
   async weddingInvitation(userId: string) {
-    return (await this.weddingInvitations.findOne({ where: { userId } })) ?? { cardUrl: null };
+    const row = await this.weddingInvitations.findOne({
+      where: { userId },
+      select: ['id', 'userId', 'cardUrl', 'shareToken', 'shareTokenCreatedAt', 'createdAt', 'updatedAt'],
+    });
+    return {
+      cardUrl: row?.cardUrl ?? null,
+      directLink: row?.shareToken ? this.directLinkUrl(row.shareToken) : null,
+    };
+  }
+
+  /**
+   * The wedding's Direct Link: the same one every time it is asked for, so a
+   * link already forwarded keeps working. `rotate` issues a new one and stops
+   * the old one, for a link that reached somebody it should not have.
+   */
+  async weddingDirectLink(userId: string, rotate = false): Promise<{ url: string }> {
+    let row = await this.weddingInvitations.findOne({
+      where: { userId },
+      select: ['id', 'userId', 'cardUrl', 'shareToken', 'shareTokenCreatedAt'],
+    });
+    if (!row) row = this.weddingInvitations.create({ userId, cardUrl: null });
+    if (!row.shareToken || rotate) {
+      row.shareToken = generateToken().token;
+      row.shareTokenCreatedAt = new Date();
+      row = await this.weddingInvitations.save(row);
+    }
+    return { url: this.directLinkUrl(row.shareToken!) };
+  }
+
+  /** Stops the Direct Link working. Guests who registered through it stay. */
+  async revokeWeddingDirectLink(userId: string): Promise<void> {
+    await this.weddingInvitations.update({ userId }, { shareToken: null, shareTokenCreatedAt: null });
+  }
+
+  private directLinkUrl(token: string): string {
+    // Built from APP_BASE_URL like every other link the platform hands out
+    // (see createShareLink), never from wherever the couple is viewing.
+    return `${this.cfg.mail.appBaseUrl.replace(/\/+$/, '')}/wedding-invitation/${token}`;
+  }
+
+  private async invitationByDirectLink(token: string): Promise<WeddingInvitation> {
+    const row = token
+      ? await this.weddingInvitations.findOne({ where: { shareToken: token } })
+      : null;
+    if (!row) throw new NotFoundException('That invitation link is not valid');
+    return row;
+  }
+
+  /**
+   * Public: what somebody opening the Direct Link sees. The card and whose
+   * wedding it is; nothing about the guest list, the budget or other guests.
+   */
+  async previewDirectLink(token: string) {
+    const row = await this.invitationByDirectLink(token);
+    const [coupleNames, events] = await Promise.all([
+      this.coupleNames(row.userId),
+      this.weddingEvents(row.userId),
+    ]);
+    return {
+      coupleNames,
+      title: coupleNames ? `The wedding of ${coupleNames}` : 'Our wedding',
+      cardUrl: row.cardUrl,
+      eventDate: events[0]?.eventDate ?? null,
+    };
+  }
+
+  /**
+   * Public: a guest registers through the Direct Link.
+   *
+   * The reply joins the actual guest list, for the whole wedding: one guest
+   * row, invited to every event still going ahead, rather than a form per
+   * event. Somebody registering twice is the same guest, matched the way the
+   * open links already match (the mobile number first, as it identifies a
+   * person, then the name), so the second time updates the first.
+   *
+   * Registering is not an answer to "will you attend": a new guest stays
+   * pending until the couple records their reply, and an existing guest's
+   * reply is never touched by it.
+   */
+  async registerByDirectLink(token: string, dto: WeddingRegistrationDto) {
+    const row = await this.invitationByDirectLink(token);
+    const hostId = row.userId;
+    const name = dto.name.trim();
+    const phone = dto.phone?.trim() || null;
+
+    let guest = phone ? await this.guests.findOne({ where: { userId: hostId, phone } }) : null;
+    guest ??= await this.guests
+      .createQueryBuilder('g')
+      .where('g."userId" = :hostId', { hostId })
+      .andWhere('lower(g.name) = lower(:name)', { name })
+      .getOne();
+
+    if (guest) {
+      if (phone && !guest.phone) guest.phone = phone;
+      if (dto.partySize) guest.partySize = dto.partySize;
+    } else {
+      guest = this.guests.create({
+        userId: hostId,
+        name,
+        contact: '',
+        phone,
+        partySize: dto.partySize ?? null,
+        relation: null,
+      });
+    }
+    guest.rsvpStatus = guest.rsvpStatus ?? RsvpStatus.INVITED;
+    guest = await this.guests.save(guest);
+    await this.ensureEventInvites(guest, await this.weddingEvents(hostId));
+
+    return { recorded: true, name: guest.name };
   }
 
   async setWeddingInvitationCard(userId: string, dto: SetWeddingInvitationCardDto) {

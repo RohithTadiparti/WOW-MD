@@ -60,6 +60,7 @@ import VerifyEmail from './pages/VerifyEmail';
 import GuestRsvp from './pages/GuestRsvp';
 import GetApp from './pages/GetApp';
 import SharedInvitation from './pages/SharedInvitation';
+import WeddingInvitation from './pages/WeddingInvitation';
 import Dashboard from './pages/Dashboard';
 import Profile from './pages/Profile';
 import Matches from './pages/Matches';
@@ -956,6 +957,8 @@ export default function App() {
         open it; that is what a forwarded invitation is.
       */}
       <Route path="/invitation/:token" element={<SharedInvitation />} />
+      {/* The wedding's one Direct Link: the card and name, mobile, head count. */}
+      <Route path="/wedding-invitation/:token" element={<WeddingInvitation />} />
       <Route path="/biodata/:token" element={<SharedBiodata />} />
       <Route path="/album/:token" element={<SharedAlbum />} />
 

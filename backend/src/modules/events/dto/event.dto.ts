@@ -328,6 +328,34 @@ export class EventQueryDto {
 }
 
 /**
+ * Registering through the wedding's Direct Link.
+ *
+ * Name, mobile and how many are coming: that is the whole form. No email and
+ * no "will you attend" question; the link adds the guest to the list for the
+ * wedding, and the couple records replies from there.
+ */
+export class WeddingRegistrationDto {
+  @ApiProperty({ example: 'Ramesh Sharma', minLength: 2, maxLength: 120 })
+  @IsString()
+  @MinLength(2, { message: 'Please give your name' })
+  @MaxLength(120)
+  name: string;
+
+  @ApiPropertyOptional({ example: '9876543210' })
+  @IsOptional()
+  @Transform(normaliseMobile)
+  @Matches(MOBILE_PATTERN, { message: MOBILE_MESSAGE })
+  phone?: string;
+
+  @ApiPropertyOptional({ minimum: 1, maximum: 100, description: 'Optional: how many are coming, including you.' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  partySize?: number;
+}
+
+/**
  * Answering an open invitation.
  *
  * The name is the only required field, because it is the only one the host
