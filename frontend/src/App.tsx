@@ -113,6 +113,8 @@ import Support from './pages/Support';
 import ProviderConsole from './pages/ProviderConsole';
 import WeddingPlanners from './pages/WeddingPlanners';
 import PlannerDetail from './pages/PlannerDetail';
+import PlannerPortfolio from './pages/PlannerPortfolio';
+import PlannerWeddingDetail from './pages/PlannerWeddingDetail';
 import Forbidden from './pages/Forbidden';
 import Verification from './pages/Verification';
 import OfficerCases from './pages/OfficerCases';
@@ -1118,6 +1120,23 @@ export default function App() {
         element={
           <Protected requires={[Permission.BOOKING_CREATE]}>
             <PlannerDetail />
+          </Protected>
+        }
+      />
+      {/* A planner's portfolio weddings, opened from their profile. */}
+      <Route
+        path="/wedding-planners/:id/weddings"
+        element={
+          <Protected requires={[Permission.BOOKING_CREATE]}>
+            <PlannerPortfolio />
+          </Protected>
+        }
+      />
+      <Route
+        path="/wedding-planners/:id/weddings/:weddingId"
+        element={
+          <Protected requires={[Permission.BOOKING_CREATE]}>
+            <PlannerWeddingDetail />
           </Protected>
         }
       />

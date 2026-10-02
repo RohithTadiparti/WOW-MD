@@ -30,6 +30,8 @@ export interface IncomingBooking {
    */
   slotId?: string | null;
   requirements: string | null;
+  /** Planner requests only: the services the couple ticked, as catalogue keys. */
+  requestedServices?: string[];
   clientName: string | null;
   clientEmail: string | null;
   clientPhone: string | null;

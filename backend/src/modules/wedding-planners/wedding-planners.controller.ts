@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Put, Query } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { WeddingPlannersService } from './wedding-planners.service';
 import { PlannerSearchDto, UpsertPlannerProfileDto } from './dto/wedding-planner.dto';
@@ -64,9 +64,44 @@ export class WeddingPlannersController {
     return this.payoutAccounts.getForPlanner(userId);
   }
 
+  /**
+   * The caller's saved planners. Held by whoever can hire one: saving is the
+   * step before asking.
+   */
+  @ApiBearerAuth()
+  @RequirePermissions(Permission.BOOKING_CREATE)
+  @ApiOperation({ summary: 'Planners you have saved as favourites' })
+  @Get('favourites')
+  favourites(@CurrentUser('userId') userId: string) {
+    return this.planners.listFavourites(userId);
+  }
+
   @Public()
   @Get(':id')
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.planners.findOne(id);
+  }
+
+  @ApiBearerAuth()
+  @RequirePermissions(Permission.BOOKING_CREATE)
+  @Get(':id/favourite')
+  isFavourite(@CurrentUser('userId') userId: string, @Param('id', ParseUUIDPipe) id: string) {
+    return this.planners.isFavourite(userId, id);
+  }
+
+  @ApiBearerAuth()
+  @RequirePermissions(Permission.BOOKING_CREATE)
+  @ApiOperation({ summary: 'Save a planner as a favourite' })
+  @Put(':id/favourite')
+  addFavourite(@CurrentUser('userId') userId: string, @Param('id', ParseUUIDPipe) id: string) {
+    return this.planners.setFavourite(userId, id, true);
+  }
+
+  @ApiBearerAuth()
+  @RequirePermissions(Permission.BOOKING_CREATE)
+  @ApiOperation({ summary: 'Remove a planner from your favourites' })
+  @Delete(':id/favourite')
+  removeFavourite(@CurrentUser('userId') userId: string, @Param('id', ParseUUIDPipe) id: string) {
+    return this.planners.setFavourite(userId, id, false);
   }
 }

@@ -14,6 +14,25 @@ export interface PlannerPackage {
   includes?: string[];
 }
 
+export interface PlannerWeddingEvent {
+  name: string;
+  date?: string | null;
+  description?: string | null;
+}
+
+/** One wedding in a planner's portfolio. `id` is assigned on save and kept across edits. */
+export interface PlannerWedding {
+  id: string;
+  title: string;
+  location?: string | null;
+  date?: string | null;
+  description?: string | null;
+  coverUrl?: string | null;
+  photos: string[];
+  videos: string[];
+  events: PlannerWeddingEvent[];
+}
+
 /**
  * The public listing for a PLANNER account. Mirrors the vendor listing shape so
  * both provider personas are searchable and bookable through the same paths.
@@ -81,6 +100,32 @@ export class PlannerProfile {
 
   @Column({ type: 'jsonb', default: [] })
   portfolio: string[];
+
+  // ------------------------------------------------------------ the showcase
+  //
+  // What a couple reads to choose a planner (planner-catalog.ts holds the keys).
+
+  /** Services offered, as PLANNER_SERVICE_KEYS; a couple ticks these on a request. */
+  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
+  services: string[];
+
+  /** Kinds of wedding, as PLANNER_SPECIALIZATION_KEYS: traditional, destination. */
+  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
+  specializations: string[];
+
+  /** An uploaded film, or a YouTube / Vimeo page. */
+  @Column({ type: 'varchar', length: 2048, nullable: true })
+  introVideoUrl: string | null;
+
+  @Column({ type: 'int', nullable: true })
+  weddingsCompleted: number | null;
+
+  @Column({ type: 'text', nullable: true })
+  planningApproach: string | null;
+
+  /** Weddings the planner ran, each with its events, photographs and films. */
+  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
+  weddings: PlannerWedding[];
 
   @Column({ type: 'float', default: 0 })
   ratingAvg: number;

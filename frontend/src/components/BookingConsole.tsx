@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import { formatDate } from '../lib/dates';
 import { CANCELLED_BY_LABEL, labelFrom, partialListNote, paymentStatusLabel } from '../lib/labels';
 import { EmptyState, Loading } from './ui/Feedback';
+import RequestedServices from './RequestedServices';
 import {
   PROGRESS_STEPS,
   QUOTATION_STAGE_LABEL,
@@ -46,6 +47,8 @@ interface IncomingBooking {
    */
   slotId?: string | null;
   requirements: string | null;
+  /** Planner requests only: the services the couple ticked, as catalogue keys. */
+  requestedServices?: string[];
   clientName: string | null;
   clientEmail: string | null;
   clientPhone: string | null;
@@ -478,6 +481,8 @@ export default function BookingConsole({
                   {open.has(booking.id) && renderDetail(booking)}
                 </>
               )}
+
+              <RequestedServices services={booking.requestedServices} className="mt-2" />
 
               {booking.requirements && (
                 <p className="mt-2 rounded-sm bg-surface-sunken p-2 text-xs text-gray-700">

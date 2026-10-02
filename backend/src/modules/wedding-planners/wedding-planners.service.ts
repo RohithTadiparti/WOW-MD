@@ -1,8 +1,14 @@
+import { randomUUID } from 'crypto';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { PlannerProfile } from './entities/planner-profile.entity';
-import { PlannerSearchDto, UpsertPlannerProfileDto } from './dto/wedding-planner.dto';
+import { In, Repository } from 'typeorm';
+import { PlannerProfile, PlannerWedding } from './entities/planner-profile.entity';
+import { PlannerFavourite } from './entities/planner-favourite.entity';
+import {
+  PlannerSearchDto,
+  PlannerWeddingDto,
+  UpsertPlannerProfileDto,
+} from './dto/wedding-planner.dto';
 import { RedisService } from '../../platform/redis/redis.service';
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
 import { VerificationService } from '../verification/verification.service';
@@ -14,6 +20,7 @@ import { resolveSocialLinks } from '../../common/dto/social-links.dto';
 export class WeddingPlannersService {
   constructor(
     @InjectRepository(PlannerProfile) private readonly planners: Repository<PlannerProfile>,
+    @InjectRepository(PlannerFavourite) private readonly favourites: Repository<PlannerFavourite>,
     private readonly redis: RedisService,
     private readonly verification: VerificationService,
   ) {}
@@ -34,8 +41,9 @@ export class WeddingPlannersService {
     }
     // The list and the single columns mirroring it move together, whichever
     // of them the client sent (see resolveSocialLinks).
-    const { socialLinks: _list, ...fields } = dto;
+    const { socialLinks: _list, weddings, ...fields } = dto;
     Object.assign(profile, fields, resolveSocialLinks(dto, profile) ?? {});
+    if (weddings) profile.weddings = keepWeddingIds(weddings, profile.weddings ?? []);
     const saved = await this.planners.save(profile);
 
     /*
@@ -104,6 +112,47 @@ export class WeddingPlannersService {
     return profile;
   }
 
+  /** Whether the caller has saved this planner. */
+  async isFavourite(userId: string, plannerId: string): Promise<{ favourite: boolean }> {
+    const row = await this.favourites.findOne({ where: { userId, plannerId } });
+    return { favourite: Boolean(row) };
+  }
+
+  /**
+   * Save or unsave a planner. Idempotent both ways: a second save, or removing
+   * one that was never saved, gives the same answer as the first.
+   */
+  async setFavourite(
+    userId: string,
+    plannerId: string,
+    favourite: boolean,
+  ): Promise<{ favourite: boolean }> {
+    if (!favourite) {
+      await this.favourites.delete({ userId, plannerId });
+      return { favourite: false };
+    }
+    await this.findOne(plannerId);
+    await this.favourites
+      .createQueryBuilder()
+      .insert()
+      .into(PlannerFavourite)
+      .values({ userId, plannerId })
+      .orIgnore()
+      .execute();
+    return { favourite: true };
+  }
+
+  /** The caller's saved planners that are still listed, most recently saved first. */
+  async listFavourites(userId: string): Promise<PlannerProfile[]> {
+    const rows = await this.favourites.find({ where: { userId }, order: { createdAt: 'DESC' } });
+    if (!rows.length) return [];
+    const listed = await this.planners.find({
+      where: { id: In(rows.map((r) => r.plannerId)), isApproved: true },
+    });
+    const byId = new Map(listed.map((p) => [p.id, p]));
+    return rows.map((r) => byId.get(r.plannerId)).filter((p): p is PlannerProfile => Boolean(p));
+  }
+
   async approve(id: string): Promise<PlannerProfile> {
     const profile = await this.findByIdOrFail(id);
     profile.isApproved = true;
@@ -120,4 +169,35 @@ export class WeddingPlannersService {
     const keys = await this.redis.raw.keys('planners:search:*');
     if (keys.length) await this.redis.del(...keys);
   }
+}
+
+/**
+ * The weddings as sent, with ids that last.
+ *
+ * A wedding's id is part of its page address, so an edit must not mint a new
+ * one: an id the listing already holds is kept, and anything else (a new
+ * wedding, or an id the client made up) gets a fresh one from here.
+ */
+function keepWeddingIds(sent: PlannerWeddingDto[], saved: PlannerWedding[]): PlannerWedding[] {
+  const known = new Set(saved.map((w) => w.id));
+  const used = new Set<string>();
+  return sent.map((w) => {
+    const id = w.id && known.has(w.id) && !used.has(w.id) ? w.id : randomUUID();
+    used.add(id);
+    return {
+      id,
+      title: w.title.trim(),
+      location: w.location ?? null,
+      date: w.date ?? null,
+      description: w.description ?? null,
+      coverUrl: w.coverUrl ?? null,
+      photos: w.photos ?? [],
+      videos: w.videos ?? [],
+      events: (w.events ?? []).map((e) => ({
+        name: e.name.trim(),
+        date: e.date ?? null,
+        description: e.description ?? null,
+      })),
+    };
+  });
 }

@@ -227,6 +227,20 @@ function Routes() {
         options={{ headerShown: true, title: 'Hire a Planner' }}
       />
       <Stack.Screen name="planners/[id]" options={{ title: 'Wedding Planner' }} />
+      <Stack.Screen
+        name="planners/[id]/weddings/index"
+        options={{ headerShown: true, title: 'Previous Weddings' }}
+      />
+      {/* Retitled with the couple's names once the wedding has loaded. */}
+      <Stack.Screen
+        name="planners/[id]/weddings/[weddingId]"
+        options={{ headerShown: true, title: 'Wedding' }}
+      />
+      <Stack.Screen name="planners/[id]/reviews" options={{ headerShown: true, title: 'Reviews' }} />
+      <Stack.Screen
+        name="planners/[id]/request"
+        options={{ headerShown: true, title: 'Send Request' }}
+      />
       {/* The title becomes the other person's name once the thread knows it. */}
       <Stack.Screen name="chat/index" options={{ headerShown: true, title: 'Chat' }} />
       {/* These routes retain their specialised headers; the shared mark is rendered in them. */}

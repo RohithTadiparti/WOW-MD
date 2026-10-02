@@ -6,6 +6,7 @@ import {
   Link as LinkIcon,
   LinkedinLogo,
   PinterestLogo,
+  WhatsappLogo,
   XLogo,
   YoutubeLogo,
 } from '@phosphor-icons/react';
@@ -30,6 +31,7 @@ export const SOCIAL_ICONS: Record<SocialPlatform, Icon> = {
   pinterest: PinterestLogo,
   x: XLogo,
   linkedin: LinkedinLogo,
+  whatsapp: WhatsappLogo,
   website: Globe,
   other: LinkIcon,
 };

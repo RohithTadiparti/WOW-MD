@@ -19,6 +19,7 @@ export type SocialPlatform =
   | 'pinterest'
   | 'x'
   | 'linkedin'
+  | 'whatsapp'
   | 'website'
   | 'other';
 
@@ -94,6 +95,14 @@ export const SOCIAL_PLATFORMS: readonly SocialPlatformRule[] = [
     hosts: /^(www\.)?linkedin\.com$/,
     domains: 'linkedin.com',
     placeholder: 'https://www.linkedin.com/company/yourbusiness',
+  },
+  {
+    value: 'whatsapp',
+    label: 'WhatsApp',
+    noun: 'WhatsApp',
+    hosts: /^(wa\.me|(api\.|www\.)?whatsapp\.com)$/,
+    domains: 'wa.me or whatsapp.com',
+    placeholder: 'https://wa.me/919876543210',
   },
   {
     value: 'website',

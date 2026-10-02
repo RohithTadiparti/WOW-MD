@@ -12,6 +12,16 @@ import { Textarea } from '@/components/form';
 import { MediaStrip, PhotoPicker } from '@/components/uploader';
 import { SocialLinksEditor } from '@/components/social-links';
 import {
+  HTTPS_URL,
+  ToggleChips,
+  WeddingsEditor,
+  toWeddingDrafts,
+  weddingsError,
+  weddingsPayload,
+  type WeddingDraft,
+} from '@/components/business/planner-profile-fields';
+import { PLANNER_SERVICES, PLANNER_SPECIALIZATIONS } from '@/shared/planner-profile';
+import {
   listingSocialLinks,
   normaliseSocialLinks,
   socialLinkErrors,
@@ -54,10 +64,13 @@ const EMPTY = {
   contactPhone: '',
   contactEmail: '',
   address: '',
+  weddingsCompleted: '',
+  planningApproach: '',
+  introVideoUrl: '',
 };
 
 type Form = typeof EMPTY;
-type Errors = Partial<Record<keyof Form | 'socialLinks', string>>;
+type Errors = Partial<Record<keyof Form | 'socialLinks' | 'weddings', string>>;
 
 const MOBILE = /^(\+91)?[6-9]\d{9}$/;
 
@@ -70,6 +83,9 @@ export function PlannerListingForm() {
   const [packages, setPackages] = useState<PlannerPackage[]>([]);
   const [portfolio, setPortfolio] = useState<string[]>([]);
   const [socialLinks, setSocialLinks] = useState<SocialLink[]>([]);
+  const [services, setServices] = useState<string[]>([]);
+  const [specializations, setSpecializations] = useState<string[]>([]);
+  const [weddings, setWeddings] = useState<WeddingDraft[]>([]);
   // After a save attempt every link row shows its problem.
   const [showLinkErrors, setShowLinkErrors] = useState(false);
   const [draft, setDraft] = useState({ name: '', price: '', includes: '' });
@@ -96,7 +112,13 @@ export function PlannerListingForm() {
       contactPhone: listing.contactPhone ?? '',
       contactEmail: listing.contactEmail ?? '',
       address: listing.address ?? '',
+      weddingsCompleted: listing.weddingsCompleted == null ? '' : String(listing.weddingsCompleted),
+      planningApproach: listing.planningApproach ?? '',
+      introVideoUrl: listing.introVideoUrl ?? '',
     });
+    setServices(listing.services ?? []);
+    setSpecializations(listing.specializations ?? []);
+    setWeddings(toWeddingDrafts(listing.weddings));
     setPackages(listing.packages ?? []);
     setPortfolio(listing.portfolio ?? []);
     setSocialLinks(
@@ -145,6 +167,16 @@ export function PlannerListingForm() {
     if (years && !(/^\d{1,2}$/.test(years) && Number(years) <= 80)) {
       found.yearsExperience = 'Years of experience, from 0 to 80';
     }
+    const completed = form.weddingsCompleted.trim();
+    if (completed && !/^\d{1,5}$/.test(completed)) {
+      found.weddingsCompleted = 'Enter a whole number of weddings';
+    }
+    const video = form.introVideoUrl.trim();
+    if (video && !HTTPS_URL.test(video)) {
+      found.introVideoUrl = 'Paste a YouTube or Vimeo link starting with https://';
+    }
+    const weddingProblem = weddingsError(weddings);
+    if (weddingProblem) found.weddings = weddingProblem;
     const links = socialLinkErrors(socialLinks);
     if (links.any) found.socialLinks = links.list ?? 'Fix the highlighted links.';
     return found;
@@ -178,6 +210,14 @@ export function PlannerListingForm() {
       // Always sent, including empty: removing the last link has to reach the server.
       payload.socialLinks = normaliseSocialLinks(socialLinks);
       payload.yearsExperience = form.yearsExperience.trim() ? Number(form.yearsExperience) : null;
+      // The public profile, sent whole every time so a cleared field or the
+      // last wedding removed reaches the server. Saved weddings keep their id.
+      payload.services = services;
+      payload.specializations = specializations;
+      payload.weddingsCompleted = form.weddingsCompleted.trim() ? Number(form.weddingsCompleted) : null;
+      payload.planningApproach = form.planningApproach.trim() || null;
+      payload.introVideoUrl = form.introVideoUrl.trim() || null;
+      payload.weddings = weddingsPayload(weddings);
 
       await api.put('/wedding-planners/me', payload);
       for (const key of ['planner-me', 'payout-account', 'planner']) {
@@ -285,6 +325,47 @@ export function PlannerListingForm() {
         showErrors={showLinkErrors}
         error={errors.socialLinks}
       />
+
+      <Card>
+        <SectionTitle>Services and style</SectionTitle>
+        <Body tone="muted">Couples pick from your services when they send a request.</Body>
+        <Caption>Services you offer</Caption>
+        <ToggleChips options={PLANNER_SERVICES} value={services} onChange={setServices} />
+        <Caption>Wedding specialisations</Caption>
+        <ToggleChips
+          options={PLANNER_SPECIALIZATIONS}
+          value={specializations}
+          onChange={setSpecializations}
+        />
+        <Field
+          label="Weddings completed"
+          value={form.weddingsCompleted}
+          onChangeText={set('weddingsCompleted')}
+          error={errors.weddingsCompleted}
+          keyboardType="number-pad"
+          maxLength={5}
+        />
+        <Textarea
+          label="Your planning approach"
+          value={form.planningApproach}
+          onChange={set('planningApproach')}
+          rows={4}
+          maxLength={1000}
+          hint={`${form.planningApproach.length}/1000`}
+        />
+        <Field
+          label="Introduction video"
+          value={form.introVideoUrl}
+          onChangeText={set('introVideoUrl')}
+          error={errors.introVideoUrl}
+          hint="A YouTube or Vimeo link to a short film about you."
+          keyboardType="url"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </Card>
+
+      <WeddingsEditor value={weddings} onChange={setWeddings} error={errors.weddings} />
 
       <Card>
         <SectionTitle>Packages</SectionTitle>
