@@ -8,6 +8,7 @@ import { ProfileSilhouette } from '@/components/profile-silhouette';
 import { ListScreen } from '@/components/layout';
 import { Alert, Body, Caption } from '@/components/ui';
 import { rgb, space, useTheme, radius } from '@/theme';
+import { ageText } from '@/lib/labels';
 
 interface BlockedInterest {
   id: string;
@@ -16,6 +17,7 @@ interface BlockedInterest {
     displayName: string;
     city: string | null;
     ageRange: string | null;
+    age?: number | null;
     gender: string | null;
     photos?: string[];
     photoUrl?: string | null;
@@ -83,7 +85,7 @@ export default function BlockedProfiles() {
             <View style={{ flex: 1, gap: 2 }}>
               <Body style={{ fontWeight: '600' }}>{item.counterpart.displayName}</Body>
               <Caption tone="muted">
-                {[item.counterpart.ageRange, item.counterpart.city].filter(Boolean).join(' · ')}
+                {[ageText(item.counterpart.age, item.counterpart.ageRange), item.counterpart.city].filter(Boolean).join(' · ')}
               </Caption>
             </View>
             <Caption style={{ color: rgb(theme.criticalFg), fontWeight: '600' }}>Blocked</Caption>

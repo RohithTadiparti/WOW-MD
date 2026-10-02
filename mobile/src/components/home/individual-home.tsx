@@ -17,6 +17,7 @@ import { shortDate } from '@/lib/format';
 import { ProfileSilhouette } from '@/components/profile-silhouette';
 import { Body, Caption, Card, Loading, SectionTitle, Eyebrow } from '@/components/ui';
 import { radius, rgb, space, useTheme } from '@/theme';
+import { ageText } from '@/lib/labels';
 
 interface Completion {
   complete: boolean;
@@ -37,6 +38,7 @@ interface PublicProfile {
   displayName: string;
   gender?: string;
   ageRange: string | null;
+  age?: number | null;
   city?: string;
   photos: string[];
   verified: boolean;
@@ -414,7 +416,7 @@ function RecommendationCard({ recommendation, onPress, onToggleShortlist }: { re
       <View style={{ padding: space(2), gap: space(0.5) }}>
         <Body style={{ fontWeight: '600', fontSize: 13 }} numberOfLines={1}>{p.displayName}</Body>
         <Caption tone="muted" style={{ fontSize: 11 }} numberOfLines={1}>
-          {p.ageRange ? `${p.ageRange} yrs` : 'Unknown age'} • {p.city || 'Unknown city'}
+          {ageText(p.age, p.ageRange) ?? 'Unknown age'} • {p.city || 'Unknown city'}
         </Caption>
         <Caption tone="muted" style={{ fontSize: 11 }} numberOfLines={1}>
           {p.card?.profession || p.card?.occupationStatus || 'Unknown profession'}

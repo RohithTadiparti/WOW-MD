@@ -26,6 +26,7 @@ interface Counterpart {
   displayName: string;
   city: string | null;
   ageRange: string | null;
+  age?: number | null;
   gender: string | null;
   photoUrl?: string | null;
   photos?: string[];
@@ -526,7 +527,11 @@ export default function Interests() {
                         when they were last around. */}
                     <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-500">
                       {row.counterpart.city && <span>{row.counterpart.city}</span>}
-                      {row.counterpart.ageRange && <span>{row.counterpart.ageRange}</span>}
+                      {row.counterpart.age ? (
+                        <span>{row.counterpart.age} yrs</span>
+                      ) : (
+                        row.counterpart.ageRange && <span>{row.counterpart.ageRange}</span>
+                      )}
                       <span>
                         {row.direction === 'incoming' ? 'Received' : 'Sent'}{' '}
                         {formatShortDate(row.createdAt)}

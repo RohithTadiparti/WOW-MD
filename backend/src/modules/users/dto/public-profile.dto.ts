@@ -226,6 +226,8 @@ export interface BiodataView {
   displayName: string;
   gender?: string;
   ageRange: string | null;
+  /** Whole years from the date of birth, on every view including the limited one. */
+  age: number | null;
   dateOfBirth: string | null;
   city?: string;
   bio?: string;
@@ -254,7 +256,7 @@ export function toBiodata(
   // visibility; the anonymous link and the pool see it only for PUBLIC profiles.
   if (!opts.recipient && profile.visibility !== ProfileVisibility.PUBLIC) {
     return { id: profile.id, displayName: profile.displayName, photos: [],
-      ageRange: ageBand(profile.dateOfBirth), dateOfBirth: null,
+      ageRange: ageBand(profile.dateOfBirth), age: ageOf(profile.dateOfBirth), dateOfBirth: null,
       basic: basic ? { religion: basic.religion, caste: basic.caste, motherTongue: basic.motherTongue,
         highestQualification: basic.highestQualification,
         occupationStatus: basic.occupationStatus, profession: basic.profession } : null,
@@ -265,6 +267,7 @@ export function toBiodata(
     displayName: profile.displayName,
     gender: profile.gender,
     ageRange: ageBand(profile.dateOfBirth),
+    age: ageOf(profile.dateOfBirth),
     // Age matters enough in this market to be worth the precision, and this
     // view is only reachable through a deliberate share.
     dateOfBirth: profile.dateOfBirth,

@@ -85,6 +85,16 @@ export function ageFrom(dateOfBirth: string | null | undefined, now = new Date()
   return years >= 18 && years < 120 ? `${years} years` : null;
 }
 
+/**
+ * The age a list row shows: the exact age the server works out from the date of
+ * birth, or the older five-year band only when talking to a server that predates
+ * it. "27 yrs", never "26-30" when the age is known.
+ */
+export function ageText(age: number | null | undefined, ageRange?: string | null): string | null {
+  if (typeof age === 'number' && age > 0) return `${age} yrs`;
+  return ageRange ? `${ageRange} yrs` : null;
+}
+
 /** Who answers for a profile, as the server describes it. Null when self-managed. */
 export interface Stewardship {
   kind: 'family' | 'agency';

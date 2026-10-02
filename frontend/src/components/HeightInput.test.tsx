@@ -10,6 +10,8 @@ describe('HeightInput form validation', () => {
     expect(html).toContain('value="5"');
     expect(html).toContain('aria-label="Height in inches"');
     expect(html).toContain('value="6"');
-    expect(html).toContain('max="11"');
+    // Text boxes: the browser enforces the range through `pattern`, not min/max.
+    expect(html).toContain('pattern="[3-8]"');
+    expect(html).toContain('pattern="[0-9]|1[01]"');
   });
 });

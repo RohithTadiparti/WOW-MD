@@ -26,7 +26,9 @@ interface Viewable {
     city: string | null;
     gender: string | null;
     dateOfBirth?: string | null;
-    /** An age band on the basic card, in place of the exact date of birth. */
+    /** Exact age on every view; the date of birth itself only on the full one. */
+    age?: number | null;
+    /** The older five-year band, read only when an older server sends no age. */
     ageRange?: string | null;
     photos: string[];
     bio?: string | null;
@@ -126,10 +128,15 @@ export default function ProfilePreview({
     return null;
   })();
 
+  // From the date of birth when the full view carries it, else the exact age
+  // the server works out for the limited view; the band only from an old server.
+  const exactAge = age ?? data?.profile.age ?? null;
+  const shownAge = exactAge ? `${exactAge} years` : data?.profile.ageRange || null;
+
   const name = data?.profile.displayName ?? 'Profile';
   const heightCm = str('heightCm');
   const facts = [
-    age ? `${age} years` : data?.profile.ageRange || null,
+    shownAge,
     heightCm ? formatHeight(heightCm) : null,
     data?.profile.city || null,
   ].filter(Boolean) as string[];
@@ -253,7 +260,7 @@ export default function ProfilePreview({
 
             <Group title="Personal details">
               <Row label="Name">{name}</Row>
-              <Row label="Age">{age ? `${age} years` : data.profile.ageRange}</Row>
+              <Row label="Age">{shownAge}</Row>
               <Row label="Location">{data.profile.city}</Row>
               <Row label="Height">{heightCm ? formatHeight(heightCm) : null}</Row>
               <Row label="Complexion">

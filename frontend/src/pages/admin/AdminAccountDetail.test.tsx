@@ -37,15 +37,25 @@ describe('buildSummaryCards', () => {
     const cards = buildSummaryCards('officer', {
       ...account,
       user: { ...account.user, role: 'in_person' },
-      officer: { assigned: 2, open: 1, overdue: 0, queue: [], serviceAreas: [], decisions: [] },
+      officer: {
+        assigned: 2,
+        open: 1,
+        overdue: 1,
+        queue: [{ status: 'in_progress' }, { status: 'assigned' }],
+        serviceAreas: [],
+        decisions: [{ id: 'd1' }],
+      },
+      casesAssigned: [{ status: 'resolved' }, { status: 'open' }, { status: 'closed' }],
       metrics: { provider: { bookings: 0, inEscrow: '0', released: '0' }, agent: null, officer: { new: 1, assigned: 2, approved: 1 } },
     } as any, 'o1');
 
-    expect(cards.map((card) => card.label)).toEqual([
-      'Assigned cases',
-      'Open queue',
-      'Overdue',
-      'Service areas',
+    expect(cards.map((card) => [card.label, card.value])).toEqual([
+      ['Assigned verifications', 2],
+      ['Completed verifications', 1],
+      ['In progress', 1],
+      ['Missed / overdue', 1],
+      ['Cases assigned', 3],
+      ['Cases solved', 2],
     ]);
   });
 });

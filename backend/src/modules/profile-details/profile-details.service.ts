@@ -34,7 +34,7 @@ import {
 } from '../../common/enums';
 import { Interest } from '../matchmaking/entities/interest.entity';
 import { hasFullProfileAccess } from '../users/profile-visibility';
-import { ageBand, toCardFacts } from '../users/dto/public-profile.dto';
+import { ageBand, ageOf, toCardFacts } from '../users/dto/public-profile.dto';
 import { AiService } from '../ai/ai.service';
 import { StorageService } from '../../platform/storage/storage.service';
 import { parseKey } from '../../platform/storage/storage-keys';
@@ -981,9 +981,10 @@ export class ProfileDetailsService {
           displayName: profile.displayName,
           city: profile.city,
           gender: profile.gender,
-          // An age band, not the exact date of birth: enough to judge a match,
-          // not the full record, which is what the mutual accept unlocks.
+          // The exact age (and the older band, for clients that still read it),
+          // never the date of birth itself: that is what the mutual accept unlocks.
           ageRange: ageBand(profile.dateOfBirth),
+          age: ageOf(profile.dateOfBirth),
           // One lead photo, so the family can decide whether to send interest.
           photos: (profile.photos ?? []).slice(0, 1),
           identityVerified: Boolean(profile.idVerifiedAt),
@@ -1009,6 +1010,7 @@ export class ProfileDetailsService {
         // The same band the limited view shows, so a client renders one field
         // whichever view it was given.
         ageRange: ageBand(profile.dateOfBirth),
+        age: ageOf(profile.dateOfBirth),
         photos: profile.photos ?? [],
         bio: profile.bio,
         // Whether a verification officer has seen the document, which is the
