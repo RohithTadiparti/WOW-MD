@@ -1,6 +1,7 @@
 import { FormEvent, useState } from 'react';
 import { Link } from 'react-router-dom';
 import BiodataImport from '../components/BiodataImport';
+import HeightInput from '../components/HeightInput';
 import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiMessage } from '../lib/api';
@@ -102,7 +103,7 @@ const IMPORT_REVIEW_SECTIONS = [
   {
     title: 'Personal and birth details',
     fields: [
-      ['heightCm', 'Height (cm)'], ['complexion', 'Complexion'],
+      ['heightCm', 'Height'], ['complexion', 'Complexion'],
       ['placeOfBirth', 'Place of birth'], ['timeOfBirth', 'Birth time'],
       ['communicationAddress', 'Address'], ['alternateMobile', 'Alternate mobile'],
       ['maritalStatus', 'Marital status'],
@@ -708,7 +709,14 @@ export default function ManagedProfiles({
                   {section.fields.map(([key, label]) => (
                     <label key={key} className="block">
                       <span className={`label${!(extractedBiodata[key] ?? '').trim() ? ' text-red-700' : ''}`}>{label}</span>
-                      {REVIEW_CHOICES[key] ? (
+                      {key === 'heightCm' ? (
+                        // Feet and inches, as the biodata form reads it; the
+                        // value underneath stays whole centimetres.
+                        <HeightInput
+                          value={extractedBiodata.heightCm ?? ''}
+                          onChange={(cm) => setBiodata('heightCm')({ target: { value: cm } })}
+                        />
+                      ) : REVIEW_CHOICES[key] ? (
                         <select
                           className={`input${!(extractedBiodata[key] ?? '').trim() ? ' border-red-500 bg-red-50 focus:border-red-500 focus:ring-red-500/20' : ''}`}
                           value={extractedBiodata[key] ?? ''}
@@ -828,13 +836,14 @@ export default function ManagedProfiles({
                   )}
                   {p.claimStatus === 'claimed' && (
                     <p className="mt-1 text-xs text-gray-500">
-                      This profile belongs to its owner now, so it is read-only for you.
+                      Claimed by the client. You and the client can both update this biodata;
+                      their contact details are theirs to change.
                     </p>
                   )}
                   <CompletionStatus
                     profileId={p.id}
                     visibility={p.visibility}
-                    canPublish={Boolean(p.actions?.canEdit)}
+                    canPublish={Boolean(p.actions?.canEdit) && p.claimStatus !== 'claimed'}
                     onPublished={() => void qc.invalidateQueries({ queryKey: ['managed-profiles'] })}
                   />
                 </div>

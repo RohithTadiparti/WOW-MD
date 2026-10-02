@@ -21,6 +21,7 @@ import { STATES_BY_COUNTRY, districtsForState, DISTRICTS_BY_STATE } from '@/shar
 import { space } from '@/theme';
 import { genderForIndividualRole } from '@/lib/labels';
 import { useAuth } from '@/store/auth';
+import { type HeightParts, feetInchesToCm, heightPartsError, heightPartsFromCm } from '@/shared/height';
 
 interface Form {
   firstName: string;
@@ -92,6 +93,19 @@ export default function EditProfile() {
   });
 
   const form = draft ?? (me ? formFrom(me, full, fixedGender) : formFrom({}, undefined, fixedGender));
+
+  // Feet and inches, as the biodata form asks it; stored in whole cm. The raw
+  // boxes are kept while typed, so a half-entered height is not wiped.
+  const [heightEdit, setHeightEdit] = useState<HeightParts | null>(null);
+  const heightParts = heightEdit ?? heightPartsFromCm(form.heightCm);
+  const heightError = heightEdit ? heightPartsError(heightEdit) : null;
+  const updateHeight = (unit: 'feet' | 'inches', value: string) => {
+    const next = { ...heightParts, [unit]: value };
+    setHeightEdit(next);
+    const cm = feetInchesToCm(next.feet, next.inches);
+    if (cm !== null) setDraft({ ...form, heightCm: String(cm) });
+    else if (!next.feet && !next.inches) setDraft({ ...form, heightCm: '' });
+  };
 
   const save = useMutation({
     mutationFn: async () => {
@@ -168,7 +182,14 @@ export default function EditProfile() {
       />
       <WowCalendar title="Select Date of Birth" label="Date of Birth" value={form.dateOfBirth} onChange={set('dateOfBirth')} />
       <SelectField label="Gender" value={form.gender} options={GENDERS} onChange={set('gender')} disabled={Boolean(fixedGender)} hint={fixedGender ? 'Set from your registered role.' : undefined} />
-      <Field label="Height (cm)" value={form.heightCm} onChangeText={set('heightCm')} keyboardType="number-pad" maxLength={3} />
+      <View style={{ flexDirection: 'row', gap: space(2) }}>
+        <View style={{ flex: 1 }}>
+          <Field label="Height (feet)" value={heightParts.feet} onChangeText={(value) => updateHeight('feet', value)} keyboardType="number-pad" maxLength={1} error={heightError ?? undefined} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Field label="Height (inches)" value={heightParts.inches} onChangeText={(value) => updateHeight('inches', value)} keyboardType="number-pad" maxLength={2} />
+        </View>
+      </View>
       <SelectField
         label="Marital Status"
         value={form.maritalStatus}
@@ -208,9 +229,8 @@ export default function EditProfile() {
           busy={save.isPending}
           disabled={!form.firstName.trim() || !form.lastName.trim()}
           onPress={() => {
-            const h = Number(form.heightCm);
-            if (form.heightCm && (Number.isNaN(h) || h < 120 || h > 230)) {
-              setError('Height must be between 120cm and 230cm.');
+            if (heightError) {
+              setError(heightError);
               return;
             }
             save.mutate();

@@ -3,7 +3,7 @@ import { AppConfigService } from '../../config/app-config.service';
 import { MatchmakingService } from '../matchmaking/matchmaking.service';
 import { VendorsService } from '../vendors/vendors.service';
 import { CompleteOptions, DEFAULT_TEMPERATURE, OpenAiProvider } from './ai.provider';
-import { AiService, EXTRACTION_TEMPERATURE, parseExtraction } from './ai.service';
+import { AiService, EXTRACTION_TEMPERATURE, extractedHeightCm, parseExtraction } from './ai.service';
 
 function serviceWith(reply: string) {
   const provider = { complete: jest.fn<Promise<string>, [string, CompleteOptions?]>(async () => reply) };
@@ -83,5 +83,24 @@ describe('OpenAiProvider temperature', () => {
       type: 'image_url',
       image_url: { url: 'https://signed.example/a.jpg' },
     });
+  });
+});
+
+describe('extractedHeightCm', () => {
+  it.each([
+    [168, 168],
+    ['167.6', 168],
+    ['170 cm', 170],
+    ["5'6\"", 168],
+    ['5 ft 6 in', 168],
+    ['5 feet', 152],
+    ['5.6', 168],
+    ['5.10 ft', 178],
+  ])('reads %p as %p cm', (value, cm) => {
+    expect(extractedHeightCm(value)).toBe(cm);
+  });
+
+  it.each([null, '', 'tall', '5.13', 40, '300 cm'])('drops %p', (value) => {
+    expect(extractedHeightCm(value)).toBeNull();
   });
 });

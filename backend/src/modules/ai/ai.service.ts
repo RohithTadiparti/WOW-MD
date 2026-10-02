@@ -99,7 +99,7 @@ export class AiService {
   "firstName": "string (required if found)",
   "lastName": "string",
   "dateOfBirth": "YYYY-MM-DD",
-  "heightCm": "number (in cm)",
+  "heightCm": "whole number of centimetres; convert feet and inches (5 ft 6 in = 168)",
   "complexion": "string (Fair, Wheatish, Dark)",
   "communicationAddress": "string",
   "alternateMobile": "string",
@@ -118,6 +118,11 @@ Do not invent values. If a field is not present in the document, omit it or set 
       json: true,
     });
     const extracted = parseExtraction(responseText);
+    if (extracted && 'heightCm' in extracted) {
+      const cm = extractedHeightCm(extracted.heightCm);
+      if (cm === null) delete extracted.heightCm;
+      else extracted.heightCm = cm;
+    }
     // Nothing read is a failure, not an empty success: the app would otherwise
     // announce that the details were filled in and show a blank form.
     if (!extracted) {
@@ -127,6 +132,36 @@ Do not invent values. If a field is not present in the document, omit it or set 
     }
     return extracted;
   }
+}
+
+/**
+ * A height as the model read it, in the whole centimetres the biodata stores,
+ * or null when it is not a believable height.
+ *
+ * The model is asked for centimetres but returns what the document says often
+ * enough: 167.6, "170 cm", 5'6", "5 ft 6 in", or the Indian-biodata 5.6 that
+ * means five feet six inches. Each becomes whole centimetres here, so every
+ * client gets a value its feet-and-inches field can show; anything else is
+ * dropped rather than shown as a wrong height.
+ */
+export function extractedHeightCm(value: unknown): number | null {
+  const text =
+    typeof value === 'number' ? String(value) : typeof value === 'string' ? value.trim() : '';
+  if (!text) return null;
+  let cm = NaN;
+  const metric = /^(\d{2,3}(?:\.\d+)?)\s*(?:cm|cms|centimeters|centimetres)?$/i.exec(text);
+  const feetInches =
+    /^(\d)\s*(?:ft|feet|foot|')\s*(?:(\d{1,2})\s*(?:in|inch|inches|"|'')?)?$/i.exec(text);
+  const dotted = /^(\d)\.(\d{1,2})\s*(?:ft|feet)?$/i.exec(text);
+  if (feetInches && Number(feetInches[2] ?? 0) < 12) {
+    cm = (Number(feetInches[1]) * 12 + Number(feetInches[2] ?? 0)) * 2.54;
+  } else if (dotted && Number(dotted[2]) < 12) {
+    cm = (Number(dotted[1]) * 12 + Number(dotted[2])) * 2.54;
+  } else if (metric) {
+    cm = Number(metric[1]);
+  }
+  const rounded = Math.round(cm);
+  return Number.isFinite(rounded) && rounded >= 91 && rounded <= 244 ? rounded : null;
 }
 
 /** Extraction is transcription: the same document should read the same way twice. */
