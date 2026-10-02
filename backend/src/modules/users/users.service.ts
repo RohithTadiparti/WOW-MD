@@ -60,18 +60,31 @@ export class UsersService {
     @InjectRepository(AgentProfile) private readonly agencies: Repository<AgentProfile>,
   ) {}
 
-  async upsert(userId: string, dto: CreateProfileDto | UpdateProfileDto): Promise<Profile> {
+  /** Bride and groom are fixed individual personas, not a value users can accidentally contradict. */
+  genderForRole(role: UserRole): string | null {
+    if (role === UserRole.BRIDE) return 'female';
+    if (role === UserRole.GROOM) return 'male';
+    return null;
+  }
+
+  async upsert(
+    userId: string,
+    dto: CreateProfileDto | UpdateProfileDto,
+    role?: UserRole,
+  ): Promise<Profile> {
+    const roleGender = role ? this.genderForRole(role) : null;
+    const fields = roleGender ? { ...dto, gender: roleGender } : dto;
     let profile = await this.profiles.findOne({ where: { userId } });
     if (!profile) {
       profile = this.profiles.create({
         userId,
-        ...dto,
+        ...fields,
         // Self-managed from the outset; stewardship is set only by the agent
         // paths in ManagedProfilesService.
         claimStatus: ProfileClaimStatus.SELF,
       } as Partial<Profile>);
     } else {
-      Object.assign(profile, dto);
+      Object.assign(profile, fields);
     }
     profile.profileCompleted = this.isComplete(profile);
     return this.profiles.save(profile);

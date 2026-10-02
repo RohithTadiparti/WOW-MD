@@ -34,6 +34,13 @@ export const GENDER_LABEL: Record<string, string> = {
   other: 'Other',
 };
 
+/** Bride/groom accounts represent a fixed side of a match. */
+export function genderForIndividualRole(role: string | null | undefined): 'female' | 'male' | null {
+  if (role === 'bride') return 'female';
+  if (role === 'groom') return 'male';
+  return null;
+}
+
 /** A wedding event's status. The server's enum is upcoming/ongoing/completed/cancelled. */
 export const EVENT_STATUS_LABEL: Record<string, string> = {
   upcoming: 'Upcoming',

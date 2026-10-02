@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { api, apiMessage } from '../lib/api';
 import { useAuth } from '../store/auth';
 import { Permission, can, isProvider, MOBILE_10_PATTERN } from '../lib/permissions';
-import { formatDate, adultDobMax } from '../lib/dates';
+import { ageFromDateOfBirth, formatDate, adultDobMax } from '../lib/dates';
 import { Loading } from '../components/ui/Feedback';
 import { PersonPhoto } from '../components/ProfileSilhouette';
 
@@ -88,6 +88,10 @@ export default function Profile() {
   const isAgency = can(permissions, Permission.AGENCY_MANAGE);
   const stewardFields = isSteward && !isAgency;
   const isFamilyMember = role === 'family';
+  // Bride and groom are account roles, not a second question for the person to
+  // answer. Keep the profile display and every save aligned with that canonical
+  // role even when an older profile row has no gender recorded yet.
+  const roleGender = role === 'bride' ? 'Female' : role === 'groom' ? 'Male' : null;
   /*
    * Profile visibility is a matrimony-profile setting: who may see the biodata
    * in matching. Vendors, planners and verification officers have no biodata
@@ -120,7 +124,7 @@ export default function Profile() {
     if (!data) return;
     setForm({
       displayName: data.displayName ?? '',
-      gender: data.gender ?? '',
+      gender: roleGender ?? data.gender ?? '',
       dateOfBirth: data.dateOfBirth ?? '',
       city: data.city ?? '',
       address: data.address ?? '',
@@ -130,7 +134,10 @@ export default function Profile() {
       stewardRelation: data.stewardRelation ?? '',
       visibility: data.visibility ?? 'matches_only',
     });
-  }, [data]);
+  }, [data, roleGender]);
+
+  const effectiveGender = roleGender ?? data?.gender ?? null;
+  const profileAge = ageFromDateOfBirth(data?.dateOfBirth);
 
   /**
    * The same mobile-number rule the server applies, caught in the field before
@@ -162,6 +169,7 @@ export default function Profile() {
       // explicit null lets a person clear an optional value instead of leaving
       // an old value visible forever.
       const payload: Record<string, string | null> = { displayName: form.displayName };
+      if (roleGender) payload.gender = roleGender;
       // An agency is not asked for these, so it does not send them either.
       // Leaving them in the payload would keep resubmitting whatever stale
       // value the form was seeded with, from fields nobody can see.
@@ -215,7 +223,7 @@ export default function Profile() {
           <div className="flex items-start gap-3">
             <PersonPhoto
               url={data?.primaryPhotoUrl || data?.photos?.[0]}
-              gender={data?.gender}
+              gender={effectiveGender}
               className="h-16 w-16 shrink-0 rounded-full object-cover ring-1 ring-inset ring-gray-900/10"
             />
             <div>
@@ -254,9 +262,12 @@ export default function Profile() {
             <Saved label={isFamilyMember ? 'Name (Your)' : 'Name'}>{data.displayName}</Saved>
             {!isAgency && (
               <>
-                <Saved label={isFamilyMember ? 'Gender (Your)' : 'Gender'}>{data.gender}</Saved>
+                <Saved label={isFamilyMember ? 'Gender (Your)' : 'Gender'}>{effectiveGender}</Saved>
                 <Saved label={isFamilyMember ? 'Date of birth (Your)' : 'Date of birth'}>
                   {data.dateOfBirth ? formatDate(data.dateOfBirth) : null}
+                </Saved>
+                <Saved label={isFamilyMember ? 'Age (Your)' : 'Age'}>
+                  {profileAge === null ? null : `${profileAge} years`}
                 </Saved>
               </>
             )}
@@ -368,11 +379,22 @@ export default function Profile() {
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block text-sm">
                 <span className="text-gray-700">{isFamilyMember ? 'Gender (Your)' : 'Gender'}</span>
-                <select className="input mt-1" value={form.gender} onChange={set('gender')}>
+                <select
+                  className="input mt-1"
+                  value={form.gender}
+                  onChange={set('gender')}
+                  disabled={Boolean(roleGender)}
+                  aria-describedby={roleGender ? 'role-gender-note' : undefined}
+                >
                   <option value="">Prefer not to say</option>
                   <option value="Female">Female</option>
                   <option value="Male">Male</option>
                 </select>
+                {roleGender && (
+                  <span id="role-gender-note" className="mt-1 block text-xs text-gray-500">
+                    Set automatically from your {role === 'bride' ? 'Bride' : 'Groom'} account role.
+                  </span>
+                )}
               </label>
               <label className="block text-sm">
                 <span className="text-gray-700">{isFamilyMember ? 'Date of birth (Your)' : 'Date of birth'}</span>

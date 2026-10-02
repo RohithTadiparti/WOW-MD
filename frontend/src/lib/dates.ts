@@ -81,6 +81,17 @@ export function hasDate(value: string | null | undefined): boolean {
   return parse(value) !== null;
 }
 
+/** Whole years elapsed since a date of birth, or null when it is not a real age. */
+export function ageFromDateOfBirth(value: string | null | undefined, now = new Date()): number | null {
+  const dob = parse(value);
+  if (!dob) return null;
+  let years = now.getFullYear() - dob.getFullYear();
+  if (now.getMonth() < dob.getMonth() || (now.getMonth() === dob.getMonth() && now.getDate() < dob.getDate())) {
+    years -= 1;
+  }
+  return years >= 0 && years < 120 ? years : null;
+}
+
 /**
  * "in 3 months", "in 12 days", "today", "2 days ago".
  *

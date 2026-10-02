@@ -47,6 +47,7 @@ import SavedBiodata from '../components/SavedBiodata';
 import ProfileCard from '../components/ProfileCard';
 import BiodataImport from '../components/BiodataImport';
 import { formatDate } from '../lib/dates';
+import RequiredMark, { RequiredNote } from '../components/ui/RequiredMark';
 
 interface Section {
   section: string;
@@ -164,6 +165,16 @@ export default function Biodata() {
 
   const details = data?.details ?? {};
   const sharedProfile: SharedProfile | undefined = data?.profile;
+  // Managed records predate the gender field in some installations. Their
+  // bride/groom assignment remains the authoritative fallback in the agent
+  // portal, so profile cards and saved biodata never render an empty gender.
+  const profileGender =
+    sharedProfile?.gender ??
+    (sharedProfile?.managingFor === 'bride'
+      ? 'Female'
+      : sharedProfile?.managingFor === 'groom'
+        ? 'Male'
+        : null);
   const contact: ContactBlock | undefined = data?.contact;
   const completion: Completion | undefined = data?.completion;
   const siblings: Sibling[] = data?.siblings ?? [];
@@ -283,6 +294,7 @@ export default function Biodata() {
           <p className="page-subtitle">
             Saved section by section. You can stop and come back.
           </p>
+          <RequiredNote />
         </div>
         {/*
           "Client" is an agency's word for an agency's business. A father
@@ -368,7 +380,7 @@ export default function Biodata() {
           onEdit={() => goTo('basic')}
           onPhotos={() => goTo('photos')}
           onView={() => setSavedOpen(true)}
-          gender={me?.gender ?? data?.gender}
+          gender={profileGender ?? me?.gender ?? data?.gender}
         />
       )}
 
@@ -380,7 +392,7 @@ export default function Biodata() {
       <Accordion id="saved-details" title="Saved details" open={savedOpen} setOpen={setSavedOpen}>
         <SavedBiodata
           details={details}
-          profile={sharedProfile}
+          profile={sharedProfile ? { ...sharedProfile, gender: profileGender } : sharedProfile}
           siblings={siblings}
           assets={assets}
         />
@@ -789,14 +801,20 @@ function Field({
   label,
   children,
   hint,
+  required = false,
 }: {
   label: string;
   children: ReactNode;
   hint?: string;
+  /** Keep the visible label aligned with the control's native requirement. */
+  required?: boolean;
 }) {
   return (
     <label className="block text-sm">
-      <span className="text-gray-700">{label}</span>
+      <span className="text-gray-700">
+        {label}
+        {required && <RequiredMark />}
+      </span>
       {children}
       {hint && <span className="mt-1 block text-xs text-gray-500">{hint}</span>}
     </label>
@@ -935,7 +953,7 @@ function BasicInfoForm({
   return (
     <form onSubmit={submit} className="space-y-3">
       <div className="grid gap-3 sm:grid-cols-3">
-        <Field label="First name" hint="What people call you">
+        <Field label="First name" hint="What people call you" required>
           <input className="input mt-1" value={String(draft.firstName ?? '')} onChange={set('firstName')} required />
         </Field>
         {/*
@@ -944,7 +962,7 @@ function BasicInfoForm({
           they were read as duplicates often enough that a single field is the
           clearer answer.
         */}
-        <Field label="Last name" hint="Family name, as on your documents">
+        <Field label="Last name" hint="Family name, as on your documents" required>
           <input className="input mt-1" value={String(draft.lastName ?? '')} onChange={set('lastName')} required />
         </Field>
         {/*
@@ -954,7 +972,7 @@ function BasicInfoForm({
           here.
         */}
         {showDob && (
-          <Field label="Bride/Groom date of birth" hint="Of the person this profile is for">
+          <Field label="Bride/Groom date of birth" hint="Of the person this profile is for" required>
             <input
               className="input mt-1"
               type="date"
@@ -964,14 +982,14 @@ function BasicInfoForm({
             />
           </Field>
         )}
-        <Field label="Height">
+        <Field label="Height" required>
           <HeightInput
             value={draft.heightCm}
             onChange={(value) => set('heightCm')({ target: { value } })}
             required
           />
         </Field>
-        <Field label="Complexion">
+        <Field label="Complexion" required>
           <select
             className="input mt-1"
             value={String(draft.complexion ?? '')}
@@ -1027,7 +1045,7 @@ function BasicInfoForm({
           />
         </Field>
       </div>
-      <Field label="Communication address">
+      <Field label="Communication address" required>
         <textarea
           className="input mt-1"
           rows={2}
@@ -1047,6 +1065,7 @@ function BasicInfoForm({
           }}
           options={RELIGIONS}
           required
+          markRequired
         />
         <ChoiceField
           label="Caste"
@@ -1062,6 +1081,7 @@ function BasicInfoForm({
               : 'Pick a religion first, or type the caste.'
           }
           required
+          markRequired
         />
         {/*
           The catalogue lists the common sub-castes under each caste; there
@@ -1078,6 +1098,7 @@ function BasicInfoForm({
           disabled={!caste}
           hint={caste ? undefined : 'Select a caste first.'}
           required
+          markRequired
         />
         <ChoiceField
           label="Mother tongue"
@@ -1085,12 +1106,13 @@ function BasicInfoForm({
           onChange={put('motherTongue')}
           options={MOTHER_TONGUES}
           required
+          markRequired
         />
         {/*
           Asked here, as on mobile, so the marital history step can appear
           only for somebody who has been married.
         */}
-        <Field label="Marital status">
+        <Field label="Marital status" required>
           <select
             className="input mt-1"
             value={status}
@@ -1658,7 +1680,7 @@ function FamilyForm({
         className="space-y-3"
       >
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Father's name">
+          <Field label="Father's name" required>
             <input className="input mt-1" value={String(values.fatherName ?? '')} onChange={set('fatherName')} required />
           </Field>
           <Field label="Father's profession">
@@ -1685,7 +1707,7 @@ function FamilyForm({
               <option value="deceased">{LIFE_STATUS_LABEL.deceased}</option>
             </select>
           </Field>
-          <Field label="Mother's name">
+          <Field label="Mother's name" required>
             <input className="input mt-1" value={String(values.motherName ?? '')} onChange={set('motherName')} required />
           </Field>
           <Field label="Mother's profession">
@@ -1716,7 +1738,7 @@ function FamilyForm({
               ))}
             </select>
           </Field>
-          <Field label="Family status">
+          <Field label="Family status" required>
             <select
               className="input mt-1"
               value={String(values.familyStatus ?? '')}
@@ -1808,7 +1830,7 @@ function FamilyForm({
           */}
           {isGroom && (
             <>
-              <Field label="Family net worth" hint="Rupees. Required for groom biodata.">
+              <Field label="Family net worth" hint="Rupees. Required for groom biodata." required>
                 <input
                   className="input mt-1"
                   type="number"
@@ -2175,7 +2197,7 @@ function EducationForm({
       className="space-y-3"
     >
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Highest qualification">
+        <Field label="Highest qualification" required>
           <ChoiceField
             label=""
             value={String(values.highestQualification ?? '')}
@@ -2184,7 +2206,7 @@ function EducationForm({
             required
           />
         </Field>
-        <Field label="Course">
+        <Field label="Course" required>
           <input className="input mt-1" value={String(values.course ?? '')} onChange={set('course')} required />
         </Field>
         <Field label="Institution">
@@ -2211,10 +2233,10 @@ function EducationForm({
 
       {status === 'employed' && (
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Company">
+          <Field label="Company" required>
             <input className="input mt-1" value={String(values.company ?? '')} onChange={set('company')} required />
           </Field>
-          <Field label="Designation">
+          <Field label="Designation" required>
             <input className="input mt-1" value={String(values.designation ?? '')} onChange={set('designation')} required />
           </Field>
           <Field label="Work location">
@@ -2267,7 +2289,7 @@ function EducationForm({
         </legend>
         {otherIncome.map((row, i) => (
           <div key={i} className="grid items-end gap-3 sm:grid-cols-[1fr_2fr_1fr_auto]">
-            <Field label="Source">
+            <Field label="Source" required>
               <select
                 className="input mt-1"
                 value={row.source}
@@ -2443,20 +2465,20 @@ function PreferencesForm({
       className="space-y-3"
     >
       <div className="grid gap-3 sm:grid-cols-4">
-        <Field label="Age from">
+        <Field label="Age from" required>
           <input className="input mt-1" type="number" min={18} max={100} value={String(values.preferredAgeMin ?? '')} onChange={set('preferredAgeMin')} required />
         </Field>
-        <Field label="Age to">
+        <Field label="Age to" required>
           <input className="input mt-1" type="number" min={18} max={100} value={String(values.preferredAgeMax ?? '')} onChange={set('preferredAgeMax')} required />
         </Field>
-        <Field label="Height from">
+        <Field label="Height from" required>
           <HeightInput
             value={values.preferredHeightMinCm}
             onChange={(value) => set('preferredHeightMinCm')({ target: { value } })}
             required
           />
         </Field>
-        <Field label="Height to">
+        <Field label="Height to" required>
           <HeightInput
             value={values.preferredHeightMaxCm}
             onChange={(value) => set('preferredHeightMaxCm')({ target: { value } })}
@@ -2764,7 +2786,7 @@ function AadhaarPanel({ profileId }: { profileId: string }) {
 
       {!sessionId ? (
         <form onSubmit={send} className="flex flex-wrap items-end gap-2">
-          <Field label="Aadhaar number">
+          <Field label="Aadhaar number" required>
             <input
               className="input mt-1"
               inputMode="numeric"
@@ -2781,6 +2803,7 @@ function AadhaarPanel({ profileId }: { profileId: string }) {
           <Field
             label="Six-digit code"
             hint={devCode ? `Development mode, the code is ${devCode}` : 'Sent to the registered mobile'}
+            required
           >
             <input
               className="input mt-1 w-40"

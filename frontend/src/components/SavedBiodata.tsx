@@ -1,7 +1,7 @@
 import { formatHeight } from '../lib/height';
 import { readBusinessEntries } from '../lib/business-entries';
 import { ReactNode } from 'react';
-import { formatDate } from '../lib/dates';
+import { ageFromDateOfBirth, formatDate } from '../lib/dates';
 import { LIFE_STATUS_LABEL, OTHER_INCOME_LABEL } from '../lib/permissions';
 
 /**
@@ -124,6 +124,7 @@ export default function SavedBiodata({
   const father = bag('father');
   const mother = bag('mother');
   const profileName = profile?.displayName ?? null;
+  const profileAge = ageFromDateOfBirth(profile?.dateOfBirth);
   const visibilityLabel: Record<string, string> = {
     public: 'Public',
     matches_only: 'Private / Matches only',
@@ -139,6 +140,7 @@ export default function SavedBiodata({
         </Row>
         <Row label="Gender">{profile?.gender ?? null}</Row>
         <Row label="Date of birth">{profile?.dateOfBirth ? formatDate(profile.dateOfBirth) : null}</Row>
+        <Row label="Age">{profileAge === null ? null : `${profileAge} years`}</Row>
         <Row label="Mobile number">{profile?.contactPhone ?? null}</Row>
         <Row label="City">{profile?.city ?? null}</Row>
         <Row label="Height">{height ? formatHeight(height) : null}</Row>
@@ -291,7 +293,7 @@ export default function SavedBiodata({
             ? `${num('preferredPackageMin')?.toLocaleString('en-IN') ?? 'No minimum'} – ${num('preferredPackageMax')?.toLocaleString('en-IN') ?? 'No maximum'}`
             : 'No preference'}
         </Row>
-        <Row label="Age">
+        <Row label="Preferred age">
           {num('preferredAgeMin') && num('preferredAgeMax')
             ? `${num('preferredAgeMin')} – ${num('preferredAgeMax')}`
             : null}

@@ -25,6 +25,8 @@ import {
   SectionTitle,
 } from '@/components/ui';
 import { radius, space } from '@/theme';
+import { ageFrom, genderForIndividualRole, GENDER_LABEL } from '@/lib/labels';
+import { useAuth } from '@/store/auth';
 
 interface BiodataResponse {
   profileId: string;
@@ -42,6 +44,7 @@ interface BiodataResponse {
 export default function BiodataWizard() {
   const qc = useQueryClient();
   const router = useRouter();
+  const user = useAuth((s) => s.user);
   const params = useLocalSearchParams<{ profileId?: string | string[] }>();
 
   const [step, setStep] = useState(0);
@@ -128,7 +131,10 @@ export default function BiodataWizard() {
   }
 
   const d = (full?.details ?? {}) as Record<string, unknown>;
-  const targetGender = String(full?.profile?.gender ?? full?.profile?.managingFor ?? me?.gender ?? me?.managingFor ?? '').toLowerCase();
+  // A self-managed bride/groom's role is canonical. Managed profiles can be
+  // either gender, so they intentionally keep their persisted value.
+  const fixedGender = isOwnProfile ? genderForIndividualRole(user?.role) : null;
+  const targetGender = String(fixedGender ?? full?.profile?.gender ?? full?.profile?.managingFor ?? me?.gender ?? me?.managingFor ?? '').toLowerCase();
   const isGroom = targetGender === 'groom' || targetGender === 'male' || targetGender === 'm';
   const showMarital = d.maritalStatus && d.maritalStatus !== 'never_married';
 
@@ -244,6 +250,7 @@ export default function BiodataWizard() {
           me={me as Record<string, unknown>}
           full={full}
           syncAccount={isOwnProfile}
+          fixedGender={fixedGender}
           photos={photos?.photos ?? []}
           onPhotoAdded={(url) => {
             void api.post(`/profiles/${profileId}/details/photos`, { url }).then(refresh).catch((err) => {
@@ -351,7 +358,8 @@ export default function BiodataWizard() {
               <DetailGrid>
                 <DetailRow label="Name">{`${d.firstName ?? ''} ${d.lastName ?? ''}`.trim()}</DetailRow>
                 <DetailRow label="Date of Birth">{String(full?.profile?.dateOfBirth ?? full?.dateOfBirth ?? me?.dateOfBirth ?? '—').slice(0, 10)}</DetailRow>
-                <DetailRow label="Gender">{String(full?.profile?.gender ?? me?.gender ?? '—')}</DetailRow>
+                <DetailRow label="Age">{ageFrom(full?.profile?.dateOfBirth ?? full?.dateOfBirth ?? me?.dateOfBirth) ?? '—'}</DetailRow>
+                <DetailRow label="Gender">{GENDER_LABEL[fixedGender ?? String(full?.profile?.gender ?? me?.gender ?? '').toLowerCase()] ?? '—'}</DetailRow>
                 <DetailRow label="Height">{String(d.height ?? '—')}</DetailRow>
                 <DetailRow label="Complexion">{String(d.complexion ?? '—')}</DetailRow>
                 <DetailRow label="Marital Status">{String(d.maritalStatus ?? '—').replace(/_/g, ' ')}</DetailRow>
@@ -446,7 +454,7 @@ export default function BiodataWizard() {
             </View>
             <View style={{ marginTop: space(2) }}>
               <DetailGrid>
-                {(d.partnerPreferences as any)?.ageMin || (d.partnerPreferences as any)?.ageMax ? <DetailRow label="Age">{`${(d.partnerPreferences as any)?.ageMin ?? ''} to ${(d.partnerPreferences as any)?.ageMax ?? ''}`}</DetailRow> : null}
+                {(d.partnerPreferences as any)?.ageMin || (d.partnerPreferences as any)?.ageMax ? <DetailRow label="Preferred age">{`${(d.partnerPreferences as any)?.ageMin ?? ''} to ${(d.partnerPreferences as any)?.ageMax ?? ''}`}</DetailRow> : null}
                 {(d.partnerPreferences as any)?.heightMin || (d.partnerPreferences as any)?.heightMax ? <DetailRow label="Height">{`${(d.partnerPreferences as any)?.heightMin ?? ''} to ${(d.partnerPreferences as any)?.heightMax ?? ''}`}</DetailRow> : null}
                 {(d.partnerPreferences as any)?.maritalStatus ? <DetailRow label="Marital Status">{Array.isArray((d.partnerPreferences as any).maritalStatus) ? (d.partnerPreferences as any).maritalStatus.join(', ') : String((d.partnerPreferences as any).maritalStatus)}</DetailRow> : null}
                 {(d.partnerPreferences as any)?.religion ? <DetailRow label="Religion">{String((d.partnerPreferences as any).religion)}</DetailRow> : null}

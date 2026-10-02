@@ -19,6 +19,8 @@ import { GENDERS, MARITAL, displayNameOf, namesFrom } from '@/components/biodata
 import { CASTES_BY_RELIGION, RELIGIONS } from '@/shared/reference';
 import { STATES_BY_COUNTRY, districtsForState, DISTRICTS_BY_STATE } from '@/shared/locations';
 import { space } from '@/theme';
+import { genderForIndividualRole } from '@/lib/labels';
+import { useAuth } from '@/store/auth';
 
 interface Form {
   firstName: string;
@@ -36,6 +38,7 @@ interface Form {
 function formFrom(
   me: Record<string, unknown>,
   full?: { details?: Record<string, unknown>; dateOfBirth?: string | null },
+  fixedGender?: string | null,
 ): Form {
   const d = (full?.details ?? {}) as Record<string, unknown>;
   const religion = canonical(String(d.religion ?? ''), RELIGIONS);
@@ -51,7 +54,7 @@ function formFrom(
   return {
     ...namesFrom(me.displayName, d),
     dateOfBirth: String(me.dateOfBirth ?? full?.dateOfBirth ?? '').slice(0, 10),
-    gender: String(me.gender ?? '').toLowerCase(),
+    gender: fixedGender ?? String(me.gender ?? '').toLowerCase(),
     heightCm: d.heightCm != null ? String(d.heightCm) : '',
     maritalStatus: String(d.maritalStatus ?? ''),
     religion,
@@ -64,6 +67,8 @@ function formFrom(
 export default function EditProfile() {
   const router = useRouter();
   const qc = useQueryClient();
+  const user = useAuth((s) => s.user);
+  const fixedGender = genderForIndividualRole(user?.role);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [draft, setDraft] = useState<Form | null>(null);
@@ -86,14 +91,14 @@ export default function EditProfile() {
     retry: false,
   });
 
-  const form = draft ?? (me ? formFrom(me, full) : formFrom({}));
+  const form = draft ?? (me ? formFrom(me, full, fixedGender) : formFrom({}, undefined, fixedGender));
 
   const save = useMutation({
     mutationFn: async () => {
       const payload: Record<string, string> = {};
       const displayName = displayNameOf(form.firstName, form.lastName);
       if (displayName) payload.displayName = displayName;
-      if (form.gender) payload.gender = form.gender;
+      if (fixedGender ?? form.gender) payload.gender = fixedGender ?? form.gender;
       if (form.dateOfBirth) payload.dateOfBirth = form.dateOfBirth;
       if (form.location.trim()) payload.city = form.location.trim();
       await api.put('/users/me/profile', payload);
@@ -162,7 +167,7 @@ export default function EditProfile() {
         hint="Family name, as on your documents"
       />
       <WowCalendar title="Select Date of Birth" label="Date of Birth" value={form.dateOfBirth} onChange={set('dateOfBirth')} />
-      <SelectField label="Gender" value={form.gender} options={GENDERS} onChange={set('gender')} />
+      <SelectField label="Gender" value={form.gender} options={GENDERS} onChange={set('gender')} disabled={Boolean(fixedGender)} hint={fixedGender ? 'Set from your registered role.' : undefined} />
       <Field label="Height (cm)" value={form.heightCm} onChangeText={set('heightCm')} keyboardType="number-pad" maxLength={3} />
       <SelectField
         label="Marital Status"

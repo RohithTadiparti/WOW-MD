@@ -56,9 +56,13 @@ export class UsersController {
 
 
   @Get('me')
-  async getMe(@CurrentUser('userId') userId: string) {
-    const profile = await this.users.getByUserId(userId);
-    const accountName = await this.users.resolveAccountName(userId, profile);
+  async getMe(@CurrentUser() actor: AuthUser) {
+    const profile = await this.users.getByUserId(actor.userId);
+    // Existing bride/groom profiles are normalised on read as well as on save,
+    // so the portal reflects the account persona immediately.
+    const roleGender = this.users.genderForRole(actor.role);
+    if (roleGender) profile.gender = roleGender;
+    const accountName = await this.users.resolveAccountName(actor.userId, profile);
     return toOwnProfile(profile, accountName);
   }
 
@@ -68,9 +72,9 @@ export class UsersController {
   }
 
   @Put('me/profile')
-  async upsert(@CurrentUser('userId') userId: string, @Body() dto: UpdateProfileDto) {
-    const profile = await this.users.upsert(userId, dto);
-    const accountName = await this.users.resolveAccountName(userId, profile);
+  async upsert(@CurrentUser() actor: AuthUser, @Body() dto: UpdateProfileDto) {
+    const profile = await this.users.upsert(actor.userId, dto, actor.role);
+    const accountName = await this.users.resolveAccountName(actor.userId, profile);
     return toOwnProfile(profile, accountName);
   }
 

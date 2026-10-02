@@ -31,6 +31,7 @@ import {
 } from '@/components/ui';
 import { useAuth } from '@/store/auth';
 import { space } from '@/theme';
+import { genderForIndividualRole } from '@/lib/labels';
 
 /**
  * My Profile: what the platform holds about the person, not their business.
@@ -108,6 +109,7 @@ export default function Profile() {
   const qc = useQueryClient();
   const user = useAuth((s) => s.user);
   const isFamilyMember = user?.role === 'family';
+  const fixedGender = genderForIndividualRole(user?.role);
 
   const [form, setForm] = useState(EMPTY);
   const [editing, setEditing] = useState(false);
@@ -125,7 +127,7 @@ export default function Profile() {
     if (!data) return;
     setForm({
       displayName: data.displayName ?? '',
-      gender: data.gender ?? '',
+      gender: fixedGender ?? data.gender ?? '',
       state: getStateForCity(data.city),
       dateOfBirth: isoToDobInput(data.dateOfBirth ?? ''),
       city: data.city ?? '',
@@ -142,6 +144,10 @@ export default function Profile() {
       const payload: Record<string, string> = { displayName: form.displayName.trim() };
       for (const key of ['gender', 'dateOfBirth', 'city', 'address', 'contactPhone', 'bio'] as const) {
         const value = form[key].trim();
+        if (key === 'gender' && fixedGender) {
+          payload.gender = fixedGender;
+          continue;
+        }
         if (!value) continue;
         if (key === 'dateOfBirth') {
           // Checked complete in submit(); never sent as typed.
@@ -235,6 +241,8 @@ export default function Profile() {
             value={form.gender}
             options={GENDERS}
             onChange={set('gender')}
+            disabled={Boolean(fixedGender)}
+            hint={fixedGender ? 'Set from your registered role.' : undefined}
           />
           <DobField
             label={isFamilyMember ? 'Date of Birth (Your)' : 'Date of birth'}
@@ -288,7 +296,7 @@ export default function Profile() {
             {isFamilyMember ? <DetailRow label="Email Address (Your)">{user?.email || '—'}</DetailRow> : null}
             <DetailRow label={isFamilyMember ? 'Name (Your)' : 'Name'}>{data?.displayName || '—'}</DetailRow>
             <DetailRow label={isFamilyMember ? 'Gender (Your)' : 'Gender'}>
-              {GENDERS.find((g) => g.value === data?.gender)?.label ?? '—'}
+              {GENDERS.find((g) => g.value === (fixedGender ?? data?.gender))?.label ?? '—'}
             </DetailRow>
             <DetailRow label={isFamilyMember ? 'Date of Birth (Your)' : 'Date of birth'}>{formatDate(data?.dateOfBirth, '—')}</DetailRow>
             <DetailRow label="State">{getStateForCity(data?.city) || '—'}</DetailRow>

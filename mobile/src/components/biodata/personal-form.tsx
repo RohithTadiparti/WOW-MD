@@ -37,6 +37,7 @@ interface Form {
 function formFrom(
   subject: Record<string, unknown>,
   full?: { details?: Record<string, unknown> | null; dateOfBirth?: string | null; profile?: Record<string, unknown> | null },
+  fixedGender?: string | null,
 ): Form {
   const d = (full?.details ?? {}) as Record<string, unknown>;
   const profile = full?.profile ?? {};
@@ -55,7 +56,7 @@ function formFrom(
     firstName: capitalizeWords(names.firstName),
     lastName: capitalizeWords(names.lastName),
     dateOfBirth: String(profile.dateOfBirth ?? full?.dateOfBirth ?? subject.dateOfBirth ?? '').slice(0, 10),
-    gender: String(profile.gender ?? subject.gender ?? '').toLowerCase(),
+    gender: fixedGender ?? String(profile.gender ?? subject.gender ?? '').toLowerCase(),
     heightCm: stored(d.heightCm),
     maritalStatus: String(d.maritalStatus ?? ''),
     religion,
@@ -83,6 +84,7 @@ export function PersonalForm({
   onBack,
   autofilledKeys,
   syncAccount = true,
+  fixedGender = null,
 }: {
   profileId: string | null;
   me: Record<string, unknown>;
@@ -98,13 +100,15 @@ export function PersonalForm({
   autofilledKeys?: Set<string>;
   /** Only the account holder's own biodata may update /users/me/profile. */
   syncAccount?: boolean;
+  /** Bride/groom accounts inherit gender from their role. */
+  fixedGender?: string | null;
 }) {
   const qc = useQueryClient();
   const [error, setError] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [draft, setDraft] = useState<Form | null>(null);
 
-  const form = draft ?? formFrom(me, full);
+  const form = draft ?? formFrom(me, full, fixedGender);
   const heightSource = form.heightCm;
   const heightSourceRef = useRef(heightSource);
   const [heightParts, setHeightParts] = useState(() => heightPartsFromCm(heightSource));
@@ -131,7 +135,7 @@ export function PersonalForm({
       const payload: Record<string, string> = {};
       const displayName = displayNameOf(form.firstName, form.lastName);
       if (displayName) payload.displayName = displayName;
-      if (form.gender) payload.gender = form.gender;
+      if (fixedGender ?? form.gender) payload.gender = fixedGender ?? form.gender;
       if (form.dateOfBirth) payload.dateOfBirth = form.dateOfBirth;
       if (form.location.trim()) payload.city = form.location.trim();
       // A managed profile belongs to the selected bride/groom, not to the
@@ -143,7 +147,7 @@ export function PersonalForm({
         await api.put(`/profiles/${profileId}/details/personal`, {
           firstName: form.firstName.trim(),
           lastName: form.lastName.trim(),
-          gender: form.gender || undefined,
+          gender: (fixedGender ?? form.gender) || undefined,
           dateOfBirth: form.dateOfBirth || undefined,
           heightCm: Number(form.heightCm),
           complexion: form.complexion,
@@ -277,7 +281,7 @@ export function PersonalForm({
             {errors.dateOfBirth ? <Caption tone="critical">{errors.dateOfBirth}</Caption> : null}
           </View>
           <View style={{ flex: 1 }}>
-            <SelectField label="Gender" value={form.gender} options={GENDERS} onChange={set('gender')} required autoFilled={autofilledKeys?.has('gender')} error={errors.gender} disabled={Boolean(full?.profile?.gender)} hint={full?.profile?.gender ? 'Set from the registered profile.' : undefined} />
+            <SelectField label="Gender" value={form.gender} options={GENDERS} onChange={set('gender')} required autoFilled={autofilledKeys?.has('gender')} error={errors.gender} disabled={Boolean(fixedGender ?? full?.profile?.gender)} hint={fixedGender ? 'Set from your registered role.' : full?.profile?.gender ? 'Set from the registered profile.' : undefined} />
           </View>
         </View>
 
