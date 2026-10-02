@@ -103,6 +103,14 @@ export const DELIVERY: Record<NotificationType, DeliverySpec> = {
     whatsappTemplate: 'booking_request',
     whatsappParams: (p) => [str(p, 'clientName', 'A client'), job(p)],
   },
+  // The couple's first answer from a planner. Nothing is priced yet, so it
+  // says what comes next rather than asking them to do anything.
+  [NotificationType.BOOKING_REQUEST_ACCEPTED]: {
+    title: 'Request accepted',
+    body: (p) =>
+      `Your planner has accepted your request for ${job(p)}. Their quotation comes next.`,
+    whatsappTemplate: null,
+  },
   [NotificationType.BOOKING_QUOTATION]: {
     title: 'Quotation received',
     body: (p) => `${money(p) || 'A price'} for ${job(p)}.`,

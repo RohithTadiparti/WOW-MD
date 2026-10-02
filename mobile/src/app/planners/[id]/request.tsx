@@ -5,7 +5,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api, apiMessage } from '@/lib/api';
 import { todayIso } from '@/components/calendar';
-import { DateField, Textarea } from '@/components/form';
+import { DateField, SelectField, Textarea } from '@/components/form';
+import { MediaStrip, PhotoPicker } from '@/components/uploader';
 import {
   Alert,
   Body,
@@ -21,6 +22,7 @@ import {
 import { useCanRequestPlanner, usePlannerProfile } from '@/components/planner/data';
 import { ServicesPicker } from '@/components/planner/services-picker';
 import { PLANNER_SERVICES } from '@/shared/planner-profile';
+import { WEDDING_TYPES } from '@/lib/planner-requests';
 import { usePlannerRequest } from '@/store/planner-request';
 import { space } from '@/theme';
 
@@ -43,6 +45,11 @@ const MAX_REQUIREMENTS = 4000;
 /** The server's floor when requirements are sent at all. */
 const MIN_REQUIREMENTS = 10;
 const MAX_SERVICES = 16;
+/** Kept in step with the API's referenceImages limit. */
+const MAX_PHOTOS = 6;
+
+/** Digits only, as a whole positive number, or undefined. */
+const whole = (v: string) => (/^\d{1,12}$/.test(v.trim()) && Number(v) > 0 ? Number(v) : undefined);
 
 export default function PlannerRequestScreen() {
   const router = useRouter();
@@ -60,7 +67,13 @@ export default function PlannerRequestScreen() {
   const storeFor = usePlannerRequest((s) => s.plannerId);
 
   const [requirements, setRequirements] = useState('');
-  const [budget, setBudget] = useState('');
+  const [location, setLocation] = useState<string | null>(null);
+  const [weddingType, setWeddingType] = useState('');
+  const [guestMin, setGuestMin] = useState('');
+  const [guestMax, setGuestMax] = useState('');
+  const [budgetMin, setBudgetMin] = useState('');
+  const [budgetMax, setBudgetMax] = useState('');
+  const [photos, setPhotos] = useState<string[]>([]);
   const [showErrors, setShowErrors] = useState(false);
   const [error, setError] = useState('');
   const [existing, setExisting] = useState<string | null>(null);
@@ -76,8 +89,14 @@ export default function PlannerRequestScreen() {
     trimmed.length > 0 && trimmed.length < MIN_REQUIREMENTS
       ? 'Tell the planner what you need, at least a sentence'
       : undefined;
+  const guestError =
+    whole(guestMin) && whole(guestMax) && whole(guestMin)! > whole(guestMax)!
+      ? 'The smaller guest count is above the larger'
+      : undefined;
   const budgetError =
-    budget.trim() && !/^\d{1,12}$/.test(budget.trim()) ? 'Enter the budget in whole rupees' : undefined;
+    whole(budgetMin) && whole(budgetMax) && whole(budgetMin)! > whole(budgetMax)!
+      ? 'The lower budget is above the upper one'
+      : undefined;
 
   const send = useMutation({
     mutationFn: async () => {
@@ -87,7 +106,17 @@ export default function PlannerRequestScreen() {
         ...(date ? { eventDate: date } : {}),
         ...(services.length ? { requestedServices: services.slice(0, MAX_SERVICES) } : {}),
         ...(trimmed ? { requirements: trimmed } : {}),
-        ...(budget.trim() ? { expectedBudget: Number(budget.trim()) } : {}),
+        ...(photos.length ? { referenceImages: photos } : {}),
+        // Blank budget fields mean "quote me"; the server takes the top of
+        // the range as the expected budget.
+        plannerBrief: {
+          location: (location ?? query.data?.city ?? '').trim() || undefined,
+          weddingType: weddingType || undefined,
+          guestCountMin: whole(guestMin),
+          guestCountMax: whole(guestMax),
+          budgetMin: whole(budgetMin),
+          budgetMax: whole(budgetMax),
+        },
       });
       return res.data as { id: string };
     },
@@ -112,7 +141,7 @@ export default function PlannerRequestScreen() {
     setShowErrors(true);
     setError('');
     setExisting(null);
-    if (requirementsError || budgetError) return;
+    if (requirementsError || guestError || budgetError) return;
     send.mutate();
   };
 
@@ -210,7 +239,7 @@ export default function PlannerRequestScreen() {
           label="Additional wedding requirements"
           value={requirements}
           onChange={setRequirements}
-          placeholder="Guest count, venue ideas, events you are planning, anything the planner should know"
+          placeholder="Venue ideas, events you are planning, anything the planner should know"
           maxLength={MAX_REQUIREMENTS}
           rows={5}
           error={showErrors ? requirementsError : undefined}
@@ -218,14 +247,73 @@ export default function PlannerRequestScreen() {
         />
 
         <Field
-          label="Expected budget (optional)"
-          value={budget}
-          onChangeText={(v) => setBudget(v.replace(/[^\d]/g, ''))}
-          keyboardType="number-pad"
-          placeholder="Leave blank to ask for a quote"
-          error={showErrors ? budgetError : undefined}
-          hint="In rupees."
+          label="Wedding location"
+          value={location ?? planner.city ?? ''}
+          onChangeText={setLocation}
+          maxLength={120}
+          placeholder="City, state"
         />
+
+        <SelectField
+          label="Wedding type (optional)"
+          value={weddingType}
+          onChange={setWeddingType}
+          options={WEDDING_TYPES.map((t) => ({ value: t, label: t }))}
+        />
+
+        <View style={{ flexDirection: 'row', gap: space(3) }}>
+          <View style={{ flex: 1 }}>
+            <Field
+              label="Guests from"
+              value={guestMin}
+              onChangeText={(v) => setGuestMin(v.replace(/[^\d]/g, ''))}
+              keyboardType="number-pad"
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Field
+              label="Guests to"
+              value={guestMax}
+              onChangeText={(v) => setGuestMax(v.replace(/[^\d]/g, ''))}
+              keyboardType="number-pad"
+              error={showErrors ? guestError : undefined}
+            />
+          </View>
+        </View>
+
+        <View style={{ flexDirection: 'row', gap: space(3) }}>
+          <View style={{ flex: 1 }}>
+            <Field
+              label="Budget from (₹)"
+              value={budgetMin}
+              onChangeText={(v) => setBudgetMin(v.replace(/[^\d]/g, ''))}
+              keyboardType="number-pad"
+              placeholder="Optional"
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Field
+              label="Budget up to (₹)"
+              value={budgetMax}
+              onChangeText={(v) => setBudgetMax(v.replace(/[^\d]/g, ''))}
+              keyboardType="number-pad"
+              placeholder="Optional"
+              error={showErrors ? budgetError : undefined}
+            />
+          </View>
+        </View>
+
+        <View style={{ gap: space(2) }}>
+          <Body style={{ fontWeight: '600' }}>Reference photos</Body>
+          <Caption>Optional. Designs you have in mind, up to {MAX_PHOTOS}.</Caption>
+          <MediaStrip urls={photos} onRemove={(url) => setPhotos((p) => p.filter((u) => u !== url))} />
+          {photos.length < MAX_PHOTOS ? (
+            <PhotoPicker
+              label={photos.length ? 'Add another photo' : 'Upload a photo'}
+              onUploaded={(url) => setPhotos((p) => [...p, url])}
+            />
+          ) : null}
+        </View>
 
         {existing !== null ? (
           <View style={{ gap: space(2) }}>

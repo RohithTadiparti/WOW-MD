@@ -105,7 +105,12 @@ export default function PlannerClients() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="page-title">My Clients</h1>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <h1 className="page-title">My Clients</h1>
+          <Link className="btn-outline btn-sm" to="/my-clients/requests">
+            All requests
+          </Link>
+        </div>
         <p className="page-subtitle">
           The couples you are engaged on. Each one opens onto their wedding, its events, the
           tasks and what has been committed.
@@ -118,9 +123,14 @@ export default function PlannerClients() {
       */}
       {(data?.requests.length ?? 0) > 0 && (
         <div className="card border-l-4 border-l-brand">
-          <h2 className="section-title">
-            {data!.requests.length} request{data!.requests.length === 1 ? '' : 's'} waiting on you
-          </h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="section-title">
+              {data!.requests.length} request{data!.requests.length === 1 ? '' : 's'} waiting on you
+            </h2>
+            <Link className="btn btn-sm" to="/my-clients/requests">
+              Review requests
+            </Link>
+          </div>
           <p className="mt-0.5 text-sm text-gray-600">
             A couple has asked you to plan their wedding and has not heard back. These are not
             clients yet — they become clients once you accept and the booking is confirmed.
@@ -139,7 +149,7 @@ export default function PlannerClients() {
                       ` · ${r.currency} ${Number(r.amount).toLocaleString('en-IN')}`}
                   </p>
                 </div>
-                <Link className="btn-outline btn-sm" to="/bookings">
+                <Link className="btn-outline btn-sm" to={`/my-clients/requests/${r.bookingId}`}>
                   Review
                 </Link>
               </li>

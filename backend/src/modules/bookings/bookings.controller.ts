@@ -161,6 +161,41 @@ export class BookingsController {
 
   @RequirePermissions(Permission.BOOKING_READ_INCOMING)
   @ApiOperation({
+    summary: "A wedding planner's requests from couples",
+    description:
+      'Every request against your planner listing, newest first, with a status worked out from ' +
+      'the booking and its quotations: new, accepted, quotation_sent, requote_requested, ' +
+      'declined or closed.',
+  })
+  @Get('planner-requests')
+  plannerRequests(@CurrentUser() actor: AuthUser) {
+    return this.bookings.plannerRequests(actor);
+  }
+
+  @RequirePermissions(Permission.BOOKING_READ_INCOMING)
+  @ApiOperation({
+    summary: 'One planner request in full',
+    description:
+      "The wedding brief, chosen services, reference images and whether you are free on the date. " +
+      "The couple's phone number is not included.",
+  })
+  @Get('planner-requests/:id')
+  plannerRequest(@CurrentUser() actor: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.bookings.plannerRequest(actor, id);
+  }
+
+  @RequirePermissions(Permission.BOOKING_CONFIRM)
+  @ApiOperation({
+    summary: 'Take a planner request on',
+    description: 'Tells the couple you are interested. Nothing is priced or held; send a quotation next.',
+  })
+  @Put('planner-requests/:id/accept')
+  acceptPlannerRequest(@CurrentUser() actor: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.bookings.acceptPlannerRequest(actor, id);
+  }
+
+  @RequirePermissions(Permission.BOOKING_READ_INCOMING)
+  @ApiOperation({
     summary: 'Your account: earnings, money still in escrow, and the ledger behind both',
   })
   @Get('earnings')

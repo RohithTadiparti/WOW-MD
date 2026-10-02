@@ -173,6 +173,8 @@ export enum NotificationType {
   // meant a vendor could not tell, from the list, whether anything needed
   // them — which is the entire job of a notifications page.
   BOOKING_REQUEST = 'booking_request',
+  /** A planner has taken a couple's request on; a quotation comes next. */
+  BOOKING_REQUEST_ACCEPTED = 'booking_request_accepted',
   BOOKING_QUOTATION = 'booking_quotation',
   BOOKING_CONFIRMED = 'booking_confirmed',
   BOOKING_PAYMENT = 'booking_payment',

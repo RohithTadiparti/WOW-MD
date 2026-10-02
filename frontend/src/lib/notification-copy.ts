@@ -41,6 +41,7 @@ export const TYPE_LABEL: Record<string, string> = {
   booking_update: 'Booking update',
 
   booking_request: 'New request',
+  booking_request_accepted: 'Request accepted',
   booking_quotation: 'Quotation',
   booking_confirmed: 'Job accepted',
   booking_payment: 'Payment held',
@@ -75,6 +76,8 @@ export function describe(n: Notification): string {
   switch (n.type) {
     case 'booking_request':
       return `${client} has asked about ${job || 'your services'}.`;
+    case 'booking_request_accepted':
+      return `Your planner has accepted your request for ${job || 'your wedding'}. Their quotation comes next.`;
     case 'booking_quotation':
       return money ? `${money}: ${job || 'the job'}.` : `A quotation on ${job || 'the job'}.`;
     case 'booking_addon': {

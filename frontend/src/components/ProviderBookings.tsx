@@ -755,7 +755,7 @@ function VendorAddOns({ bookingId }: { bookingId: string }) {
   );
 }
 
-function QuotationForm({ bookingId, onDone }: { bookingId: string; onDone: () => void }) {
+export function QuotationForm({ bookingId, onDone }: { bookingId: string; onDone: () => void }) {
   const isPlanner = can(useAuth((s) => s.user?.permissions ?? []), Permission.PLANNER_LISTING_MANAGE);
   const [amount, setAmount] = useState('');
   const [notes, setNotes] = useState('');

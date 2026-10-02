@@ -254,8 +254,14 @@ export class PlannerClientsService {
 
       // A booking is "confirmed" once the vendor has taken the job; anything
       // earlier (requested, quoted, accepted) is still being negotiated.
+      // Vendor bookings only: the planner's own engagement is a booking too,
+      // and counting it read as a confirmed vendor on a wedding with none.
+      // Cancelled ones are neither confirmed nor pending.
       const clientBookings = bookings.filter(
-        (b) => b.userId === plan.userId || (partner !== undefined && b.userId === partner),
+        (b) =>
+          b.providerType === ProviderType.VENDOR &&
+          b.status !== BookingStatus.CANCELLED &&
+          (b.userId === plan.userId || (partner !== undefined && b.userId === partner)),
       );
       const confirmed = clientBookings.filter((b) =>
         [BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS, BookingStatus.COMPLETED].includes(
@@ -263,6 +269,9 @@ export class PlannerClientsService {
         ),
       ).length;
       const pendingBookings = clientBookings.length - confirmed;
+      // Where the couple said the wedding is when they asked this planner.
+      const briefLocation =
+        bookings.find((b) => b.id === plan.plannerBookingId)?.plannerBrief?.location ?? null;
 
       return {
         userId: plan.userId,
@@ -275,7 +284,7 @@ export class PlannerClientsService {
         weddingDate: plan.weddingDate ?? null,
         /** The plan's date, else the earliest function's, else the earliest vendor booking's. */
         derivedWeddingDate: weddingDate,
-        location: next?.city ?? mine[0]?.city ?? own[0]?.city ?? null,
+        location: next?.city ?? mine[0]?.city ?? briefLocation ?? own[0]?.city ?? null,
         events: mine.length,
         nextEvent: next ? { id: next.id, name: next.name, date: next.eventDate } : null,
         tasks: {

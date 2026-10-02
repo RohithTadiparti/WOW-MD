@@ -199,7 +199,12 @@ function Routes() {
       <Stack.Screen name="support" options={{ headerShown: true, title: 'Support' }} />
       <Stack.Screen name="security" options={{ headerShown: true, title: 'Security' }} />
       <Stack.Screen name="my-reviews" options={{ headerShown: true, title: 'My Reviews' }} />
-      <Stack.Screen name="planner-clients" options={{ headerShown: true, title: 'Client Weddings' }} />
+      <Stack.Screen name="planner-clients" options={{ headerShown: true, title: 'My Weddings' }} />
+      <Stack.Screen
+        name="planner-requests/index"
+        options={{ headerShown: true, title: 'Planner Requests' }}
+      />
+      <Stack.Screen name="planner-requests/[id]" options={{ headerShown: true, title: 'Request' }} />
       <Stack.Screen name="about" options={{ headerShown: true, title: 'About WOW' }} />
       <Stack.Screen
         name="transaction/[id]"
