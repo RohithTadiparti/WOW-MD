@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
+import { useRouter } from 'expo-router';
 
 import { api } from '@/lib/api';
 import { useAuth } from '@/store/auth';
@@ -35,6 +36,7 @@ import { rgb, space, useTheme } from '@/theme';
  * always carried.
  */
 export default function Home() {
+  const router = useRouter();
   const user = useAuth((s) => s.user);
   const permissions = user?.permissions ?? [];
 
@@ -150,9 +152,9 @@ export default function Home() {
               ) : null}
               {isAgent ? (
                 <>
-                  <Counter label="Total clients" value={agentStats?.totalClients} />
-                  <Counter label="Matches fixed" value={agentStats?.matchesFixed} />
-                  <Counter label="Remaining clients" value={agentStats?.remainingClients} />
+                  <Counter label="Total clients" value={agentStats?.totalClients} onPress={() => router.push('/agent-clients')} />
+                  <Counter label="Matches fixed" value={agentStats?.matchesFixed} onPress={() => router.push('/agent-clients')} />
+                  <Counter label="Remaining clients" value={agentStats?.remainingClients} onPress={() => router.push('/agent-clients')} />
                   <Counter label="Total interests" value={agentStats?.totalInterests} />
                 </>
               ) : null}
@@ -178,10 +180,9 @@ function greeting(): string {
  * and claiming it before the answer has arrived is the small lie that makes
  * somebody stop trusting the screen.
  */
-function Counter({ label, value }: { label: string; value?: number }) {
+function Counter({ label, value, onPress }: { label: string; value?: number; onPress?: () => void }) {
   const theme = useTheme();
-  return (
-    <Card style={{ gap: space(1.5) }}>
+  const content = <>
       <Caption numberOfLines={1}>{label}</Caption>
       {/*
         Tabular figures. These sit in a column and get compared against each
@@ -202,6 +203,6 @@ function Counter({ label, value }: { label: string; value?: number }) {
       >
         {value ?? '—'}
       </Body>
-    </Card>
-  );
+  </>;
+  return onPress ? <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}><Card style={{ gap: space(1.5) }}>{content}</Card></Pressable> : <Card style={{ gap: space(1.5) }}>{content}</Card>;
 }

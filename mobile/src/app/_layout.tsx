@@ -182,6 +182,8 @@ function Routes() {
       />
       <Stack.Screen name="accounts" options={{ headerShown: true, title: 'Accounts' }} />
       <Stack.Screen name="escrow" options={{ headerShown: true, title: 'Escrow' }} />
+      <Stack.Screen name="agent-clients" options={{ headerShown: true, title: 'My Clients' }} />
+      <Stack.Screen name="agent-onboard" options={{ headerShown: true, title: 'New Client' }} />
       <Stack.Screen name="account" options={{ headerShown: true, title: 'Account Information' }} />
       <Stack.Screen name="profile" options={{ headerShown: true, title: 'My Profile' }} />
       <Stack.Screen name="edit-profile" options={{ headerShown: true, title: 'Edit Profile' }} />
@@ -197,6 +199,7 @@ function Routes() {
       <Stack.Screen name="support" options={{ headerShown: true, title: 'Support' }} />
       <Stack.Screen name="security" options={{ headerShown: true, title: 'Security' }} />
       <Stack.Screen name="my-reviews" options={{ headerShown: true, title: 'My Reviews' }} />
+      <Stack.Screen name="planner-clients" options={{ headerShown: true, title: 'Client Weddings' }} />
       <Stack.Screen name="about" options={{ headerShown: true, title: 'About WOW' }} />
       <Stack.Screen
         name="transaction/[id]"
