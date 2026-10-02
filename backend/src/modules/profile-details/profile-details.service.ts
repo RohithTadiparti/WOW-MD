@@ -40,6 +40,7 @@ import { StorageService } from '../../platform/storage/storage.service';
 import { parseKey } from '../../platform/storage/storage-keys';
 import { BIODATA_DOCUMENT_EXTENSIONS, BIODATA_IMAGE_EXTENSIONS } from '../media/dto/media.dto';
 import { matchGender } from '../matchmaking/match-gender';
+import { CLOSED_ENGAGEMENT_MESSAGE, stewardMayEditBiodata } from '../users/stewardship';
 
 /** The most brothers and sisters a profile may list (EZ1-I102). */
 export const SIBLING_LIMIT = 10;
@@ -1203,8 +1204,9 @@ export class ProfileDetailsService {
   /**
    * Loads the details row for writing, creating it on first use.
    *
-   * A steward may write only while the profile is unclaimed — the same line the
-   * rest of the agency surface stops at.
+   * The owner always may. A steward (agent or family) may while the engagement
+   * is live, claimed or not: see stewardMayEditBiodata for why a claim no
+   * longer ends it and what does.
    */
   private async editable(actor: AuthUser, profileId: string): Promise<ProfileDetails> {
     const profile = await this.load(profileId);
@@ -1214,10 +1216,8 @@ export class ProfileDetailsService {
     if (!owns && !stewards && actor.role !== UserRole.ADMIN) {
       throw new ForbiddenException('That profile is not yours to edit');
     }
-    if (stewards && !owns && profile.userId !== null) {
-      throw new ForbiddenException(
-        'This profile belongs to its owner now — only they can edit it.',
-      );
+    if (stewards && !owns && !stewardMayEditBiodata(profile, actor.userId)) {
+      throw new ForbiddenException(CLOSED_ENGAGEMENT_MESSAGE);
     }
 
     const existing = await this.details.findOne({ where: { profileId } });

@@ -27,6 +27,7 @@ import { ConsentScope, FamilyType, MaritalStatus, NetworkVisibility, OccupationS
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
 import { ProfileClaimStatus, UserRole } from '../../common/enums';
+import { CLOSED_ENGAGEMENT_MESSAGE, stewardMayEditBiodata } from '../users/stewardship';
 
 /*
  * The words a biodata document uses for the three fixed-choice intake fields,
@@ -414,16 +415,40 @@ export class ManagedProfilesService {
   async update(actor: AuthUser, profileId: string, dto: UpdateManagedProfileDto): Promise<Profile> {
     const profile = await this.findOne(actor, profileId);
 
-    // Once the subject owns the profile, the steward stops being able to edit
-    // it. Anything else would mean an agent could rewrite a client's live
-    // profile behind their back.
-    if (profile.claimStatus === ProfileClaimStatus.CLAIMED) {
-      throw new ForbiddenException(
-        'This profile has been claimed by its owner and can only be edited by them.',
-      );
+    // The steward keeps editing after a claim for as long as the engagement is
+    // live (stewardMayEditBiodata). An administrator is not a steward and is
+    // let through by findOne as before.
+    if (actor.role !== UserRole.ADMIN && !stewardMayEditBiodata(profile, actor.userId)) {
+      throw new ForbiddenException(CLOSED_ENGAGEMENT_MESSAGE);
     }
 
     const { inviteNow, ...fields } = dto;
+
+    // What a claim does still change: the contact details and who can see the
+    // profile. Before it the contacts are where the invitation goes; after it
+    // they are the owner's own, reached through their account, and so is the
+    // privacy choice. The agency keeps the biodata, not those.
+    const claimed = profile.claimStatus === ProfileClaimStatus.CLAIMED;
+    if (
+      claimed &&
+      actor.role !== UserRole.ADMIN &&
+      fields.visibility !== undefined &&
+      fields.visibility !== profile.visibility
+    ) {
+      throw new ForbiddenException(
+        'The client has claimed this profile, so who can see it is their choice.',
+      );
+    }
+    if (
+      claimed &&
+      actor.role !== UserRole.ADMIN &&
+      ((fields.contactPhone !== undefined && fields.contactPhone !== profile.contactPhone) ||
+        (fields.contactEmail !== undefined && fields.contactEmail !== profile.contactEmail))
+    ) {
+      throw new ForbiddenException(
+        'The client has claimed this profile, so their contact details are theirs to change.',
+      );
+    }
     void inviteNow; // only meaningful at creation
 
     if (actor.role === UserRole.FAMILY && fields.stewardRelation !== undefined) {
@@ -519,29 +544,6 @@ export class ManagedProfilesService {
       circulation: consent.get(profile.id) ?? null,
     }));
     return paginate(withActions, total, q.page, q.limit);
-  }
-
-  /**
-   * The line an agency stops at once the subject owns their profile.
-   *
-   * That line used to sit at the claim itself: pausing, closing, circulating
-   * and photographs all stopped the moment somebody took ownership. It now
-   * sits much later, because the engagement does not end when the subject gets
-   * an account — the family hired the agency to find a match, and that is
-   * usually the point at which the work matters most.
-   *
-   * Two things stay refused, for reasons that are about the data rather than
-   * about the engagement. Editing the biodata, because two writers with no rule
-   * about who wins produces a profile that contradicts itself. And deleting,
-   * because a claimed profile *is* somebody's account profile — removing it
-   * would leave a real person signed in to nothing.
-   */
-  private assertNotClaimed(profile: Profile, action: string): void {
-    if (profile.claimStatus === ProfileClaimStatus.CLAIMED) {
-      throw new ForbiddenException(
-        `This profile belongs to its owner now — only they can ${action} it.`,
-      );
-    }
   }
 
   /**
@@ -649,13 +651,13 @@ export class ManagedProfilesService {
     // agency's work becomes most useful. What claiming changes is that the
     // subject can now act for themselves as well.
     //
-    // The one thing an agency still cannot do is edit the biodata of somebody
-    // who is sitting there editing it themselves, because two writers and no
-    // rule about who wins is how a profile ends up with a contradiction on it.
+    // Editing the biodata now carries on as well: the client and the agency
+    // both write the one profile (stewardMayEditBiodata). Only the invitation
+    // ends with the claim, because there is nobody left to invite.
     const claimed = profile.claimStatus === ProfileClaimStatus.CLAIMED;
 
     return {
-      canEdit: !claimed && !archived,
+      canEdit: !archived,
       canManagePhotos: !archived,
       canCirculate: !archived,
       // A mobile number alone is enough to invite: the invitation goes out by

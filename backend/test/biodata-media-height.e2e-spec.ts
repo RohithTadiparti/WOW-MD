@@ -11,7 +11,7 @@ import { AppConfigService } from '../src/config/app-config.service';
 import { User } from '../src/modules/auth/entities/user.entity';
 import { Profile } from '../src/modules/users/entities/profile.entity';
 import { ProfileDetails } from '../src/modules/profile-details/entities/profile-details.entity';
-import { UserRole } from '../src/common/enums';
+import { ProfileLifecycle, UserRole } from '../src/common/enums';
 import { BiodataFamilyPhoto1710000103000 } from '../src/database/migrations/1710000103000-BiodataFamilyPhoto';
 import { RestoreBiodataHeightCm1710000104000 } from '../src/database/migrations/1710000104000-RestoreBiodataHeightCm';
 
@@ -105,7 +105,7 @@ describe('Family Photo and centimeter height end to end', () => {
     expect((await read().expect(200)).body.details).toMatchObject({ familyPhotoUrl: second, heightCm: 180 });
   }, 60000);
 
-  it('refuses anonymous, unrelated and former stewards without changing the target', async () => {
+  it('refuses anonymous, unrelated and released stewards without changing the target', async () => {
     const target = actors[0];
     const route = `/api/profiles/${target.profile.id}/details`;
     await http().put(`${route}/family-photo`).send({ url: target.url }).expect(401);
@@ -113,13 +113,24 @@ describe('Family Photo and centimeter height end to end', () => {
       await http().put(`${route}/family-photo`).set('Authorization', `Bearer ${actor.token}`).send({ url: actor.url }).expect(403);
       await http().put(`${route}/personal`).set('Authorization', `Bearer ${actor.token}`).send({ ...personal, heightCm: 168 }).expect(403);
     }
+    // A steward keeps writing once the person claims the profile, while the
+    // engagement is live; closing it out, or releasing the profile from their
+    // book, is what ends it.
     const family = actors[2];
+    const familyPhoto = () => http().put(`/api/profiles/${family.profile.id}/details/family-photo`)
+      .set('Authorization', `Bearer ${family.token}`).send({ url: family.url });
     await db.getRepository(Profile).update(actors[1].profile.id, { userId: null });
     await db.getRepository(Profile).update(family.profile.id, { userId: actors[1].user.id });
     try {
-      await http().put(`/api/profiles/${family.profile.id}/details/family-photo`).set('Authorization', `Bearer ${family.token}`).send({ url: family.url }).expect(403);
+      await familyPhoto().expect(200);
+      await db.getRepository(Profile).update(family.profile.id, { lifecycle: ProfileLifecycle.ARCHIVED });
+      await familyPhoto().expect(403);
+      await db.getRepository(Profile).update(family.profile.id, { lifecycle: ProfileLifecycle.ACTIVE, managedByUserId: null });
+      await familyPhoto().expect(403);
     } finally {
-      await db.getRepository(Profile).update(family.profile.id, { userId: null });
+      await db.getRepository(Profile).update(family.profile.id, {
+        userId: null, managedByUserId: family.user.id, lifecycle: ProfileLifecycle.ACTIVE,
+      });
       await db.getRepository(Profile).update(actors[1].profile.id, { userId: actors[1].user.id });
     }
     expect((await db.getRepository(ProfileDetails).findOneByOrFail({ profileId: target.profile.id })).familyPhotoUrl).toBe(target.url);

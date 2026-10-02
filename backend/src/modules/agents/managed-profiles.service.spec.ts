@@ -12,7 +12,13 @@ import { InvitationsService } from '../invitations/invitations.service';
 import { ConsentService } from '../circulation/consent.service';
 import { AgentBillingService } from './agent-billing.service';
 import { ModerationService } from '../../platform/moderation/moderation.service';
-import { ConsentMethod, ConsentRelation, UserRole } from '../../common/enums';
+import {
+  ConsentMethod,
+  ConsentRelation,
+  ProfileClaimStatus,
+  ProfileLifecycle,
+  UserRole,
+} from '../../common/enums';
 import { CreateManagedProfileDto } from './dto/managed-profile.dto';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 
@@ -126,5 +132,38 @@ describe('managed profile biodata intake', () => {
       stewardRelation: 'Self',
     })).rejects.toThrow('Select your relationship to the person whose profile you are managing.');
     expect(transaction).not.toHaveBeenCalled();
+  });
+
+  describe('editing a client who has claimed their profile', () => {
+    const claimedProfile = () => ({
+      id: 'profile-1', userId: 'client-1', managedByUserId: 'agent-1',
+      claimStatus: ProfileClaimStatus.CLAIMED, lifecycle: ProfileLifecycle.ACTIVE,
+      displayName: 'Kamesh', contactPhone: '+919876543210', contactEmail: null,
+    }) as unknown as Profile;
+
+    it('keeps the agency able to edit while the client is still on their book', async () => {
+      const { service, profileRepo } = await setup();
+      profileRepo.findOne.mockResolvedValue(claimedProfile());
+      const updated = await service.update(actor, 'profile-1', { displayName: 'Kamesh Rao', city: 'Hyderabad' });
+      expect(updated).toMatchObject({ displayName: 'Kamesh Rao', city: 'Hyderabad', userId: 'client-1' });
+      expect(service.agencyActions(claimedProfile()).canEdit).toBe(true);
+      expect(service.agencyActions(claimedProfile()).canInvite).toBe(false);
+    });
+
+    it("leaves the claimed client's own contact details to them", async () => {
+      const { service, profileRepo } = await setup();
+      profileRepo.findOne.mockResolvedValue(claimedProfile());
+      await expect(service.update(actor, 'profile-1', { contactPhone: '+919876500001' }))
+        .rejects.toThrow('their contact details are theirs to change');
+      // Sending the same number back, as a full form save does, is not a change.
+      await expect(service.update(actor, 'profile-1', { contactPhone: '+919876543210', displayName: 'Kamesh' }))
+        .resolves.toMatchObject({ displayName: 'Kamesh' });
+    });
+
+    it('stops once the engagement is closed', async () => {
+      const { service, profileRepo } = await setup();
+      profileRepo.findOne.mockResolvedValue({ ...claimedProfile(), lifecycle: ProfileLifecycle.ARCHIVED });
+      await expect(service.update(actor, 'profile-1', { displayName: 'X' })).rejects.toThrow('engagement is closed');
+    });
   });
 });
