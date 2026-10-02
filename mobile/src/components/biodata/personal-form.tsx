@@ -261,6 +261,7 @@ export function PersonalForm({
         />
         <PhotoPicker
           label="Add a photograph"
+          purpose="profile_photo"
           onUploaded={(url) => onPhotoAdded && onPhotoAdded(url)}
         />
       </Card>

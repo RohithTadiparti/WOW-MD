@@ -28,6 +28,7 @@ export default function PhotoUploader({
   onUploaded,
   label = 'Upload a photo',
   kind = 'photo',
+  purpose,
 }: {
   onUploaded: (url: string) => void | Promise<void>;
   label?: string;
@@ -39,6 +40,12 @@ export default function PhotoUploader({
    * the point, and in practice that is as often an invoice as a photograph.
    */
   kind?: 'photo' | 'attachment';
+  /**
+   * `profile_photo` for a photograph of a person going onto a profile. The
+   * server then checks it for AI generation as soon as it lands, and a
+   * refusal surfaces here — before `onUploaded`, so nothing is shown as added.
+   */
+  purpose?: 'profile_photo';
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -105,8 +112,9 @@ export default function PhotoUploader({
       if (!response.ok) throw new Error(`Storage refused the file (${response.status}). Try again.`);
 
       // The server reads the file back and refuses one that is not what it
-      // claimed to be, before anything is attached to it.
-      await api.post('/media/complete', { key: data.key });
+      // claimed to be — or, for a profile photograph, one that is AI-generated
+      // — before anything is attached to it. Its message is shown as it is.
+      await api.post('/media/complete', { key: data.key, ...(purpose ? { purpose } : {}) });
 
       await onUploaded(data.publicUrl);
     } catch (err) {
@@ -150,7 +158,11 @@ export default function PhotoUploader({
       >
         {busy ? 'Uploading…' : label}
       </button>
-      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      {error && (
+        <p role="alert" className="mt-1 text-xs text-red-600">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

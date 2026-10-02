@@ -1281,6 +1281,7 @@ function PhotoEditor({
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <PhotoUploader
           label="Upload a photo"
+          purpose="profile_photo"
           onUploaded={async (uploaded) => {
             try {
               await api.post(`/agents/profiles/${profile.id}/photos`, { url: uploaded });

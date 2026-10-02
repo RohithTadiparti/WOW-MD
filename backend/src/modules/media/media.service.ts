@@ -12,10 +12,10 @@ import { MediaItem } from './entities/media-item.entity';
 import { AddMediaItemDto, CreateAlbumDto, SignMediaDto, UploadDetailsDto } from './dto/media.dto';
 import { MediaAccessService } from './media-access.service';
 import { StorageService } from '../../platform/storage/storage.service';
-import { KeyScope, buildKey, isSafeKey, refKey } from '../../platform/storage/storage-keys';
+import { KeyScope, buildKey, isSafeKey, parseKey, refKey } from '../../platform/storage/storage-keys';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { AppConfigService } from '../../config/app-config.service';
-import { MediaType } from '../../common/enums';
+import { MediaType, UserRole } from '../../common/enums';
 import { ModerationService } from '../../platform/moderation/moderation.service';
 
 /** An album as the gallery screen needs it: what is in it, and what it looks like. */
@@ -165,11 +165,39 @@ export class MediaService {
    * Only for a key the caller could have been issued, so it cannot be used to
    * probe, or delete, somebody else's files.
    */
-  async completeUpload(actor: AuthUser, key: string, requestOrigin?: string) {
+  async completeUpload(
+    actor: AuthUser,
+    key: string,
+    requestOrigin?: string,
+    purpose?: 'profile_photo',
+  ) {
     if (!(await this.access.canUpload(actor, key))) {
       throw new ForbiddenException('That is not one of your uploads');
     }
-    return this.storage.verifyUpload(key, requestOrigin);
+    const upload = await this.storage.verifyUpload(key, requestOrigin);
+
+    // A photograph of a person, checked as soon as its bytes are in: the
+    // uploader has not shown it as added yet, so a refusal here leaves nothing
+    // half-attached on screen. The file is deleted rather than left to the
+    // lifecycle sweep — nobody should be able to link to it in the meantime.
+    // Only images in a profile slot; documents and videos are not portraits.
+    if (
+      purpose === 'profile_photo' &&
+      parseKey(key)?.area === 'profile' &&
+      upload.contentType.startsWith('image/')
+    ) {
+      try {
+        await this.moderation.assertGenuinePhoto(upload.ref, {
+          userId: actor.userId,
+          kind:
+            actor.role === UserRole.AGENT || actor.role === UserRole.FAMILY ? 'managed_profile' : 'profile',
+        });
+      } catch (err) {
+        await this.storage.driver.delete(key).catch(() => undefined);
+        throw err;
+      }
+    }
+    return upload;
   }
 
   /**
