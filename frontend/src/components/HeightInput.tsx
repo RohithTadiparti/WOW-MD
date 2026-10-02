@@ -6,6 +6,10 @@ import { HeightParts, heightPartsError, heightPartsFromCm, feetInchesToCm } from
  *
  * The two boxes sit inside the caller's field label, so each carries its own
  * accessible name rather than a nested label of its own.
+ *
+ * They are text boxes (a number box lets "5." and "e" through and spins on
+ * scroll), so `min`/`max` mean nothing to the browser here; `pattern` is what
+ * makes it refuse "abc" or "8.1" and block the form from submitting.
  */
 export default function HeightInput({ value, onChange, required = false }: {
   value: unknown;
@@ -41,14 +45,16 @@ export default function HeightInput({ value, onChange, required = false }: {
     <div className="mt-1 flex gap-2">
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <input className={`input min-w-0${error ? ' border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`} aria-label="Height in feet" type="text" inputMode="numeric"
-          value={parts.feet} required={required} min={3} max={8} maxLength={1} placeholder="5"
+          value={parts.feet} required={required} pattern="[3-8]" maxLength={1} placeholder="5"
+          title="Feet, from 3 to 8"
           onBlur={() => setTouched(true)}
           onChange={(event) => update({ ...parts, feet: event.target.value })} />
         <span className="text-sm text-ink-600">ft</span>
       </div>
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <input className={`input min-w-0${error ? ' border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`} aria-label="Height in inches" type="text" inputMode="numeric"
-          value={parts.inches} required={required} min={0} max={11} maxLength={2} placeholder="6"
+          value={parts.inches} required={required} pattern="[0-9]|1[01]" maxLength={2} placeholder="6"
+          title="Inches, from 0 to 11"
           onBlur={() => setTouched(true)}
           onChange={(event) => update({ ...parts, inches: event.target.value })} />
         <span className="text-sm text-ink-600">in</span>
