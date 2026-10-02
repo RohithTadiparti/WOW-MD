@@ -47,6 +47,8 @@ export interface BuyerBooking {
   collectedMilestones?: string[];
   guests?: number | null;
   specialRequests?: string | null;
+  /** Planner requests only: the services the couple ticked, as catalogue keys. */
+  requestedServices?: string[];
   ratingAvg?: number;
   ratingCount?: number;
 }

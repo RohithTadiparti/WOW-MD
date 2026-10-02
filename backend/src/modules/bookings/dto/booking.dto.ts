@@ -1,9 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ArrayMaxSize,
+  ArrayUnique,
   IsArray,
   IsDateString,
   IsEnum,
+  IsIn,
   IsInt,
   IsObject,
   IsOptional,
@@ -18,6 +20,7 @@ import { IsUploadedUrl } from '../../../common/decorators/uploaded-url.decorator
 import { IsStrictNumber } from '../../../common/decorators/strict-type.decorator';
 import { BookingStatus, PaymentMethod, PaymentMilestone, ProviderType } from '../../../common/enums';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
+import { PLANNER_SERVICE_KEYS } from '../../wedding-planners/planner-catalog';
 
 export class CreateBookingDto {
   /**
@@ -128,6 +131,19 @@ export class CreateBookingDto {
   @IsUploadedUrl({ each: true })
   @MaxLength(2048, { each: true })
   referenceImages?: string[];
+
+  /**
+   * The services the couple ticked on a planner's profile, carried onto the
+   * request so the planner reads them and the couple does not type them out
+   * again. Planner requests only; refused on a vendor request.
+   */
+  @ApiPropertyOptional({ type: [String], enum: PLANNER_SERVICE_KEYS })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(PLANNER_SERVICE_KEYS.length)
+  @ArrayUnique()
+  @IsIn(PLANNER_SERVICE_KEYS, { each: true, message: 'Choose services from the list' })
+  requestedServices?: string[];
 
   /**
    * What the buyer hopes to spend. Optional on purpose: the provider quotes

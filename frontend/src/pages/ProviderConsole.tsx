@@ -12,6 +12,17 @@ import { LoadingCards } from '../components/ui/Feedback';
 import CategoryPicker, { useCategoryNames } from '../components/CategoryPicker';
 import VendorServices, { priceLabel } from '../components/VendorServices';
 import PhotoUploader from '../components/PhotoUploader';
+import {
+  HTTPS_URL,
+  PlannerServicesPicker,
+  PlannerSpecializationsPicker,
+  PlannerWeddingsEditor,
+  WeddingDraft,
+  toWeddingDrafts,
+  weddingsError,
+  weddingsPayload,
+} from '../components/PlannerProfileFields';
+import { PlannerWedding } from '../lib/planner-profile';
 import RequiredMark, { RequiredNote } from '../components/ui/RequiredMark';
 import { SocialLinksEditor, SocialLinksList } from '../components/SocialLinks';
 import {
@@ -1438,6 +1449,12 @@ interface PlannerListing {
   isApproved?: boolean;
   portfolio?: string[];
   packages?: PlannerPackage[];
+  services?: string[];
+  specializations?: string[];
+  weddingsCompleted?: number | null;
+  planningApproach?: string | null;
+  introVideoUrl?: string | null;
+  weddings?: PlannerWedding[];
 }
 
 /**
@@ -1469,6 +1486,10 @@ const EMPTY_PLANNER = {
   address: '',
   state: '',
   pincode: '',
+  // Text, not a number, so a blank box means "not said" rather than zero.
+  weddingsCompleted: '',
+  planningApproach: '',
+  introVideoUrl: '',
 };
 
 function PlannerListingForm({ existing }: { existing?: PlannerListing }) {
@@ -1483,6 +1504,10 @@ function PlannerListingForm({ existing }: { existing?: PlannerListing }) {
   const [packages, setPackages] = useState<PlannerPackage[]>([]);
   const [pkgName, setPkgName] = useState('');
   const [pkgPrice, setPkgPrice] = useState('');
+  // The public profile: what the planner offers and the weddings they have run.
+  const [services, setServices] = useState<string[]>([]);
+  const [specializations, setSpecializations] = useState<string[]>([]);
+  const [weddings, setWeddings] = useState<WeddingDraft[]>([]);
   const [msg, setMsg] = useState('');
 
   // A rejected planner is locked out of re-verification (EZ1-I66, EZ1-I72): the
@@ -1515,7 +1540,14 @@ function PlannerListingForm({ existing }: { existing?: PlannerListing }) {
       address: existing.address ?? '',
       state: existing.state ?? '',
       pincode: existing.pincode ?? '',
+      weddingsCompleted:
+        existing.weddingsCompleted == null ? '' : String(existing.weddingsCompleted),
+      planningApproach: existing.planningApproach ?? '',
+      introVideoUrl: existing.introVideoUrl ?? '',
     });
+    setServices(existing.services ?? []);
+    setSpecializations(existing.specializations ?? []);
+    setWeddings(toWeddingDrafts(existing.weddings));
     setSocialLinks(
       Array.isArray(existing.socialLinks) ? existing.socialLinks : listingSocialLinks(existing),
     );
@@ -1529,6 +1561,9 @@ function PlannerListingForm({ existing }: { existing?: PlannerListing }) {
   // fields that are wrong.
   function validate(): Record<string, string> {
     const errors: Record<string, string> = {};
+    // An approved listing saves only its showcase, so only that is checked:
+    // a locked field the planner cannot reach must not block the save.
+    if (approved) return showcaseErrors(errors);
     // Required fields the business cannot go live without (EZ1-I106).
     if (!form.agencyName.trim()) errors.agencyName = 'A business name is required';
     if (!form.city.trim()) errors.city = 'A city is required';
@@ -1549,6 +1584,20 @@ function PlannerListingForm({ existing }: { existing?: PlannerListing }) {
     }
     const links = socialLinkErrors(socialLinks);
     if (links.any) errors.socialLinks = links.list ?? 'Fix the highlighted links.';
+    return showcaseErrors(errors);
+  }
+
+  function showcaseErrors(errors: Record<string, string>): Record<string, string> {
+    const completed = form.weddingsCompleted.trim();
+    if (completed && !/^\d{1,5}$/.test(completed)) {
+      errors.weddingsCompleted = 'Enter a whole number of weddings';
+    }
+    const video = form.introVideoUrl.trim();
+    if (video && !HTTPS_URL.test(video)) {
+      errors.introVideoUrl = 'Paste a YouTube or Vimeo link starting with https://';
+    }
+    const weddingProblem = weddingsError(weddings);
+    if (weddingProblem) errors.weddings = weddingProblem;
     return errors;
   }
 
@@ -1562,7 +1611,26 @@ function PlannerListingForm({ existing }: { existing?: PlannerListing }) {
       setMsg('Fix the highlighted fields before saving.');
       return;
     }
+    // The public profile. Sent whole on every save, blanks as null, so
+    // clearing a field or removing the last wedding reaches the server.
+    // Saved weddings keep their id; new ones go without and get one.
+    const showcase = {
+      services,
+      specializations,
+      weddingsCompleted: form.weddingsCompleted.trim() ? Number(form.weddingsCompleted) : null,
+      planningApproach: form.planningApproach.trim() || null,
+      introVideoUrl: form.introVideoUrl.trim() || null,
+      weddings: weddingsPayload(weddings),
+    };
     try {
+      // An approved listing sends only the showcase (and its saved name, which
+      // the server requires): the locked details are left exactly as they are.
+      if (approved) {
+        await api.put('/wedding-planners/me', { agencyName: existing?.agencyName, ...showcase });
+        setMsg('Saved. Your profile showcase is live for couples now.');
+        qc.invalidateQueries({ queryKey: ['my-listing'] });
+        return;
+      }
       await api.put('/wedding-planners/me', {
         agencyName: form.agencyName.trim(),
         // Blanks are dropped rather than sent as empty strings, which fail the
@@ -1584,6 +1652,7 @@ function PlannerListingForm({ existing }: { existing?: PlannerListing }) {
         // reaches the server.
         portfolio,
         packages: packages.map((p) => ({ name: p.name, price: p.price })),
+        ...showcase,
       });
       /*
        * What actually happens next, which depends on where the listing stands.
@@ -1651,8 +1720,9 @@ function PlannerListingForm({ existing }: { existing?: PlannerListing }) {
       {msg && <p className="rounded-sm bg-brand-light p-2 text-sm text-brand-dark">{msg}</p>}
       {approved && (
         <p className="rounded-sm bg-emerald-50 p-2 text-sm text-emerald-800">
-          This listing is approved and live for couples, so its details are read-only. To change
-          anything, contact Support and an administrator will reopen it for editing.
+          This listing is approved and live for couples, so its business details and prices are
+          read-only. To change those, contact Support and an administrator will reopen it for
+          editing. Your profile showcase below stays editable.
         </p>
       )}
       {/* disabled disables every control inside, so an approved listing cannot be
@@ -1832,9 +1902,69 @@ function PlannerListingForm({ existing }: { existing?: PlannerListing }) {
           </button>
         </div>
       </div>
+      </fieldset>
+
+      {/*
+        The public profile showcase, outside the EZ1-I138 lock.
+
+        What the planner offers, how they work and the weddings they have run
+        are what an approved planner keeps adding to as they take on work; the
+        lock exists for the verified business details and the prices couples
+        compare, which stay read-only above. A rejected planner still cannot
+        save anything.
+      */}
+      <fieldset disabled={rejected} className="space-y-3 border-0 p-0">
+      {approved && (
+        <p className="border-t pt-3 text-sm text-gray-600">
+          Your profile showcase stays editable while you are live: services, wedding types,
+          your approach, introduction video and previous weddings.
+        </p>
+      )}
+      <PlannerServicesPicker value={services} onChange={setServices} />
+      <PlannerSpecializationsPicker value={specializations} onChange={setSpecializations} />
+      <div className="grid gap-3 border-t pt-3 sm:grid-cols-3">
+        <Field label="Weddings completed" error={fieldErrors.weddingsCompleted}>
+          <input
+            className="input"
+            type="number"
+            min={0}
+            max={10000}
+            value={form.weddingsCompleted}
+            onChange={set('weddingsCompleted')}
+          />
+        </Field>
+        <div className="sm:col-span-2">
+          <Field label="Introduction video" error={fieldErrors.introVideoUrl}>
+            <input
+              className="input"
+              type="url"
+              placeholder="https://www.youtube.com/watch?v=..."
+              value={form.introVideoUrl}
+              onChange={set('introVideoUrl')}
+            />
+          </Field>
+          <p className="mt-1 text-xs text-gray-500">
+            A YouTube or Vimeo link to a short film about you and your team.
+          </p>
+        </div>
+      </div>
+      <div>
+        <label className="label">Your planning approach</label>
+        <textarea
+          className="input"
+          rows={3}
+          maxLength={1000}
+          placeholder="How you work with a couple, from the first call to the last guest leaving."
+          value={form.planningApproach}
+          onChange={set('planningApproach')}
+        />
+        <p className="mt-1 text-xs text-gray-500">{form.planningApproach.length}/1000</p>
+      </div>
+
+      <PlannerWeddingsEditor value={weddings} onChange={setWeddings} error={fieldErrors.weddings} />
 
       <button className="btn" disabled={rejected}>
-        Save listing
+        {approved ? 'Save profile showcase' : 'Save listing'}
       </button>
       </fieldset>
     </form>

@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { VerificationModule } from '../verification/verification.module';
 import { PlannerProfile } from './entities/planner-profile.entity';
 import { PlannerReview } from './entities/planner-review.entity';
+import { PlannerFavourite } from './entities/planner-favourite.entity';
 import { WeddingPlannersService } from './wedding-planners.service';
 import { PlannerReviewsService } from './planner-reviews.service';
 import { WeddingPlannersController } from './wedding-planners.controller';
@@ -25,6 +26,7 @@ import { Vendor } from '../vendors/entities/vendor.entity';
     TypeOrmModule.forFeature([
       PlannerProfile,
       PlannerReview,
+      PlannerFavourite,
       Booking,
       User,
       Profile,

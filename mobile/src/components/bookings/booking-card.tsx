@@ -23,6 +23,7 @@ import { money, shortDate } from '@/lib/format';
 import { Badge, DetailGrid, DetailRow, Divider } from '@/components/chrome';
 import { BookingDetail } from '@/components/bookings/detail';
 import { BookingChat } from '@/components/bookings/chat';
+import { RequestedServices } from '@/components/bookings/requested-services';
 import { QuotationForm } from '@/components/bookings/quotation';
 import { PromptSheet } from '@/components/prompt';
 import { Body, Button, Caption, Card } from '@/components/ui';
@@ -237,6 +238,8 @@ export function BookingCard({
           </Caption>
         </View>
       ) : null}
+
+      <RequestedServices services={booking.requestedServices} />
 
       {booking.requirements ? (
         <Sunken>

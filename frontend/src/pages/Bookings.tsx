@@ -18,6 +18,7 @@ import BookingChat from '../components/BookingChat';
 import PaymentMethodPicker from '../components/PaymentMethodPicker';
 import PhotoUploader from '../components/PhotoUploader';
 import ConfirmDialog from '../components/ConfirmDialog';
+import RequestedServices from '../components/RequestedServices';
 import { Loading } from '../components/ui/Feedback';
 import { ReferenceThumbs, RequestEstimate } from '../components/RequestExtras';
 import { estimateSummary } from '../lib/booking-request';
@@ -42,6 +43,8 @@ interface Booking {
   providerId: string;
   providerName?: string;
   requirements?: string | null;
+  /** Planner requests only: the services the couple ticked, as catalogue keys. */
+  requestedServices?: string[];
   expectedBudget?: string | null;
   amount: string;
   currency: string;
@@ -973,6 +976,9 @@ function BookingDetail({
           <BookingProgress status={booking.status} />
         </div>
       </div>
+
+      {/* What the couple asked the planner for, as they ticked it. */}
+      <RequestedServices services={booking.requestedServices} />
 
       {/* Everything that has happened to it, in order (EZ1-I68). */}
       {timeline && timeline.length > 0 && (

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
 import { Permission, can } from '@/shared/permissions';
+import type { PlannerWedding } from '@/shared/planner-profile';
 import type { SocialLink } from '@/shared/social-links';
 
 /**
@@ -41,6 +42,16 @@ export interface PlannerListing {
   instagramUrl: string | null;
   youtubeUrl: string | null;
   portfolio: string[];
+  /**
+   * The public profile. Optional because a server that predates it leaves
+   * them out; the form reads an absent one as empty.
+   */
+  services?: string[];
+  specializations?: string[];
+  weddingsCompleted?: number | null;
+  planningApproach?: string | null;
+  introVideoUrl?: string | null;
+  weddings?: PlannerWedding[];
   ratingAvg: number;
   ratingCount: number;
   isApproved: boolean;

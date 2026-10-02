@@ -56,6 +56,7 @@ export const SOCIAL_PLATFORMS = [
   'pinterest',
   'x',
   'linkedin',
+  'whatsapp',
   'website',
   'other',
 ] as const;
@@ -76,6 +77,7 @@ export const SOCIAL_PLATFORM_RULES: Record<SocialPlatform, { label: string; host
   pinterest: { label: 'Pinterest', hosts: [/^(www\.|[a-z]{2}\.)?pinterest\.com$/i, /^pin\.it$/i] },
   x: { label: 'X', hosts: [/^(www\.)?x\.com$/i, /^(www\.)?twitter\.com$/i] },
   linkedin: { label: 'LinkedIn', hosts: [/^(www\.)?linkedin\.com$/i] },
+  whatsapp: { label: 'WhatsApp', hosts: [/^wa\.me$/i, /^(api\.|www\.)?whatsapp\.com$/i] },
   website: { label: 'website', hosts: null },
   other: { label: 'link', hosts: null },
 };
@@ -88,6 +90,7 @@ const DOMAINS: Record<SocialPlatform, string> = {
   pinterest: 'pinterest.com or pin.it',
   x: 'x.com or twitter.com',
   linkedin: 'linkedin.com',
+  whatsapp: 'wa.me or whatsapp.com',
   website: '',
   other: '',
 };

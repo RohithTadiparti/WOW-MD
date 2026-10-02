@@ -137,6 +137,17 @@ export class PlannerAvailabilityController {
    * availability-first path the vendor flow already offers. Any signed-in user
    * may look; only full and blocked windows are hidden.
    */
+  /**
+   * Each published day as a couple reads it on the profile's calendar:
+   * available, limited, booked or not available. No counts beyond openings
+   * left, and no block reasons; those stay on the owner's `calendar`.
+   */
+  @ApiOperation({ summary: 'Day-by-day availability for the public profile calendar' })
+  @Get('days')
+  days(@Param('id', ParseUUIDPipe) id: string, @Query() q: AvailabilityQueryDto) {
+    return this.availability.publicDays(ProviderType.PLANNER, id, q.from, q.to);
+  }
+
   @ApiOperation({ summary: 'Bookable slots for a buyer checking availability (EZ1-I113)' })
   @Get('bookable')
   bookable(@Param('id', ParseUUIDPipe) id: string, @Query() q: AvailabilityQueryDto) {

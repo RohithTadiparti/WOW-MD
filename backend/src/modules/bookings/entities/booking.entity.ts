@@ -132,6 +132,13 @@ export class Booking {
   referenceImages: string[];
 
   /**
+   * On a planner request: the services the couple ticked on the planner's
+   * profile, as keys of PLANNER_SERVICE_KEYS. Empty on every vendor booking.
+   */
+  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
+  requestedServices: string[];
+
+  /**
    * What the buyer hopes to spend. Optional on purpose — the provider quotes
    * against the requirements, and forcing a number out of someone who does not
    * have one only produces a fictional one.

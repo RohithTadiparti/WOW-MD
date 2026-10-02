@@ -2,9 +2,12 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayUnique,
   IsArray,
+  IsDateString,
   IsEmail,
   IsEnum,
+  IsIn,
   IsInt,
   IsNumber,
   IsOptional,
@@ -15,11 +18,25 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateBy,
   ValidateNested,
+  ValidationOptions,
+  buildMessage,
+  isURL,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { SocialLinksDto } from '../../../common/dto/social-links.dto';
 import { IsUploadedUrl } from '../../../common/decorators/uploaded-url.decorator';
+import { isMediaRef } from '../../../platform/storage/storage-keys';
+import {
+  MAX_PLANNER_WEDDINGS,
+  MAX_WEDDING_EVENTS,
+  MAX_WEDDING_PHOTOS,
+  MAX_WEDDING_VIDEOS,
+  PLANNER_SERVICE_KEYS,
+  PLANNER_SPECIALIZATION_KEYS,
+  VIDEO_HOSTS,
+} from '../planner-catalog';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import {
   MOBILE_MESSAGE,
@@ -48,6 +65,126 @@ export class PlannerPackageDto {
   @IsString({ each: true })
   @MaxLength(120, { each: true })
   includes?: string[];
+}
+
+const blankToNull = ({ value }: { value: unknown }) =>
+  typeof value === 'string' ? value.trim() || null : value;
+
+/**
+ * An uploaded video, or a film on YouTube or Vimeo. Null passes: it clears the
+ * field.
+ *
+ * Shaped like IsUploadedUrl (a storage host may have no TLD), with the
+ * protocol limited to http(s) so a `javascript:` link is never stored. Only a
+ * YouTube or Vimeo address (VIDEO_HOSTS, matched again by the clients) is ever
+ * framed into the page; anything else plays in a plain video element, so
+ * accepting other hosts embeds nobody's page.
+ */
+function IsVideoUrl(options?: ValidationOptions): PropertyDecorator {
+  return ValidateBy(
+    {
+      name: 'isVideoUrl',
+      validator: {
+        validate: (value: unknown) =>
+          value === null ||
+          (typeof value === 'string' &&
+            (isMediaRef(value) ||
+              isURL(value, { protocols: ['https'], require_protocol: true, host_whitelist: VIDEO_HOSTS }) ||
+              isURL(value, { protocols: ['http', 'https'], require_protocol: true, require_tld: false }))),
+        defaultMessage: buildMessage(
+          (each) => `${each}$property must be an uploaded video or a YouTube or Vimeo link`,
+          options,
+        ),
+      },
+    },
+    options,
+  );
+}
+
+export class PlannerWeddingEventDto {
+  @ApiProperty({ example: 'Sangeet', maxLength: 80 })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  name: string;
+
+  @ApiPropertyOptional({ format: 'date' })
+  @IsOptional()
+  @Transform(blankToNull)
+  @IsDateString()
+  date?: string | null;
+
+  @ApiPropertyOptional({ maxLength: 500 })
+  @IsOptional()
+  @Transform(blankToNull)
+  @IsString()
+  @MaxLength(500)
+  description?: string | null;
+}
+
+/** A wedding in the planner's portfolio. Without `id` it is new; the server assigns one. */
+export class PlannerWeddingDto {
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  id?: string;
+
+  @ApiProperty({ example: 'Rahul & Priya', maxLength: 120 })
+  @IsString()
+  @MinLength(2, { message: 'Name each wedding, for example the couple' })
+  @MaxLength(120)
+  title: string;
+
+  @ApiPropertyOptional({ maxLength: 120 })
+  @IsOptional()
+  @Transform(blankToNull)
+  @IsString()
+  @MaxLength(120)
+  location?: string | null;
+
+  @ApiPropertyOptional({ format: 'date' })
+  @IsOptional()
+  @Transform(blankToNull)
+  @IsDateString()
+  date?: string | null;
+
+  @ApiPropertyOptional({ maxLength: 2000 })
+  @IsOptional()
+  @Transform(blankToNull)
+  @IsString()
+  @MaxLength(2000)
+  description?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(blankToNull)
+  @IsUploadedUrl()
+  @MaxLength(2048)
+  coverUrl?: string | null;
+
+  @ApiPropertyOptional({ type: [String], maxItems: MAX_WEDDING_PHOTOS })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_WEDDING_PHOTOS)
+  @IsUploadedUrl({ each: true })
+  @MaxLength(2048, { each: true })
+  photos?: string[];
+
+  @ApiPropertyOptional({ type: [String], maxItems: MAX_WEDDING_VIDEOS })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_WEDDING_VIDEOS)
+  @IsVideoUrl({ each: true })
+  @MaxLength(2048, { each: true })
+  videos?: string[];
+
+  @ApiPropertyOptional({ type: () => [PlannerWeddingEventDto], maxItems: MAX_WEDDING_EVENTS })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_WEDDING_EVENTS)
+  @ValidateNested({ each: true })
+  @Type(() => PlannerWeddingEventDto)
+  events?: PlannerWeddingEventDto[];
 }
 
 export class UpsertPlannerProfileDto extends SocialLinksDto {
@@ -136,6 +273,52 @@ export class UpsertPlannerProfileDto extends SocialLinksDto {
   @IsUploadedUrl({ each: true })
   @MaxLength(2048, { each: true })
   portfolio?: string[];
+
+  @ApiPropertyOptional({ type: [String], enum: PLANNER_SERVICE_KEYS })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(PLANNER_SERVICE_KEYS.length)
+  @ArrayUnique()
+  @IsIn(PLANNER_SERVICE_KEYS, { each: true, message: 'Choose services from the list' })
+  services?: string[];
+
+  @ApiPropertyOptional({ type: [String], enum: PLANNER_SPECIALIZATION_KEYS })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(PLANNER_SPECIALIZATION_KEYS.length)
+  @ArrayUnique()
+  @IsIn(PLANNER_SPECIALIZATION_KEYS, { each: true, message: 'Choose specializations from the list' })
+  specializations?: string[];
+
+  @ApiPropertyOptional({ description: 'An uploaded video, or a YouTube or Vimeo link. Blank clears it.' })
+  @IsOptional()
+  @Transform(blankToNull)
+  @IsVideoUrl()
+  @MaxLength(2048)
+  introVideoUrl?: string | null;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 10000 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10_000)
+  weddingsCompleted?: number | null;
+
+  @ApiPropertyOptional({ maxLength: 1000 })
+  @IsOptional()
+  @Transform(blankToNull)
+  @IsString()
+  @MaxLength(1000)
+  planningApproach?: string | null;
+
+  @ApiPropertyOptional({ type: () => [PlannerWeddingDto], maxItems: MAX_PLANNER_WEDDINGS })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_PLANNER_WEDDINGS)
+  @ValidateNested({ each: true })
+  @Type(() => PlannerWeddingDto)
+  weddings?: PlannerWeddingDto[];
 }
 
 export class PlannerSearchDto extends PaginationDto {

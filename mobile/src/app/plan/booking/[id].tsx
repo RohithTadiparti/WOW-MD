@@ -9,6 +9,7 @@ import { shortDate, money } from '@/lib/format';
 import { categoryLabel } from '@/lib/wedding-plan';
 import { BuyerMoneyPanel } from '@/components/bookings/buyer-money';
 import { BookingChat } from '@/components/bookings/chat';
+import { RequestedServices } from '@/components/bookings/requested-services';
 import { BuyerBooking, BUYER_STATUS_LABEL } from '../bookings';
 import {
   Alert,
@@ -184,6 +185,7 @@ export default function BookingDetails() {
         <InfoRow label="Guests (Expected)" value={row.guests?.toString() || '-'} icon={<CheckCircle size={16} color={rgb(theme.brand)} />} />
         <InfoRow label="Location" value={row.city || row.venue || '-'} icon={<MapPin size={16} color={rgb(theme.brand)} />} />
         <InfoRow label="Special Requests" value={row.specialRequests || '-'} icon={<CheckCircle size={16} color={rgb(theme.brand)} />} />
+        <RequestedServices services={row.requestedServices} />
       </Card>
 
       <Card style={{ marginBottom: space(4), gap: space(3) }}>

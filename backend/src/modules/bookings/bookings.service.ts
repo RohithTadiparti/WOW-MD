@@ -508,6 +508,12 @@ export class BookingsService {
       throw new BadRequestException('Choose a service before answering its questions');
     }
 
+    // Services ticked on a planner's profile mean nothing to a vendor, whose
+    // request names its service through the catalog instead.
+    if (dto.requestedServices?.length && dto.providerType !== ProviderType.PLANNER) {
+      throw new BadRequestException('Services can only be chosen on a planner request');
+    }
+
     // Venue, catering and florist cannot quote without a brief; everybody else
     // quotes from the price the buyer picked (booking-request-rules.ts).
     if (briefRequired && !dto.requirements?.trim()) {
@@ -536,6 +542,7 @@ export class BookingsService {
           quantity: dto.quantity ?? null,
           estimatedAmount: estimatedAmount !== null ? estimatedAmount.toFixed(2) : null,
           referenceImages: dto.referenceImages ?? [],
+          requestedServices: dto.requestedServices ?? [],
           expectedBudget: dto.expectedBudget !== undefined ? dto.expectedBudget.toFixed(2) : null,
           notes: dto.notes,
           status: BookingStatus.REQUESTED,

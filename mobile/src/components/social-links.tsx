@@ -8,6 +8,7 @@ import {
   Link as LinkIcon,
   LinkedinLogo,
   PinterestLogo,
+  WhatsappLogo,
   XLogo,
   YoutubeLogo,
 } from 'phosphor-react-native';
@@ -42,6 +43,7 @@ const ICONS: Record<SocialPlatform, typeof Globe> = {
   pinterest: PinterestLogo,
   x: XLogo,
   linkedin: LinkedinLogo,
+  whatsapp: WhatsappLogo,
   website: Globe,
   other: LinkIcon,
 };

@@ -420,6 +420,47 @@ export class AvailabilityService {
     );
   }
 
+  /**
+   * One word per day for a buyer's calendar: available, limited, booked or
+   * not available.
+   *
+   * The public counterpart of `calendar`, which is the owner's and carries
+   * counts and block reasons a buyer has no business reading. This says only
+   * what a couple choosing a date needs: whether the day can be had, and how
+   * many openings are left on it. A day with nothing published is left out,
+   * not reported as unavailable, because the provider may still take it.
+   *
+   * "Limited" is a day that is still open but already partly taken (a window
+   * with a confirmed booking, or a held request), so the couple knows not to
+   * leave it long.
+   */
+  async publicDays(
+    providerType: ProviderType,
+    providerId: string,
+    from?: string,
+    to?: string,
+  ): Promise<{ date: string; status: 'available' | 'limited' | 'booked' | 'unavailable'; openings: number }[]> {
+    const byDate = new Map<string, SlotView[]>();
+    for (const slot of await this.rows(providerType, providerId, from, to)) {
+      const view = this.view(slot);
+      if (view.state === 'cancelled') continue;
+      byDate.set(view.date, [...(byDate.get(view.date) ?? []), view]);
+    }
+    return [...byDate.entries()].map(([date, views]) => {
+      const open = views.filter((v) => v.bookable);
+      const openings = open.reduce((n, v) => n + v.remaining, 0);
+      const status =
+        open.length > 0
+          ? views.some((v) => v.confirmed > 0 || v.pending > 0 || !v.bookable)
+            ? 'limited'
+            : 'available'
+          : views.every((v) => v.state === 'blocked')
+            ? 'unavailable'
+            : 'booked';
+      return { date, status, openings };
+    });
+  }
+
   async summary(
     actor: AuthUser,
     providerType: ProviderType,
