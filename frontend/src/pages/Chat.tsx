@@ -39,6 +39,7 @@ interface Conversation {
   profileId: string | null;
   profileCode: string | null;
   ageRange: string | null;
+  age?: number | null;
   city: string | null;
   lastActiveAt: string | null;
   /** Why these two are talking: the accepted interest, and how it scored. */
@@ -283,7 +284,7 @@ export default function Chat() {
                   tell them apart without thinking about it.
                 */}
                 <span className="block truncate text-[11px] text-gray-400">
-                  {[c.profileCode, c.ageRange ? `${c.ageRange} yrs` : null, c.city]
+                  {[c.profileCode, c.age ? `${c.age} yrs` : c.ageRange ? `${c.ageRange} yrs` : null, c.city]
                     .filter(Boolean)
                     .join(' \u00b7 ')}
                 </span>
@@ -386,7 +387,11 @@ export default function Chat() {
                     <p className="truncate text-xs text-gray-500">
                       {[
                         active?.profileCode,
-                        active?.ageRange ? `${active.ageRange} yrs` : null,
+                        active?.age
+                          ? `${active.age} yrs`
+                          : active?.ageRange
+                            ? `${active.ageRange} yrs`
+                            : null,
                         active?.city,
                       ]
                         .filter(Boolean)

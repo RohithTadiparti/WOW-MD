@@ -6,6 +6,7 @@ export interface Biodata {
   displayName: string;
   gender?: string;
   ageRange: string | null;
+  age?: number | null;
   dateOfBirth: string | null;
   city?: string;
   bio?: string;
@@ -54,7 +55,7 @@ export default function BiodataCard({
   profile: Biodata;
   print?: boolean;
 }) {
-  const years = age(profile.dateOfBirth);
+  const years = age(profile.dateOfBirth) ?? profile.age ?? null;
   // Which photo is open full size, if any (EZ1-I23). Only interactive off the
   // printed sheet — a print has no click.
   const [preview, setPreview] = useState<string | null>(null);

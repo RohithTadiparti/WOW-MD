@@ -5,7 +5,7 @@ import { ProfileDetailsController } from './profile-details.controller';
 import { Profile } from '../users/entities/profile.entity';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { InterestStatus, MatchFixedState, ProfileLifecycle, ProfileVisibility, UserRole } from '../../common/enums';
-import { toBiodata, toCardFacts, toPublicProfile } from '../users/dto/public-profile.dto';
+import { ageOf, toBiodata, toCardFacts, toPublicProfile } from '../users/dto/public-profile.dto';
 
 const states = ['none', 'sent', 'accepted', 'proposed', 'fixed', 'rejected', 'withdrawn'] as const;
 const basic = {
@@ -71,6 +71,9 @@ describe.each(Object.values(ProfileVisibility))('profile visibility %s', visibil
         expect(response.limited).toBe(!full);
         expect(response.profile.displayName).toBe('Chakri');
         expect(response.profile.ageRange).toBeTruthy();
+        // The exact age on every view, limited or full; the date of birth only on full.
+        expect(response.profile.age).toBe(ageOf('1996-04-02'));
+        expect(response.profile.age).toBeGreaterThanOrEqual(18);
         expect(response.details).toMatchObject({ religion: 'Hindu', motherTongue: 'Telugu',
           highestQualification: 'B.Tech', occupationStatus: 'employed' });
         const json = JSON.stringify(response);
@@ -95,6 +98,7 @@ describe.each(Object.values(ProfileVisibility))('profile visibility %s', visibil
       const card = toPublicProfile(target, { accepted, fixed, card: toCardFacts(details as never) });
       expect(card.accessLevel).toBe(full ? 'full' : 'basic');
       expect(card.ageRange).toBeTruthy();
+      expect(card.age).toBe(ageOf('1996-04-02'));
       expect(card.card?.motherTongue).toBe('Telugu');
       expect(card.card?.profession).toBe('Engineer');
       // Before a match the card carries the lead photo, except for PRIVATE.
@@ -111,6 +115,8 @@ describe.each(Object.values(ProfileVisibility))('profile visibility %s', visibil
     const view = toBiodata({ id: 'a', displayName: 'Chakri', visibility,
       dateOfBirth: '1996-04-02', photos: ['photo'] } as Profile, basic);
     expect(view.ageRange).toBeTruthy();
+    expect(view.age).toBe(ageOf('1996-04-02'));
+    expect(view.dateOfBirth).toBe(visibility === ProfileVisibility.PUBLIC ? '1996-04-02' : null);
     expect(view.basic?.motherTongue).toBe('Telugu');
     expect(view.photos).toEqual(visibility === ProfileVisibility.PUBLIC ? ['photo'] : []);
   });

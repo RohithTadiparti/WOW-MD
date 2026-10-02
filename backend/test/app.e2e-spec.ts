@@ -458,7 +458,7 @@ describe('WOW API (e2e)', () => {
         .expect(403);
     });
 
-    it('requires a mobile number and a consent record, but not an email', async () => {
+    it('requires a consent record, but neither a mobile number nor an email at intake', async () => {
       await http()
         .put('/api/agents/agency')
         .set('Authorization', `Bearer ${agentToken}`)
@@ -475,7 +475,10 @@ describe('WOW API (e2e)', () => {
           displayName: 'No phone',
           consent: consent(),
         })
-        .expect(400);
+        // Contact details are optional at intake (they are needed only to send
+        // an invitation), so this passes validation and reaches the vetting
+        // check instead: this agency is still unvetted.
+        .expect(403);
 
       await http()
         .post('/api/agents/profiles')

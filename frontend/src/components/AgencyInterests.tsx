@@ -29,6 +29,7 @@ interface PartyView {
   displayName: string;
   gender: string | null;
   ageRange: string | null;
+  age?: number | null;
   city: string | null;
   photos?: string[];
   profileCode?: string | null;
@@ -367,7 +368,7 @@ function Party({
   label: string;
   onView: () => void;
 }) {
-  const facts = [party.ageRange, party.gender, party.city].filter(Boolean).join(' · ');
+  const facts = [party.age ? `${party.age} yrs` : party.ageRange, party.gender, party.city].filter(Boolean).join(' · ');
   return (
     <div className="flex min-w-0 flex-1 items-center gap-2">
       <PersonPhoto

@@ -41,12 +41,14 @@ import { useMatchmakingGate } from "@/lib/matchmaking";
 import { useAuth } from "@/store/auth";
 import { rgb, space, useTheme, radius } from "@/theme";
 import { Txt, typeface } from "@/theme/fonts";
+import { ageText } from "@/lib/labels";
 
 interface Profile {
   id: string;
   displayName: string;
   gender?: string | null;
   ageRange: string | null;
+  age?: number | null;
   city?: string | null;
   photos: string[];
   profileCode: string;
@@ -447,7 +449,7 @@ function MatchCard({
   const { width } = useWindowDimensions();
   const { profile, score } = suggestion;
   const cardWidth = (width - space(8) - space(2)) / 2;
-  const facts = [profile.ageRange, profile.city].filter(Boolean).join(" • ");
+  const facts = [ageText(profile.age, profile.ageRange), profile.city].filter(Boolean).join(" • ");
   return (
     <Pressable
       accessibilityLabel={`View ${profile.displayName}`}

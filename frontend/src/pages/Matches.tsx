@@ -954,7 +954,10 @@ export default function Matches() {
                     </button>
                     <p className="font-mono text-xs text-gray-400">{m.counterpart.profileCode}</p>
                     <p className="text-sm text-gray-500">
-                      {[m.counterpart.city, m.counterpart.ageRange].filter(Boolean).join(' · ')}
+                      {[
+                        m.counterpart.city,
+                        m.counterpart.age ? `${m.counterpart.age} yrs` : m.counterpart.ageRange,
+                      ].filter(Boolean).join(' · ')}
                     </p>
                     {/* Who runs the profile, on the confirmed-match card (EZ1-I115). */}
                     {m.managedBy && (

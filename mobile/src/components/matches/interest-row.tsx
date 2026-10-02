@@ -2,7 +2,7 @@ import { Pressable, View } from 'react-native';
 import { Image } from 'expo-image';
 import { SealCheck } from 'phosphor-react-native';
 
-import { GENDER_LABEL, labelFor } from '@/lib/labels';
+import { GENDER_LABEL, ageText, labelFor } from '@/lib/labels';
 import { formatDate } from '@/shared/dates';
 import { Badge, type Tone } from '@/components/chrome';
 import { Button, Caption, Card, SectionTitle } from '@/components/ui';
@@ -27,6 +27,7 @@ export interface Interest {
     displayName: string;
     city: string | null;
     ageRange: string | null;
+    age?: number | null;
     gender: string | null;
     photos?: string[];
     photoUrl?: string | null;
@@ -107,7 +108,7 @@ export function InterestRow({
   const { counterpart: them, actions } = interest;
   const status = statusOf(interest);
   const photo = them.photos?.[0] ?? them.photoUrl ?? null;
-  const facts = [them.ageRange, them.city, labelFor(GENDER_LABEL, them.gender)]
+  const facts = [ageText(them.age, them.ageRange), them.city, labelFor(GENDER_LABEL, them.gender)]
     .filter(Boolean)
     .join(' · ');
 
