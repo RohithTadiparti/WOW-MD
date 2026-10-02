@@ -131,10 +131,148 @@ function Masthead({ title, children }: { title: string; children: ReactNode }) {
 }
 
 export function AdminAgents() {
+  return <RoleDirectory role="agent" title="Agents" noun="agents" detailBase="/admin/agents" description="Agencies acting for families, and where each stands on approval." />;
+}
+
+/**
+ * The provider-account counterpart to the vendor business directory. Agents
+ * and planners do not have a one-to-many business record to list, so their
+ * source of truth is the account directory itself. Keeping this specialised
+ * presentation here means all four operational directories answer the same
+ * questions: how many, what state, can I find one, and where do I open it.
+ */
+interface RoleDirectoryRow {
+  id: string;
+  email: string;
+  isActive: boolean;
+  isVerified: boolean;
+  createdAt: string;
+}
+
+const ROLE_DIRECTORY_PAGE_SIZE = 25;
+
+function RoleDirectory({
+  role,
+  title,
+  noun,
+  detailBase,
+  description,
+}: {
+  role: 'agent' | 'planner';
+  title: string;
+  noun: string;
+  detailBase: string;
+  description: string;
+}) {
+  const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const filter = params.get('status') ?? 'all';
+  const search = params.get('q') ?? '';
+  const page = Math.max(1, Number(params.get('page')) || 1);
+  const active = filter === 'active' ? 'true' : filter === 'suspended' ? 'false' : undefined;
+
+  const change = (updates: Record<string, string | undefined>) => {
+    const next = new URLSearchParams(params);
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    });
+    next.delete('page');
+    setParams(next, { replace: true });
+  };
+  const setPage = (value: number) => {
+    const next = new URLSearchParams(params);
+    if (value > 1) next.set('page', String(value));
+    else next.delete('page');
+    setParams(next, { replace: true });
+  };
+
+  const { data, isLoading, isError } = useQuery<{
+    data: RoleDirectoryRow[];
+    meta: { total: number; totalPages: number };
+  }>({
+    queryKey: ['admin-role-directory', role, filter, search, page],
+    queryFn: async () =>
+      (await api.get('/admin/directory', {
+        params: { role, limit: ROLE_DIRECTORY_PAGE_SIZE, page, q: search || undefined, active },
+      })).data,
+    refetchInterval: 60000,
+  });
+  const all = useQuery<{ meta: { total: number } }>({
+    queryKey: ['admin-role-directory-count', role, 'all'],
+    queryFn: async () => (await api.get('/admin/directory', { params: { role, limit: 1 } })).data,
+    refetchInterval: 60000,
+  });
+  const enabled = useQuery<{ meta: { total: number } }>({
+    queryKey: ['admin-role-directory-count', role, 'active'],
+    queryFn: async () => (await api.get('/admin/directory', { params: { role, active: 'true', limit: 1 } })).data,
+    refetchInterval: 60000,
+  });
+  const suspended = useQuery<{ meta: { total: number } }>({
+    queryKey: ['admin-role-directory-count', role, 'suspended'],
+    queryFn: async () => (await api.get('/admin/directory', { params: { role, active: 'false', limit: 1 } })).data,
+    refetchInterval: 60000,
+  });
+  const counts = { all: all.data?.meta.total ?? 0, active: enabled.data?.meta.total ?? 0, suspended: suspended.data?.meta.total ?? 0 };
+  const cards = [
+    { key: 'all', label: `All ${title}`, value: counts.all, tone: 'bg-brand-soft text-brand-strong' },
+    { key: 'active', label: 'Active', value: counts.active, tone: 'bg-positive-bg text-positive-fg' },
+    { key: 'suspended', label: 'Suspended', value: counts.suspended, tone: 'bg-critical-bg text-critical-fg' },
+  ];
+  const loadingCounts = all.isLoading || enabled.isLoading || suspended.isLoading;
+  const rows = data?.data ?? [];
+  const totalPages = data?.meta.totalPages ?? 1;
+
   return (
-    <div className="space-y-4">
-      <Masthead title="Agents">Agencies acting for families, and where each stands on approval.</Masthead>
-      <Directory title="Agent accounts" initialRole="agent" roles={['agent']} detailBase="/admin/agents" />
+    <div className="space-y-5">
+      <Masthead title={title}>{description}</Masthead>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        {cards.map((card) => (
+          <button key={card.key} type="button" onClick={() => change({ status: card.key === 'all' ? undefined : card.key })}
+            className={`card text-left transition-shadow hover:shadow-pop focus-visible:ring-2 focus-visible:ring-brand ${filter === card.key ? 'ring-2 ring-brand' : ''}`}>
+            <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${card.tone}`}>{card.label}</span>
+            <span className="mt-3 block text-2xl font-semibold tabular-nums text-gray-900">{loadingCounts ? 'â€”' : card.value}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="card overflow-hidden p-0">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 p-4">
+          <div>
+            <h2 className="section-title">{title} accounts</h2>
+            <p className="text-xs text-gray-500">{data?.meta.total ?? 0} {noun} from the backend</p>
+          </div>
+          <input className="input w-full sm:w-80" placeholder="Search by email" value={search}
+            onChange={(event) => change({ q: event.target.value || undefined })} aria-label={`Search ${noun} by email`} />
+        </div>
+        {isLoading ? <Loading rows={5} /> : isError ? (
+          <p className="p-6 text-sm text-critical-fg">The {noun} directory could not be loaded. Try again.</p>
+        ) : rows.length === 0 ? (
+          <EmptyState title={`No ${noun} match`}><span>Try a different status or email search.</span></EmptyState>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500"><tr>
+                <th className="px-4 py-3">Name / Email</th><th className="px-4 py-3">Account Status</th><th className="px-4 py-3">Identity</th><th className="px-4 py-3">Joined Date</th>
+              </tr></thead>
+              <tbody className="divide-y divide-gray-100">
+                {rows.map((account) => <tr key={account.id} onClick={() => navigate(`${detailBase}/${account.id}`)} className="cursor-pointer transition-colors hover:bg-brand-soft/30 focus-within:bg-brand-soft/30">
+                  <td className="px-4 py-3"><Link className="block font-medium text-gray-900 hover:text-brand-strong focus-visible:underline" to={`${detailBase}/${account.id}`}>{account.email}</Link><span className="block font-mono text-[11px] text-gray-400">#{account.id.slice(0, 8)}</span></td>
+                  <td className="px-4 py-3"><StatusPill active={account.isActive} /></td>
+                  <td className="px-4 py-3"><span className={`pill ${account.isVerified ? 'bg-positive-bg text-positive-fg' : 'bg-caution-bg text-caution-fg'}`}>{account.isVerified ? 'Verified' : 'Not verified'}</span></td>
+                  <td className="px-4 py-3 text-gray-600">{new Date(account.createdAt).toLocaleDateString()}</td>
+                </tr>)}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {totalPages > 1 && <div className="flex items-center justify-between gap-3 border-t border-gray-100 p-3 text-sm">
+          <button type="button" className="btn-outline" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</button>
+          <span className="text-gray-500">Page {page} of {totalPages}</span>
+          <button type="button" className="btn-outline" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>Next</button>
+        </div>}
+      </div>
     </div>
   );
 }
@@ -359,17 +497,7 @@ function useVendorCounts() {
 }
 
 export function AdminPlanners() {
-  return (
-    <div className="space-y-4">
-      <Masthead title="Wedding Planners">Planners who run weddings end to end for the families here.</Masthead>
-      <Directory
-        title="Planner accounts"
-        initialRole="planner"
-        roles={['planner']}
-        detailBase="/admin/planners"
-      />
-    </div>
-  );
+  return <RoleDirectory role="planner" title="Wedding Planners" noun="planners" detailBase="/admin/planners" description="Planners who run weddings end to end for the families here." />;
 }
 
 /**
@@ -747,6 +875,7 @@ export function AdminOfficers() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [filter, setFilter] = useState<OfficerFilter>('all');
+  const [search, setSearch] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState('');
 
@@ -757,7 +886,12 @@ export function AdminOfficers() {
 
   const officers = data ?? [];
   const count = (f: OfficerFilter) => officers.filter((o) => officerMatches(o, f)).length;
-  const shown = officers.filter((o) => officerMatches(o, filter));
+  const shown = officers.filter((o) =>
+    officerMatches(o, filter) &&
+    [o.name, o.email, o.id, ...o.serviceAreas.map((area) => area.label)]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(search.trim().toLowerCase())),
+  );
 
   async function setActive(id: string, active: boolean) {
     if (!window.confirm(active ? 'Reinstate this officer?' : 'Suspend this officer?')) return;
@@ -813,6 +947,16 @@ export function AdminOfficers() {
           );
         })}
       </div>
+
+      <label className="block sm:max-w-sm">
+        <span className="sr-only">Search verification officers</span>
+        <input
+          className="input w-full"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search name, email, ID or coverage"
+        />
+      </label>
 
       <div className="card overflow-x-auto p-0">
         {isLoading && <Loading rows={5} className="p-5" />}
