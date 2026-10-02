@@ -1,4 +1,3 @@
-import { useEffect, useRef } from 'react';
 import { FlatList, Pressable, RefreshControl, View, Text } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -84,7 +83,6 @@ export default function Notifications() {
   const theme = useTheme();
   const qc = useQueryClient();
   const router = useRouter();
-  const acknowledgedOnEntry = useRef(false);
   const permissions = useAuth(selectPermissions);
 
   const canReadIncoming = can(permissions, Permission.BOOKING_READ_INCOMING);
@@ -117,14 +115,6 @@ export default function Notifications() {
 
   const items = data ?? [];
 
-  // Opening the notification centre acknowledges the pending alerts. They
-  // remain available as read history, while the bell badge immediately stops
-  // reporting alerts the person has already checked.
-  useEffect(() => {
-    if (acknowledgedOnEntry.current || items.length === 0) return;
-    acknowledgedOnEntry.current = true;
-    if (items.some((item) => !item.isRead)) markAll.mutate();
-  }, [items, markAll]);
 
   const header = (
     <View style={{ gap: space(4), paddingHorizontal: space(4), paddingTop: space(6), paddingBottom: space(4) }}>

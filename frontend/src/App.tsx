@@ -5,7 +5,7 @@ import { useAuth } from './store/auth';
 import { api, bootstrapSession } from './lib/api';
 import { Permission, PermissionValue, ROLE_LABEL, UserRole, canAny } from './lib/permissions';
 import { navDenied } from './lib/nav-access';
-import { UNREAD_POLL_MS } from './lib/notification-copy';
+import { describe, type Notification, UNREAD_POLL_MS } from './lib/notification-copy';
 import type { Icon } from '@phosphor-icons/react';
 import {
   AddressBook,
@@ -442,6 +442,34 @@ function useUnreadCount(): number {
   return data?.unread ?? 0;
 }
 
+/** A lightweight preview: the bell is a toggle, not a navigation-only icon. */
+function NotificationPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { data = [], isLoading } = useQuery<Notification[]>({
+    queryKey: ['notifications'],
+    queryFn: async () => (await api.get('/notifications')).data,
+    enabled: open,
+    retry: false,
+  });
+  if (!open) return null;
+  const latest = data.slice(0, 5);
+  return (
+    <div role="dialog" aria-label="Notifications" className="absolute right-0 top-11 z-30 w-[min(24rem,calc(100vw-2rem))] overflow-hidden border border-brand/15 bg-surface shadow-xl shadow-brand/10">
+      <div className="flex items-center justify-between border-b border-brand/10 px-4 py-3">
+        <p className="section-title">Notifications</p>
+        <Link to="/notifications" onClick={onClose} className="text-xs font-semibold text-brand hover:underline">View all</Link>
+      </div>
+      <div className="max-h-[min(28rem,calc(100dvh-6rem))] overflow-y-auto">
+        {isLoading ? <p className="px-4 py-5 text-sm text-gray-500">Loading notificationsâ€¦</p> : latest.length === 0 ? <p className="px-4 py-5 text-sm text-gray-500">You are all caught up.</p> : latest.map((notification) => (
+          <Link key={notification.id} to="/notifications" onClick={onClose} className={`block border-b border-brand/10 px-4 py-3 last:border-b-0 hover:bg-surface-sunken ${notification.isRead ? '' : 'bg-brand-light/25'}`}>
+            <p className="text-sm font-medium text-gray-900">{describe(notification) || 'There is an update on your account.'}</p>
+            <p className="mt-1 text-xs text-gray-500">{new Date(notification.createdAt).toLocaleString()}</p>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function useNavigationCounts(): Record<string, number> {
   const { data } = useQuery({
     queryKey: ['navigation-counts'],
@@ -590,6 +618,7 @@ function Layout({ children }: { children: ReactNode }) {
   const nav = useNavigate();
   const loc = useLocation();
   const [drawer, setDrawer] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const reduce = useReducedMotion();
 
   const { data: profile } = useQuery({
@@ -669,7 +698,7 @@ function Layout({ children }: { children: ReactNode }) {
 
   // The drawer closes on navigation. Leaving it open over the page somebody
   // just asked for is the most common way a mobile menu goes wrong.
-  useEffect(() => setDrawer(false), [loc.pathname]);
+  useEffect(() => { setDrawer(false); setNotificationsOpen(false); }, [loc.pathname]);
 
   return (
     <div className="portal-shell min-h-[100dvh]" data-portal={portal}>
@@ -710,10 +739,13 @@ function Layout({ children }: { children: ReactNode }) {
             <div className="flex items-center gap-2">
               {/* Only rendered for an account that holds more than one business. */}
               {canAny(permissions, [Permission.VENDOR_LISTING_MANAGE]) && <BusinessSwitcher />}
-              <Link
-                to="/notifications"
+              <div className="relative">
+              <button
                 aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
                 className="relative grid h-9 w-9 place-items-center rounded-md text-gray-600 transition-colors hover:bg-gray-100 hover:text-brand"
+                aria-expanded={notificationsOpen}
+                aria-haspopup="dialog"
+                onClick={() => setNotificationsOpen((open) => !open)}
               >
                 <Bell size={20} weight={unread > 0 ? 'fill' : 'regular'} aria-hidden />
                 {unread > 0 && (
@@ -721,7 +753,9 @@ function Layout({ children }: { children: ReactNode }) {
                     {unread > 99 ? '99+' : unread}
                   </span>
                 )}
-              </Link>
+              </button>
+              <NotificationPanel open={notificationsOpen} onClose={() => setNotificationsOpen(false)} />
+              </div>
               <AccountMenu email={user?.email} displayName={accountDisplayName} role={user?.role} onSignOut={signOut} />
             </div>
           </header>
