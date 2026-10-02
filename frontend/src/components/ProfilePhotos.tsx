@@ -146,6 +146,7 @@ export default function ProfilePhotos({
         ) : (
           <PhotoUploader
             label={photos.length === 0 ? 'Add a photograph' : 'Add another'}
+            purpose="profile_photo"
             onUploaded={(url) =>
               run(() => api.post(`/profiles/${profileId}/details/photos`, { url }))
             }

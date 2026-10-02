@@ -3,7 +3,7 @@ import { View, ScrollView, Alert as NativeAlert, Pressable } from 'react-native'
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
-import { api } from '@/lib/api';
+import { api, apiMessage } from '@/lib/api';
 import {
   PersonalForm,
   MaritalHistoryForm,
@@ -255,7 +255,9 @@ export default function BiodataWizard() {
           onPhotoAdded={(url) => {
             void api.post(`/profiles/${profileId}/details/photos`, { url }).then(refresh).catch((err) => {
               console.error('Failed to add photo:', err);
-              NativeAlert.alert('Upload Failed', 'Your photo could not be uploaded. Please try again.');
+              // The server's own words: an AI-generated photo is refused with
+              // what to upload instead, which a generic "try again" would hide.
+              NativeAlert.alert('Photo not added', apiMessage(err, 'Your photo could not be uploaded. Please try again.'));
             });
           }}
           onPhotoRemoved={(url) => {

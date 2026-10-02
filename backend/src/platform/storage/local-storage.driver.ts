@@ -69,6 +69,19 @@ export class LocalStorageDriver implements StorageDriver {
     await fs.rm(resolveLocalPath(this.s.mockStorageDir, key), { force: true });
   }
 
+  async readStart(key: string, maxBytes: number): Promise<Buffer | null> {
+    const path = resolveLocalPath(this.s.mockStorageDir, key);
+    if (!existsSync(path)) return null;
+    const file = await fs.open(path, 'r');
+    try {
+      const buf = Buffer.alloc(maxBytes);
+      const { bytesRead } = await file.read(buf, 0, maxBytes, 0);
+      return buf.subarray(0, bytesRead);
+    } finally {
+      await file.close();
+    }
+  }
+
   /**
    * Where the local store is reached, for the device that asked.
    *

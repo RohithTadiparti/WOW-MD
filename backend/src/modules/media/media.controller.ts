@@ -199,7 +199,7 @@ export class MediaController {
   @Post('complete')
   @RawMediaRefs()
   complete(@CurrentUser() actor: AuthUser, @Body() dto: CompleteUploadDto, @Req() req: Request) {
-    return this.media.completeUpload(actor, dto.key, requestOrigin(req));
+    return this.media.completeUpload(actor, dto.key, requestOrigin(req), dto.purpose);
   }
 
   @ApiBearerAuth()

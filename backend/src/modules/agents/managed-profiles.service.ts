@@ -180,6 +180,14 @@ export class ManagedProfilesService {
 
     await this.assertNotDuplicate(actor, dto.contactPhone, dto.contactEmail);
 
+    // Photographs handed over at intake are attached here rather than through
+    // addPhoto, so they get addPhoto's check here: before the transaction, so
+    // a refused photograph leaves no half-created profile behind.
+    await this.moderation.assertGenuinePhotos(dto.photos, [], {
+      userId: actor.userId,
+      kind: 'managed_profile',
+    });
+
     const { inviteNow, consent, biodata, biodataDocumentUrl, ...fields } = dto;
     // Resolved before anything is written: a value the agent confirmed that
     // matches none of the choices is refused, never silently dropped.
@@ -471,6 +479,13 @@ export class ManagedProfilesService {
         profile.id,
       );
     }
+
+    // A full photo list in an edit is another way to attach one; only the
+    // photographs this profile does not already have are checked.
+    await this.moderation.assertGenuinePhotos(fields.photos, profile.photos, {
+      userId: actor.userId,
+      kind: 'managed_profile',
+    });
 
     Object.assign(profile, fields);
     profile.profileCompleted = this.isComplete(profile);

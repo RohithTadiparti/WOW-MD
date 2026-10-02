@@ -195,4 +195,20 @@ export class S3StorageDriver implements StorageDriver {
   async delete(key: string): Promise<void> {
     await this.client.send(new DeleteObjectCommand({ Bucket: this.s.s3Bucket, Key: key }));
   }
+
+  /** A ranged GET, so a large object costs only the bytes asked for. */
+  async readStart(key: string, maxBytes: number): Promise<Buffer | null> {
+    try {
+      const out = await this.client.send(
+        new GetObjectCommand({ Bucket: this.s.s3Bucket, Key: key, Range: `bytes=0-${maxBytes - 1}` }),
+      );
+      if (!out.Body) return null;
+      const bytes = await (out.Body as { transformToByteArray(): Promise<Uint8Array> }).transformToByteArray();
+      return Buffer.from(bytes.buffer, bytes.byteOffset, Math.min(bytes.byteLength, maxBytes));
+    } catch (err) {
+      const status = (err as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
+      if (status === 404 || (err as Error).name === 'NoSuchKey') return null;
+      throw err;
+    }
+  }
 }

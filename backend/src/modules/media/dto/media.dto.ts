@@ -176,6 +176,18 @@ export class CompleteUploadDto {
   @MaxLength(1024)
   @Matches(/^[A-Za-z0-9._\-/]+$/, { message: 'key must be the key the upload slot was issued for' })
   key: string;
+
+  /**
+   * What the file is about to become. `profile_photo` has it checked for
+   * AI generation here, so a refused photograph is refused (and deleted)
+   * before the screen shows it as added. The profile-photo slot is also used
+   * for invitation cards and listing pictures, which is why the area alone
+   * does not decide it — and why the attach points check again regardless.
+   */
+  @ApiPropertyOptional({ enum: ['profile_photo'] })
+  @IsOptional()
+  @IsIn(['profile_photo'])
+  purpose?: 'profile_photo';
 }
 
 /** A stored reference to open: `media://…` as stored, or the bare key. */

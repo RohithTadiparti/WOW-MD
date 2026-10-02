@@ -49,6 +49,14 @@ export interface StorageDriver {
 
   head(key: string): Promise<ObjectInfo | null>;
   delete(key: string): Promise<void>;
+
+  /**
+   * The first `maxBytes` of an object, or null when there is none. For reading
+   * what a file says about itself (its metadata sits at the front) without
+   * pulling a whole video through the API. Optional so a test double need not
+   * implement it; a driver without it simply gets no content checks.
+   */
+  readStart?(key: string, maxBytes: number): Promise<Buffer | null>;
 }
 
 export const STORAGE_DRIVER = Symbol('STORAGE_DRIVER');
