@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
-import { Booking } from './entities/booking.entity';
+import { Booking, PlannerBrief } from './entities/booking.entity';
 import { Payment } from './entities/payment.entity';
 import { Quotation } from './entities/quotation.entity';
 import { MarkDeliveredDto } from './dto/booking-addon.dto';
@@ -44,6 +44,13 @@ import {
 } from './payment.provider';
 import { PAYMENT_STATUS_RANK, collectedByBooking, isCollected } from './payment-totals';
 import { escrowSummary, summariseQuotations } from './booking-summary';
+import {
+  PlannerRequestCard,
+  PlannerRequestDetail,
+  dateAvailability,
+  toRequestCard,
+  toRequestDetail,
+} from './planner-requests';
 import { WeddingFacts, bookingContextOf } from './booking-venue';
 import { loadWeddingFacts } from './wedding-facts';
 import { serviceNamesByIds } from '../catalog/service-names';
@@ -153,6 +160,15 @@ const HOLDS_SLOT: BookingStatus[] = [
  * so only cancellation and completion free the buyer to ask again.
  */
 const ACTIVE_REQUEST: BookingStatus[] = HOLDS_SLOT;
+
+/** A job the provider has agreed to: the day is theirs to keep free. */
+const COMMITTED: BookingStatus[] = [
+  BookingStatus.PAYMENT_PENDING,
+  BookingStatus.PENDING,
+  BookingStatus.CONFIRMED,
+  BookingStatus.IN_PROGRESS,
+  BookingStatus.COMPLETED_PENDING_FINAL_PAYMENT,
+];
 
 /** Still being asked and priced: what the Requests and Request on Date tabs gather. */
 const REQUEST_STATUSES: BookingStatus[] = [
@@ -520,6 +536,8 @@ export class BookingsService {
       throw new BadRequestException('Tell the provider what you need — at least a sentence');
     }
 
+    const plannerBrief = await this.plannerBriefFor(dto);
+
     return this.dataSource.transaction(async (manager) => {
       const bookingRepo = manager.getRepository(Booking);
       const booking = await bookingRepo.save(
@@ -543,7 +561,15 @@ export class BookingsService {
           estimatedAmount: estimatedAmount !== null ? estimatedAmount.toFixed(2) : null,
           referenceImages: dto.referenceImages ?? [],
           requestedServices: dto.requestedServices ?? [],
-          expectedBudget: dto.expectedBudget !== undefined ? dto.expectedBudget.toFixed(2) : null,
+          // A planner request's budget is a range; the top of it is what the
+          // couple is prepared to spend, which is what `expectedBudget` means.
+          expectedBudget:
+            dto.expectedBudget !== undefined
+              ? dto.expectedBudget.toFixed(2)
+              : plannerBrief?.budgetMax != null
+                ? plannerBrief.budgetMax.toFixed(2)
+                : null,
+          plannerBrief,
           notes: dto.notes,
           status: BookingStatus.REQUESTED,
         }),
@@ -566,6 +592,54 @@ export class BookingsService {
       );
       return booking;
     });
+  }
+
+  /**
+   * The planner brief, checked and tidied, or null.
+   *
+   * Only a planner request carries one, and ranges must run low to high. The
+   * services travel separately as `requestedServices`; each must be one this
+   * planner lists, when they list any — the planner is shown "the services
+   * the couple asked for", and a key sent past the form would be one they
+   * never offered.
+   */
+  private async plannerBriefFor(dto: CreateBookingDto): Promise<PlannerBrief | null> {
+    if (dto.providerType === ProviderType.PLANNER && dto.requestedServices?.length) {
+      const planner = await this.planners.findOne({
+        where: { id: dto.providerId },
+        select: ['id', 'services'],
+      });
+      const offered = planner?.services ?? [];
+      const unknown = dto.requestedServices.filter((s) => !offered.includes(s));
+      if (offered.length > 0 && unknown.length > 0) {
+        throw new BadRequestException('Choose only services this planner offers');
+      }
+    }
+
+    const brief = dto.plannerBrief;
+    if (!brief) return null;
+    if (dto.providerType !== ProviderType.PLANNER) {
+      throw new BadRequestException('A planner brief only goes with a wedding planner request');
+    }
+    if (
+      brief.guestCountMin != null &&
+      brief.guestCountMax != null &&
+      brief.guestCountMin > brief.guestCountMax
+    ) {
+      throw new BadRequestException('The smallest guest count is larger than the largest');
+    }
+    if (brief.budgetMin != null && brief.budgetMax != null && brief.budgetMin > brief.budgetMax) {
+      throw new BadRequestException('The lower budget is larger than the upper one');
+    }
+
+    return {
+      location: brief.location?.trim() || null,
+      guestCountMin: brief.guestCountMin ?? null,
+      guestCountMax: brief.guestCountMax ?? null,
+      weddingType: brief.weddingType ?? null,
+      budgetMin: brief.budgetMin ?? null,
+      budgetMax: brief.budgetMax ?? null,
+    };
   }
 
   /** The live request for this buyer/provider/event/slot, if there is one. */
@@ -2240,6 +2314,89 @@ export class BookingsService {
     // provider names. Without it every row read "Customer" (EZ1-I68).
     const named = await this.withProviderNames(data);
     return paginate(await this.withClientContext(named), total, q.page, q.limit);
+  }
+
+  /**
+   * Every request couples have sent this planner, newest first.
+   *
+   * All of them rather than one page: a planner's book is tens of weddings,
+   * and the request screen counts and filters its tabs on the client.
+   */
+  async plannerRequests(actor: AuthUser): Promise<PlannerRequestCard[]> {
+    const providerIds = await this.ownedProviderIds(actor);
+    if (providerIds.length === 0) return [];
+    const rows = await this.bookings.find({
+      where: { providerType: ProviderType.PLANNER, providerId: In(providerIds) },
+      order: { createdAt: 'DESC' },
+      take: 500,
+    });
+    const enriched = await this.withClientContext(await this.withProviderNames(rows));
+    return enriched.map(toRequestCard);
+  }
+
+  /** One request in full, with whether the planner is free on the day. */
+  async plannerRequest(actor: AuthUser, bookingId: string): Promise<PlannerRequestDetail> {
+    const booking = await this.loadOrFail(bookingId);
+    if (booking.providerType !== ProviderType.PLANNER) {
+      throw new NotFoundException('Request not found');
+    }
+    await this.assertSellerSide(actor, booking);
+    const [row] = await this.withClientContext(await this.withProviderNames([booking]));
+
+    const date = row.eventDate ?? null;
+    let openings = 0;
+    let otherBookings = 0;
+    if (date) {
+      const [slots, committed] = await Promise.all([
+        this.availability.listBookable(ProviderType.PLANNER, row.providerId, date, date),
+        this.bookings.count({
+          where: {
+            providerType: ProviderType.PLANNER,
+            providerId: row.providerId,
+            eventDate: date,
+            status: In(COMMITTED),
+          },
+        }),
+      ]);
+      openings = slots
+        .filter((s) => s.date === date)
+        .reduce((n, s) => n + Math.max(0, s.remaining ?? 0), 0);
+      otherBookings = committed - (COMMITTED.includes(row.status) ? 1 : 0);
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    return toRequestDetail(row, {
+      state: dateAvailability({ date, today, openings, otherBookings }),
+      openings,
+      otherBookings,
+    });
+  }
+
+  /**
+   * The planner takes the request on, before any price is agreed.
+   *
+   * Nothing about the money or the date changes: the couple is told the
+   * planner is interested, and the planner goes on to quote. Repeating it is
+   * harmless.
+   */
+  async acceptPlannerRequest(actor: AuthUser, bookingId: string): Promise<PlannerRequestDetail> {
+    const booking = await this.loadOrFail(bookingId);
+    if (booking.providerType !== ProviderType.PLANNER) {
+      throw new NotFoundException('Request not found');
+    }
+    await this.assertSellerSide(actor, booking);
+    if (![BookingStatus.REQUESTED, BookingStatus.QUOTATION_SENT].includes(booking.status)) {
+      throw new BadRequestException('Only an open request can be accepted');
+    }
+    if (!booking.providerAcceptedAt) {
+      booking.providerAcceptedAt = new Date();
+      await this.bookings.save(booking);
+      await this.outbox.record({
+        eventType: 'booking.request_accepted',
+        aggregateType: 'booking',
+        payload: { bookingId, userId: booking.userId, providerId: booking.providerId },
+      });
+    }
+    return this.plannerRequest(actor, bookingId);
   }
 
   /**

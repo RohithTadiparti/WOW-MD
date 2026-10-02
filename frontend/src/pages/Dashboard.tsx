@@ -658,7 +658,7 @@ export default function Dashboard({
         <section className="space-y-4">
           <h2 className="section-title">Action required</h2>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <PlannerMetric label="New quotation requests" value={plannerRequests} to="/bookings?status=requested" tone="from-brand-soft to-surface" />
+            <PlannerMetric label="New quotation requests" value={plannerRequests} to="/my-clients/requests" tone="from-brand-soft to-surface" />
             <PlannerMetric label="Pending tasks" value={plannerPendingTasks} to="/tasks?status=pending" tone="from-caution-bg to-surface" />
             <PlannerMetric label="Overdue tasks" value={plannerOverview?.tasks.overdue ?? 0} to="/tasks?status=overdue" tone="from-rose-50 to-surface" />
             <PlannerMetric label="Upcoming events" value={plannerUpcomingEvents} to="/events" tone="from-positive-bg to-brand-50" />
@@ -733,7 +733,7 @@ export default function Dashboard({
             <Counter
               label="Requests to answer"
               value={plannerRequests}
-              to="/bookings"
+              to="/my-clients/requests"
               tone={plannerRequests > 0 ? 'text-amber-700' : undefined}
             />
             <Counter label="Active weddings" value={activeClients} to="/weddings?status=active" />
@@ -760,7 +760,7 @@ export default function Dashboard({
             <div className="card">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <h3 className="section-title text-sm">Upcoming weddings</h3>
-                <Link className="text-xs text-brand-dark hover:underline" to="/my-weddings">
+                <Link className="text-xs text-brand-dark hover:underline" to="/weddings">
                   Open weddings
                 </Link>
               </div>

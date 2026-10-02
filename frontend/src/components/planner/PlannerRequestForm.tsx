@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { CheckCircle, ClipboardText } from '@phosphor-icons/react';
 import { api, apiMessage } from '../../lib/api';
 import { plannerServiceLabel, plannerSpecializationLabel } from '../../lib/planner-profile';
+import { WEDDING_TYPES } from '../../lib/planner-requests';
+import { ReferencePhotos } from '../BookingRequestParts';
 import { Modal, SERVICE_ICONS, iso, longDate, type PlannerSelection } from './shared';
 
 /**
@@ -11,17 +13,23 @@ import { Modal, SERVICE_ICONS, iso, longDate, type PlannerSelection } from './sh
  *
  * It arrives filled in with what the couple already picked on the page (the
  * date from the calendar, the ticked services, any specialisations) and every
- * part of it can still be changed here. Guest count and the specialisations
- * have no field of their own on a booking, so they travel at the end of the
- * requirements, where the planner reads them alongside the rest.
+ * part of it can still be changed here. Where the wedding is, its type, the
+ * guest and budget ranges travel as the request's planner brief, which the
+ * planner's request page lays out; the specialisations have no field of their
+ * own, so they travel at the end of the requirements.
  */
 
 const MAX_REQUIREMENTS = 4000;
 const MIN_REQUIREMENTS = 10;
 
+/** A whole positive number from a field, or undefined. */
+const whole = (v: string) => (v.trim() && Number(v) > 0 ? Math.round(Number(v)) : undefined);
+
 interface Props {
   plannerId: string;
   plannerName: string;
+  /** Prefills the wedding location; the couple can change it. */
+  plannerCity?: string | null;
   services: string[];
   selection: PlannerSelection;
   onSelectionChange: (next: PlannerSelection) => void;
@@ -32,6 +40,7 @@ interface Props {
 export default function PlannerRequestForm({
   plannerId,
   plannerName,
+  plannerCity,
   services,
   selection,
   onSelectionChange,
@@ -39,8 +48,13 @@ export default function PlannerRequestForm({
   onClose,
 }: Props) {
   const [requirements, setRequirements] = useState('');
-  const [guests, setGuests] = useState('');
-  const [budget, setBudget] = useState('');
+  const [location, setLocation] = useState(plannerCity ?? '');
+  const [weddingType, setWeddingType] = useState('');
+  const [guestMin, setGuestMin] = useState('');
+  const [guestMax, setGuestMax] = useState('');
+  const [budgetMin, setBudgetMin] = useState('');
+  const [budgetMax, setBudgetMax] = useState('');
+  const [images, setImages] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [sent, setSent] = useState<{ id?: string; date: string } | null>(null);
@@ -58,7 +72,6 @@ export default function PlannerRequestForm({
   // The note the planner reads: the couple's own words first, then the facts
   // that have no column of their own.
   const extras = [
-    Number(guests) > 0 ? `Guest count: ${Math.round(Number(guests))}` : '',
     selection.specializations.length
       ? `Specialisation: ${selection.specializations.map(plannerSpecializationLabel).join(', ')}`
       : '',
@@ -77,20 +90,34 @@ export default function PlannerRequestForm({
       return;
     }
     if (tooLong || busy) return;
+    const gMin = whole(guestMin);
+    const gMax = whole(guestMax);
+    const bMin = whole(budgetMin);
+    const bMax = whole(budgetMax);
+    if (gMin && gMax && gMin > gMax) return setError('The smaller guest count is above the larger.');
+    if (bMin && bMax && bMin > bMax) return setError('The lower budget is above the upper one.');
     setBusy(true);
     setError('');
     setExisting('');
     try {
-      const amount = Number(budget);
       const { data } = await api.post('/bookings', {
         providerType: 'planner',
         providerId: plannerId,
         ...(selection.date ? { eventDate: selection.date } : {}),
         ...(selection.services.length ? { requestedServices: selection.services.slice(0, 16) } : {}),
         ...(composed ? { requirements: composed } : {}),
-        // An empty budget means "quote me": a number is never invented on the
-        // couple's behalf.
-        ...(budget.trim() && Number.isFinite(amount) && amount > 0 ? { expectedBudget: amount } : {}),
+        ...(images.length ? { referenceImages: images } : {}),
+        // Empty budget fields mean "quote me": a number is never invented on
+        // the couple's behalf. The server takes the top of the range as the
+        // expected budget.
+        plannerBrief: {
+          location: location.trim() || undefined,
+          weddingType: weddingType || undefined,
+          guestCountMin: gMin,
+          guestCountMax: gMax,
+          budgetMin: bMin,
+          budgetMax: bMax,
+        },
       });
       setSent({ id: (data as { id?: string } | undefined)?.id, date: selection.date });
       onSent();
@@ -236,31 +263,45 @@ export default function PlannerRequestForm({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block">
-            <span>Guest count (optional)</span>
+            <span>Wedding location</span>
             <input
               className="input"
-              type="number"
-              inputMode="numeric"
-              min={1}
-              value={guests}
-              onChange={(e) => setGuests(e.target.value)}
-              onWheel={(e) => e.currentTarget.blur()}
+              maxLength={120}
+              placeholder="City, state"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
             />
           </label>
           <label className="block">
-            <span>Expected budget in ₹ (optional)</span>
-            <input
-              className="input"
-              type="number"
-              inputMode="numeric"
-              min={1}
-              placeholder="Leave blank to be quoted"
-              value={budget}
-              onChange={(e) => setBudget(e.target.value)}
-              onWheel={(e) => e.currentTarget.blur()}
-            />
+            <span>Wedding type (optional)</span>
+            <select className="input" value={weddingType} onChange={(e) => setWeddingType(e.target.value)}>
+              <option value="">Choose…</option>
+              {WEDDING_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
           </label>
+          <RangeField
+            label="Guest count (optional)"
+            min={guestMin}
+            max={guestMax}
+            onMin={setGuestMin}
+            onMax={setGuestMax}
+            placeholders={['From', 'To']}
+          />
+          <RangeField
+            label="Budget in ₹ (optional)"
+            min={budgetMin}
+            max={budgetMax}
+            onMin={setBudgetMin}
+            onMax={setBudgetMax}
+            placeholders={['From', 'Up to']}
+          />
         </div>
+
+        <ReferencePhotos urls={images} onChange={setImages} />
 
         {existing && (
           <div className="alert-caution space-y-1 text-sm">
@@ -276,5 +317,48 @@ export default function PlannerRequestForm({
         {error && <p className="alert-critical">{error}</p>}
       </form>
     </Modal>
+  );
+}
+
+/** Two number fields, low and high, under one label. */
+function RangeField({
+  label,
+  min,
+  max,
+  onMin,
+  onMax,
+  placeholders,
+}: {
+  label: string;
+  min: string;
+  max: string;
+  onMin: (v: string) => void;
+  onMax: (v: string) => void;
+  placeholders: [string, string];
+}) {
+  const fields: [string, (v: string) => void, string][] = [
+    [min, onMin, placeholders[0]],
+    [max, onMax, placeholders[1]],
+  ];
+  return (
+    <fieldset className="block">
+      <legend className="label">{label}</legend>
+      <div className="flex items-center gap-2">
+        {fields.map(([value, set, ph]) => (
+          <input
+            key={ph}
+            className="input min-w-0 flex-1"
+            type="number"
+            inputMode="numeric"
+            min={1}
+            placeholder={ph}
+            aria-label={`${label}: ${ph}`}
+            value={value}
+            onChange={(e) => set(e.target.value)}
+            onWheel={(e) => e.currentTarget.blur()}
+          />
+        ))}
+      </div>
+    </fieldset>
   );
 }

@@ -163,6 +163,11 @@ export class NotificationsConsumer implements OnModuleInit {
     const bookingEvents: { event: string; type: NotificationType; to: 'seller' | 'buyer' | 'both' }[] =
       [
         { event: 'booking.requested', type: NotificationType.BOOKING_REQUEST, to: 'seller' },
+        {
+          event: 'booking.request_accepted',
+          type: NotificationType.BOOKING_REQUEST_ACCEPTED,
+          to: 'buyer',
+        },
         { event: 'booking.quotation_sent', type: NotificationType.BOOKING_QUOTATION, to: 'buyer' },
         {
           event: 'booking.quotation_accepted',
@@ -311,6 +316,11 @@ export class NotificationsConsumer implements OnModuleInit {
 
   /** What was booked, in words. Falls back gracefully for pre-catalog rows. */
   private async serviceName(booking: Booking): Promise<string | null> {
+    // A planner is booked for the whole wedding, not a catalog service; the
+    // booking lists say "Wedding planning" for the same row.
+    if (!booking.vendorServiceId && booking.providerType === ProviderType.PLANNER) {
+      return 'Wedding planning';
+    }
     if (!booking.vendorServiceId) return null;
     const service = await this.services.findOne({ where: { id: booking.vendorServiceId } });
     if (!service) return null;

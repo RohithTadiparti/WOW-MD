@@ -163,6 +163,7 @@ function PlannerProfile({
         <PlannerRequestForm
           plannerId={p.id}
           plannerName={p.agencyName}
+          plannerCity={p.city ?? null}
           services={services}
           selection={selection}
           onSelectionChange={(next: PlannerSelection) => setSelection(next)}

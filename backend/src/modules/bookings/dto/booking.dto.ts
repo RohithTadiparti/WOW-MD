@@ -15,12 +15,64 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { IsUploadedUrl } from '../../../common/decorators/uploaded-url.decorator';
 import { IsStrictNumber } from '../../../common/decorators/strict-type.decorator';
 import { BookingStatus, PaymentMethod, PaymentMilestone, ProviderType } from '../../../common/enums';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { PLANNER_SERVICE_KEYS } from '../../wedding-planners/planner-catalog';
+import { WEDDING_TYPES } from '../planner-requests';
+
+/**
+ * The structured part of a request to a wedding planner.
+ *
+ * A planner is hired for the whole wedding, so what they price on is its size
+ * and shape: how many guests, what kind of wedding, where and roughly what it
+ * may cost. The services go in `requestedServices`, free text in
+ * `requirements`, and reference photos in `referenceImages`.
+ */
+export class PlannerBriefDto {
+  @ApiPropertyOptional({ maxLength: 120, example: 'Hyderabad, Telangana' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  location?: string;
+
+  @ApiPropertyOptional({ minimum: 1, maximum: 100_000 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100_000)
+  guestCountMin?: number;
+
+  @ApiPropertyOptional({ minimum: 1, maximum: 100_000 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100_000)
+  guestCountMax?: number;
+
+  @ApiPropertyOptional({ enum: WEDDING_TYPES })
+  @IsOptional()
+  @IsIn([...WEDDING_TYPES])
+  weddingType?: string;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 100_000_000 })
+  @IsOptional()
+  @IsStrictNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100_000_000)
+  budgetMin?: number;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 100_000_000 })
+  @IsOptional()
+  @IsStrictNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100_000_000)
+  budgetMax?: number;
+}
 
 export class CreateBookingDto {
   /**
@@ -167,6 +219,13 @@ export class CreateBookingDto {
   @IsString()
   @MaxLength(2000)
   notes?: string;
+
+  /** Planner requests only: the wedding's size, type, budget and services. */
+  @ApiPropertyOptional({ type: PlannerBriefDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PlannerBriefDto)
+  plannerBrief?: PlannerBriefDto;
 }
 
 export class PayDto {

@@ -136,7 +136,9 @@ export function PlannerBook() {
               value={book.isLoading ? undefined : requests}
               tone={requests > 0 ? 'caution' : undefined}
               hint={requests > 0 ? 'Couples waiting on your answer' : undefined}
-              onPress={() => router.push({ pathname: '/bookings', params: { tab: 'requests' } })}
+              // The planner's own queue, with the brief each couple sent, rather
+              // than the generic bookings list the vendor works from.
+              onPress={() => router.push('/planner-requests')}
             />
             <StatTile
               label="Vendor bookings"
@@ -184,7 +186,7 @@ export function PlannerBook() {
           ))
         )}
         <Button
-          label="Open client weddings"
+          label="Open My Weddings"
           variant="outline"
           onPress={() => router.push('/planner-clients')}
         />

@@ -68,8 +68,8 @@ import VendorDetail from './pages/VendorDetail';
 import Planner from './pages/Planner';
 import PlannerClients from './pages/PlannerClients';
 import PlannerClientDetail from './pages/PlannerClientDetail';
+import PlannerRequests from './pages/PlannerRequests';
 import PlannerEventWorkspace from './pages/PlannerEventWorkspace';
-import MyWeddings from './pages/MyWeddings';
 import PlannerWeddings from './pages/PlannerWeddings';
 import PlannerTasks from './pages/PlannerTasks';
 import Chat from './pages/Chat';
@@ -303,7 +303,6 @@ const NAV: NavEntry[] = [
    * serving both would need a fork at the top of every screen below it.
    */
   { to: '/my-clients', label: 'My Clients', requires: [Permission.PLAN_MANAGE_ENGAGED], group: 'clients', icon: AddressBook },
-  { to: '/my-weddings', label: 'My Weddings', requires: [Permission.PLAN_MANAGE_ENGAGED], group: 'clients', icon: CalendarCheck },
   { to: '/weddings', label: 'My Weddings', requires: [Permission.PLAN_MANAGE_ENGAGED], group: 'wedding', icon: CalendarCheck },
   { to: '/tasks', label: 'Tasks', requires: [Permission.PLAN_MANAGE_ENGAGED], group: 'wedding', icon: ClipboardText },
   { to: '/agency', label: 'My Agency', requires: [Permission.AGENCY_MANAGE], group: 'clients', icon: Buildings },
@@ -1158,14 +1157,11 @@ export default function App() {
           </Protected>
         }
       />
-      <Route
-        path="/my-weddings"
-        element={
-          <Protected requires={[Permission.PLAN_MANAGE_ENGAGED]}>
-            <MyWeddings />
-          </Protected>
-        }
-      />
+      {/*
+        There used to be two "My Weddings" pages over the same engagements, one
+        in each sidebar group. /weddings is the one; old links land on it.
+      */}
+      <Route path="/my-weddings" element={<Navigate to="/weddings" replace />} />
       <Route
         path="/weddings"
         element={
@@ -1182,6 +1178,22 @@ export default function App() {
           </Protected>
         }
       />
+      {/*
+        A couple's requests to this planner, as a list beside the one open.
+        Declared ahead of /my-clients/:userId, though the static segment wins
+        either way.
+      */}
+      {['/my-clients/requests', '/my-clients/requests/:bookingId'].map((path) => (
+        <Route
+          key={path}
+          path={path}
+          element={
+            <Protected requires={[Permission.PLANNER_LISTING_MANAGE]}>
+              <PlannerRequests />
+            </Protected>
+          }
+        />
+      ))}
       <Route
         path="/my-clients/:userId"
         element={

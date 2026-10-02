@@ -32,6 +32,7 @@ const TYPE_GROUP: Record<string, Group> = {
   verification_submitted: 'action',
   match_interest: 'action',
   booking_payment: 'money',
+  booking_request_accepted: 'progress',
   booking_confirmed: 'progress',
   booking_started: 'progress',
   booking_completed: 'progress',

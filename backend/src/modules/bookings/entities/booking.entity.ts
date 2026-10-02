@@ -9,6 +9,15 @@ import {
 import { BookingStatus, ProviderType } from '../../../common/enums';
 import type { QuotationSummary } from '../booking-summary';
 
+export interface PlannerBrief {
+  location?: string | null;
+  guestCountMin?: number | null;
+  guestCountMax?: number | null;
+  weddingType?: string | null;
+  budgetMin?: number | null;
+  budgetMax?: number | null;
+}
+
 @Entity('bookings')
 @Index(['providerType', 'providerId'])
 export class Booking {
@@ -145,6 +154,22 @@ export class Booking {
    */
   @Column({ type: 'numeric', precision: 12, scale: 2, nullable: true })
   expectedBudget: string | null;
+
+  /**
+   * What a couple told a wedding planner about the wedding: guest count, type,
+   * place and budget range (the services are `requestedServices`). Null on vendor bookings
+   * and on planner requests made before the brief existed.
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  plannerBrief: PlannerBrief | null;
+
+  /**
+   * When the provider took the request on, before any price was agreed. A
+   * planner accepts a couple's request and then quotes, so "accepted" and
+   * "priced" are two separate moments.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  providerAcceptedAt: Date | null;
 
   /** Set when the provider confirms they have started. */
   @Column({ type: 'timestamptz', nullable: true })

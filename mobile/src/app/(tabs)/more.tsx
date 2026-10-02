@@ -2,6 +2,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
   CalendarBlank,
+  CalendarCheck,
   CaretRight,
   ChatCircleDots,
   Check,
@@ -14,6 +15,7 @@ import {
   SignOut,
   Star,
   Storefront,
+  Tray,
   UserCircle,
   type IconProps,
 } from 'phosphor-react-native';
@@ -111,6 +113,25 @@ export default function More() {
             label="Events"
             hint="The days of the wedding, and the invitations to them"
             to="/events"
+          />
+        </Group>
+      ) : null}
+
+      {/* A planner's two working lists, named as the web sidebar names them.
+          My Weddings is here once; Home only links to it from its own card. */}
+      {isPlanner ? (
+        <Group title="Weddings">
+          <Row
+            icon={CalendarCheck}
+            label="My Weddings"
+            hint="Every confirmed engagement and how its planning is going"
+            to="/planner-clients"
+          />
+          <Row
+            icon={Tray}
+            label="Planner Requests"
+            hint="Couples asking you to plan their wedding"
+            to="/planner-requests"
           />
         </Group>
       ) : null}

@@ -84,6 +84,7 @@ export const NOTIFICATION_TARGET: Record<NotificationType, NotificationTarget> =
     action: 'respond',
     idKey: 'bookingId',
   },
+  [NotificationType.BOOKING_REQUEST_ACCEPTED]: { module: 'bookings', action: 'view', idKey: 'bookingId' },
   [NotificationType.BOOKING_CONFIRMED]: { module: 'bookings', action: 'pay', idKey: 'bookingId' },
   [NotificationType.BOOKING_PAYMENT]: { module: 'bookings', action: 'view', idKey: 'bookingId' },
   [NotificationType.BOOKING_STARTED]: { module: 'bookings', action: 'view', idKey: 'bookingId' },
