@@ -26,6 +26,10 @@ export class PublicProfileView {
   @ApiPropertyOptional({ example: '26-30' })
   ageRange: string | null;
 
+  /** Current whole-year age. The birth date itself is never exposed in a match card. */
+  @ApiPropertyOptional({ example: 28 })
+  age: number | null;
+
   @ApiPropertyOptional()
   city?: string;
 
@@ -291,6 +295,19 @@ export function ageBand(dateOfBirth: string | null): string | null {
   return `${lower}-${lower + 4}`;
 }
 
+/** The match-list age, calculated without disclosing a date of birth. */
+export function ageOf(dateOfBirth: string | null): number | null {
+  if (!dateOfBirth) return null;
+  const dob = new Date(dateOfBirth);
+  if (Number.isNaN(dob.getTime())) return null;
+
+  const now = new Date();
+  let age = now.getFullYear() - dob.getFullYear();
+  const monthDelta = now.getMonth() - dob.getMonth();
+  if (monthDelta < 0 || (monthDelta === 0 && now.getDate() < dob.getDate())) age -= 1;
+  return age >= 18 && age <= 99 ? age : null;
+}
+
 /**
  * The profile photo another person may see: the first photo, which is the one
  * its owner chose or, if they never chose, the first they uploaded. None for a
@@ -328,6 +345,7 @@ export function toPublicProfile(
       displayName: profile.displayName,
       gender: profile.gender,
       ageRange: ageBand(profile.dateOfBirth),
+      age: ageOf(profile.dateOfBirth),
       city: profile.city,
       // Before a match a viewer sees the lead photo — the profile photo its
       // owner chose, which is always first — and the full set only once both
@@ -369,6 +387,7 @@ export function toPublicProfile(
     displayName: profile.displayName,
     gender: profile.gender,
     ageRange: ageBand(profile.dateOfBirth),
+    age: ageOf(profile.dateOfBirth),
     city: profile.city,
     bio: profile.bio,
     photos,

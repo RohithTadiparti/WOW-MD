@@ -11,6 +11,8 @@ export interface PublicProfile {
   displayName: string;
   gender?: string;
   ageRange: string | null;
+  /** Exact age calculated by the API; the date of birth is not exposed. */
+  age?: number | null;
   city?: string;
   bio?: string;
   photos: string[];
@@ -178,7 +180,7 @@ export default function MatchCard({
   const facts = (
     brief
       ? [
-          p.ageRange ? `${p.ageRange} yrs` : null,
+          p.age ? `${p.age} yrs` : (p.ageRange ? `${p.ageRange} yrs` : null),
           p.city,
           card?.profession ??
             (card?.occupationStatus
@@ -187,7 +189,7 @@ export default function MatchCard({
               : null),
         ]
       : [
-          p.ageRange ? `${p.ageRange} yrs` : null,
+          p.age ? `${p.age} yrs` : (p.ageRange ? `${p.ageRange} yrs` : null),
           p.city,
           card?.heightCm ? formatHeight(card.heightCm) : null,
           card?.profession,
