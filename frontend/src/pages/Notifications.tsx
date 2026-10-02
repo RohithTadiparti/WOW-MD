@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import {
   ACTION_LABEL,
@@ -67,7 +67,15 @@ const GROUP_LABEL: Record<Group, string> = {
  */
 export default function Notifications() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
+
+  function close() {
+    // A full-centre visit normally came from the bell preview. Direct links
+    // have no in-app history, so they land on the signed-in home instead.
+    if (window.history.state?.idx > 0) navigate(-1);
+    else navigate('/dashboard');
+  }
 
   const { data = [], isLoading } = useQuery<Notification[]>({
     queryKey: ['notifications'],
@@ -167,6 +175,9 @@ export default function Notifications() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button className="btn-outline" onClick={close}>
+            Close
+          </button>
           <button
             className={filter === 'all' ? 'btn' : 'btn-outline'}
             onClick={() => setFilter('all')}
