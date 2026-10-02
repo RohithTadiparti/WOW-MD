@@ -17,6 +17,7 @@ import { api, apiMessage } from '@/lib/api';
 import { rupees } from '@/lib/format';
 import { loadPlannerShortlist, togglePlannerShortlist } from '@/lib/plan-shortlist';
 import { Sheet } from '@/components/sheet';
+import { ViewInstagramButton } from '@/components/social-links';
 import {
   Alert,
   Body,
@@ -196,6 +197,9 @@ export default function PlannerProfileScreen() {
             </View>
 
             <HeaderStats planner={planner} />
+
+            {/* Beside the request, as on the web profile. */}
+            <ViewInstagramButton listing={planner} />
 
             {canRequest ? (
               <Button label="Send Request" onPress={openRequest} />

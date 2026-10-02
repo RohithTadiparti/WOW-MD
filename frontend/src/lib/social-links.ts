@@ -227,3 +227,76 @@ export function listingSocialLinks(listing: ListingLinks | null | undefined): So
       ];
   return normaliseSocialLinks(links).filter((l) => httpsHost(l.url) !== null);
 }
+
+/**
+ * First path segments on instagram.com that are Instagram's own pages, not
+ * someone's profile: a link to one post is not "their Instagram", so it is
+ * not offered as one.
+ */
+const INSTAGRAM_NOT_PROFILES = new Set([
+  'p',
+  'reel',
+  'reels',
+  'tv',
+  'stories',
+  'explore',
+  'accounts',
+  'direct',
+  'about',
+  'legal',
+  'developer',
+]);
+
+/** Instagram's own rule for a username: letters, digits, dots and underscores, at most 30. */
+const INSTAGRAM_HANDLE = /^[a-z0-9._]{1,30}$/i;
+
+/**
+ * One Instagram link or handle as the profile page it names, or null.
+ *
+ * Takes what a provider is likely to have typed, not only what the editor now
+ * insists on: `@name`, `instagram.com/name`, `www.instagram.com/name/`, an
+ * `http://` or `m.` link, one with `?igsh=` share tracking on the end. Each
+ * becomes the same `https://www.instagram.com/name/`, so the button opens the
+ * profile rather than whatever page the link was copied from.
+ */
+export function instagramProfileUrl(value: string | null | undefined): string | null {
+  const text = (value ?? '').trim();
+  if (!text) return null;
+  let handle: string | undefined;
+  if (text.startsWith('@')) {
+    handle = text.slice(1);
+  } else {
+    // The host must be instagram.com itself: "instagram.com.evil.in" and a
+    // site with "instagram" somewhere in its path are not Instagram links.
+    const match = /^(?:https?:\/\/)?(?:www\.|m\.)?instagram\.com(\/[^?#\s]*)?(?:[?#]\S*)?$/i.exec(
+      text,
+    );
+    if (!match) return null;
+    // A later segment (/name/reels, /name/tagged) is still that profile.
+    handle = (match[1] ?? '').split('/').filter(Boolean)[0];
+  }
+  if (!handle || !INSTAGRAM_HANDLE.test(handle)) return null;
+  if (INSTAGRAM_NOT_PROFILES.has(handle.toLowerCase())) return null;
+  return `https://www.instagram.com/${handle}/`;
+}
+
+/**
+ * The provider's Instagram profile for a "View Instagram" button, or null when
+ * there is none to show.
+ *
+ * The first Instagram entry in the list that names a profile wins; the single
+ * `instagramUrl` field is read after it, for a server or a listing that
+ * predates the list. Checked here rather than trusted: what is stored is
+ * whatever the rules were on the day it was saved.
+ */
+export function listingInstagramUrl(listing: ListingLinks | null | undefined): string | null {
+  if (!listing) return null;
+  const fromList = Array.isArray(listing.socialLinks)
+    ? listing.socialLinks.filter((l) => l?.platform === 'instagram').map((l) => l.url)
+    : [];
+  for (const url of [...fromList, listing.instagramUrl]) {
+    const profile = instagramProfileUrl(url);
+    if (profile) return profile;
+  }
+  return null;
+}

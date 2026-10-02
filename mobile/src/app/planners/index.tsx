@@ -6,6 +6,7 @@ import { Heart, MagnifyingGlass, MapPin, SlidersHorizontal, Star } from 'phospho
 
 import { api, apiMessage } from '@/lib/api';
 import { loadPlannerShortlist, togglePlannerShortlist } from '@/lib/plan-shortlist';
+import { ViewInstagramButton, type SocialLinks } from '@/components/social-links';
 import {
   Alert,
   Body,
@@ -28,7 +29,7 @@ type Planner = {
   ratingCount: number;
   portfolio?: string[];
   packages?: { name: string; price: number }[];
-};
+} & SocialLinks;
 
 export default function HirePlanner() {
   const theme = useTheme();
@@ -185,6 +186,8 @@ export default function HirePlanner() {
                   />
                 </Pressable>
               </View>
+              {/* A sibling of the card's Pressables, so it opens Instagram, not the planner. */}
+              <ViewInstagramButton listing={planner} style={{ marginHorizontal: space(1) }} />
             </Card>
           );
         })

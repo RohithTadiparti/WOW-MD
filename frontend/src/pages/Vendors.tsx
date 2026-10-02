@@ -6,6 +6,8 @@ import { Permission, can } from '../lib/permissions';
 import { CategoryNames, useCatalogCategories } from '../components/CategoryPicker';
 import { useAuth } from '../store/auth';
 import RequestDialog from '../components/RequestDialog';
+import { ViewInstagramLink } from '../components/SocialLinks';
+import type { SocialLink } from '../lib/social-links';
 import { EmptyState, Loading } from '../components/ui/Feedback';
 import { SealCheck, Star, Storefront } from '@phosphor-icons/react';
 
@@ -30,6 +32,9 @@ interface Vendor {
   startingPrice?: number | null;
   /** Set once an officer has verified the business, for the badge (EZ1-I164). */
   verifiedAt?: string | null;
+  /** Read only for the View Instagram button; see `listingInstagramUrl`. */
+  socialLinks?: SocialLink[] | null;
+  instagramUrl?: string | null;
 }
 
 /** The sort options the grid offers, mirrored server-side (EZ1-I164). */
@@ -259,11 +264,13 @@ export default function Vendors() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {vendors.map((v) => (
-          <Link
+          // The whole card opens the vendor, through the name's link stretched
+          // over it (after:inset-0) rather than a card that is one big <a>: the
+          // View Instagram button is a link of its own, and a link inside a
+          // link is invalid HTML that browsers split apart unpredictably.
+          <article
             key={v.id}
-            to={`/vendors/${v.id}`}
-            aria-label={`View ${v.name}`}
-            className="group/vendor flex flex-col overflow-hidden rounded-lg border border-gray-200
+            className="group/vendor relative flex flex-col overflow-hidden rounded-lg border border-gray-200
               bg-surface transition-[border-color,box-shadow] duration-200
               hover:border-gray-300 hover:shadow-card"
           >
@@ -301,7 +308,16 @@ export default function Vendors() {
 
             <div className="flex flex-1 flex-col p-4">
               <div className="flex items-start justify-between gap-2">
-                <h2 className="section-title truncate">{v.name}</h2>
+                <h2 className="section-title truncate">
+                  <Link
+                    to={`/vendors/${v.id}`}
+                    aria-label={`View ${v.name}`}
+                    className="after:absolute after:inset-0 after:rounded-lg focus-visible:outline-none
+                      focus-visible:after:ring-2 focus-visible:after:ring-brand"
+                  >
+                    {v.name}
+                  </Link>
+                </h2>
                 {v.ratingCount > 0 && (
                   <span className="flex shrink-0 items-center gap-1 whitespace-nowrap text-sm text-gray-600">
                     <Star size={13} weight="fill" className="text-caution-fg" aria-hidden />
@@ -351,6 +367,8 @@ export default function Vendors() {
                     <span className="font-medium">₹{v.startingPrice.toLocaleString('en-IN')}</span>
                   </p>
                 )}
+                {/* Above the stretched card link (z-10), so it opens Instagram, not the vendor. */}
+                <ViewInstagramLink listing={v} className="relative z-10 w-full" />
                 <span className="btn btn-sm w-full transition-colors">
                   View details
                 </span>
@@ -361,7 +379,7 @@ export default function Vendors() {
                 )}
               </div>
             </div>
-          </Link>
+          </article>
         ))}
       </div>
 

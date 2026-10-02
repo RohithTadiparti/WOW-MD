@@ -18,6 +18,7 @@ import { useCatalogCategories, useCategoryNames } from "@/components/business/ca
 import { rupees, money } from "@/lib/format";
 import { fetchWeddingDashboard } from "@/lib/wedding-plan";
 import { loadVendorShortlist, toggleVendorShortlist } from "@/lib/plan-shortlist";
+import { ViewInstagramButton, type SocialLinks } from "@/components/social-links";
 import {
   Alert,
   Button,
@@ -43,7 +44,7 @@ type Vendor = {
   portfolio?: string[];
   startingPrice?: number | null;
   verifiedAt?: string | null;
-};
+} & SocialLinks;
 
 type VendorPage = {
   data: Vendor[];
@@ -93,6 +94,7 @@ function Chip({ label, active, onPress }: { label: string; active: boolean; onPr
 export default function Vendors() {
   const theme = useTheme();
   const router = useRouter();
+  const openVendor = (id: string) => router.push({ pathname: "/vendors/[id]", params: { id } });
   const params = useLocalSearchParams();
   const initialCategory = Array.isArray(params.category) ? params.category[0] : params.category || "";
   const fromBudget = params.fromBudget === "true";
@@ -307,12 +309,18 @@ export default function Vendors() {
         <View style={{ gap: space(3) }}>
           {vendors.map((v) => (
             <View key={v.id}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`${v.name}, view details`}
-                onPress={() => router.push({ pathname: "/vendors/[id]", params: { id: v.id } })}
-              >
-                <Card style={{ padding: 0, overflow: 'hidden' }}>
+              {/*
+                The card holds two tappable areas side by side rather than one
+                Pressable around everything: View Instagram must open Instagram
+                and not the vendor, and a screen reader reads a Pressable as one
+                button, so a link inside it would be out of reach.
+              */}
+              <Card style={{ padding: 0, overflow: 'hidden', gap: 0 }}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`${v.name}, view details`}
+                  onPress={() => openVendor(v.id)}
+                >
                   {v.portfolio?.[0] ? (
                     <Image
                       source={{ uri: v.portfolio[0] }}
@@ -358,13 +366,20 @@ export default function Vendors() {
                         <Caption style={{ fontWeight: '600' }}>{Number(v.ratingAvg).toFixed(1)} <Caption tone="muted">({v.ratingCount})</Caption></Caption>
                       </View>
                     </View>
-
-                    <View style={{ backgroundColor: rgb(theme.brand), paddingVertical: 10, borderRadius: radius.md, alignItems: 'center', marginTop: space(2) }}>
-                      <Caption style={{ color: rgb(theme.brandFg), fontWeight: '600' }}>View Details</Caption>
-                    </View>
                   </View>
-                </Card>
-              </Pressable>
+                </Pressable>
+                <View style={{ paddingHorizontal: space(3), paddingBottom: space(3), gap: space(2) }}>
+                  <ViewInstagramButton listing={v} />
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`${v.name}, view details`}
+                    onPress={() => openVendor(v.id)}
+                    style={{ backgroundColor: rgb(theme.brand), paddingVertical: 10, borderRadius: radius.md, alignItems: 'center' }}
+                  >
+                    <Caption style={{ color: rgb(theme.brandFg), fontWeight: '600' }}>View Details</Caption>
+                  </Pressable>
+                </View>
+              </Card>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={shortlist.has(v.id) ? `Remove ${v.name} from shortlist` : `Shortlist ${v.name}`}
