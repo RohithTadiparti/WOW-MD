@@ -255,6 +255,24 @@ describe('ProfileDetailsService section saves', () => {
     expect(stored).toMatchObject({ religion: 'Hindu', maritalStatus: 'never_married' });
   });
 
+  it('saves the city and About Me on the profile, and clears them when emptied', async () => {
+    await service.savePersonal(owner, 'p1', personal({ city: 'Warangal', bio: 'Calm and family-minded.' }));
+    expect(profile).toMatchObject({ city: 'Warangal', bio: 'Calm and family-minded.' });
+
+    await service.savePersonal(owner, 'p1', personal());
+    expect(profile).toMatchObject({ city: 'Warangal', bio: 'Calm and family-minded.' });
+
+    await service.savePersonal(owner, 'p1', personal({ city: '', bio: '' }));
+    expect(profile).toMatchObject({ city: null, bio: null });
+  });
+
+  it('names a profile from its biodata when a steward fills it in', async () => {
+    const steward: AuthUser = { userId: 'fam1', email: 'f@example.com', role: UserRole.FAMILY, managedByAgentId: null };
+    profile = { ...profile, userId: null, managedByUserId: 'fam1', managingFor: null, displayName: 'Old Name' } as unknown as Profile;
+    await service.savePersonal(steward, 'p1', personal({ firstName: 'Bhavana', lastName: 'Rao' }));
+    expect(profile.displayName).toBe('Bhavana Rao');
+  });
+
   describe('a claimed client with an agency still engaged', () => {
     const agent: AuthUser = {
       userId: 'agent1',

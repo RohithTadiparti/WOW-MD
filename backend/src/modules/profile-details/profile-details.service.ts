@@ -193,7 +193,11 @@ export class ProfileDetailsService {
     // own name stays on their user account and surfaces only as the "managed
     // by their <relation>" line. Left untouched for a self-registered
     // individual, whose display name is already their own.
-    if (profile.managingFor) {
+    // Also any profile a steward is filling in: one created through the
+    // agency intake has no `managingFor`, so its name never followed the
+    // biodata and a corrected name came back as the old one.
+    const stewarding = profile.managedByUserId !== null && profile.managedByUserId === actor.userId;
+    if (profile.managingFor || stewarding) {
       let touched = false;
       if (dto.firstName) {
         const biodataName = `${dto.firstName} ${lastName}`.trim();
@@ -203,6 +207,13 @@ export class ProfileDetailsService {
         }
       }
       if (touched) await this.profiles.save(profile);
+    }
+
+    // City and About Me belong to the profile (see PersonalDetailsDto).
+    if (dto.city !== undefined || dto.bio !== undefined) {
+      if (dto.city !== undefined) profile.city = dto.city.trim() || (null as unknown as string);
+      if (dto.bio !== undefined) profile.bio = dto.bio.trim() || (null as unknown as string);
+      await this.profiles.save(profile);
     }
 
     /*

@@ -104,3 +104,58 @@ describe('extractedHeightCm', () => {
     expect(extractedHeightCm(value)).toBeNull();
   });
 });
+
+describe('reading a biodata into the form', () => {
+  it('turns what the document says into the form values, and drops what it cannot place', async () => {
+    const { service } = serviceWith(
+      JSON.stringify({
+        firstName: '  kamesh ',
+        lastName: 'Rao',
+        gender: 'Groom',
+        dateOfBirth: '15/08/1996',
+        heightCm: "5'10\"",
+        complexion: 'Wheatish Brown',
+        maritalStatus: 'Unmarried',
+        occupationStatus: 'Working in IT',
+        familyType: 'Nuclear Family',
+        familyStatus: 'Upper Middle Class',
+        brothers: '1',
+        sisters: 'none',
+        rashi: 'Mesha',
+        timeOfBirth: '6:30 PM',
+        preferredAgeMin: 22,
+        preferredHeightMin: '5 ft 2 in',
+        horoscope: { star: 'Ashwini' },
+        family: { father: { name: 'Ramesh Rao', profession: 'Teacher' } },
+        religion: '',
+      }),
+    );
+    expect(await service.extractBiodata('https://signed.example/a.jpg')).toEqual({
+      firstName: 'kamesh',
+      lastName: 'Rao',
+      gender: 'male',
+      dateOfBirth: '1996-08-15',
+      heightCm: 178,
+      complexion: 'wheatish',
+      maritalStatus: 'never_married',
+      occupationStatus: 'employed',
+      familyType: 'nuclear',
+      familyStatus: 'upper_middle_class',
+      brothers: 1,
+      rashi: 'Mesha',
+      star: 'Ashwini',
+      timeOfBirth: '18:30',
+      preferredAgeMin: 22,
+      preferredHeightMinCm: 157,
+      fatherName: 'Ramesh Rao',
+      fatherProfession: 'Teacher',
+    });
+  });
+
+  it('answers 422 when nothing in the reply can be placed', async () => {
+    const { service } = serviceWith('{"gender":"unknown","dateOfBirth":"31/02/1999"}');
+    await expect(service.extractBiodata('https://signed.example/a.jpg')).rejects.toBeInstanceOf(
+      UnprocessableEntityException,
+    );
+  });
+});

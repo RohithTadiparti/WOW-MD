@@ -13,6 +13,7 @@ import { AI_PROVIDER, AiProvider } from './ai.provider';
 // One table, shared with the Genie, so the panel and the answer beside it
 // cannot disagree about where the money goes.
 import { BUDGET_ALLOCATION } from './genie-knowledge';
+import { BIODATA_EXTRACTION_PROMPT, normaliseExtraction } from './biodata-extraction';
 
 @Injectable()
 export class AiService {
@@ -94,38 +95,18 @@ export class AiService {
   }
 
   async extractBiodata(documentUrl: string) {
-    const prompt = `You are a biodata extraction assistant. Please extract all the available biodata fields from this image and return them as a JSON object matching this exact structure:
-{
-  "firstName": "string (required if found)",
-  "lastName": "string",
-  "dateOfBirth": "YYYY-MM-DD",
-  "heightCm": "whole number of centimetres; convert feet and inches (5 ft 6 in = 168)",
-  "complexion": "string (Fair, Wheatish, Dark)",
-  "communicationAddress": "string",
-  "alternateMobile": "string",
-  "religion": "string",
-  "caste": "string",
-  "subCaste": "string",
-  "motherTongue": "string",
-  "maritalStatus": "string (never_married, divorced, widowed, awaiting_divorce)",
-  "education": { "highestQualification": "string", "course": "string", "institution": "string", "occupationStatus": "string (employed, self_employed, not_working)" },
-  "family": { "father": { "name": "string", "profession": "string" }, "mother": { "name": "string", "profession": "string" } }
-}
-Do not invent values. If a field is not present in the document, omit it or set it to null. Return ONLY raw JSON, without markdown formatting or code blocks.`;
-    const responseText = await this.ai.complete(prompt, {
+    const responseText = await this.ai.complete(BIODATA_EXTRACTION_PROMPT, {
       imageUrl: documentUrl,
       temperature: EXTRACTION_TEMPERATURE,
       json: true,
     });
-    const extracted = parseExtraction(responseText);
-    if (extracted && 'heightCm' in extracted) {
-      const cm = extractedHeightCm(extracted.heightCm);
-      if (cm === null) delete extracted.heightCm;
-      else extracted.heightCm = cm;
-    }
+    const parsed = parseExtraction(responseText);
+    // In the form's own values (biodata-extraction.ts); what cannot be placed
+    // is dropped, so a partial read fills only what it found.
+    const extracted = parsed ? normaliseExtraction(parsed, extractedHeightCm) : null;
     // Nothing read is a failure, not an empty success: the app would otherwise
     // announce that the details were filled in and show a blank form.
-    if (!extracted) {
+    if (!extracted || Object.keys(extracted).length === 0) {
       throw new UnprocessableEntityException(
         'We could not read that document. Try a clearer photo of it, or enter the details yourself.',
       );

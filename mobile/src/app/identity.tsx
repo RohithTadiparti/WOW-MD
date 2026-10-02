@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useLocalSearchParams } from 'expo-router';
 import { CheckCircle, IdentificationCard } from 'phosphor-react-native';
 
 import { api, apiMessage } from '@/lib/api';
@@ -55,7 +56,11 @@ export default function IdentityVerification() {
     queryFn: async () => (await api.get('/users/me')).data as { id?: string | null },
     retry: false,
   });
-  const profileId = me?.id ?? null;
+  // A family member or agency verifies the profile they opened (from its
+  // biodata); anybody else, their own.
+  const params = useLocalSearchParams<{ profileId?: string | string[] }>();
+  const chosen = Array.isArray(params.profileId) ? params.profileId[0] : params.profileId;
+  const profileId = chosen ?? me?.id ?? null;
 
   const { data, isPending } = useQuery({
     queryKey: ['identity', profileId],

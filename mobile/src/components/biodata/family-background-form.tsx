@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api, apiMessage } from '@/lib/api';
 import { SelectField } from '@/components/form';
-import { Alert, Button, Card, Field } from '@/components/ui';
+import { Alert, Button, Card, Field, useFieldAnchors } from '@/components/ui';
 import { PROFESSIONS } from '@/shared/reference';
 import { space } from '@/theme';
 import { ChoiceField, DependentLocation, canonical } from './choice-field';
@@ -52,10 +52,10 @@ export function FamilyBackgroundForm({
   const qc = useQueryClient();
   const [error, setError] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
-  
+
   const father = (details.father as Record<string, unknown>) ?? {};
   const mother = (details.mother as Record<string, unknown>) ?? {};
-  
+
   const [form, setForm] = useState<Form>({
     fatherName: capitalizeWords(String(father.name ?? '')),
     fatherProfession: canonical(String(father.profession ?? ''), PROFESSIONS),
@@ -115,29 +115,36 @@ export function FamilyBackgroundForm({
     onError: (err) => setError(apiMessage(err, 'Family background could not be saved.')),
   });
 
+  const { anchor, revealFirst } = useFieldAnchors([
+    'fatherLifeStatus', 'fatherName', 'motherLifeStatus', 'motherName', 'familyType', 'familyStatus', 'familyNetWorth',
+  ]);
+
   const set = (key: keyof Form, capitalize?: boolean) => (value: string) => {
     setErrors(e => ({ ...e, [key]: '' }));
     setForm({ ...form, [key]: capitalize ? capitalizeWords(value) : value });
   };
 
   function submit() {
-    let newErrors: Record<string, string> = {};
-    if (!form.fatherLifeStatus) newErrors.fatherLifeStatus = "Father Status is required.";
-    if (!form.fatherName.trim()) newErrors.fatherName = "Father's Name is required.";
-    if (!form.motherLifeStatus) newErrors.motherLifeStatus = "Mother Status is required.";
-    if (!form.motherName.trim()) newErrors.motherName = "Mother's Name is required.";
-    if (!form.familyType) newErrors.familyType = "Family Type is required.";
-    if (!form.familyStatus) newErrors.familyStatus = "Family Status is required.";
+    const REQUIRED = 'This field is required.';
+    const newErrors: Record<string, string> = {};
+    if (!form.fatherLifeStatus) newErrors.fatherLifeStatus = REQUIRED;
+    if (!form.fatherName.trim()) newErrors.fatherName = REQUIRED;
+    if (!form.motherLifeStatus) newErrors.motherLifeStatus = REQUIRED;
+    if (!form.motherName.trim()) newErrors.motherName = REQUIRED;
+    if (!form.familyType) newErrors.familyType = REQUIRED;
+    if (!form.familyStatus) newErrors.familyStatus = REQUIRED;
     if (isGroom && (!form.familyNetWorth || Number(form.familyNetWorth) < 1)) {
-      newErrors.familyNetWorth = 'Family Net Worth is required for groom biodata.';
+      newErrors.familyNetWorth = form.familyNetWorth ? 'Enter an amount in rupees.' : REQUIRED;
     }
 
+    // Each message under its own field, and the screen taken to the first.
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
-      setError('Please fix the errors below.');
+      setError('');
+      revealFirst(newErrors);
       return;
     }
-    
+
     setErrors({});
     setError('');
     save.mutate();
@@ -146,13 +153,15 @@ export function FamilyBackgroundForm({
   return (
     <View style={{ gap: space(4) }}>
       {error ? <Alert tone="critical">{error}</Alert> : null}
-      
+
       <Card>
         <View style={{ flexDirection: 'row', gap: space(2) }}>
           <View style={{ flex: 1 }}>
-            <SelectField label="Father" value={form.fatherLifeStatus} options={[{ value: 'alive', label: 'Mr.' }, { value: 'deceased', label: 'Late' }]} onChange={(v) => { setForm({ ...form, fatherLifeStatus: v, fatherProfession: v === 'deceased' ? '' : form.fatherProfession }); setErrors(e => ({ ...e, fatherLifeStatus: '' })); }} required autoFilled={autofilledKeys?.has('father.lifeStatus') || autofilledKeys?.has('fatherLifeStatus')} error={errors.fatherLifeStatus} />
+            <View ref={anchor('fatherLifeStatus')} collapsable={false} />
+            <SelectField label="Father"  value={form.fatherLifeStatus} options={[{ value: 'alive', label: 'Mr.' }, { value: 'deceased', label: 'Late' }]} onChange={(v) => { setForm({ ...form, fatherLifeStatus: v, fatherProfession: v === 'deceased' ? '' : form.fatherProfession }); setErrors(e => ({ ...e, fatherLifeStatus: '' })); }} required autoFilled={autofilledKeys?.has('father.lifeStatus') || autofilledKeys?.has('fatherLifeStatus')} error={errors.fatherLifeStatus} />
           </View>
           <View style={{ flex: 2 }}>
+            <View ref={anchor('fatherName')} collapsable={false} />
             <Field label="Father's Name" value={form.fatherName} onChangeText={set('fatherName', true)} required autoFilled={autofilledKeys?.has('father.name') || autofilledKeys?.has('fatherName')} autoCapitalize="words" error={errors.fatherName} />
           </View>
         </View>
@@ -160,13 +169,15 @@ export function FamilyBackgroundForm({
           <ChoiceField label="Father's Profession" value={form.fatherProfession} options={PROFESSIONS} onChange={set('fatherProfession')} autoFilled={autofilledKeys?.has('father.profession') || autofilledKeys?.has('fatherProfession')} />
         )}
       </Card>
-      
+
       <Card>
         <View style={{ flexDirection: 'row', gap: space(2) }}>
           <View style={{ flex: 1 }}>
-            <SelectField label="Mother" value={form.motherLifeStatus} options={[{ value: 'alive', label: 'Mrs.' }, { value: 'deceased', label: 'Late' }]} onChange={(v) => { setForm({ ...form, motherLifeStatus: v, motherProfession: v === 'deceased' ? '' : form.motherProfession }); setErrors(e => ({ ...e, motherLifeStatus: '' })); }} required autoFilled={autofilledKeys?.has('mother.lifeStatus') || autofilledKeys?.has('motherLifeStatus')} error={errors.motherLifeStatus} />
+            <View ref={anchor('motherLifeStatus')} collapsable={false} />
+            <SelectField label="Mother"  value={form.motherLifeStatus} options={[{ value: 'alive', label: 'Mrs.' }, { value: 'deceased', label: 'Late' }]} onChange={(v) => { setForm({ ...form, motherLifeStatus: v, motherProfession: v === 'deceased' ? '' : form.motherProfession }); setErrors(e => ({ ...e, motherLifeStatus: '' })); }} required autoFilled={autofilledKeys?.has('mother.lifeStatus') || autofilledKeys?.has('motherLifeStatus')} error={errors.motherLifeStatus} />
           </View>
           <View style={{ flex: 2 }}>
+            <View ref={anchor('motherName')} collapsable={false} />
             <Field label="Mother's Name" value={form.motherName} onChangeText={set('motherName', true)} required autoFilled={autofilledKeys?.has('mother.name') || autofilledKeys?.has('motherName')} autoCapitalize="words" error={errors.motherName} />
           </View>
         </View>
@@ -174,13 +185,15 @@ export function FamilyBackgroundForm({
           <ChoiceField label="Mother's Profession" value={form.motherProfession} options={PROFESSIONS} onChange={set('motherProfession')} autoFilled={autofilledKeys?.has('mother.profession') || autofilledKeys?.has('motherProfession')} />
         )}
       </Card>
-      
+
       <Card>
         <View style={{ flexDirection: 'row', gap: space(2) }}>
           <View style={{ flex: 1 }}>
+            <View ref={anchor('familyType')} collapsable={false} />
             <SelectField label="Family Type" value={form.familyType} options={FAMILY_TYPES} onChange={set('familyType')} required autoFilled={autofilledKeys?.has('familyType')} error={errors.familyType} />
           </View>
           <View style={{ flex: 1 }}>
+            <View ref={anchor('familyStatus')} collapsable={false} />
             <SelectField label="Family Status" value={form.familyStatus} options={FAMILY_STATUSES} onChange={set('familyStatus')} required autoFilled={autofilledKeys?.has('familyStatus')} error={errors.familyStatus} />
           </View>
         </View>
@@ -192,6 +205,7 @@ export function FamilyBackgroundForm({
             <Field label="No. of Sisters" value={form.sisters} onChangeText={set('sisters')} keyboardType="number-pad" maxLength={2} autoFilled={autofilledKeys?.has('sisters')} />
           </View>
         </View>
+        <View ref={anchor('familyNetWorth')} collapsable={false} />
         {isGroom ? <Field label="Family Net Worth" value={form.familyNetWorth} onChangeText={set('familyNetWorth')} keyboardType="number-pad" hint="Required, in Rupees" required error={errors.familyNetWorth} autoFilled={autofilledKeys?.has('familyNetWorth')} /> : null}
       </Card>
 
@@ -221,7 +235,7 @@ export function FamilyBackgroundForm({
           </>
         )}
       </Card>
-      
+
       <View style={{ gap: space(2) }}>
         <View style={{ flexDirection: 'row', gap: space(2) }}>
           {onBack && (

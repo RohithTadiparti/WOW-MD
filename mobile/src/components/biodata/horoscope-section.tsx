@@ -8,7 +8,7 @@ import { api, apiMessage } from '@/lib/api';
 import { isChartImage } from '@/shared/horoscope';
 import { DetailGrid, DetailRow } from '@/components/chrome';
 import { PhotoPicker } from '@/components/uploader';
-import { Alert, Body, Button, Caption, Card, Field, SectionTitle } from '@/components/ui';
+import { Alert, Body, Button, Caption, Card, Field, SectionTitle, useFieldAnchors } from '@/components/ui';
 import { SelectField } from '@/components/form';
 import { NAKSHATRAS, PADAMS, RASHIS } from '@/shared/reference';
 import { radius, rgb, space, useTheme } from '@/theme';
@@ -59,6 +59,30 @@ export function HoroscopeSection({
   });
 
   const [timeError, setTimeError] = useState('');
+  /*
+   * Whether there is a horoscope at all: the one required answer here, and the
+   * one the completion check reads. Saving the step with nothing filled in used
+   * to record "no horoscope" silently; now it has to be said.
+   */
+  const [hasChart, setHasChart] = useState<'' | 'yes' | 'no'>(
+    details.horoscopeAvailable === true ? 'yes' : details.horoscopeAvailable === false ? 'no' : '',
+  );
+  const [answerError, setAnswerError] = useState('');
+  const [rashiError, setRashiError] = useState('');
+  const { anchor, revealFirst } = useFieldAnchors(['hasChart', 'rashi']);
+
+  /**
+   * The step's own check, the server's rule: an answer, and a Rashi when the
+   * answer is yes (HoroscopeDetailsDto requires it then and only then).
+   */
+  function answered(next: typeof form): boolean {
+    const answer = hasChart ? '' : 'This field is required.';
+    const rashi = hasChart === 'yes' && !next.rashi ? 'This field is required.' : '';
+    setAnswerError(answer);
+    setRashiError(rashi);
+    if (answer || rashi) revealFirst({ hasChart: answer, rashi });
+    return !answer && !rashi;
+  }
 
   function parseAndValidateTime(input: string) {
     if (!input.trim()) return '';
@@ -67,22 +91,28 @@ export function HoroscopeSection({
     let [ , hStr, mStr, period ] = match;
     let hour = parseInt(hStr, 10);
     const minute = parseInt(mStr, 10);
-    
+
     if (hour < 1 || hour > 12) return null;
     if (minute < 0 || minute > 59) return null;
-    
+
     if (period.toLowerCase() === 'pm' && hour < 12) hour += 12;
     if (period.toLowerCase() === 'am' && hour === 12) hour = 0;
-    
+
     return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
   }
 
   const save = useMutation({
     mutationFn: async (patch: Partial<typeof form> = {}) => {
       const next = { ...form, ...patch };
-      
+
       const hasData = next.rashi || next.star || next.padam || next.gothram || next.kujaDosham || next.timeOfBirth || next.horoscopeDocumentUrl;
-      const isAvailable = hasData ? true : available;
+      // The explicit answer wins; outside the wizard an older profile with no
+      // answer yet is read from what was filled in, as before.
+      const isAvailable = hasChart ? hasChart === 'yes' : hasData ? true : available;
+      if (!isAvailable) {
+        await api.put(`/profiles/${profileId}/details/horoscope`, { horoscopeAvailable: false });
+        return;
+      }
 
       await api.put(`/profiles/${profileId}/details/horoscope`, {
         horoscopeAvailable: isAvailable,
@@ -109,16 +139,47 @@ export function HoroscopeSection({
   return (
     <View style={{ gap: space(4) }}>
       {error ? <Alert tone="critical">{error}</Alert> : null}
-      
+
       <Card>
         {!isWizard && <SectionTitle>Horoscope</SectionTitle>}
         {notice && !isWizard ? <Alert tone="positive">{notice}</Alert> : null}
 
         {editing ? (
           <>
+            <View ref={anchor('hasChart')} collapsable={false}>
+              <SelectField
+                label="Do you have a horoscope?"
+                value={hasChart}
+                required
+                options={[
+                  { value: '', label: 'Choose' },
+                  { value: 'yes', label: 'Yes' },
+                  { value: 'no', label: 'No' },
+                ]}
+                onChange={(value) => {
+                  setHasChart(value as '' | 'yes' | 'no');
+                  setAnswerError('');
+                }}
+                error={answerError}
+              />
+            </View>
+            {hasChart !== 'no' ? (
+            <>
             <View style={{ flexDirection: 'row', gap: space(2) }}>
               <View style={{ flex: 1 }}>
-                <ChoiceField label="Rashi" value={form.rashi} options={RASHIS} onChange={set('rashi')} allowOther={false} />
+                <View ref={anchor('rashi')} collapsable={false} />
+                <ChoiceField
+                  label="Rashi"
+                  value={form.rashi}
+                  options={RASHIS}
+                  onChange={(value) => {
+                    set('rashi')(value);
+                    setRashiError('');
+                  }}
+                  allowOther={false}
+                  required={hasChart === 'yes'}
+                  error={rashiError}
+                />
               </View>
               <View style={{ flex: 1 }}>
                 <ChoiceField label="Star" value={form.star} options={NAKSHATRAS} onChange={set('star')} allowOther={false} />
@@ -142,25 +203,28 @@ export function HoroscopeSection({
                 />
               </View>
               <View style={{ flex: 1 }}>
-                <Field 
-                  label="Time of Birth" 
-                  value={form.timeOfBirthDisplay} 
+                <Field
+                  label="Time of Birth"
+                  value={form.timeOfBirthDisplay}
                   onChangeText={(val) => {
                     let text = val.toUpperCase();
                     if (text.length === 2 && form.timeOfBirthDisplay.length === 1 && !text.includes(':')) text += ':';
                     if (text.length === 5 && form.timeOfBirthDisplay.length === 4 && !text.includes(' ')) text += ' ';
                     setForm((current) => ({ ...current, timeOfBirthDisplay: text }));
                     setTimeError('');
-                  }} 
-                  placeholder="HH:MM AM" 
+                  }}
+                  placeholder="HH:MM AM"
                   maxLength={8}
                   error={timeError}
                 />
               </View>
             </View>
+            </>
+            ) : null}
             {!isWizard && (
               <View style={{ gap: space(2) }}>
                 <Button label="Save" busy={save.isPending} onPress={() => {
+                  if (!answered(form)) return;
                   const val = form.timeOfBirthDisplay.trim();
                   if (val) {
                     const parsed = parseAndValidateTime(val);
@@ -260,6 +324,7 @@ export function HoroscopeSection({
               label="Save & Continue →"
               busy={save.isPending}
               onPress={() => {
+                if (!answered(form)) return;
                 const val = form.timeOfBirthDisplay.trim();
                 if (val) {
                   const parsed = parseAndValidateTime(val);

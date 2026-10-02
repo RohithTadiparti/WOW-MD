@@ -6,7 +6,7 @@ import { api, apiMessage } from '@/lib/api';
 import { cmToFeetInches, feetInchesToCm, formatHeight, heightPartsError, heightPartsFromCm } from '@/shared/height';
 import { DetailGrid, DetailRow } from '@/components/chrome';
 import { SelectField } from '@/components/form';
-import { Alert, Button, Caption, Card, Field, SectionTitle } from '@/components/ui';
+import { Alert, Button, Caption, Card, Field, SectionTitle, useFieldAnchors } from '@/components/ui';
 import { CASTES_BY_RELIGION, CITIES, PADAMS, PROFESSIONS, QUALIFICATIONS, RASHIS, RELIGIONS } from '@/shared/reference';
 import { space } from '@/theme';
 import { ChoiceField, canonical } from './choice-field';
@@ -112,40 +112,44 @@ export function PreferencesSection({
     onError: (err) => setError(apiMessage(err, 'Those preferences could not be saved.')),
   });
 
-  const set = (key: keyof typeof form, capitalize?: boolean) => (value: string) =>
+  // The age and height ranges are what the completion check and the match
+  // search read, so all four ends are required, each with its own message.
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const { anchor, revealFirst } = useFieldAnchors([
+    'preferredAgeMin', 'preferredAgeMax', 'preferredHeightMinCm', 'preferredHeightMaxCm',
+  ]);
+
+  const set = (key: keyof typeof form, capitalize?: boolean) => (value: string) => {
+    setErrors((current) => ({ ...current, [key]: '' }));
     setForm((current) => ({ ...current, [key]: capitalize ? capitalizeWords(value) : value }));
+  };
 
   function submit() {
-    const ranges = [
-      form.preferredAgeMin,
-      form.preferredAgeMax,
-      form.preferredHeightMinCm,
-      form.preferredHeightMaxCm,
-    ];
-    if (ranges.some((value) => !value.trim())) {
-      setError('Give both ends of the age range and the height range before saving.');
-      return;
+    const REQUIRED = 'This field is required.';
+    const next: Record<string, string> = {};
+    if (!form.preferredAgeMin.trim()) next.preferredAgeMin = REQUIRED;
+    if (!form.preferredAgeMax.trim()) next.preferredAgeMax = REQUIRED;
+    for (const key of ['preferredHeightMinCm', 'preferredHeightMaxCm'] as const) {
+      const parts = heightParts[key];
+      if (!parts.feet && !parts.inches) next[key] = REQUIRED;
+      else if (heightPartsError(parts, true) || feetInchesToCm(parts.feet, parts.inches) === null) {
+        next[key] = heightPartsError(parts, true) ?? 'Enter a height between 3 ft 0 in and 8 ft 0 in.';
+      }
+    }
+    if (!next.preferredAgeMin && !next.preferredAgeMax && Number(form.preferredAgeMin) > Number(form.preferredAgeMax)) {
+      next.preferredAgeMax = 'Must not be below the minimum age.';
     }
     const minHeight = feetInchesToCm(heightParts.preferredHeightMinCm.feet, heightParts.preferredHeightMinCm.inches);
     const maxHeight = feetInchesToCm(heightParts.preferredHeightMaxCm.feet, heightParts.preferredHeightMaxCm.inches);
-    if (
-      heightPartsError(heightParts.preferredHeightMinCm, true) ||
-      heightPartsError(heightParts.preferredHeightMaxCm, true) ||
-      minHeight === null ||
-      maxHeight === null
-    ) {
-      setError('Enter valid heights in feet and inches (inches must be 0 to 11).');
-      return;
+    if (!next.preferredHeightMaxCm && minHeight !== null && maxHeight !== null && minHeight > maxHeight) {
+      next.preferredHeightMaxCm = 'Must not be below the minimum height.';
     }
-    if (Number(form.preferredAgeMin) > Number(form.preferredAgeMax)) {
-      setError('The minimum age cannot be above the maximum.');
-      return;
-    }
-    if (minHeight > maxHeight) {
-      setError('The minimum height cannot be above the maximum.');
-      return;
-    }
+    setErrors(next);
     setError('');
+    if (Object.keys(next).length > 0) {
+      revealFirst(next);
+      return;
+    }
     save.mutate();
   }
 
@@ -156,6 +160,7 @@ export function PreferencesSection({
   const updateHeight = (key: typeof heightFields[number]['key'], unit: 'feet' | 'inches', value: string) => {
     const next = { ...heightParts[key], [unit]: value };
     setHeightParts((current) => ({ ...current, [key]: next }));
+    setErrors((current) => ({ ...current, [key]: '' }));
     const cm = feetInchesToCm(next.feet, next.inches);
     if (cm !== null) setForm((current) => ({ ...current, [key]: String(cm) }));
     else if (!next.feet && !next.inches) setForm((current) => ({ ...current, [key]: '' }));
@@ -171,22 +176,22 @@ export function PreferencesSection({
         {editing ? (
           <>
             <View style={{ flexDirection: 'row', gap: space(2) }}>
-              <View style={{ flex: 1 }}>
-                <Field label="Age from" value={form.preferredAgeMin} onChangeText={set('preferredAgeMin')} keyboardType="number-pad" maxLength={3} />
+              <View style={{ flex: 1 }} ref={anchor('preferredAgeMin')} collapsable={false}>
+                <Field label="Age from" required value={form.preferredAgeMin} onChangeText={set('preferredAgeMin')} keyboardType="number-pad" maxLength={3} error={errors.preferredAgeMin} />
               </View>
-              <View style={{ flex: 1 }}>
-                <Field label="Age to" value={form.preferredAgeMax} onChangeText={set('preferredAgeMax')} keyboardType="number-pad" maxLength={3} />
+              <View style={{ flex: 1 }} ref={anchor('preferredAgeMax')} collapsable={false}>
+                <Field label="Age to" required value={form.preferredAgeMax} onChangeText={set('preferredAgeMax')} keyboardType="number-pad" maxLength={3} error={errors.preferredAgeMax} />
               </View>
             </View>
 
           {heightFields.map(({ key, label, height }) => (
-            <View key={key} style={{ flexDirection: 'row', gap: space(2) }}>
+            <View key={key} ref={anchor(key)} collapsable={false} style={{ flexDirection: 'row', gap: space(2) }}>
               <View style={{ flex: 1 }}>
-                <Field label={`${label} (feet)`} value={height.feet}
-                  onChangeText={(value) => updateHeight(key, 'feet', value)} keyboardType="number-pad" maxLength={1} />
+                <Field label={`${label} (feet)`} required value={height.feet}
+                  onChangeText={(value) => updateHeight(key, 'feet', value)} keyboardType="number-pad" maxLength={1} error={errors[key]} />
               </View>
               <View style={{ flex: 1 }}>
-                <Field label={`${label} (inches)`} value={height.inches}
+                <Field label={`${label} (inches)`} required value={height.inches}
                   onChangeText={(value) => updateHeight(key, 'inches', value)} keyboardType="number-pad" maxLength={2} />
               </View>
             </View>
@@ -213,7 +218,7 @@ export function PreferencesSection({
                 />
               </View>
             </View>
-            
+
             <ChoiceField label="Education" value={form.education} options={QUALIFICATIONS} placeholder="No preference" onChange={set('education')} />
             <ChoiceField label="Profession" value={form.profession} options={PROFESSIONS} placeholder="No preference" onChange={set('profession')} />
             <ChoiceField label="Preferred Location" value={form.locations} options={CITIES} placeholder="No preference" onChange={set('locations')} />

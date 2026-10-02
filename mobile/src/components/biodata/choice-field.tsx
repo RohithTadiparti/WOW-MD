@@ -22,6 +22,7 @@ export function ChoiceField({
   placeholder = 'Not stated',
   required,
   autoFilled,
+  error,
 }: {
   label: string;
   value: string;
@@ -31,6 +32,8 @@ export function ChoiceField({
   placeholder?: string;
   required?: boolean;
   autoFilled?: boolean;
+  /** Shown under the list, or under the typed value when "Other" is open. */
+  error?: string;
 }) {
   const [otherPicked, setOtherPicked] = useState(false);
   const showOther = allowOther && (otherPicked || isOffList(value, options));
@@ -44,6 +47,7 @@ export function ChoiceField({
         placeholder={placeholder}
         required={required}
         autoFilled={autoFilled}
+        error={showOther ? undefined : error}
         options={[{ value: '', label: placeholder }, ...list.map((o) => ({ value: o, label: o }))]}
         onChange={(next) => {
           setOtherPicked(next === OTHER && allowOther);
@@ -59,6 +63,7 @@ export function ChoiceField({
           maxLength={60}
           required={required}
           autoFilled={autoFilled}
+          error={error}
         />
       ) : null}
     </>

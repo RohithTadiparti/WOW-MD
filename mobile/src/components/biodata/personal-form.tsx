@@ -3,8 +3,8 @@ import { View } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api, apiMessage } from '@/lib/api';
-import { SelectField } from '@/components/form';
-import { Alert, Button, Card, Field, Caption, Body } from '@/components/ui';
+import { SelectField, Textarea } from '@/components/form';
+import { Alert, Button, Card, Field, Caption, Body, useFieldAnchors } from '@/components/ui';
 import { CASTES_BY_RELIGION, MOTHER_TONGUES, RELIGIONS } from '@/shared/reference';
 import { STATES_BY_COUNTRY, districtsForState, DISTRICTS_BY_STATE } from '@/shared/locations';
 import { radius, space } from '@/theme';
@@ -32,19 +32,43 @@ interface Form {
   communicationAddress: string;
   alternateMobile: string;
   complexion: string;
+  bio: string;
 }
 
+/** The order fields appear in, so an error scrolls to the first one on screen. */
+const FIELD_ORDER = [
+  'photos', 'firstName', 'lastName', 'dateOfBirth', 'gender', 'heightCm', 'complexion',
+  'maritalStatus', 'religion', 'caste', 'motherTongue', 'communicationAddress',
+] as const;
+
+const REQUIRED = 'This field is required.';
+
+/** "bride" / "groom" as the profile's gender, for a managed profile with none stored yet. */
+const genderOfRole = (role: unknown) =>
+  role === 'bride' ? 'female' : role === 'groom' ? 'male' : '';
+
 function formFrom(
-  subject: Record<string, unknown>,
+  signedIn: Record<string, unknown>,
   full?: { details?: Record<string, unknown> | null; dateOfBirth?: string | null; profile?: Record<string, unknown> | null },
   fixedGender?: string | null,
+  ownProfile = true,
 ): Form {
   const d = (full?.details ?? {}) as Record<string, unknown>;
   const profile = full?.profile ?? {};
+  // A family member's own account is never a source for the person they
+  // manage: falling back to it is how the parent's gender, date of birth and
+  // city appeared on the bride's form. Only the account holder's own biodata
+  // reads the account.
+  const subject = ownProfile ? signedIn : {};
   const religion = canonical(String(d.religion ?? ''), RELIGIONS);
   const city = String(profile.city ?? subject.city ?? '');
-  let state = '';
+  // A state read from a document is used as given when it is on the list;
+  // otherwise it is worked out from the city, as before.
+  const states = STATES_BY_COUNTRY['India'] ?? [];
+  let state = canonical(String(d.state ?? ''), states);
+  if (!states.includes(state)) state = '';
   for (const [s, cities] of Object.entries(DISTRICTS_BY_STATE)) {
+    if (state) break;
     if (cities.includes(city)) {
       state = s;
       break;
@@ -56,7 +80,9 @@ function formFrom(
     firstName: capitalizeWords(names.firstName),
     lastName: capitalizeWords(names.lastName),
     dateOfBirth: String(profile.dateOfBirth ?? full?.dateOfBirth ?? subject.dateOfBirth ?? '').slice(0, 10),
-    gender: fixedGender ?? String(profile.gender ?? subject.gender ?? '').toLowerCase(),
+    gender:
+      fixedGender ??
+      (String(profile.gender ?? subject.gender ?? '').toLowerCase() || genderOfRole(profile.managingFor)),
     heightCm: stored(d.heightCm),
     maritalStatus: String(d.maritalStatus ?? ''),
     religion,
@@ -68,6 +94,7 @@ function formFrom(
     communicationAddress: capitalizeWords(String(d.communicationAddress ?? '')),
     alternateMobile: String(d.alternateMobile ?? ''),
     complexion: String(d.complexion ?? ''),
+    bio: String(profile.bio ?? subject.bio ?? ''),
   };
 }
 
@@ -108,7 +135,8 @@ export function PersonalForm({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [draft, setDraft] = useState<Form | null>(null);
 
-  const form = draft ?? formFrom(me, full, fixedGender);
+  const form = draft ?? formFrom(me, full, fixedGender, syncAccount);
+  const { anchor, revealFirst } = useFieldAnchors(FIELD_ORDER);
   const heightSource = form.heightCm;
   const heightSourceRef = useRef(heightSource);
   const [heightParts, setHeightParts] = useState(() => heightPartsFromCm(heightSource));
@@ -138,6 +166,7 @@ export function PersonalForm({
       if (fixedGender ?? form.gender) payload.gender = fixedGender ?? form.gender;
       if (form.dateOfBirth) payload.dateOfBirth = form.dateOfBirth;
       if (form.location.trim()) payload.city = form.location.trim();
+      if (form.bio.trim()) payload.bio = form.bio.trim();
       // A managed profile belongs to the selected bride/groom, not to the
       // parent/guardian who is signed in. Its details are saved through the
       // profile endpoint below; writing /users/me here overwrote the guardian.
@@ -153,6 +182,10 @@ export function PersonalForm({
           complexion: form.complexion,
           communicationAddress: form.communicationAddress.trim(),
           alternateMobile: form.alternateMobile.trim() || null,
+          // On the profile itself, for whichever profile this is: the only
+          // way a family member's edits to a relative's city stick.
+          city: form.location.trim(),
+          bio: form.bio.trim(),
         });
 
       if (religionStarted) {
@@ -187,6 +220,7 @@ export function PersonalForm({
   });
 
   const set = (key: keyof Form, capitalize?: boolean) => (value: string) => {
+    setError('');
     setErrors(e => ({ ...e, [key]: '' }));
     setDraft({ ...form, [key]: capitalize ? capitalizeWords(value) : value });
   };
@@ -202,31 +236,36 @@ export function PersonalForm({
   };
 
   function submit() {
-    let newErrors: Record<string, string> = {};
-    if (!photos || photos.length < 3) return setError('At least 3 photographs are required.');
-    
-    if (!form.firstName.trim()) newErrors.firstName = 'First Name is required.';
-    if (!form.lastName.trim()) newErrors.lastName = 'Last Name is required.';
-    if (!form.dateOfBirth) newErrors.dateOfBirth = 'Date of Birth is required.';
-    if (!form.gender) newErrors.gender = 'Gender is required.';
-    
+    const newErrors: Record<string, string> = {};
+    if (!photos || photos.length < 3) newErrors.photos = 'Add at least 3 photographs.';
+
+    if (!form.firstName.trim()) newErrors.firstName = REQUIRED;
+    if (!form.lastName.trim()) newErrors.lastName = REQUIRED;
+    if (!form.dateOfBirth) newErrors.dateOfBirth = REQUIRED;
+    if (!form.gender) newErrors.gender = REQUIRED;
+
     const heightMessage = heightPartsError(heightParts, true);
     const h = feetInchesToCm(heightParts.feet, heightParts.inches);
     if (heightMessage || h === null || h < MIN_HEIGHT_CM || h > MAX_HEIGHT_CM) {
-      newErrors.heightCm = heightMessage ?? 'Height must be between 3 ft 0 in and 8 ft 0 in.';
+      newErrors.heightCm =
+        !heightParts.feet && !heightParts.inches
+          ? REQUIRED
+          : (heightMessage ?? 'Height must be between 3 ft 0 in and 8 ft 0 in.');
     }
-    
-    if (!form.complexion) newErrors.complexion = 'Complexion is required.';
-    if (!form.maritalStatus) newErrors.maritalStatus = 'Marital Status is required.';
-    
-    if (!form.religion) newErrors.religion = 'Religion is required.';
-    if (!form.caste.trim()) newErrors.caste = 'Caste is required.';
-    if (!form.motherTongue.trim()) newErrors.motherTongue = 'Mother Tongue is required.';
-    if (!form.communicationAddress.trim()) newErrors.communicationAddress = 'Communication Address is required.';
 
+    if (!form.complexion) newErrors.complexion = REQUIRED;
+    if (!form.maritalStatus) newErrors.maritalStatus = REQUIRED;
+
+    if (!form.religion) newErrors.religion = REQUIRED;
+    if (!form.caste.trim()) newErrors.caste = REQUIRED;
+    if (!form.motherTongue.trim()) newErrors.motherTongue = REQUIRED;
+    if (!form.communicationAddress.trim()) newErrors.communicationAddress = REQUIRED;
+
+    // Every message under its own field, and the screen taken to the first.
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
-      setError('Please fix the errors below.');
+      setError('');
+      revealFirst(newErrors);
       return;
     }
 
@@ -238,10 +277,12 @@ export function PersonalForm({
   return (
     <View style={{ gap: space(4) }}>
       {error ? <Alert tone="critical">{error}</Alert> : null}
+      <View ref={anchor('photos')} collapsable={false}>
       <Card>
         <Body tone="muted">
-          Add at least 3 photographs — basic information cannot be saved without them.
+          Add at least 3 photographs<Caption tone="critical"> *</Caption>. Basic information cannot be saved without them.
         </Body>
+        {errors.photos ? <Caption tone="critical">{errors.photos}</Caption> : null}
         {(photos ?? []).length === 0 ? (
           <ProfileSilhouette
             gender={typeof me.gender === 'string' ? me.gender : null}
@@ -262,26 +303,32 @@ export function PersonalForm({
         <PhotoPicker
           label="Add a photograph"
           purpose="profile_photo"
-          onUploaded={(url) => onPhotoAdded && onPhotoAdded(url)}
+          onUploaded={(url) => {
+            setErrors((e) => ({ ...e, photos: '' }));
+            if (onPhotoAdded) onPhotoAdded(url);
+          }}
         />
       </Card>
+      </View>
 
       <Card>
         <View style={{ flexDirection: 'row', gap: space(2) }}>
           <View style={{ flex: 1 }}>
-            <Field label="First Name" value={form.firstName} onChangeText={set('firstName', true)} required autoFilled={autofilledKeys?.has('firstName')} autoCapitalize="words" error={errors.firstName} />
+            <View ref={anchor('firstName')} collapsable={false}><Field label="First Name" value={form.firstName} onChangeText={set('firstName', true)} required autoFilled={autofilledKeys?.has('firstName')} autoCapitalize="words" error={errors.firstName} /></View>
           </View>
           <View style={{ flex: 1 }}>
-            <Field label="Last Name" value={form.lastName} onChangeText={set('lastName', true)} required autoFilled={autofilledKeys?.has('lastName')} autoCapitalize="words" error={errors.lastName} />
+            <View ref={anchor('lastName')} collapsable={false}><Field label="Last Name" value={form.lastName} onChangeText={set('lastName', true)} required autoFilled={autofilledKeys?.has('lastName')} autoCapitalize="words" error={errors.lastName} /></View>
           </View>
         </View>
 
         <View style={{ flexDirection: 'row', gap: space(2) }}>
           <View style={{ flex: 1 }}>
+            <View ref={anchor('dateOfBirth')} collapsable={false} />
             <WowCalendar label="Date of Birth" title="Select Date of Birth" value={form.dateOfBirth} onChange={set('dateOfBirth')} maximumDate={maxDob} required autoFilled={autofilledKeys?.has('dateOfBirth')} />
             {errors.dateOfBirth ? <Caption tone="critical">{errors.dateOfBirth}</Caption> : null}
           </View>
           <View style={{ flex: 1 }}>
+            <View ref={anchor('gender')} collapsable={false} />
             <SelectField label="Gender" value={form.gender} options={GENDERS} onChange={set('gender')} required autoFilled={autofilledKeys?.has('gender')} error={errors.gender} disabled={Boolean(fixedGender ?? full?.profile?.gender)} hint={fixedGender ? 'Set from your registered role.' : full?.profile?.gender ? 'Set from the registered profile.' : undefined} />
           </View>
         </View>
@@ -289,6 +336,7 @@ export function PersonalForm({
         {/* Feet and inches, as the web form and partner preferences ask it; stored in cm. */}
         <View style={{ flexDirection: 'row', gap: space(2) }}>
           <View style={{ flex: 1 }}>
+            <View ref={anchor('heightCm')} collapsable={false} />
             <Field label="Height (feet)" value={heightParts.feet} onChangeText={(value) => updateHeight('feet', value)} keyboardType="number-pad" maxLength={1} required autoFilled={autofilledKeys?.has('heightCm')} error={errors.heightCm} />
           </View>
           <View style={{ flex: 1 }}>
@@ -296,14 +344,16 @@ export function PersonalForm({
           </View>
         </View>
 
+        <View ref={anchor('complexion')} collapsable={false} />
         <SelectField label="Complexion" value={form.complexion} options={COMPLEXIONS} onChange={set('complexion')} required autoFilled={autofilledKeys?.has('complexion')} error={errors.complexion} />
-        
+
+        <View ref={anchor('maritalStatus')} collapsable={false} />
         <SelectField label="Marital Status" value={form.maritalStatus} options={MARITAL} onChange={set('maritalStatus')} required autoFilled={autofilledKeys?.has('maritalStatus')} error={errors.maritalStatus} />
       </Card>
 
       <Card>
         <View style={{ flexDirection: 'row', gap: space(2) }}>
-          <View style={{ flex: 1 }}>
+          <View style={{ flex: 1 }} ref={anchor('religion')} collapsable={false}>
             <ChoiceField
               label="Religion"
               value={form.religion}
@@ -314,10 +364,10 @@ export function PersonalForm({
               }}
               required
               autoFilled={autofilledKeys?.has('religion')}
+              error={errors.religion}
             />
-            {errors.religion ? <Caption tone="critical">{errors.religion}</Caption> : null}
           </View>
-          <View style={{ flex: 1 }}>
+          <View style={{ flex: 1 }} ref={anchor('caste')} collapsable={false}>
             <ChoiceField
               key={`caste-${form.religion}`}
               label="Caste"
@@ -326,14 +376,15 @@ export function PersonalForm({
               onChange={set('caste')}
               required
               autoFilled={autofilledKeys?.has('caste')}
+              error={errors.caste}
             />
-            {errors.caste ? <Caption tone="critical">{errors.caste}</Caption> : null}
           </View>
         </View>
 
         <Field label="Sub-Caste" value={form.subCaste} onChangeText={set('subCaste', true)} maxLength={60} autoFilled={autofilledKeys?.has('subCaste')} autoCapitalize="words" />
-        <ChoiceField label="Mother Tongue" value={form.motherTongue} options={MOTHER_TONGUES} onChange={set('motherTongue')} required autoFilled={autofilledKeys?.has('motherTongue')} />
-        {errors.motherTongue ? <Caption tone="critical">{errors.motherTongue}</Caption> : null}
+        <View ref={anchor('motherTongue')} collapsable={false}>
+          <ChoiceField label="Mother Tongue" value={form.motherTongue} options={MOTHER_TONGUES} onChange={set('motherTongue')} required autoFilled={autofilledKeys?.has('motherTongue')} error={errors.motherTongue} />
+        </View>
       </Card>
 
       <Card>
@@ -352,11 +403,22 @@ export function PersonalForm({
           autoFilled={autofilledKeys?.has('state')}
         />
         {errors.state ? <Caption tone="critical">{errors.state}</Caption> : null}
-        
+
         <ChoiceField label="City" value={form.location} options={districtsForState(form.state)} onChange={set('location', true)} autoFilled={autofilledKeys?.has('location')} />
 
-        <Field label="Communication Address" value={form.communicationAddress} onChangeText={set('communicationAddress', true)} required autoFilled={autofilledKeys?.has('communicationAddress')} autoCapitalize="words" error={errors.communicationAddress} />
+        <View ref={anchor('communicationAddress')} collapsable={false}><Field label="Communication Address" value={form.communicationAddress} onChangeText={set('communicationAddress', true)} required autoFilled={autofilledKeys?.has('communicationAddress')} autoCapitalize="words" error={errors.communicationAddress} /></View>
         <Field label="Alternate Mobile" value={form.alternateMobile} onChangeText={set('alternateMobile')} keyboardType="phone-pad" autoFilled={autofilledKeys?.has('alternateMobile')} />
+      </Card>
+
+      <Card>
+        <Textarea
+          label="About Me"
+          value={form.bio}
+          onChange={(value) => set('bio')(value.length === 1 ? value.toUpperCase() : value)}
+          rows={4}
+          maxLength={2000}
+          placeholder="A few lines about yourself, your family and what you are looking for."
+        />
       </Card>
 
       <View style={{ flexDirection: 'row', gap: space(2) }}>
@@ -367,7 +429,6 @@ export function PersonalForm({
           style={{ flex: 1 }}
           label="Save & Continue →"
           busy={save.isPending}
-          disabled={!form.firstName.trim() || !form.lastName.trim()}
           onPress={submit}
         />
       </View>

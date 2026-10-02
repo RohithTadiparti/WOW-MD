@@ -121,6 +121,24 @@ export class PersonalDetailsDto {
   @IsIn(['male', 'female', 'other'])
   gender?: string;
 
+  /**
+   * Where they live and what they say about themselves. Both live on the
+   * profile, not the biodata row, and are written to whichever profile this
+   * biodata is for: a family member filling in a relative's had no other way
+   * to save them. Absent leaves them alone; an empty string clears them.
+   */
+  @ApiPropertyOptional({ maxLength: 80 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  city?: string;
+
+  @ApiPropertyOptional({ maxLength: 2000, description: 'About me' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  bio?: string;
+
   @ApiProperty({ example: 168, minimum: MIN_HEIGHT_CM, maximum: MAX_HEIGHT_CM, description: 'Height in whole centimetres' })
   @Transform(({ obj, key }) => parseHeightCmQuery(obj[key]))
   @IsInt()

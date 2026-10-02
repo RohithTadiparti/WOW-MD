@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { createContext, useCallback, useContext, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   ActivityIndicator,
@@ -167,9 +167,54 @@ export function Eyebrow({ children, style }: TxtProps) {
 
 // --------------------------------------------------------------- surfaces --
 
+/**
+ * Lets something inside a scrolling Screen bring one of its own views into
+ * sight: a form showing its errors scrolls to the first invalid field rather
+ * than leaving the person to hunt for it under a banner.
+ */
+const RevealContext = createContext<((node: View | null) => void) | null>(null);
+
+/**
+ * Anchors for a form's fields, and a way to show its errors.
+ *
+ * `anchor(key)` goes on the View around a field; `showErrors(errors)` keeps
+ * the messages and scrolls to the first field, in `order`, that has one.
+ */
+export function useFieldAnchors(order: readonly string[]) {
+  const reveal = useContext(RevealContext);
+  const nodes = useRef(new Map<string, View | null>());
+  const anchor = useCallback(
+    (key: string) => (node: View | null) => {
+      nodes.current.set(key, node);
+    },
+    [],
+  );
+  const revealFirst = useCallback(
+    (errors: Record<string, string | undefined>) => {
+      const first = order.find((key) => errors[key]);
+      if (first && reveal) reveal(nodes.current.get(first) ?? null);
+    },
+    [order, reveal],
+  );
+  return { anchor, revealFirst };
+}
+
 export function Screen({ children, scroll = true, onRefresh, refreshing = false }: { children: ReactNode; scroll?: boolean; onRefresh?: () => void; refreshing?: boolean }) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const scrollRef = useRef<ScrollView>(null);
+  const offset = useRef(0);
+  const reveal = useCallback((node: View | null) => {
+    const list = scrollRef.current;
+    if (!node || !list) return;
+    // Both positions in window coordinates, so nesting inside cards does not
+    // matter: the difference is how far the field is from the top of the list.
+    node.measureInWindow((_x, fieldY) => {
+      (list as unknown as View).measureInWindow((_lx, listY) => {
+        list.scrollTo({ y: Math.max(0, offset.current + fieldY - listY - space(4)), animated: true });
+      });
+    });
+  }, []);
   const style = { flex: 1 };
   // The bottom pad clears the tab bar's own inset; without it the last card in
   // a list sits under the bar and looks like the list was cut off.
@@ -188,12 +233,17 @@ export function Screen({ children, scroll = true, onRefresh, refreshing = false 
   return (
     <HeartBackdrop>
       <ScrollView 
+        ref={scrollRef}
         style={style} 
         contentContainerStyle={content} 
         keyboardShouldPersistTaps="handled"
+        scrollEventThrottle={32}
+        onScroll={(event) => {
+          offset.current = event.nativeEvent.contentOffset.y;
+        }}
         refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined}
       >
-        {children}
+        <RevealContext.Provider value={reveal}>{children}</RevealContext.Provider>
       </ScrollView>
     </HeartBackdrop>
   );
