@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../lib/api';
+import { api, apiMessage } from '../lib/api';
+import { Loading } from '../components/ui/Feedback';
 
 /**
  * An agent's reviews, on their own page.
@@ -26,12 +27,11 @@ function Stars({ value }: { value: number }) {
 }
 
 export default function AgentReviews() {
-  const { data } = useQuery({
+  const { data, error, isError, isLoading, refetch } = useQuery({
     queryKey: ['agent-my-reviews'],
     queryFn: async () => (await api.get('/agents/my-reviews')).data as MyReviews,
     retry: false,
   });
-  if (!data) return null;
 
   return (
     <div className="space-y-4">
@@ -42,7 +42,18 @@ export default function AgentReviews() {
         </p>
       </div>
 
-      <div className="card space-y-3">
+      {isLoading && <Loading rows={3} />}
+
+      {isError && (
+        <div role="alert" className="alert-critical flex items-center justify-between gap-3">
+          <span>{apiMessage(error, 'Could not load your reviews.')}</span>
+          <button type="button" className="btn-secondary shrink-0" onClick={() => void refetch()}>
+            Try again
+          </button>
+        </div>
+      )}
+
+      {data && <div className="card space-y-3">
       <div className="flex items-center justify-between">
         <h2 className="section-title">Overall</h2>
         {data.rating.count > 0 && (
@@ -75,7 +86,7 @@ export default function AgentReviews() {
           ))}
         </div>
       )}
-      </div>
+      </div>}
     </div>
   );
 }

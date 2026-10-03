@@ -126,3 +126,41 @@ export async function settle(page: Page): Promise<void> {
     .catch(() => undefined);
   await page.waitForTimeout(400);
 }
+
+/** Waits for the app shell after a role-navigation click and makes auth loss explicit. */
+export async function waitForNavigationReady(page: Page, role: string, targetPath: string): Promise<void> {
+  await page.waitForURL(
+    (url) => url.pathname === targetPath || url.pathname === '/login',
+    { timeout: 30_000 },
+  );
+
+  if (new URL(page.url()).pathname === '/login') {
+    throw new Error(`${role}: session redirected to /login while opening ${targetPath}`);
+  }
+
+  await expect(page.locator('aside nav[aria-label="Main"]')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('main')).toBeVisible({ timeout: 15_000 });
+}
+
+/** Clicks a role-visible navigation item and verifies the resulting session and route. */
+export async function visitRoleScreen(
+  page: Page,
+  role: string,
+  screen: { href: string; label: string; index: number },
+): Promise<void> {
+  if (new URL(page.url()).pathname === '/login') {
+    throw new Error(`${role}: session is already on /login before opening ${screen.href}`);
+  }
+
+  const rail = page.locator('aside nav[aria-label="Main"]');
+  await expect(rail).toBeVisible({ timeout: 15_000 });
+  const link = rail.locator('a').nth(screen.index);
+  await expect(link).toHaveAttribute('href', screen.href);
+  await link.click();
+  await waitForNavigationReady(page, role, screen.href.split('?')[0]);
+  await settle(page);
+
+  if (new URL(page.url()).pathname === '/login') {
+    throw new Error(`${role}: session redirected to /login after settling ${screen.href}`);
+  }
+}

@@ -1,5 +1,13 @@
 import { test, expect } from '@playwright/test';
-import { DEMO_PASSWORD, DEMO_ROLES, demoEmail, expectTemplate, settle, signIn } from './template';
+import {
+  DEMO_PASSWORD,
+  DEMO_ROLES,
+  demoEmail,
+  expectTemplate,
+  settle,
+  signIn,
+  visitRoleScreen,
+} from './template';
 
 /**
  * Every screen every role can reach, walked by clicking its own navigation.
@@ -20,23 +28,20 @@ for (const role of DEMO_ROLES) {
     await signIn(page, demoEmail(role), DEMO_PASSWORD);
     await settle(page);
 
-    const rail = page.locator('aside nav[aria-label="Main"]');
-    await expect(rail).toBeVisible();
-    const links = await rail.locator('a').evaluateAll((as) =>
-      as.map((a) => ({ href: a.getAttribute('href') ?? '', label: a.textContent?.trim() ?? '' })),
+    await expect(page.locator('aside nav[aria-label="Main"]')).toBeVisible();
+    const links = await page.locator('aside nav[aria-label="Main"] a').evaluateAll((as) =>
+      as.map((a, index) => ({ index, href: a.getAttribute('href') ?? '', label: a.textContent?.trim() ?? '' })),
     );
     expect(links.length, `${role} has a navigation`).toBeGreaterThan(0);
 
     const issues: string[] = [];
-    for (const { href, label } of links) {
-      await rail.locator(`a[href="${href}"]`).first().click();
-      await page.waitForURL((url) => url.pathname === href.split('?')[0]);
-      await settle(page);
+    for (const screen of links) {
+      await visitRoleScreen(page, role, screen);
       await page.screenshot({
-        path: `e2e-results/pages/${role}/${href.replace(/[/?=&]/g, '_').replace(/^_/, '') || 'home'}.png`,
+        path: `e2e-results/pages/${role}/${screen.href.replace(/[/?=&]/g, '_').replace(/^_/, '') || 'home'}.png`,
         fullPage: true,
       });
-      issues.push(...(await expectTemplate(page, `${label} (${href})`)));
+      issues.push(...(await expectTemplate(page, `${screen.label} (${screen.href})`)));
     }
 
     console.log(`${role}: walked ${links.length} screens`);
