@@ -51,13 +51,13 @@ jobs:
         with:
           category: /language:${{ matrix.language }}
           upload: never
-          output: ../results
+          output: results
 
       - name: Retain CodeQL SARIF
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: codeql-${{ matrix.language }}
-          path: ../results/*.sarif
+          path: results/*.sarif
           if-no-files-found: error
           retention-days: 30

@@ -8,5 +8,5 @@ test('private repository CodeQL keeps SARIF without requiring code scanning', ()
   assert.match(workflow, /upload:\s*never/);
   assert.match(workflow, /actions\/upload-artifact@v4/);
   assert.match(workflow, /retention-days:\s*30/);
-  assert.match(workflow, /\.\.\/results\/\*\.sarif/);
+  assert.match(workflow, /path:\s*results\/\*\.sarif/);
 });
