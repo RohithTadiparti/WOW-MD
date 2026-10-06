@@ -15,6 +15,7 @@ frontend/public/ocr/
 
 # Logs
 *.log
+logs/
 
 # OS and editor
 .DS_Store
@@ -31,6 +32,23 @@ docker/downloads/
 docker/android-keys/
 
 mobile/.env
+
+# Agent/workstation artifacts
+.superpowers/
+.superdesign/
+.claude/
+outputs/
+qa-report/
+
+# Terraform local state and plans
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+
+# Spreadsheet builder previews and scratch
+docs/tracking/.build/
+~$*.xlsx
 
 # Local editor settings (may hold personal tokens)
 .claude/settings.json
