@@ -3,7 +3,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 6.66"
+      version = "~> 6.67"
     }
   }
   # Configure a remote backend (S3 + DynamoDB lock) before use:
