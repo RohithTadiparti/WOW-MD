@@ -10,6 +10,7 @@ import {
   UpsertPlannerProfileDto,
 } from './dto/wedding-planner.dto';
 import { RedisService } from '../../platform/redis/redis.service';
+import { assertMediaValueUploaded, assertNewMediaUploaded } from '../../platform/storage/kept-media';
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
 import { VerificationService } from '../verification/verification.service';
 import { ApplicantType } from '../../common/enums';
@@ -64,6 +65,7 @@ export class WeddingPlannersService {
       // the saved listing untouched.
       await this.verification.assertNotRejected(ownerUserId, profile.id);
     }
+    assertPlannerMedia(dto, profile);
     // The list and the single columns mirroring it move together, whichever
     // of them the client sent (see resolveSocialLinks).
     const { socialLinks: _list, weddings, ...fields } = dto;
@@ -206,6 +208,25 @@ export class WeddingPlannersService {
     const keys = await this.redis.raw.keys('planners:search:*');
     if (keys.length) await this.redis.del(...keys);
   }
+}
+
+/**
+ * The listing form sends the portfolio and every wedding back whole, photos
+ * and all. A picture the listing already holds may come back as it is, even
+ * one stored before uploads were enforced; anything new must be an upload.
+ *
+ * A wedding's pictures are matched against every wedding's stored pictures
+ * rather than the one with the same id, so moving a photo between weddings,
+ * or a client that drops the ids, is not mistaken for adding a new one.
+ */
+function assertPlannerMedia(dto: UpsertPlannerProfileDto, profile: PlannerProfile): void {
+  assertNewMediaUploaded('portfolio', dto.portfolio, profile.portfolio);
+  if (!dto.weddings) return;
+  const stored = (profile.weddings ?? []).flatMap((w) => [w.coverUrl, ...(w.photos ?? [])]);
+  dto.weddings.forEach((w, i) => {
+    assertMediaValueUploaded('coverUrl', w.coverUrl, stored, `weddings.${i}.`);
+    assertNewMediaUploaded('photos', w.photos, stored, `weddings.${i}.`);
+  });
 }
 
 /**

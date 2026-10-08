@@ -23,6 +23,7 @@ import {
   VendorSort,
 } from './dto/vendor.dto';
 import { RedisService } from '../../platform/redis/redis.service';
+import { assertNewMediaUploaded } from '../../platform/storage/kept-media';
 import { BusinessStatus, CaseStatus, ReviewStatus, UserRole } from '../../common/enums';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { PaginatedResult, paginate } from '../../common/dto/pagination.dto';
@@ -156,6 +157,9 @@ export class VendorsService {
   async create(ownerUserId: string, dto: CreateVendorDto): Promise<Vendor> {
     const categories = await this.resolveCategories(dto);
     if (!categories) throw new BadRequestException('Choose at least one category');
+    // Nothing is stored yet, so every file named here must be an upload.
+    assertNewMediaUploaded('complianceDocuments', dto.complianceDocuments, []);
+    assertNewMediaUploaded('portfolio', dto.portfolio, []);
     // The links are written through resolveSocialLinks, with their mirrors.
     const { socialLinks: _links, ...rest } = dto;
     const fields: Partial<Omit<CreateVendorDto, 'socialLinks'>> = { ...rest };
@@ -231,6 +235,11 @@ export class VendorsService {
     if (vendor.ownerUserId !== ownerUserId) {
       throw new ForbiddenException('This listing does not belong to you');
     }
+
+    // The edit form resends both lists whole. A file the listing already holds
+    // may come back as it is; a new one must be an upload.
+    assertNewMediaUploaded('complianceDocuments', dto.complianceDocuments, vendor.complianceDocuments);
+    assertNewMediaUploaded('portfolio', dto.portfolio, vendor.portfolio);
 
     // Enforced here, not by hiding a button. A vendor who edits their GST
     // number after an officer has been sent to check it has verified nothing,

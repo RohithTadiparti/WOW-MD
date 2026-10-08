@@ -1,5 +1,6 @@
-import { ValidateBy, ValidationOptions, buildMessage } from 'class-validator';
+import { ValidateBy, ValidationOptions, buildMessage, isURL } from 'class-validator';
 import { isUploadedMedia } from '../../platform/storage/uploaded-media';
+import { isMediaRef } from '../../platform/storage/storage-keys';
 
 /**
  * A URL for something that was uploaded — a photograph, a document, evidence.
@@ -39,6 +40,33 @@ export function IsUploadedUrl(options?: ValidationOptions): PropertyDecorator {
       name: 'isUploadedUrl',
       validator: {
         validate: (value: unknown) => isUploadedMedia(value),
+        defaultMessage: buildMessage((each) => `${each}$property must be a file uploaded here`, options),
+      },
+    },
+    options,
+  );
+}
+
+/**
+ * Shaped like an upload — a `media://` reference or an http(s) URL — without
+ * the origin check IsUploadedUrl makes.
+ *
+ * Only for a field whose service has the stored value in hand and enforces
+ * the origin rule there (see platform/storage/kept-media.ts): a form that
+ * sends its whole photo list back must be able to resend a photo stored before
+ * uploads were enforced, while anything new still has to be an upload. A field
+ * with this decorator and no such service check accepts outside links, so do
+ * not use it anywhere else.
+ */
+export function IsMediaUrlShape(options?: ValidationOptions): PropertyDecorator {
+  return ValidateBy(
+    {
+      name: 'isMediaUrlShape',
+      validator: {
+        validate: (value: unknown) =>
+          typeof value === 'string' &&
+          (isMediaRef(value) ||
+            isURL(value, { protocols: ['http', 'https'], require_protocol: true, require_tld: false })),
         defaultMessage: buildMessage((each) => `${each}$property must be a file uploaded here`, options),
       },
     },

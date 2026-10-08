@@ -110,3 +110,50 @@ describe('AdminAccountsService contact masking', () => {
     expect(audit.record).not.toHaveBeenCalled();
   });
 });
+
+describe('AdminAccountsService.directory', () => {
+  function directoryRepo(rows: unknown[]) {
+    const qb = {
+      select: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      getManyAndCount: jest.fn().mockResolvedValue([rows, rows.length]),
+    };
+    return { qb, repo: emptyRepo({ createQueryBuilder: jest.fn(() => qb) }) };
+  }
+
+  it('masks email and mobile on every row (ISS-11)', async () => {
+    const { repo } = directoryRepo([{ ...ACCOUNT }]);
+    const { service } = build(repo);
+
+    const page = await service.directory({ page: 1, limit: 25 } as never);
+
+    expect(page.data[0]).toMatchObject({
+      id: ACCOUNT.id,
+      email: 'r***@gmail.com',
+      phone: '********3210',
+      contactMasked: true,
+    });
+    expect(JSON.stringify(page)).not.toContain('rohith@gmail.com');
+    expect(JSON.stringify(page)).not.toContain('9876543210');
+  });
+
+  it('still searches the raw email and the mobile digits in the database', async () => {
+    const { qb, repo } = directoryRepo([{ ...ACCOUNT }]);
+    const { service } = build(repo);
+
+    await service.directory({ page: 1, limit: 25, q: 'Rohith@Gmail' } as never);
+    expect(qb.andWhere).toHaveBeenCalledWith('(LOWER(u.email) LIKE :contactNeedle)', {
+      contactNeedle: '%rohith@gmail%',
+    });
+
+    qb.andWhere.mockClear();
+    await service.directory({ page: 1, limit: 25, q: '98765 43210' } as never);
+    const [clause, params] = qb.andWhere.mock.calls[0];
+    expect(clause).toContain('LOWER(u.email) LIKE :contactNeedle');
+    expect(clause).toContain("REGEXP_REPLACE(COALESCE(u.phone, ''), '\\D', '', 'g') LIKE :contactNeedleDigits");
+    expect(params).toEqual({ contactNeedle: '%98765 43210%', contactNeedleDigits: '%9876543210%' });
+  });
+});

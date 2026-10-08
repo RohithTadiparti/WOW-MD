@@ -38,6 +38,7 @@ import { ageBand, ageOf, toCardFacts } from '../users/dto/public-profile.dto';
 import { AiService } from '../ai/ai.service';
 import { StorageService } from '../../platform/storage/storage.service';
 import { parseKey } from '../../platform/storage/storage-keys';
+import { assertMediaValueUploaded } from '../../platform/storage/kept-media';
 import { BIODATA_DOCUMENT_EXTENSIONS, BIODATA_IMAGE_EXTENSIONS } from '../media/dto/media.dto';
 import { matchGender } from '../matchmaking/match-gender';
 import { CLOSED_ENGAGEMENT_MESSAGE, stewardMayEditBiodata } from '../users/stewardship';
@@ -249,6 +250,8 @@ export class ProfileDetailsService {
   async saveHoroscope(actor: AuthUser, profileId: string, dto: HoroscopeDetailsDto) {
     const row = await this.editable(actor, profileId);
     const { horoscopeAvailable, horoscopeDocumentUrl, birthPlace, timeOfBirth, ...chart } = dto;
+    // The section sends the attached chart back on every save; only a new one must be an upload.
+    assertMediaValueUploaded('horoscopeDocumentUrl', horoscopeDocumentUrl, row.horoscopeDocumentUrl);
 
     row.horoscopeAvailable = horoscopeAvailable;
 
@@ -421,6 +424,7 @@ export class ProfileDetailsService {
 
   async savePreferences(actor: AuthUser, profileId: string, dto: PartnerPreferencesDto) {
     const row = await this.editable(actor, profileId);
+    assertMediaValueUploaded('horoscopeDocumentUrl', dto.horoscopeDocumentUrl, row.horoscopeDocumentUrl);
 
     const packageMin = dto.preferredPackageMin === undefined ? row.preferredPackageMin : dto.preferredPackageMin;
     const packageMax = dto.preferredPackageMax === undefined ? row.preferredPackageMax : dto.preferredPackageMax;

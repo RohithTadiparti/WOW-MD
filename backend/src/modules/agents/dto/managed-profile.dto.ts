@@ -19,7 +19,7 @@ import {
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
-import { IsUploadedUrl } from '../../../common/decorators/uploaded-url.decorator';
+import { IsMediaUrlShape, IsUploadedUrl } from '../../../common/decorators/uploaded-url.decorator';
 import {
   ConsentMethod,
   ConsentRelation,
@@ -194,7 +194,8 @@ export class CreateManagedProfileDto {
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(20)
-  @IsUploadedUrl({ each: true })
+  // New entries must be uploads; ones already stored may be resent (kept-media.ts).
+  @IsMediaUrlShape({ each: true })
   @MaxLength(2048, { each: true })
   photos?: string[];
 

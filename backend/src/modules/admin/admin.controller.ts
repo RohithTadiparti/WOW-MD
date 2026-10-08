@@ -39,6 +39,7 @@ import {
   AdminBookingQueryDto,
   AdminTransactionQueryDto,
   DirectoryQueryDto,
+  OfficerRosterQueryDto,
   ReportQueryDto,
 } from './dto/console.dto';
 
@@ -182,8 +183,8 @@ export class AdminController {
       'administrator can see who to send the next visit to. Availability lands with EZ1-I210.',
   })
   @Get('officers')
-  officers() {
-    return this.console.officers();
+  officers(@Query() q: OfficerRosterQueryDto) {
+    return this.console.officers(q.q);
   }
 
   @RequirePermissions(Permission.ADMIN_VENDOR_APPROVE)
@@ -288,9 +289,25 @@ export class AdminController {
    * two routes are the gate.
    */
   @RequirePermissions(Permission.ADMIN_AGENT_APPROVE)
+  @ApiOperation({
+    summary: 'Agencies awaiting an administrator',
+    description:
+      'Unapproved and not rejected — the same definition the pending-counts badge uses. ' +
+      'Rejected agencies are listed by GET /admin/agents/rejected until they resubmit.',
+  })
   @Get('agents/pending')
   pendingAgents() {
     return this.agency.listPending();
+  }
+
+  @RequirePermissions(Permission.ADMIN_AGENT_APPROVE)
+  @ApiOperation({
+    summary: 'Agencies rejected and not yet resubmitted',
+    description: 'With the reason they were given, so a decision can be reconsidered.',
+  })
+  @Get('agents/rejected')
+  rejectedAgents() {
+    return this.agency.listRejected();
   }
 
   @RequirePermissions(Permission.ADMIN_AGENT_APPROVE)

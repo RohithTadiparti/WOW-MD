@@ -26,6 +26,7 @@ import { AdminBookingsService } from './admin-bookings.service';
 import { AuditAction, AuditService } from '../../platform/audit/audit.service';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { maskEmail, maskPhone } from '../../common/util/pii-mask';
+import { contactSearchClause } from '../../common/util/contact-search';
 
 function uniqueById<T extends { id: string }>(rows: T[]): T[] {
   return [...new Map(rows.map((row) => [row.id, row])).values()];
@@ -93,6 +94,11 @@ export class AdminAccountsService {
    * `listUsers` already pages by role. What it could not do is answer "show me
    * the suspended ones" or "find this email", which is how somebody arrives
    * here — from a complaint naming a person, not from a wish to browse.
+   *
+   * The search runs on the raw email and mobile columns, so a full or partial
+   * address or number still finds the account; the rows that come back carry
+   * both masked (ISS-11). The whole value is one click away on the account
+   * detail, behind the audited reveal.
    */
   async directory(q: DirectoryQueryDto): Promise<PaginatedResult<Record<string, unknown>>> {
     const qb = this.users
@@ -100,6 +106,7 @@ export class AdminAccountsService {
       .select([
         'u.id',
         'u.email',
+        'u.phone',
         'u.role',
         'u.isActive',
         'u.isVerified',
@@ -112,8 +119,9 @@ export class AdminAccountsService {
       qb.andWhere('u.isActive = :active', { active: q.active === true });
     }
     if (q.agentId) qb.andWhere('u.managedByAgentId = :agentId', { agentId: q.agentId });
-    if (q.q) {
-      qb.andWhere('LOWER(u.email) LIKE :needle', { needle: `%${q.q.toLowerCase()}%` });
+    if (q.q?.trim()) {
+      const search = contactSearchClause({ email: 'u.email', phone: 'u.phone' }, q.q);
+      qb.andWhere(search.clause, search.params);
     }
 
     qb.orderBy('u.createdAt', 'DESC')
@@ -121,7 +129,13 @@ export class AdminAccountsService {
       .take(q.limit);
 
     const [data, total] = await qb.getManyAndCount();
-    return paginate(data as unknown as Record<string, unknown>[], total, q.page, q.limit);
+    const rows = data.map((user) => ({
+      ...user,
+      email: maskEmail(user.email),
+      phone: maskPhone(user.phone),
+      contactMasked: true,
+    }));
+    return paginate(rows as unknown as Record<string, unknown>[], total, q.page, q.limit);
   }
 
   /**

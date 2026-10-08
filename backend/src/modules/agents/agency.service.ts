@@ -11,6 +11,9 @@ import { ApplicantType } from '../../common/enums';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { generateToken } from '../../common/util/tokens';
 import { AppConfigService } from '../../config/app-config.service';
+import { assertNewMediaUploaded } from '../../platform/storage/kept-media';
+import { maskPhone } from '../../common/util/pii-mask';
+import { PENDING_AGENCY, REJECTED_AGENCY } from './agency-status';
 
 /**
  * The agency registration record that gates an agent's ability to act for
@@ -37,6 +40,8 @@ export class AgencyService {
 
   async upsertOwn(ownerUserId: string, dto: UpsertAgencyDto): Promise<AgentProfile> {
     let agency = await this.agencies.findOne({ where: { ownerUserId } });
+    // The form resends every office photograph; only the new ones must be uploads.
+    assertNewMediaUploaded('pictures', dto.pictures, agency?.pictures);
     if (!agency) {
       agency = this.agencies.create({ ownerUserId, isApproved: false });
     } else if (agency.isApproved) {
@@ -125,20 +130,41 @@ export class AgencyService {
   }
 
   /**
-   * Every agency not yet approved, whatever it has filled in.
+   * Every agency waiting on an administrator, whatever it has filled in.
    *
-   * Deliberately one condition and no joins: an agency that registered with
-   * only a name and a city is still waiting, and an inner join or a NOT NULL
-   * filter on its optional details would hide exactly the rows an
-   * administrator most needs to chase (ISS-10). What is missing is reported on
-   * the row instead, so the gap is visible rather than the agency.
+   * No joins and no filter on the optional details: an agency that registered
+   * with only a name and a city is still waiting, and an inner join or a NOT
+   * NULL filter on those details would hide exactly the rows an administrator
+   * most needs to chase (ISS-10). What is missing is reported on the row
+   * instead, so the gap is visible rather than the agency. Rejected agencies
+   * are not waiting on anyone here and are listed by `listRejected` instead;
+   * see `agency-status.ts` for the shared definition.
+   *
+   * The contact phone is masked like every administrator list (ISS-11).
    */
   async listPending(): Promise<(AgentProfile & { missingDetails: string[] })[]> {
     const rows = await this.agencies.find({
-      where: { isApproved: false },
+      where: PENDING_AGENCY,
       order: { createdAt: 'ASC' },
     });
-    return rows.map((agency) => ({ ...agency, missingDetails: missingAgencyDetails(agency) }));
+    return rows.map((agency) => ({
+      ...agency,
+      contactPhone: maskPhone(agency.contactPhone),
+      missingDetails: missingAgencyDetails(agency),
+    }));
+  }
+
+  /**
+   * Agencies refused and not yet resubmitted, newest refusal first, with the
+   * reason they were given. Kept apart from `listPending` so an administrator
+   * can still find one to reconsider without it posing as new work.
+   */
+  async listRejected(): Promise<AgentProfile[]> {
+    const rows = await this.agencies.find({
+      where: REJECTED_AGENCY,
+      order: { updatedAt: 'DESC' },
+    });
+    return rows.map((agency) => ({ ...agency, contactPhone: maskPhone(agency.contactPhone) }));
   }
 
   async approve(actor: AuthUser, agencyId: string): Promise<AgentProfile> {

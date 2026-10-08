@@ -17,6 +17,7 @@ import { MailService } from '../../platform/mail/mail.service';
 import { AuditAction, AuditService } from '../../platform/audit/audit.service';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { generateTemporaryPassword } from '../../common/util/passwords';
+import { maskEmail, maskPhone } from '../../common/util/pii-mask';
 import { OfficerAvailabilityStatus, ProfileClaimStatus, UserRole } from '../../common/enums';
 
 export interface OfficerView {
@@ -165,9 +166,15 @@ export class OfficersService {
     });
     const availByUser = new Map(avail.map((a) => [a.officerUserId, a]));
 
-    return people.map((o) =>
-      this.view(o, byUser.get(o.id) ?? o.email ?? o.phone ?? o.id, availByUser.get(o.id)),
-    );
+    // A roster is an administrator list: contact details masked (ISS-11).
+    return people.map((o) => {
+      const masked = { ...o, email: maskEmail(o.email), phone: maskPhone(o.phone) } as User;
+      return this.view(
+        masked,
+        byUser.get(o.id) ?? masked.email ?? masked.phone ?? o.id,
+        availByUser.get(o.id),
+      );
+    });
   }
 
   /**

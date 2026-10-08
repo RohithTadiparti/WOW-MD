@@ -175,6 +175,10 @@ Skipping the second layer is what produced the IDOR bugs listed in §6.
 Two rows are worth reading twice. An officer can **report on** a verification
 (findings and a recommendation) but neither **decide** it nor **allocate** it —
 the administrator decides, and choosing your own visits is not an allocation.
+Asking a vendor to correct named fields (`PUT /verification/requests/:id/request-correction`)
+is part of deciding: it needs `verification:decide` and the service refuses
+anyone but an administrator. An officer who finds wrong details lists them in
+their findings, and the administrator sends them back.
 And an agent holds `match:respond_interest` and `match:fix` because a walk-in client
 with no account has nobody else to answer for them; the ownership check in the
 service still confines that to profiles on their own books.
