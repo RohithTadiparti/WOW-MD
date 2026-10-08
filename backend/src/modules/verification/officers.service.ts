@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { User } from '../auth/entities/user.entity';
+import { revokeAllAccess } from '../auth/sessions.service';
 import { Profile } from '../users/entities/profile.entity';
 import { CreateOfficerDto, SetAvailabilityDto } from './dto/officer.dto';
 import {
@@ -180,8 +181,14 @@ export class OfficersService {
       throw new BadRequestException('That account is not a verification officer');
     }
 
+    const wasActive = officer.isActive;
     officer.isActive = isActive;
-    await this.users.save(officer);
+    await this.users.manager.transaction(async (manager) => {
+      await manager.save(officer);
+      // A suspended officer is signed out everywhere, and stays signed out
+      // after reinstatement until they sign in again.
+      if (wasActive && !isActive) await revokeAllAccess(manager, officer.id, 'account suspended');
+    });
     await this.audit.record({
       action: AuditAction.OFFICER_CREATED,
       actor,

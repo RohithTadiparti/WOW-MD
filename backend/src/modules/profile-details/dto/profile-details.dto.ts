@@ -809,11 +809,22 @@ export class PartnerPreferencesDto {
   horoscopeDocumentUrl?: string;
 }
 
-export class SetPrimaryPhotoDto {
-  @ApiProperty({ description: 'One of the photos already on the profile' })
-  @IsUploadedUrl()
+/**
+ * A photograph already on the profile, named so it can be moved or removed.
+ *
+ * Shape only, not IsUploadedUrl: the service checks it is one of this
+ * profile's photos, and a photo stored before uploads were enforced (an
+ * outside link) must still be removable by its owner.
+ */
+export class StoredPhotoDto {
+  @ApiProperty({ description: 'One of the photos already on the profile', maxLength: 2000 })
+  @IsString()
+  @Matches(/^(https?:\/\/|media:\/\/)/i, { message: 'That is not one of the photos on this profile' })
+  @MaxLength(2000)
   url: string;
 }
+
+export class SetPrimaryPhotoDto extends StoredPhotoDto {}
 
 /** One photograph, addressed by the URL it was uploaded to. */
 /**

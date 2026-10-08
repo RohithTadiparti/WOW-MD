@@ -1,5 +1,5 @@
-import { ValidateBy, ValidationOptions, buildMessage, isURL } from 'class-validator';
-import { isMediaRef } from '../../platform/storage/storage-keys';
+import { ValidateBy, ValidationOptions, buildMessage } from 'class-validator';
+import { isUploadedMedia } from '../../platform/storage/uploaded-media';
 
 /**
  * A URL for something that was uploaded — a photograph, a document, evidence.
@@ -19,23 +19,27 @@ import { isMediaRef } from '../../platform/storage/storage-keys';
  * domain. The reported symptom — "attaching a photo to a support case does not
  * work" — was this.
  *
- * The protocol is still required. That is the part that matters: it is what
- * stops `javascript:` and a bare path being stored and later rendered.
+ * The protocol is still required, and limited to http(s): that is what stops
+ * `javascript:` and a bare path being stored and later rendered.
  *
  * A `media://{key}` reference is accepted as well. On a private store that is
  * what an upload is stored as: the API turns the signed link a client sends
  * back into its reference before validation runs (MediaUrlInterceptor), and
  * signs it again on the way out.
+ *
+ * A well-formed URL is not enough on its own. It used to be, and
+ * `https://evil.example.com/x.jpg` was stored as a profile photograph: a
+ * hotlink that never went through presign or any check made on an upload.
+ * Only addresses the platform's own storage hands out pass now — the CDN base,
+ * the local store's public path, the bucket's own hosts (isUploadedMedia).
  */
 export function IsUploadedUrl(options?: ValidationOptions): PropertyDecorator {
   return ValidateBy(
     {
       name: 'isUploadedUrl',
       validator: {
-        validate: (value: unknown) =>
-          typeof value === 'string' &&
-          (isMediaRef(value) || isURL(value, { require_protocol: true, require_tld: false })),
-        defaultMessage: buildMessage((each) => `${each}$property must be a URL address`, options),
+        validate: (value: unknown) => isUploadedMedia(value),
+        defaultMessage: buildMessage((each) => `${each}$property must be a file uploaded here`, options),
       },
     },
     options,

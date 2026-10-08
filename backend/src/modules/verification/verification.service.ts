@@ -342,7 +342,7 @@ export class VerificationService {
     return saved;
   }
 
-  // ----------------------------------------------------------- officer side
+  // ------------------------------------------------------------- admin side
 
   /**
    * Records the decision and, on approval, activates the applicant.
@@ -350,17 +350,22 @@ export class VerificationService {
    * Activation happens here rather than in a separate admin step so there is
    * exactly one place where "verified" becomes true, and it always carries the
    * request that justified it.
+   *
+   * An administrator's call only: the officer visits and recommends (findings),
+   * the administrator decides. `verification:decide` is admin-only, so an
+   * officer never reaches this; the role check below is defence in depth, not
+   * a second path. It replaces an "allocated officer may decide" branch that
+   * could not be reached once the permission was split (ISS-20).
    */
   async decide(
     actor: AuthUser,
     requestId: string,
     dto: DecideVerificationDto,
   ): Promise<VerificationRequest> {
-    const request = await this.loadOrFail(requestId);
-
-    if (actor.role !== UserRole.ADMIN && request.assignedToUserId !== actor.userId) {
-      throw new ForbiddenException('That request is not allocated to you');
+    if (actor.role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Only an administrator records a verification decision');
     }
+    const request = await this.loadOrFail(requestId);
     if (request.status === VerificationStatus.APPROVED) {
       throw new BadRequestException('That request has already been approved');
     }

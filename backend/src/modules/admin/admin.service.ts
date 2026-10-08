@@ -2,6 +2,7 @@ import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/commo
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
+import { revokeAllAccess } from '../auth/sessions.service';
 import { Vendor } from '../vendors/entities/vendor.entity';
 import { PlannerProfile } from '../wedding-planners/entities/planner-profile.entity';
 import { Booking } from '../bookings/entities/booking.entity';
@@ -88,8 +89,14 @@ export class AdminService {
     if (!user) throw new NotFoundException('User not found');
     // Compared rather than assigned: the DTO takes the raw value so a string
     // cannot be coerced into a yes. See `StrictBoolean`.
+    const wasActive = user.isActive;
     user.isActive = dto.isActive === true;
-    await this.users.save(user);
+    await this.users.manager.transaction(async (manager) => {
+      await manager.save(user);
+      // Suspension signs the account out everywhere, so reactivating it later
+      // needs a fresh sign-in rather than reviving the tokens it had.
+      if (wasActive && !user.isActive) await revokeAllAccess(manager, user.id, 'account suspended');
+    });
     const { passwordHash, refreshTokenHash, ...safe } = user as User & Record<string, unknown>;
     void passwordHash;
     void refreshTokenHash;

@@ -124,8 +124,21 @@ export class AgencyService {
     return agency;
   }
 
-  listPending(): Promise<AgentProfile[]> {
-    return this.agencies.find({ where: { isApproved: false }, order: { createdAt: 'ASC' } });
+  /**
+   * Every agency not yet approved, whatever it has filled in.
+   *
+   * Deliberately one condition and no joins: an agency that registered with
+   * only a name and a city is still waiting, and an inner join or a NOT NULL
+   * filter on its optional details would hide exactly the rows an
+   * administrator most needs to chase (ISS-10). What is missing is reported on
+   * the row instead, so the gap is visible rather than the agency.
+   */
+  async listPending(): Promise<(AgentProfile & { missingDetails: string[] })[]> {
+    const rows = await this.agencies.find({
+      where: { isApproved: false },
+      order: { createdAt: 'ASC' },
+    });
+    return rows.map((agency) => ({ ...agency, missingDetails: missingAgencyDetails(agency) }));
   }
 
   async approve(actor: AuthUser, agencyId: string): Promise<AgentProfile> {
@@ -196,4 +209,17 @@ export class AgencyService {
     }
     return saved;
   }
+}
+
+/** The optional registration details an officer relies on, by field name. */
+const AGENCY_DETAIL_FIELDS = ['contactPhone', 'address', 'startDate'] as const;
+
+/** Which of those an agency has left blank. */
+export function missingAgencyDetails(
+  agency: Pick<AgentProfile, (typeof AGENCY_DETAIL_FIELDS)[number]>,
+): string[] {
+  return AGENCY_DETAIL_FIELDS.filter((field) => {
+    const value = agency[field];
+    return value === null || value === undefined || String(value).trim() === '';
+  });
 }

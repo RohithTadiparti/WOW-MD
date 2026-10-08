@@ -110,6 +110,18 @@ export class AdminController {
     return this.accounts.accountDetail(id);
   }
 
+  @RequirePermissions(Permission.ADMIN_USERS_READ, Permission.ADMIN_CONTACT_REVEAL)
+  @ApiOperation({
+    summary: "One account's full email and mobile number",
+    description:
+      'The account detail returns both masked. This is the explicit reveal for an ' +
+      'administrator who has to contact the person, and every call is written to the audit trail.',
+  })
+  @Get('accounts/:id/contact')
+  revealAccountContact(@CurrentUser() actor: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.accounts.revealContact(actor, id);
+  }
+
   @RequirePermissions(Permission.ADMIN_USERS_READ)
   @ApiOperation({
     summary: 'One marriage profile in full (EZ1-I185)',

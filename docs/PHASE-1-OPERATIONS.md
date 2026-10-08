@@ -49,11 +49,15 @@ stateDiagram-v2
 **`in_person` is a first-class role** with a deliberately narrow permission row:
 the verification queue, the case queue, and nothing else. No matchmaking, no
 listings, no bookings, and — importantly — no ability to allocate work to
-themselves. An officer decides who else gets operational access, so their own
+themselves. An officer's findings decide who else gets operational access, so their own
 surface is the smallest on the platform.
 
 **There is no sign-up for it.** `POST /verification/officers` is admin-only and
-is the only way an officer account exists. Credentials go out by email under the
+is the only way an officer account exists. The body is `{ email, name, phone, region? }`:
+the email must be a deliverable address (placeholder hosts such as `example.com`,
+`wow.local`, `localhost` and `test` are refused), the name is 2-120 characters and
+the mobile number (10-15 digits, optional `+`) is mandatory because the officer is
+dispatched on it. Credentials go out by email under the
 same single-use rule as a provisioned customer (§3).
 
 **Three separations hold the flow honest:**
@@ -61,7 +65,7 @@ same single-use rule as a provisioned customer (§3).
 | Rule | Where | Why |
 | --- | --- | --- |
 | Only an admin allocates | `VERIFICATION_ALLOCATE`, admin-only | An officer choosing their own work is not an allocation |
-| Only the allocated officer decides | `decide()` checks `assignedToUserId` | Otherwise "allocation" is advisory |
+| Only the allocated officer reports; only an admin decides | `submitFindings` checks `assignedToUserId`; `decide()` needs `verification:decide` (admin-only) | Otherwise "allocation" is advisory, and an officer would review their own visit |
 | Anything but an approval needs a reason | `decide()` rejects a blank `remarks` | Being left guessing after a home visit is how you lose an applicant |
 
 Approval is also the *only* place `isApproved` becomes true on an agency or a
@@ -170,6 +174,8 @@ Three gates, all from the spec:
 | --- | --- | --- |
 | Sign-up | Individuals may self-register | `INDIVIDUAL_USER_ENABLED` |
 | Matchmaking | Complete profile, and not already in a fixed match | — |
+| Interests | Sending needs a complete biodata (identity aside); only profiles with one are suggested or may be sent an interest | — |
+| Identity | Sending, accepting and confirming a match as fixed need the subject profile verified (Aadhaar OTP); browsing stays open | `MATCHMAKING_REQUIRES_IDENTITY` |
 | Services | Vendor and planner bookings are open to any signed-in buyer | `SERVICES_REQUIRE_MATCH_FIXED` |
 
 With `INDIVIDUAL_USER_ENABLED=false` the platform runs as an agent-only
@@ -318,6 +324,7 @@ private and has its held fees refunded.
 | --- | --- | --- |
 | `INDIVIDUAL_USER_ENABLED` | `true` | Whether individuals may self-register |
 | `SERVICES_REQUIRE_MATCH_FIXED` | `false` | Whether the marketplace waits for a fixed match |
+| `MATCHMAKING_REQUIRES_IDENTITY` | `true` | Whether sending, accepting and fixing an interest need a verified subject profile |
 | `CHAT_REDACT_CONTACTS` | `true` | Contact stripping in chat |
 | `PUSH_PROVIDER` | `log` | `fcm` sends through Firebase Cloud Messaging |
 | `PUSH_SERVER_KEY` | — | Required when `PUSH_PROVIDER=fcm` |

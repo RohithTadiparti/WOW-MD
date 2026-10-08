@@ -371,9 +371,22 @@ export class VendorsService {
     });
   }
 
-  /** The listing as the public sees it. Never the whole row — see PublicVendor. */
-  async findOne(id: string): Promise<PublicVendor> {
-    return publicVendor(await this.loadOrFail(id));
+  /**
+   * The listing as the public sees it. Never the whole row — see PublicVendor.
+   *
+   * Only a live listing exists as far as the public is concerned: one still in
+   * review, sent back or refused answers 404, exactly as if it were absent, so
+   * a direct link cannot surface what search deliberately leaves out (ISS-16).
+   * Its owner and administrators still get the same public view of it — the
+   * owner previewing their own shop window is the reason the route is not
+   * simply filtered.
+   */
+  async findOne(id: string, viewer?: Pick<AuthUser, 'userId' | 'role'> | null): Promise<PublicVendor> {
+    const vendor = await this.loadOrFail(id);
+    const privileged =
+      !!viewer && (viewer.role === UserRole.ADMIN || vendor.ownerUserId === viewer.userId);
+    if (!vendor.isApproved && !privileged) throw new NotFoundException('Vendor not found');
+    return publicVendor(vendor);
   }
 
   /**

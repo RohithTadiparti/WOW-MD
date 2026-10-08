@@ -120,6 +120,15 @@ export function AdminUsers() {
   );
 }
 
+const AGENCY_DETAIL_LABEL: Record<string, string> = {
+  contactPhone: 'contact number',
+  address: 'address',
+  startDate: 'start date',
+};
+
+/** The words for a registration detail an agency left blank. */
+const agencyDetailLabel = (field: string) => AGENCY_DETAIL_LABEL[field] ?? field;
+
 /** The masthead every admin screen opens with, so directory pages match the rest. */
 function Masthead({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -1149,6 +1158,8 @@ export function AdminApprovals() {
       registrationNumber: string | null;
       contactPhone: string | null;
       about: string | null;
+      /** Optional registration details left blank; the agency is listed regardless. */
+      missingDetails?: string[];
     }[]
   >('pending-agents', '/admin/agents/pending');
 
@@ -1183,6 +1194,11 @@ export function AdminApprovals() {
                     'No further details supplied'}
                 </p>
                 {a.about && <p className="mt-1 text-sm text-gray-600">{a.about}</p>}
+                {a.missingDetails && a.missingDetails.length > 0 && (
+                  <p className="mt-1 text-xs text-amber-700">
+                    Incomplete registration: no {a.missingDetails.map(agencyDetailLabel).join(', ')}
+                  </p>
+                )}
               </div>
               <div className="flex gap-2">
                 <button
