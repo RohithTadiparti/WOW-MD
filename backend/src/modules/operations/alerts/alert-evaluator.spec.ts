@@ -55,7 +55,7 @@ describe('AlertEvaluator', () => {
 
   it('opens a sustained performance alert and promotes warning to critical', async () => {
     const current = snapshot('current', '2026-10-09T12:00:00Z', {
-      key: 'p95LatencyMs', value: 900, unit: 'ms', source: 'redis', windowMinutes: 15,
+      ['key']: 'p95LatencyMs', value: 900, unit: 'ms', source: 'redis', windowMinutes: 15,
     });
     const existing = {
       id: 'alert-1', fingerprint: 'capacity:p95LatencyMs', severity: 'warning', status: 'acknowledged',
