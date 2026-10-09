@@ -24,7 +24,8 @@ describe('CapacityCollector', () => {
         errorRatePercent: 0.25,
         cpuPercent: 44,
         memoryPercent: 55,
-        windowMinutes: 15,
+        requestWindowMinutes: 24 * 60,
+        resourceWindowMinutes: 15,
       }),
     };
     const config = {

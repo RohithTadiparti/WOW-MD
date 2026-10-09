@@ -30,7 +30,8 @@ export interface RuntimeCapacityMetrics {
   errorRatePercent: number;
   cpuPercent: number;
   memoryPercent: number;
-  windowMinutes: number;
+  requestWindowMinutes: number;
+  resourceWindowMinutes: number;
 }
 
 export const RUNTIME_CAPACITY_PROVIDER = Symbol('RUNTIME_CAPACITY_PROVIDER');

@@ -73,7 +73,8 @@ export class RuntimeCapacityService implements RuntimeCapacityProvider {
     const p95Index = Math.max(0, Math.ceil(latencies.length * 0.95) - 1);
     const cpu = process.cpuUsage(this.previousCpu);
     const now = Date.now();
-    const elapsedMicros = Math.max(1, (now - this.previousWall) * 1000);
+    const elapsedMs = Math.max(1, now - this.previousWall);
+    const elapsedMicros = elapsedMs * 1000;
     this.previousCpu = process.cpuUsage();
     this.previousWall = now;
     const cores = Math.max(1, availableParallelism());
@@ -88,7 +89,8 @@ export class RuntimeCapacityService implements RuntimeCapacityProvider {
         : 0,
       cpuPercent: Math.min(100, ((cpu.user + cpu.system) / elapsedMicros / cores) * 100),
       memoryPercent: Math.min(100, (memory / totalmem()) * 100),
-      windowMinutes: 24 * 60,
+      requestWindowMinutes: 24 * 60,
+      resourceWindowMinutes: elapsedMs / 60_000,
     };
   }
 }

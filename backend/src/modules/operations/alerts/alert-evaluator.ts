@@ -6,11 +6,9 @@ import { AlertEvaluationResult, CapacityMetric, CapacityMetricKey } from '../cap
 import { CapacitySnapshot } from '../entities/capacity-snapshot.entity';
 import { OperationalAlert, OperationalAlertSeverity } from '../entities/operational-alert.entity';
 
-const PERFORMANCE = new Set<CapacityMetricKey>([
+const REQUEST_PERFORMANCE = new Set<CapacityMetricKey>([
   'p95LatencyMs',
   'errorRatePercent',
-  'cpuPercent',
-  'memoryPercent',
 ]);
 
 @Injectable()
@@ -84,7 +82,7 @@ export class AlertEvaluator {
       value >= threshold.critical ? 'critical' : value >= threshold.warning ? 'warning' : null;
     const currentLevel = level(current.value);
     if (!currentLevel) return null;
-    if (PERFORMANCE.has(current.key)) {
+    if (REQUEST_PERFORMANCE.has(current.key)) {
       return (current.windowMinutes ?? 0) >= this.config.operations.sustainedPerformanceMinutes
         ? currentLevel
         : null;

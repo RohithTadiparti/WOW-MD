@@ -1,9 +1,11 @@
-import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from '@nestjs/common';
+import { CallHandler, ExecutionContext, Injectable, Logger, NestInterceptor } from '@nestjs/common';
 import { Observable, finalize, tap } from 'rxjs';
 import { RuntimeCapacityService } from './runtime-capacity.service';
 
 @Injectable()
 export class RequestCapacityInterceptor implements NestInterceptor {
+  private readonly logger = new Logger(RequestCapacityInterceptor.name);
+
   constructor(private readonly metrics: RuntimeCapacityService) {}
 
   async intercept(context: ExecutionContext, next: CallHandler): Promise<Observable<unknown>> {
@@ -17,7 +19,12 @@ export class RequestCapacityInterceptor implements NestInterceptor {
     return next.handle().pipe(
       tap({ error: () => (failed = true) }),
       finalize(() => {
-        void this.metrics.finish(actor, startedAt, failed, Boolean(userId));
+        void this.metrics.finish(actor, startedAt, failed, Boolean(userId)).catch((error: unknown) => {
+          this.logger.warn({
+            event: 'capacity_request_telemetry_failed',
+            error: error instanceof Error ? error.message : 'unknown_error',
+          });
+        });
       }),
     );
   }
