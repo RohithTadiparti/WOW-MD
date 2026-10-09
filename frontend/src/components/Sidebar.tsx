@@ -37,7 +37,7 @@ export default function Sidebar({
             {title && (
               <h2
                 className={`mb-2 w-fit px-3 text-[0.625rem] font-semibold uppercase tracking-[0.16em] ${
-                  rail ? 'text-brand-fg/55' : 'bg-canvas text-gray-400'
+                  rail ? 'text-brand-fg/55' : 'bg-canvas text-gold-deep/70'
                 }`}
               >
                 {title}
@@ -56,14 +56,14 @@ export default function Sidebar({
                       to={entry.to}
                       onClick={onNavigate}
                       aria-current={active ? 'page' : undefined}
-                      className={`group relative flex items-center gap-3 rounded-lg border-l-2 px-3 py-2.5 text-sm transition-colors duration-150 ${
+                      className={`group relative flex items-center gap-3 rounded-lg border-l-2 px-3 py-2.5 text-sm transition-colors duration-200 ${
                         active
                           ? gradient
                             ? 'border-gold-lit text-brand-fg'
-                            : 'border-brand text-brand-strong'
+                            : 'border-gold text-brand-strong'
                           : rail
                             ? 'border-transparent text-brand-fg/80 hover:border-gold-lit/60 hover:bg-brand-fg/10 hover:text-brand-fg'
-                            : 'border-transparent bg-canvas text-gray-600 hover:border-brand/40 hover:bg-brand/8 hover:text-brand-strong'
+                            : 'border-transparent bg-canvas text-gray-600 hover:border-gold/50 hover:bg-brand/5 hover:text-brand-strong'
                       }`}
                     >
                       {active && (
@@ -72,8 +72,9 @@ export default function Sidebar({
                           className={`absolute inset-0 -z-10 rounded-md ${
                             gradient
                               ? 'bg-gradient-to-r from-brand to-brand-rose shadow-btn'
-                              : 'bg-brand/10'
+                              : 'bg-brand/8'
                           }`}
+                          style={!gradient ? { boxShadow: '0 0 12px rgb(197 160 89 / 0.08)' } : undefined}
                           transition={
                             reduce
                               ? { duration: 0 }

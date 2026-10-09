@@ -48,13 +48,9 @@ export default function Register() {
   });
 
   const accountTypes = catalogue?.accountTypes ?? [];
-  // Nothing is chosen until the visitor picks; until then the first type the
-  // server offered stands in, so the default can never be a closed flow.
   const [chosenType, setChosenType] = useState<AccountType | null>(null);
   const [chosenRole, setChosenRole] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState('');
-  // An individual gives first and last name separately, as the biodata asks
-  // them; every other account type keeps one "Your name" box.
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -70,22 +66,12 @@ export default function Register() {
   const selected = accountTypes.find((a) => a.type === accountType);
   const roles = selected?.roles ?? [];
   const role = chosenRole && roles.includes(chosenRole) ? chosenRole : (roles[0] ?? 'bride');
-  // Every account is reached on its mobile number — it is what an OTP goes to
-  // and how the other side gets in touch — so it is required at sign-up for all
-  // personas, not offered as an optional afterthought.
   const phoneRequired = true;
   const isIndividual = accountType === 'individual';
   const name = isIndividual
     ? [firstName.trim(), lastName.trim()].filter(Boolean).join(' ')
     : displayName.trim();
 
-  /**
-   * The same rules the server applies, checked before the round trip.
-   *
-   * Field-level and specific: "Enter a 10-digit mobile number" beats a single
-   * banner saying the form is invalid, because it says which field and what to
-   * do about it. The server still enforces all of this.
-   */
   function validate(): Record<string, string> {
     const errors: Record<string, string> = {};
     const digits = phone.replace(/\s|-/g, '').replace(/^\+91/, '');
@@ -114,8 +100,6 @@ export default function Register() {
     }
 
     if (!confirm) errors.confirm = 'Type the password again';
-    // The same words the app uses, so a vendor who signed up on one and is
-    // being talked through the other is not told two different things.
     else if (confirm !== password) errors.confirm = 'Password and Confirm Password do not match.';
 
     return errors;
@@ -139,14 +123,10 @@ export default function Register() {
         displayName: name,
       };
       if (phone.trim()) payload.phone = phone.replace(/\s|-/g, '');
-      // `role` is only meaningful where the server said the type needs one; it
-      // derives the role from accountType for every other persona.
       if (selected?.requiresRole) payload.role = role;
 
       const { data } = await api.post('/auth/register', payload);
       setAuth(data);
-      // Agents land on agency registration: nothing else works until an
-      // administrator has approved them.
       if (accountType === 'agent') nav('/agency');
       else nav(accountType === 'individual' ? '/profile' : '/');
     } catch (err) {
@@ -157,13 +137,16 @@ export default function Register() {
   }
 
   return (
-    <main className="relative isolate min-h-screen overflow-hidden px-4 py-8 sm:px-8 sm:py-12">
-      <div className="relative mx-auto grid w-full max-w-[100rem] overflow-hidden border border-gray-200 bg-surface shadow-lifted lg:grid-cols-[0.88fr_1.12fr]">
-        <aside className="relative min-h-[28rem] overflow-hidden bg-brand-strong p-8 text-brand-fg sm:p-12">
+    <main className="relative isolate min-h-screen overflow-hidden px-4 py-8 sm:px-8 sm:py-12" data-testid="register-page">
+      <div className="relative mx-auto grid w-full max-w-[100rem] overflow-hidden bg-surface shadow-lifted lg:grid-cols-[0.88fr_1.12fr]" style={{ border: '1px solid rgb(197 160 89 / 0.22)' }}>
+        {/* ─── Royal Navy Aside ─── */}
+        <aside className="relative min-h-[28rem] overflow-hidden p-8 text-white sm:p-12">
           <img src="/images/wow-home-hero.webp" alt="A couple beginning a beautiful life together" fetchPriority="high" decoding="async" className="absolute inset-0 h-full w-full object-cover" />
-          <span aria-hidden className="absolute inset-0 bg-gradient-to-br from-brand-strong/95 via-brand-strong/65 to-brand/45" />
+          <span aria-hidden className="absolute inset-0 bg-gradient-to-br from-[rgb(5_10_26_/_0.92)] via-[rgb(10_17_40_/_0.70)] to-[rgb(27_42_74_/_0.50)]" />
+          {/* Subtle gold pattern */}
+          <div className="absolute inset-0 opacity-[0.04]" style={{ backgroundImage: 'radial-gradient(rgba(197, 160, 89, 0.6) 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
           <div className="relative flex h-full max-w-sm flex-col">
-            <Link to="/" className="text-xs uppercase tracking-[0.28em] text-gold-lit hover:text-brand-fg">
+            <Link to="/" className="text-xs uppercase tracking-[0.28em] text-gold-lit hover:text-white" data-testid="register-logo">
               World of Weddingz
             </Link>
             <div className="my-auto py-14">
@@ -175,19 +158,21 @@ export default function Register() {
                 Start it yourself or with your family. You remain in control of what is shared and when a conversation begins.
               </p>
             </div>
-            <p className="text-xs uppercase tracking-[0.2em] text-[rgb(var(--ink-100))]">Private · thoughtful · family-aware</p>
+            <p className="text-xs uppercase tracking-[0.2em] text-gold-lit/60">Private · thoughtful · family-aware</p>
           </div>
         </aside>
-        <form onSubmit={submit} className="relative space-y-6 p-6 sm:p-10 lg:p-12" noValidate>
+
+        {/* ─── Form ─── */}
+        <form onSubmit={submit} className="relative space-y-6 p-6 sm:p-10 lg:p-12" noValidate data-testid="register-form">
         <div>
-          <h2 className="page-title">Create your WOW account</h2>
+          <h2 className="page-title" data-testid="register-heading">Create your WOW account</h2>
           <p className="page-subtitle">
             Pick the kind of account you need. This decides what you can do on the platform, and
             you cannot change it later without contacting support.
           </p>
         </div>
 
-        {error && <p className="alert-critical">{error}</p>}
+        {error && <p className="alert-critical" data-testid="register-error">{error}</p>}
 
         <fieldset>
           <legend className="label">I am joining as</legend>
@@ -209,11 +194,13 @@ export default function Register() {
                     setChosenRole(null);
                   }}
                   aria-pressed={active}
-                  className={`rounded-lg border p-3 text-left transition ${
+                  className={`rounded-lg p-3 text-left transition ${
                     active
-                      ? 'border-brand bg-brand-light ring-1 ring-brand'
-                      : 'border-gray-200 hover:border-gray-300'
+                      ? 'bg-brand-light ring-1 ring-brand'
+                      : 'hover:border-gold'
                   }`}
+                  style={{ border: active ? '1px solid rgb(var(--brand))' : '1px solid rgb(197 160 89 / 0.2)' }}
+                  data-testid={`register-type-${opt.type}`}
                 >
                   <span className="font-serif text-[1.75rem] leading-none text-gold" aria-hidden>
                     {String(i + 1).padStart(2, '0')}
@@ -238,11 +225,13 @@ export default function Register() {
                     key={r}
                     aria-pressed={active}
                     onClick={() => setChosenRole(r)}
-                    className={`min-h-14 border px-3 text-left text-sm transition ${
+                    className={`min-h-14 px-3 text-left text-sm transition ${
                       active
-                        ? 'border-brand bg-brand-soft text-brand-strong ring-1 ring-brand'
-                        : 'border-gray-200 text-gray-700 hover:border-gold'
+                        ? 'bg-brand-soft text-brand-strong ring-1 ring-brand'
+                        : 'text-gray-700 hover:border-gold'
                     }`}
+                    style={{ border: active ? '1px solid rgb(var(--brand))' : '1px solid rgb(197 160 89 / 0.2)' }}
+                    data-testid={`register-role-${r}`}
                   >
                     <span className="block font-serif text-lg leading-tight">{ROLE_LABELS[r] ?? r}</span>
                     <span className="mt-0.5 block text-xs text-gray-500">
@@ -269,6 +258,7 @@ export default function Register() {
                 maxLength={60}
                 autoComplete="given-name"
                 aria-invalid={Boolean(fieldErrors.firstName)}
+                data-testid="register-firstname-input"
               />
               {fieldErrors.firstName && (
                 <p className="mt-1 text-xs text-red-600">{fieldErrors.firstName}</p>
@@ -286,6 +276,7 @@ export default function Register() {
                 maxLength={60}
                 autoComplete="family-name"
                 aria-invalid={Boolean(fieldErrors.lastName)}
+                data-testid="register-lastname-input"
               />
               {fieldErrors.lastName && (
                 <p className="mt-1 text-xs text-red-600">{fieldErrors.lastName}</p>
@@ -307,6 +298,7 @@ export default function Register() {
                 onChange={(e) => setDisplayName(e.target.value)}
                 maxLength={120}
                 aria-invalid={Boolean(fieldErrors.displayName)}
+                data-testid="register-displayname-input"
               />
               {fieldErrors.displayName && (
                 <p className="mt-1 text-xs text-red-600">{fieldErrors.displayName}</p>
@@ -324,6 +316,7 @@ export default function Register() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               aria-invalid={Boolean(fieldErrors.email)}
+              data-testid="register-email-input"
             />
             {fieldErrors.email && (
               <p className="mt-1 text-xs text-red-600">{fieldErrors.email}</p>
@@ -338,6 +331,7 @@ export default function Register() {
               value={username}
               onChange={(e) => setUsername(e.target.value.toLowerCase())}
               aria-invalid={Boolean(fieldErrors.username)}
+              data-testid="register-username-input"
             />
             {fieldErrors.username && <p className="mt-1 text-xs text-red-600">{fieldErrors.username}</p>}
           </div>
@@ -357,6 +351,7 @@ export default function Register() {
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             aria-invalid={Boolean(fieldErrors.phone)}
+            data-testid="register-phone-input"
           />
           {fieldErrors.phone ? (
             <p className="mt-1 text-xs text-red-600">{fieldErrors.phone}</p>
@@ -377,17 +372,6 @@ export default function Register() {
             error={fieldErrors.password}
             hint="At least 8 characters, with an uppercase letter, a lowercase letter and a digit."
           />
-          {/*
-            Typed twice, because it is typed blind and used once.
-            
-            An account is created from a password nobody can read back, and the
-            first time anybody discovers a typo is when they try to sign in and
-            cannot — by which point the only way back is a reset email. The
-            check is here and not on the server on purpose: the server never
-            sees the second field, and it should not, because what is being
-            checked is that the person typed what they meant, not anything
-            about the account.
-          */}
           <PasswordField
             label="Confirm password"
             value={confirm}
@@ -398,13 +382,13 @@ export default function Register() {
           />
         </div>
 
-        <button className="btn w-full" disabled={loading || !selected}>
+        <button className="btn w-full" disabled={loading || !selected} data-testid="register-submit-button">
           {loading ? 'Creating...' : `Create ${selected ? `${selected.label.toLowerCase()} ` : ''}account`}
         </button>
 
         <p className="text-center text-sm text-gray-500">
           Have an account?{' '}
-          <Link className="text-brand" to="/login">
+          <Link className="text-brand" to="/login" data-testid="register-login-link">
             Sign in
           </Link>
         </p>

@@ -69,16 +69,7 @@ export default function Login() {
   }
 
   return (
-    /*
-     * A split. The form sits left at a comfortable reading width; the right
-     * half is the only place in the whole application where the product gets
-     * to say what it is for before asking for anything.
-     *
-     * Below `lg` the panel is dropped rather than stacked. A photograph above
-     * a sign-in form on a phone is a photograph somebody scrolls past to reach
-     * the thing they opened the page to do.
-     */
-    <div className="grid min-h-[100dvh] lg:grid-cols-[minmax(0,1fr)_1.1fr]">
+    <div className="grid min-h-[100dvh] lg:grid-cols-[minmax(0,1fr)_1.1fr]" data-testid="login-page">
       <div className="flex items-center justify-center px-6 py-12 sm:px-10">
         <motion.div
           initial={reduce ? false : { opacity: 0, y: 12 }}
@@ -86,12 +77,12 @@ export default function Login() {
           transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
           className="w-full max-w-[22rem]"
         >
-          <Link to="/" className="mb-10 block font-serif text-[1.7rem] uppercase tracking-[0.2em] text-brand">
+          <Link to="/" className="mb-10 block font-serif text-[1.7rem] uppercase tracking-[0.2em] text-brand" data-testid="login-logo">
             W<span className="text-gold-deep">O</span>W
             <span className="mt-1 block text-[0.48rem] tracking-[0.28em] text-gold-deep">World of Weddingz</span>
           </Link>
 
-          <h1 className="font-serif text-[2.75rem] font-light leading-[1.05] text-brand">Welcome back</h1>
+          <h1 className="font-serif text-[2.75rem] font-light leading-[1.05] text-brand" data-testid="login-heading">Welcome back</h1>
           {location.state?.passwordChanged === true && (
             <p role="status" className="rounded-sm bg-brand-light p-3 text-sm text-brand-dark">
               Password changed successfully. Sign in with your new password.
@@ -101,11 +92,12 @@ export default function Login() {
             Sign in to pick up where your family left off.
           </p>
 
-          <form onSubmit={submit}>
+          <form onSubmit={submit} data-testid="login-form">
           {error && (
             <p
               role="alert"
               className="mb-5 flex items-start gap-2 rounded-md bg-critical-bg px-3 py-2.5 text-sm text-critical-fg"
+              data-testid="login-error"
             >
               <WarningCircle size={17} className="mt-px shrink-0" aria-hidden />
               {error}
@@ -117,12 +109,6 @@ export default function Login() {
               <label className="label" htmlFor="email">
                 Username, email or mobile number
               </label>
-              {/*
-                `type="text"`, not `type="email"`: a client an agency took on by
-                phone signs in with the number they gave them, and the browser's
-                own email validation refused it before the form could be
-                submitted (EZ1-I233). `autoComplete="username"` covers both.
-              */}
               <input
                 id="email"
                 className="input"
@@ -132,6 +118,7 @@ export default function Login() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                data-testid="login-email-input"
               />
             </div>
 
@@ -144,6 +131,7 @@ export default function Login() {
                 <Link
                   className="text-[0.8125rem] text-gray-500 underline-offset-2 transition-colors hover:text-brand-strong hover:underline"
                   to="/forgot-password"
+                  data-testid="login-forgot-link"
                 >
                   Forgot?
                 </Link>
@@ -165,6 +153,7 @@ export default function Login() {
                   value={mfaCode}
                   onChange={(e) => setMfaCode(e.target.value)}
                   required
+                  data-testid="login-mfa-input"
                 />
                 <p className="mt-1.5 text-xs text-gray-500">
                   Open your authenticator app and enter the current 6-digit code.
@@ -173,17 +162,15 @@ export default function Login() {
             )}
           </div>
 
-          <button className="btn mt-6 w-full" disabled={loading}>
+          <button className="btn mt-6 w-full" disabled={loading} data-testid="login-submit-button">
             {loading && (
               <CircleNotch size={16} className="animate-spin" aria-hidden />
             )}
             {loading ? 'Signing in' : 'Sign in'}
           </button>
 
-          {/* Offered, not defaulted to — and hidden mid-MFA, where the account
-              is already half signed in. */}
           {!needsMfa && zohoEnabled && (
-            <a className="btn-outline mt-2 flex w-full justify-center" href="/api/auth/sso/zoho/start">
+            <a className="btn-outline mt-2 flex w-full justify-center" href="/api/auth/sso/zoho/start" data-testid="login-zoho-btn">
               Sign in with Zoho
             </a>
           )}
@@ -194,34 +181,24 @@ export default function Login() {
             <Link
               className="font-medium text-brand-strong underline-offset-2 hover:underline"
               to="/register"
+              data-testid="login-register-link"
             >
               Register
             </Link>
           </p>
 
-          {/*
-            Here rather than only inside the app.
-
-            Somebody who cannot get past this screen is exactly the person who
-            needs a phone number, and a contact address visible only after
-            signing in is no use to them. Renders nothing when no channel is
-            configured, so it never leaves a dead heading behind.
-          */}
-          <div className="mt-4 border-t border-gray-100 pt-4">
+          <div className="mt-4 border-t pt-4" style={{ borderColor: 'rgb(197 160 89 / 0.18)' }}>
             <SupportContact compact />
           </div>
         </motion.div>
       </div>
 
-      {/*
-        The right half, in the matrimony home template's manner: the ivory
-        ground and the app-wide field of gold hearts, a gold rule, and one line
-        in the serif. It replaces a blurred stock photograph that was only ever a
-        placeholder for a brand image nobody had.
-      */}
-      <div className="relative hidden overflow-hidden border-l border-gray-200 lg:flex lg:items-end">
+      {/* ─── Royal Navy & Gold decorative panel ─── */}
+      <div className="relative hidden overflow-hidden lg:flex lg:items-end" style={{ borderLeft: '1px solid rgb(197 160 89 / 0.2)' }}>
         <img src="/images/wow-home-hero.webp" alt="A couple beginning a life together beside a palace lake" fetchPriority="high" decoding="async" className="absolute inset-0 h-full w-full object-cover" />
-        <div className="absolute inset-0 bg-gradient-to-t from-brand-strong/95 via-brand-strong/35 to-brand-strong/10" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[rgb(5_10_26_/_0.92)] via-[rgb(10_17_40_/_0.45)] to-[rgb(10_17_40_/_0.15)]" />
+        {/* Subtle gold pattern */}
+        <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(rgba(197, 160, 89, 0.6) 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
         <div className="relative p-12 xl:p-16">
           <span aria-hidden className="mb-7 block h-px w-16 bg-gold-lit" />
           <p className="max-w-[20ch] font-serif text-[2.75rem] font-light italic leading-[1.2] text-white">
