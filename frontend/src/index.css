@@ -502,6 +502,84 @@
       height: 7rem;
     }
   }
+
+  /* ─── Gold shimmer on vendor cards ─── */
+  .vendor-card-shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+  .vendor-card-shimmer::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    opacity: 0;
+    background: linear-gradient(
+      105deg,
+      transparent 20%,
+      rgb(var(--gold) / 0.08) 35%,
+      rgb(var(--gold-lit) / 0.14) 50%,
+      rgb(var(--gold) / 0.08) 65%,
+      transparent 80%
+    );
+    transform: translateX(-100%);
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+  .vendor-card-shimmer:hover::before {
+    opacity: 1;
+    animation: gold-shimmer 1.2s ease forwards;
+  }
+
+  @keyframes gold-shimmer {
+    from { transform: translateX(-100%); }
+    to   { transform: translateX(100%); }
+  }
+
+  /* ─── Hero dot pattern drift animation ─── */
+  .hero-dots-drift {
+    animation: dots-drift 25s linear infinite;
+  }
+
+  @keyframes dots-drift {
+    0%   { background-position: 0 0; }
+    100% { background-position: 168px 168px; }
+  }
+
+  /* ─── Chat bubble gold accent (sender) ─── */
+  .chat-bubble-mine {
+    position: relative;
+    border: 1px solid rgb(var(--gold) / 0.20);
+    box-shadow: 0 1px 4px rgb(var(--gold) / 0.08);
+  }
+
+  /* ─── Chat bubble received ─── */
+  .chat-bubble-theirs {
+    border: 1px solid rgb(var(--gold) / 0.10);
+  }
+
+  /* ─── Booking status timeline gold accents ─── */
+  .booking-tab-active {
+    border-bottom: 2px solid rgb(var(--gold));
+    color: rgb(var(--brand));
+  }
+
+  /* ─── Gold glow card for vendors ─── */
+  .gold-glow-card {
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+    border: 1px solid rgb(var(--gold) / 0.18);
+  }
+  .gold-glow-card:hover {
+    border-color: rgb(var(--gold) / 0.45);
+    box-shadow: 0 0 16px rgb(var(--gold) / 0.10), 0 4px 12px rgb(var(--shadow-color) / 0.06);
+  }
+
+  /* ─── Gold accent rule (horizontal divider with gold fade) ─── */
+  .gold-rule {
+    height: 1px;
+    border: none;
+    background: linear-gradient(90deg, transparent, rgb(var(--gold) / 0.30) 20%, rgb(var(--gold) / 0.30) 80%, transparent);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

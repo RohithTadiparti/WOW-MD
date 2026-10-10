@@ -58,7 +58,8 @@ export function StatCard({
     <AnimatedCard intensity="medium" className="h-full">
       <Link
         to={to}
-        className={`group block h-full rounded-lg border border-gray-200 bg-gradient-to-br ${gradient} p-4 transition-all duration-200 hover:border-gray-300 hover:shadow-card`}
+        className={`group block h-full rounded-lg bg-gradient-to-br ${gradient} p-4 transition-all duration-200 hover:shadow-card`}
+        style={{ border: '1px solid rgb(197 160 89 / 0.18)' }}
       >
         <div className="flex items-center gap-1.5">
           {Glyph && <Glyph size={14} className="text-gray-400" aria-hidden />}
@@ -87,7 +88,8 @@ export function QuickAction({
   return (
     <Link
       to={to}
-      className="group flex items-center gap-3 rounded-lg border border-gray-200 bg-surface px-4 py-3 transition-colors hover:bg-gray-100"
+      className="group flex items-center gap-3 rounded-lg bg-surface px-4 py-3 transition-colors hover:bg-surface-sunken"
+      style={{ border: '1px solid rgb(197 160 89 / 0.15)' }}
     >
       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-soft text-brand-strong">
         <Glyph size={17} aria-hidden />

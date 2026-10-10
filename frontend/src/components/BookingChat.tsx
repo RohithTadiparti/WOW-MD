@@ -62,12 +62,12 @@ export default function BookingChat({ bookingId }: { bookingId: string }) {
   const messages = [...(thread?.data ?? [])].reverse();
 
   return (
-    <div className="border-t pt-3">
+    <div className="pt-3" style={{ borderTop: '1px solid rgb(197 160 89 / 0.18)' }}>
       <h3 className="section-title text-sm">Conversation</h3>
       <p className="text-xs text-gray-500">{state?.note ?? 'Loading…'}</p>
 
       {state?.open && (
-        <div className="mt-2 max-h-64 space-y-2 overflow-y-auto rounded-sm bg-gray-50 p-3">
+        <div className="mt-2 max-h-64 space-y-2 overflow-y-auto rounded-sm bg-surface-sunken p-3">
           {messages.length === 0 && (
             <p className="text-sm text-gray-400">Nothing said yet.</p>
           )}
@@ -76,8 +76,8 @@ export default function BookingChat({ bookingId }: { bookingId: string }) {
               key={m.id}
               className={`max-w-[80%] rounded-sm px-3 py-2 text-sm ${
                 m.senderId === me
-                  ? 'ml-auto bg-brand text-brand-fg'
-                  : 'bg-surface text-gray-800 shadow-card'
+                  ? 'chat-bubble-mine ml-auto bg-brand text-brand-fg'
+                  : 'chat-bubble-theirs bg-surface text-gray-800 shadow-card'
               }`}
             >
               <p className="whitespace-pre-wrap">{m.body}</p>

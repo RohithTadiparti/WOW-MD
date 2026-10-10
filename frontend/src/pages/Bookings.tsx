@@ -392,14 +392,15 @@ export default function Bookings() {
             <button
               key={t.key || 'all'}
               onClick={() => setStatus(t.key)}
-              className={`shrink-0 whitespace-nowrap rounded-sm border px-3 py-1 text-sm transition-colors ${
+              className={`shrink-0 whitespace-nowrap rounded-sm px-3 py-1.5 text-sm transition-colors ${
                 activeTab
-                  ? 'border-brand bg-brand-light text-brand-dark'
-                  : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                  ? 'bg-brand-light text-brand-dark font-medium'
+                  : 'text-gray-600 hover:text-brand-dark hover:bg-surface-sunken'
               }`}
+              style={{ border: activeTab ? '1px solid rgb(197 160 89 / 0.40)' : '1px solid rgb(197 160 89 / 0.15)' }}
             >
               {t.label}
-              <span className={`ml-1.5 tabular-nums ${activeTab ? 'text-brand-dark' : 'text-gray-400'}`}>
+              <span className={`ml-1.5 tabular-nums ${activeTab ? 'text-gold-deep' : 'text-gray-400'}`}>
                 {n}
               </span>
             </button>
@@ -460,7 +461,7 @@ export default function Bookings() {
           return (
           <div
             key={b.id}
-            className={`card space-y-4 ${highlight === b.id ? 'ring-2 ring-brand' : ''}`}
+            className={`card space-y-4 ${highlight === b.id ? 'ring-2 ring-gold/50' : ''}`}
           >
             {/* Who and what, with the amount and date held to the right (EZ1-I167). */}
             <div className="flex items-start justify-between gap-3">

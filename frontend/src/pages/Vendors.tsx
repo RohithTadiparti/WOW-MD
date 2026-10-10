@@ -270,9 +270,8 @@ export default function Vendors() {
           // link is invalid HTML that browsers split apart unpredictably.
           <article
             key={v.id}
-            className="group/vendor relative flex flex-col overflow-hidden rounded-lg border border-gray-200
-              bg-surface transition-[border-color,box-shadow] duration-200
-              hover:border-gray-300 hover:shadow-card"
+            className="group/vendor vendor-card-shimmer gold-glow-card relative flex flex-col overflow-hidden rounded-lg
+              bg-surface transition-[border-color,box-shadow] duration-200"
           >
             {/*
               The cover. Where a vendor has uploaded nothing, the space still
@@ -333,7 +332,7 @@ export default function Vendors() {
               {/* Only approved listings reach search, but a verified badge says
                   an officer actually visited — worth surfacing (EZ1-I164). */}
               {v.verifiedAt && (
-                <span className="mt-1.5 inline-flex w-fit items-center gap-1 rounded-sm bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand-strong">
+                <span className="mt-1.5 inline-flex w-fit items-center gap-1 rounded-sm px-2 py-0.5 text-xs font-medium text-gold-deep" style={{ background: 'rgb(var(--gold) / 0.10)' }}>
                   <SealCheck size={12} weight="fill" aria-hidden /> Verified
                 </span>
               )}

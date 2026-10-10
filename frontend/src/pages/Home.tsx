@@ -58,8 +58,8 @@ export default function Home() {
         <section aria-label="A beautiful future begins here" className="relative min-h-[42rem] overflow-hidden text-white sm:min-h-[46rem]" data-testid="hero-section">
           <img src="/images/wow-home-hero.webp" alt="A couple seated beside a palace lake at sunset" fetchPriority="high" decoding="async" className="absolute inset-0 h-full w-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-r from-[rgb(5_10_26_/_0.88)] via-[rgb(10_17_40_/_0.55)] to-transparent" />
-          {/* Subtle gold pattern overlay */}
-          <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(rgba(197, 160, 89, 0.6) 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
+          {/* Animated gold dot pattern overlay */}
+          <div className="absolute inset-0 hero-dots-drift opacity-[0.04]" style={{ backgroundImage: 'radial-gradient(rgba(197, 160, 89, 0.6) 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
           <div className="relative mx-auto flex min-h-[42rem] w-full items-end px-6 pb-16 pt-36 sm:min-h-[46rem] sm:px-12 sm:pb-20 lg:px-24">
             <div className="max-w-[39rem]">
               <p className="eyebrow text-xs tracking-[0.36em] text-gold-lit">More than a match</p>

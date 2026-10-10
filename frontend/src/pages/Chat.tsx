@@ -535,7 +535,7 @@ export default function Chat() {
                     <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
                       <div
                         className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${
-                          mine ? 'bg-brand text-brand-fg' : 'bg-gray-100 text-gray-800'
+                          mine ? 'chat-bubble-mine bg-brand text-brand-fg' : 'chat-bubble-theirs bg-gray-100 text-gray-800'
                         }`}
                       >
                         <p className="whitespace-pre-wrap break-words">{m.body}</p>

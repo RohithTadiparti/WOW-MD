@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    allowedHosts: true,
     proxy: {
       // Dev proxy so the SPA can call the API without CORS friction.
       '/api': { target: process.env.VITE_BACKEND_URL || 'http://localhost:3000', changeOrigin: true },
@@ -16,5 +17,10 @@ export default defineConfig({
         ws: true,
       },
     },
+  },
+  preview: {
+    port: 3000,
+    host: '0.0.0.0',
+    allowedHosts: true,
   },
 });
