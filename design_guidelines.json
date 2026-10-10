@@ -1,0 +1,149 @@
+{
+  "theme": {
+    "palette_name": "Royal Navy & Gold with Soft Blush & Ivory Fusion",
+    "mode": "hybrid_light_dark_support",
+    "primary_aesthetic": "Classic & Traditional Royal Luxury fused with Modern Minimalist Elegance",
+    "emotional_archetype": "ARCHETYPE 5: LUXURY & ARCHETYPE 1: ORGANIC TRUST",
+    "brand_identity": {
+      "name": "World of Weddingz (WOW)",
+      "tagline": "The Premier Royal Matrimony & Wedding Ecosystem",
+      "vibe": "Extremely premium, mesmerising, royal palace luxury, architectural precision, regal warmth"
+    }
+  },
+  "colors": {
+    "primitives": {
+      "royal_navy_950": "#050A1A",
+      "royal_navy_900": "#0A1128",
+      "royal_navy_800": "#0F172A",
+      "royal_navy_700": "#1B2A4A",
+      "royal_navy_600": "#243B66",
+      "struck_gold_DEFAULT": "#C5A059",
+      "struck_gold_light": "#E6C687",
+      "struck_gold_dark": "#9A7B38",
+      "struck_gold_metallic": "linear-gradient(135deg, #BF953F 0%, #FCF6BA 25%, #B38728 50%, #FBF5B7 75%, #AA771C 100%)",
+      "soft_blush_50": "#FFF5F7",
+      "soft_blush_100": "#FDF2F4",
+      "soft_blush_200": "#F9E8EC",
+      "soft_blush_300": "#F3C5D1",
+      "warm_ivory_canvas": "#FAF7F2",
+      "warm_ivory_surface": "#FFFFFF",
+      "warm_champagne": "#FFFDF9",
+      "dark_slate_card": "#131C35"
+    },
+    "semantic_tokens": {
+      "light_mode": {
+        "canvas": "250 247 242",
+        "surface": "255 255 255",
+        "surface_raised": "255 253 249",
+        "surface_sunken": "245 240 232",
+        "brand_primary": "10 17 40",
+        "brand_secondary": "197 160 89",
+        "brand_accent": "253 242 244",
+        "brand_fg": "250 247 242",
+        "text_primary": "15 23 42",
+        "text_secondary": "71 85 105",
+        "text_muted": "100 116 139",
+        "border_subtle": "rgb(197 160 89 / 0.18)",
+        "border_strong": "rgb(197 160 89 / 0.35)",
+        "focus_ring": "rgb(197 160 89 / 0.5)",
+        "scrim": "rgba(5, 10, 26, 0.65)"
+      },
+      "dark_mode": {
+        "canvas": "10 17 40",
+        "surface": "19 28 53",
+        "surface_raised": "27 39 70",
+        "surface_sunken": "13 21 44",
+        "brand_primary": "197 160 89",
+        "brand_secondary": "230 198 135",
+        "brand_accent": "27 39 70",
+        "brand_fg": "10 17 40",
+        "text_primary": "250 247 242",
+        "text_secondary": "203 213 225",
+        "text_muted": "148 163 184",
+        "border_subtle": "rgb(197 160 89 / 0.22)",
+        "border_strong": "rgb(197 160 89 / 0.45)",
+        "focus_ring": "rgb(230 198 135 / 0.6)",
+        "scrim": "rgba(5, 10, 26, 0.85)"
+      }
+    }
+  },
+  "typography": {
+    "font_pairings": {
+      "display_heading": "'Cormorant Garamond', 'Playfair Display', 'Georgia', serif",
+      "body_sans": "'Plus Jakarta Sans', 'Karla', 'Outfit', sans-serif",
+      "data_mono": "'Geist Mono Variable', 'JetBrains Mono', monospace"
+    },
+    "hierarchy_ceiling_rules": {
+      "H1_Hero": "text-4xl sm:text-5xl lg:text-6xl font-serif font-normal tracking-tight leading-[1.1]",
+      "H2_Section": "text-2xl sm:text-3xl lg:text-4xl font-serif font-normal tracking-normal leading-snug text-royal-navy-900 dark:text-gold-lit",
+      "H3_Subsection": "text-xl sm:text-2xl font-serif font-medium leading-snug",
+      "H4_Card": "text-lg sm:text-xl font-sans font-semibold tracking-tight",
+      "Overline_Eyebrow": "text-xs uppercase tracking-[0.25em] font-sans font-medium text-gold-dark dark:text-gold-lit",
+      "Body_Text": "text-base leading-relaxed font-sans text-slate-700 dark:text-slate-300"
+    }
+  },
+  "visual_enhancers": {
+    "glassmorphism": {
+      "header_nav": "backdrop-blur-xl bg-white/80 dark:bg-royal-navy-900/85 border-b border-gold/20 shadow-sm",
+      "floating_card": "backdrop-blur-md bg-white/70 dark:bg-royal-navy-800/70 border border-gold/25 shadow-lifted"
+    },
+    "borders_and_frames": {
+      "gold_hairline": "border border-gold/20 dark:border-gold/30",
+      "gold_glow": "box-shadow: 0 0 15px rgba(197, 160, 89, 0.15)",
+      "gradient_gold_border": "border-image: linear-gradient(to right, #C5A059, #E6C687, #9A7B38) 1"
+    },
+    "textures_and_overlays": {
+      "hero_overlay": "bg-gradient-to-r from-royal-navy-950/80 via-royal-navy-900/50 to-transparent",
+      "royal_pattern": "background-image: radial-gradient(rgba(197, 160, 89, 0.08) 1px, transparent 1px); background-size: 24px 24px;"
+    }
+  },
+  "layouts_and_grids": {
+    "spacing_scale": "p-4, p-6, p-8, p-12, p-16, p-24, p-32 with generous internal padding on containers",
+    "bento_mode": "MODE A: TETRIS GRID for hero & marketplace showcases (grid-cols-1 md:grid-cols-8 lg:grid-cols-12 gap-8)",
+    "dashboard_mode": "MODE B: High Density Grid for Dashboards & Analytics (grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6)"
+  },
+  "components": {
+    "buttons": {
+      "primary": "btn: bg-royal-navy-900 hover:bg-royal-navy-800 dark:bg-gold dark:hover:bg-gold-lit text-white dark:text-royal-navy-950 uppercase tracking-[0.18em] text-xs font-medium px-6 py-3 rounded-none border border-gold/40 transition-all duration-200 active:scale-[0.98]",
+      "outline": "btn-outline: border border-gold text-gold-dark dark:text-gold-lit hover:bg-gold/10 uppercase tracking-[0.18em] text-xs font-medium px-6 py-3 rounded-none transition-all duration-200",
+      "secondary_blush": "btn-blush: bg-soft-blush-100 hover:bg-soft-blush-200 text-royal-navy-900 border border-gold/20 px-5 py-2.5 rounded-none font-medium text-xs uppercase tracking-wider"
+    },
+    "inputs": {
+      "standard": "input: bg-surface border border-gold/30 dark:border-gold/40 focus:border-gold focus:ring-2 focus:ring-gold/20 rounded-none px-4 py-3 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 text-sm min-h-[48px]",
+      "select": "select.input: appearance-none bg-no-repeat bg-[right_1rem_center] cursor-pointer"
+    },
+    "cards": {
+      "royal_card": "card: bg-surface border border-gold/20 dark:border-gold/30 p-6 rounded-none shadow-sm hover:border-gold/50 transition-all duration-200",
+      "raised_card": "card-raised: bg-surface-raised border border-gold/35 p-6 rounded-none shadow-lifted"
+    },
+    "navigation_header": {
+      "rules": "Fixed/sticky with z-50, backdrop-blur-xl bg-white/85 dark:bg-royal-navy-950/90, border-b border-gold/20, brand logo left, nav items centered, CTAs & profile right"
+    },
+    "sidebar": {
+      "rules": "Royal navy background with gold accents, clear group headers, active states highlighted with gold border-l-2 and gold soft glow background"
+    }
+  },
+  "motion": {
+    "framer_motion_support": true,
+    "transitions": "transition: transform 0.2s ease, opacity 0.2s ease, border-color 0.2s ease, background-color 0.2s ease",
+    "prefers_reduced_motion": "respect prefers-reduced-motion media query by setting duration to 0.01ms"
+  },
+  "image_urls": {
+    "hero_couple": "https://images.unsplash.com/photo-1561647784-2f9c43b07a0b?crop=entropy&cs=srgb&fm=jpg&q=85",
+    "sunset_couple": "https://images.unsplash.com/photo-1662814882169-5368304d78ad?crop=entropy&cs=srgb&fm=jpg&q=85",
+    "palace_venue": "https://images.unsplash.com/photo-1544644181-1484b3fdfc62?crop=entropy&cs=srgb&fm=jpg&q=85",
+    "photographer": "https://images.unsplash.com/photo-1537633552985-df8429e8048b?crop=entropy&cs=srgb&fm=jpg&q=85",
+    "wedding_planner": "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?crop=entropy&cs=srgb&fm=jpg&q=85"
+  },
+  "testing": {
+    "attribute_requirement": "All interactive and key informational elements MUST include data-testid attribute in kebab-case (e.g. data-testid=\"register-submit-button\")"
+  },
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
+    "Do NOT change website functionality or backend API integration.",
+    "Focus 100% on UI/UX redesign: CSS custom properties in index.css, tailwind configuration, layout elegance, typography balance, and micro-interactions.",
+    "Implement the Royal Navy (#0A1128) & Struck Gold (#C5A059) fused with Soft Blush & Warm Ivory palette.",
+    "Ensure headings use Cormorant Garamond / Playfair Display and body text uses Plus Jakarta Sans / Outfit / Karla.",
+    "Apply generous padding (p-6, p-8) and keep sharp/subtle rounded square edges (border-radius: 0 to 2px) to match the royal stationery aesthetic.",
+    "Add data-testid attributes to all buttons, inputs, links, tabs, and interactive controls."
+  ]
+}
