@@ -460,14 +460,14 @@ function NotificationPanel({ open, onClose }: { open: boolean; onClose: () => vo
   if (!open) return null;
   const latest = data.slice(0, 5);
   return (
-    <div role="dialog" aria-label="Notifications" className="absolute right-0 top-11 z-30 w-[min(24rem,calc(100vw-2rem))] overflow-hidden border border-brand/15 bg-surface shadow-xl shadow-brand/10">
-      <div className="flex items-center justify-between border-b border-brand/10 px-4 py-3">
+    <div role="dialog" aria-label="Notifications" className="absolute right-0 top-11 z-30 w-[min(24rem,calc(100vw-2rem))] overflow-hidden bg-surface shadow-xl" style={{ border: '1px solid rgb(197 160 89 / 0.22)' }}>
+      <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid rgb(197 160 89 / 0.15)' }}>
         <p className="section-title">Notifications</p>
         <Link to="/notifications" onClick={onClose} className="text-xs font-semibold text-brand hover:underline">View all</Link>
       </div>
       <div className="max-h-[min(28rem,calc(100dvh-6rem))] overflow-y-auto">
         {isLoading ? <p className="px-4 py-5 text-sm text-gray-500">Loading notificationsâ€¦</p> : latest.length === 0 ? <p className="px-4 py-5 text-sm text-gray-500">You are all caught up.</p> : latest.map((notification) => (
-          <Link key={notification.id} to="/notifications" onClick={onClose} className={`block border-b border-brand/10 px-4 py-3 last:border-b-0 hover:bg-surface-sunken ${notification.isRead ? '' : 'bg-brand-light/25'}`}>
+          <Link key={notification.id} to="/notifications" onClick={onClose} className={`block px-4 py-3 last:border-b-0 hover:bg-surface-sunken ${notification.isRead ? '' : 'bg-brand-light/25'}`} style={{ borderBottom: '1px solid rgb(197 160 89 / 0.10)' }}>
             <p className="text-sm font-medium text-gray-900">{describe(notification) || 'There is an update on your account.'}</p>
             <p className="mt-1 text-xs text-gray-500">{new Date(notification.createdAt).toLocaleString()}</p>
           </Link>
@@ -741,7 +741,7 @@ function Layout({ children }: { children: ReactNode }) {
         content column keeps its own scroll position.
       */}
       <div className="mx-auto flex w-full max-w-content gap-8 px-4 sm:px-6 lg:px-8">
-        <aside className="sticky top-0 hidden h-[100dvh] w-[13rem] shrink-0 flex-col gap-5 border-r border-gold/35 bg-surface/55 py-5 pr-4 lg:flex">
+        <aside className="sticky top-0 hidden h-[100dvh] w-[13rem] shrink-0 flex-col gap-5 py-5 pr-4 lg:flex" style={{ borderRight: '1px solid rgb(197 160 89 / 0.20)' }}>
           <Wordmark />
           <div className="-mr-2 flex-1 overflow-y-auto pr-2">
             <Sidebar entries={entries} groups={groups} />
@@ -751,7 +751,8 @@ function Layout({ children }: { children: ReactNode }) {
         <div className="flex min-w-0 flex-1 flex-col">
           <header
             className="portal-header sticky top-0 z-20 -mx-4 flex h-16 items-center justify-between gap-3
-              border-b border-brand/12 bg-canvas/90 px-4 backdrop-blur-xl sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0"
+              bg-canvas/90 px-4 backdrop-blur-xl sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0"
+            style={{ borderBottom: '1px solid rgb(197 160 89 / 0.15)' }}
           >
             <div className="flex min-w-0 items-center gap-3">
               <button
@@ -801,7 +802,7 @@ function Layout({ children }: { children: ReactNode }) {
           </header>
 
           {user && !user.isVerified && (
-            <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-gold/75 bg-surface-sunken px-4 py-3 text-sm text-gray-800">
+            <div className="mt-4 flex items-start gap-2.5 rounded-lg px-4 py-3 text-sm text-gray-800" style={{ border: '1px solid rgb(197 160 89 / 0.4)', background: 'rgb(var(--surface-sunken))' }}>
               <Warning size={17} className="mt-0.5 shrink-0 text-gold-deep" aria-hidden />
               <p>
                 Please confirm your email address.{' '}
@@ -858,7 +859,8 @@ function Layout({ children }: { children: ReactNode }) {
             initial={reduce ? false : { x: '-100%' }}
             animate={{ x: 0 }}
             transition={{ type: 'spring', stiffness: 380, damping: 36 }}
-            className="absolute inset-y-0 left-0 flex w-[15rem] flex-col gap-5 overflow-y-auto border-r border-gold/35 bg-surface p-5"
+            className="absolute inset-y-0 left-0 flex w-[15rem] flex-col gap-5 overflow-y-auto bg-surface p-5"
+            style={{ borderRight: '1px solid rgb(197 160 89 / 0.20)' }}
           >
             <Wordmark />
             <Sidebar

@@ -8,15 +8,17 @@
  * Imported here, each fontsource stylesheet goes through Vite's own CSS
  * pipeline, which resolves those urls and emits the font files beside it.
  *
- * The matrimony home template's pair: Karla carries the text, Cormorant
- * Garamond the titles. Only the weights the template sets are loaded.
+ * The royal design template's pairing: Plus Jakarta Sans carries the body text,
+ * Cormorant Garamond the display and section headings. Only the weights the
+ * template sets are loaded.
  */
 import '@fontsource-variable/geist-mono';
-import '@fontsource/karla/300.css';
-import '@fontsource/karla/400.css';
-import '@fontsource/karla/500.css';
-import '@fontsource/karla/600.css';
+import '@fontsource-variable/plus-jakarta-sans';
 import '@fontsource/cormorant-garamond/300.css';
 import '@fontsource/cormorant-garamond/400.css';
 import '@fontsource/cormorant-garamond/500.css';
 import '@fontsource/cormorant-garamond/400-italic.css';
+import '@fontsource/karla/300.css';
+import '@fontsource/karla/400.css';
+import '@fontsource/karla/500.css';
+import '@fontsource/karla/600.css';

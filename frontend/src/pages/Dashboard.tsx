@@ -427,10 +427,10 @@ export default function Dashboard({
         and the one part of it that is actionable, an unfinished profile, gets
         to be a control instead of a sentence.
       */}
-      <header className={`relative overflow-hidden rounded-lg border border-brand/35 px-6 py-6 text-brand-fg shadow-lifted sm:px-8 ${isConsumerPortal ? 'min-h-[15rem] bg-brand-strong' : 'bg-gradient-to-br from-brand-strong via-brand to-brand-rose'}`}>
-        {isConsumerPortal && <><img src="/images/wow-portal-hero.webp" alt="A couple beginning a meaningful journey together" fetchPriority="high" decoding="async" className="absolute inset-0 h-full w-full object-cover" /><span aria-hidden className="absolute inset-0 bg-gradient-to-r from-brand-strong/95 via-brand-strong/65 to-transparent" /></>}
-        <span aria-hidden className="absolute -right-8 -top-10 h-32 w-32 rounded-full border border-gold/60" />
-        <span aria-hidden className="absolute -bottom-16 right-20 h-28 w-28 rounded-full border border-gold-lit/50" />
+      <header className={`relative overflow-hidden rounded-lg px-6 py-6 text-brand-fg shadow-lifted sm:px-8 ${isConsumerPortal ? 'min-h-[15rem] bg-brand-strong' : 'bg-gradient-to-br from-brand-strong via-brand to-brand-500'}`} style={{ border: '1px solid rgb(197 160 89 / 0.25)' }}>
+        {isConsumerPortal && <><img src="/images/wow-portal-hero.webp" alt="A couple beginning a meaningful journey together" fetchPriority="high" decoding="async" className="absolute inset-0 h-full w-full object-cover" /><span aria-hidden className="absolute inset-0 bg-gradient-to-r from-[rgb(5_10_26_/_0.92)] via-[rgb(10_17_40_/_0.65)] to-transparent" /></>}
+        <span aria-hidden className="absolute -right-8 -top-10 h-32 w-32 rounded-full" style={{ border: '1px solid rgb(197 160 89 / 0.30)' }} />
+        <span aria-hidden className="absolute -bottom-16 right-20 h-28 w-28 rounded-full" style={{ border: '1px solid rgb(230 198 135 / 0.25)' }} />
         <p className="relative text-sm text-brand-fg/85">
           A thoughtful start to a beautiful journey
         </p>
@@ -438,7 +438,7 @@ export default function Dashboard({
           {delightfulGreeting(profileName)}
         </h1>
         {isConsumerPortal && (
-          <div className="absolute inset-x-6 bottom-5 z-10 grid max-w-3xl grid-cols-2 gap-x-5 gap-y-2 border-t border-gold/45 pt-3 text-[0.68rem] uppercase tracking-[0.12em] text-brand-fg/90 sm:inset-x-8 sm:grid-cols-4">
+          <div className="absolute inset-x-6 bottom-5 z-10 grid max-w-3xl grid-cols-2 gap-x-5 gap-y-2 pt-3 text-[0.68rem] uppercase tracking-[0.12em] text-brand-fg/90 sm:inset-x-8 sm:grid-cols-4" style={{ borderTop: '1px solid rgb(197 160 89 / 0.30)' }}>
             {['Thoughtful matches', 'A kind community', 'Privacy always', 'A brighter tomorrow'].map((point) => (
               <span key={point} className="flex items-center gap-1.5"><span className="text-gold-lit">♡</span>{point}</span>
             ))}
